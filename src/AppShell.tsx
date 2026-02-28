@@ -548,6 +548,10 @@ export default function AppShell() {
                 });
               }}
               onToggleSessionVisible={(session) => {
+                if (!isPro && !openSessions.includes(session) && openSessions.length >= FREE_SESSION_LIMIT) {
+                  setPaywallVisible(true);
+                  return;
+                }
                 void Haptics.selectionAsync();
                 toggleSessionVisible(session);
               }}
@@ -601,7 +605,7 @@ export default function AppShell() {
                   if (sent) {
                     await addCommand(session, sent);
                     if (isPro) {
-                      await notify("Command sent", `${session}: ${sent.slice(0, 80)}`);
+                      await notify("Command completed", `${session}: ${sent.slice(0, 80)}`);
                     }
                   }
                 });
@@ -641,6 +645,9 @@ export default function AppShell() {
                 void runWithStatus(`Running snippet in ${session}`, async () => {
                   await sendCommand(session, command, mode, false);
                   await addCommand(session, command);
+                  if (isPro) {
+                    await notify("Snippet completed", `${session}: ${command.slice(0, 80)}`);
+                  }
                 });
               }}
             />
@@ -769,11 +776,7 @@ export default function AppShell() {
         visible={!onboardingCompleted}
         notificationsGranted={permissionStatus === "granted"}
         onRequestNotifications={() => {
-          if (isPro) {
-            void requestPermission();
-            return;
-          }
-          setPaywallVisible(true);
+          void requestPermission();
         }}
         onTestConnection={async (server) => {
           const response = await fetch(`${normalizeBaseUrl(server.url)}/health`, {
