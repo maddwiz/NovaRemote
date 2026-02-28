@@ -4,9 +4,7 @@ import {
   StyleProp,
   TextInputKeyPressEventData,
   TextStyle,
-  Pressable,
   ScrollView,
-  Text,
   TextInput,
   View,
   ViewStyle,
@@ -17,14 +15,17 @@ import {
   AiEnginePreference,
   ConnectionState,
   QueuedCommand,
-  QueuedCommandStatus,
   SessionCollaborator,
   TerminalBackendKind,
   TerminalSendMode,
 } from "../types";
 import { AnsiText } from "./AnsiText";
+import { TerminalCardCollaboration } from "./terminal-card/TerminalCardCollaboration";
+import { TerminalCardFooter } from "./terminal-card/TerminalCardFooter";
 import { TerminalCardHeader } from "./terminal-card/TerminalCardHeader";
+import { TerminalCardQueue } from "./terminal-card/TerminalCardQueue";
 import { TerminalCardShellAssist } from "./terminal-card/TerminalCardShellAssist";
+import { TerminalCardWatch } from "./terminal-card/TerminalCardWatch";
 
 const SHELL_AUTOCOMPLETE_COMMON: string[] = [
   "git status",
@@ -113,14 +114,6 @@ function backendAutocompleteCommands(backend: TerminalBackendKind | undefined): 
     return [...SHELL_AUTOCOMPLETE_COMMON, ...SHELL_AUTOCOMPLETE_UNIX, ...SHELL_AUTOCOMPLETE_POWERSHELL, ...SHELL_AUTOCOMPLETE_CMD];
   }
   return [...SHELL_AUTOCOMPLETE_COMMON, ...SHELL_AUTOCOMPLETE_UNIX];
-}
-
-function queueStatus(entry: QueuedCommand): QueuedCommandStatus {
-  const status = entry.status;
-  if (status === "sending" || status === "sent" || status === "failed") {
-    return status;
-  }
-  return "pending";
 }
 
 type KeyPressEventWithModifiers = TextInputKeyPressEventData & {
@@ -337,11 +330,7 @@ export function TerminalCard({
         : streamState === "polling"
           ? "POLL"
           : "OFF";
-  const queuedCount = queuedItems.length;
-  const queuedPending = queuedItems.filter((entry) => queueStatus(entry) === "pending" || queueStatus(entry) === "sending").length;
-  const queuedFailed = queuedItems.filter((entry) => queueStatus(entry) === "failed").length;
   const activeCollaborators = useMemo(() => collaborators.filter((entry) => !entry.isSelf), [collaborators]);
-  const collaboratorNames = useMemo(() => activeCollaborators.map((entry) => entry.name).slice(0, 4), [activeCollaborators]);
 
   const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     const native = event.nativeEvent as KeyPressEventWithModifiers;
@@ -429,28 +418,13 @@ export function TerminalCard({
         <AnsiText text={output || "Waiting for output..."} style={[styles.terminalText, terminalTextStyle]} />
       </ScrollView>
 
-      {collaborationAvailable ? (
-        <View style={styles.serverCard}>
-          <View style={styles.rowInlineSpace}>
-            <Text style={styles.panelLabel}>Collaboration</Text>
-            <View style={styles.actionsWrap}>
-              <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onRefreshPresence}>
-                <Text style={styles.actionButtonText}>Refresh Viewers</Text>
-              </Pressable>
-              <Pressable accessibilityRole="button" style={[styles.actionButton, readOnly ? styles.modeButtonOn : null]} onPress={() => onSetReadOnly(!readOnly)}>
-                <Text style={styles.actionButtonText}>{readOnly ? "Read-Only" : "Interactive"}</Text>
-              </Pressable>
-            </View>
-          </View>
-          <Text style={styles.serverSubtitle}>
-            {activeCollaborators.length === 0 ? "No other viewers detected." : `${activeCollaborators.length} viewer(s) connected.`}
-          </Text>
-          {collaboratorNames.length > 0 ? (
-            <Text style={styles.emptyText}>{`Watching: ${collaboratorNames.join(", ")}${activeCollaborators.length > 4 ? "..." : ""}`}</Text>
-          ) : null}
-          {readOnly ? <Text style={styles.emptyText}>Read-only mode is enabled for this session.</Text> : null}
-        </View>
-      ) : null}
+      <TerminalCardCollaboration
+        collaborationAvailable={collaborationAvailable}
+        collaborators={collaborators}
+        readOnly={readOnly}
+        onRefreshPresence={onRefreshPresence}
+        onSetReadOnly={onSetReadOnly}
+      />
 
       <TextInput
         style={[styles.input, styles.multilineInput]}
@@ -482,124 +456,39 @@ export function TerminalCard({
         />
       ) : null}
 
-      <View style={styles.rowInlineSpace}>
-        <Text style={styles.switchLabel}>Watch Mode</Text>
-        <Pressable accessibilityRole="button" style={[styles.actionButton, watchEnabled ? styles.modeButtonOn : null]} onPress={() => onToggleWatch(!watchEnabled)}>
-          <Text style={styles.actionButtonText}>{watchEnabled ? "Enabled" : "Disabled"}</Text>
-        </Pressable>
-      </View>
-      {watchEnabled ? (
-        <TextInput
-          style={styles.input}
-          value={watchPattern}
-          onChangeText={onWatchPatternChange}
-          placeholder="Regex alert pattern (e.g. ERROR|FAILED)"
-          placeholderTextColor="#7f7aa8"
-          autoCapitalize="none"
-          autoCorrect={false}
-        />
-      ) : null}
-
-      {watchAlerts.length > 0 ? (
-        <View style={styles.serverCard}>
-          <View style={styles.rowInlineSpace}>
-            <Text style={styles.panelLabel}>Watch Alerts</Text>
-            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onClearWatchAlerts}>
-              <Text style={styles.actionButtonText}>Clear Alerts</Text>
-            </Pressable>
-          </View>
-          {watchAlerts.slice(0, 4).map((alert, index) => (
-            <Text key={`${session}-watch-${index}`} style={styles.serverSubtitle}>
-              {alert}
-            </Text>
-          ))}
-          {watchAlerts.length > 4 ? <Text style={styles.emptyText}>{`+${watchAlerts.length - 4} more alerts`}</Text> : null}
-        </View>
-      ) : null}
-
-      {queuedCount > 0 ? (
-        <View style={styles.serverCard}>
-          <View style={styles.rowInlineSpace}>
-            <Text style={styles.emptyText}>
-              {`${queuedCount} queued (${queuedPending} pending`}
-              {queuedFailed > 0 ? `, ${queuedFailed} failed` : ""}
-              {")"}
-            </Text>
-            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onFlushQueue}>
-              <Text style={styles.actionButtonText}>Flush Queue</Text>
-            </Pressable>
-          </View>
-          {queuedItems.slice(0, 5).map((entry, index) => {
-            const status = queueStatus(entry);
-            return (
-              <View key={`${entry.id || session}-${index}`} style={styles.serverCard}>
-                <View style={styles.rowInlineSpace}>
-                  <Text style={styles.serverSubtitle}>{entry.command}</Text>
-                  <Text style={styles.emptyText}>{status.toUpperCase()}</Text>
-                </View>
-                {status === "failed" && entry.lastError ? <Text style={styles.emptyText}>{entry.lastError}</Text> : null}
-                <View style={styles.rowInlineSpace}>
-                  <Text style={styles.emptyText}>{new Date(entry.queuedAt).toLocaleTimeString()}</Text>
-                  <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
-                    <Text style={styles.actionDangerText}>Remove</Text>
-                  </Pressable>
-                </View>
-              </View>
-            );
-          })}
-          {queuedItems.length > 5 ? (
-            <Text style={styles.emptyText}>{`+${queuedItems.length - 5} more queued`}</Text>
-          ) : null}
-        </View>
-      ) : null}
-
-      {recordingChunks > 0 ? (
-        <View style={styles.rowInlineSpace}>
-          <Text style={styles.emptyText}>{`${recordingChunks} rec chunks · ${(recordingDurationMs / 1000).toFixed(1)}s`}</Text>
-          <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={onDeleteRecording}>
-            <Text style={styles.actionDangerText}>Delete Rec</Text>
-          </Pressable>
-        </View>
-      ) : null}
-
-      <View style={styles.rowInlineSpace}>
-        <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryPrev}>
-          <Text style={styles.actionButtonText}>↑</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryNext}>
-          <Text style={styles.actionButtonText}>↓</Text>
-        </Pressable>
-        <Text style={styles.emptyText}>{`History ${historyCount}`}</Text>
-      </View>
-
-      <TextInput
-        style={styles.input}
-        value={sessionAlias}
-        onChangeText={onSessionAliasChange}
-        placeholder="Session label (optional)"
-        placeholderTextColor="#7f7aa8"
-        autoCorrect={false}
+      <TerminalCardWatch
+        session={session}
+        watchEnabled={watchEnabled}
+        watchPattern={watchPattern}
+        watchAlerts={watchAlerts}
+        onToggleWatch={onToggleWatch}
+        onWatchPatternChange={onWatchPatternChange}
+        onClearWatchAlerts={onClearWatchAlerts}
       />
 
-      <TextInput
-        style={styles.input}
-        value={tags.join(", ")}
-        onChangeText={onTagsChange}
-        placeholder="Tags (comma separated)"
-        placeholderTextColor="#7f7aa8"
-        autoCapitalize="none"
-        autoCorrect={false}
+      <TerminalCardQueue
+        session={session}
+        queuedItems={queuedItems}
+        onFlushQueue={onFlushQueue}
+        onRemoveQueuedCommand={onRemoveQueuedCommand}
       />
 
-      <View style={styles.rowInlineSpace}>
-        <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton, isSending || readOnly ? styles.buttonDisabled : null]} disabled={isSending || readOnly} onPress={onSend}>
-          <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : readOnly ? "Read-Only" : "Send"}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onClear}>
-          <Text style={styles.buttonGhostText}>Clear</Text>
-        </Pressable>
-      </View>
-      <Text style={styles.emptyText}>Shortcuts: Cmd/Ctrl+Enter send, Ctrl+C stop, Cmd+K clear, Cmd+W hide, Cmd+F fullscreen.</Text>
+      <TerminalCardFooter
+        recordingChunks={recordingChunks}
+        recordingDurationMs={recordingDurationMs}
+        historyCount={historyCount}
+        sessionAlias={sessionAlias}
+        tags={tags}
+        isSending={isSending}
+        readOnly={readOnly}
+        onDeleteRecording={onDeleteRecording}
+        onHistoryPrev={onHistoryPrev}
+        onHistoryNext={onHistoryNext}
+        onSessionAliasChange={onSessionAliasChange}
+        onTagsChange={onTagsChange}
+        onSend={onSend}
+        onClear={onClear}
+      />
     </View>
   );
 }
