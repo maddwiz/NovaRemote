@@ -1,10 +1,23 @@
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import CryptoJS from "crypto-js";
 
 import { STORAGE_ACTIVE_LLM_PROFILE_ID, STORAGE_LLM_PROFILES, makeId } from "../constants";
 import { LlmProfile } from "../types";
 
-const LLM_EXPORT_PREFIX = "novaremote.llm.enc.v1.";
+const LLM_EXPORT_PREFIX = "novaremote.llm.aes.v1.";
+const LLM_EXPORT_PREFIX_LEGACY = "novaremote.llm.enc.v1.";
+const LLM_EXPORT_PBKDF2_ITERATIONS = 120000;
+
+type LlmEncryptedEnvelope = {
+  version: 1;
+  cipher: "aes-256-cbc";
+  kdf: "pbkdf2-sha256";
+  iterations: number;
+  salt: string;
+  iv: string;
+  ciphertext: string;
+};
 
 function encodeUtf8(value: string): Uint8Array {
   if (typeof TextEncoder !== "undefined") {
@@ -61,6 +74,125 @@ function xorBytes(input: Uint8Array, key: Uint8Array): Uint8Array {
     result[i] = input[i] ^ key[i % key.length];
   }
   return result;
+}
+
+function requirePassphrase(passphrase: string): string {
+  const trimmed = passphrase.trim();
+  if (!trimmed) {
+    throw new Error("Passphrase is required.");
+  }
+  return trimmed;
+}
+
+function deriveAesKey(passphrase: string, salt: CryptoJS.lib.WordArray, iterations: number): CryptoJS.lib.WordArray {
+  return CryptoJS.PBKDF2(passphrase, salt, {
+    keySize: 256 / 32,
+    iterations,
+    hasher: CryptoJS.algo.SHA256,
+  });
+}
+
+function encryptPayload(payload: string, passphrase: string): string {
+  const salt = CryptoJS.lib.WordArray.random(16);
+  const iv = CryptoJS.lib.WordArray.random(16);
+  const key = deriveAesKey(passphrase, salt, LLM_EXPORT_PBKDF2_ITERATIONS);
+  const encrypted = CryptoJS.AES.encrypt(payload, key, {
+    iv,
+    mode: CryptoJS.mode.CBC,
+    padding: CryptoJS.pad.Pkcs7,
+  });
+
+  const envelope: LlmEncryptedEnvelope = {
+    version: 1,
+    cipher: "aes-256-cbc",
+    kdf: "pbkdf2-sha256",
+    iterations: LLM_EXPORT_PBKDF2_ITERATIONS,
+    salt: CryptoJS.enc.Base64.stringify(salt),
+    iv: CryptoJS.enc.Base64.stringify(iv),
+    ciphertext: CryptoJS.enc.Base64.stringify(encrypted.ciphertext),
+  };
+
+  return `${LLM_EXPORT_PREFIX}${bytesToBase64(encodeUtf8(JSON.stringify(envelope)))}`;
+}
+
+function decryptPayload(rawBlob: string, passphrase: string): string {
+  const raw = rawBlob.trim();
+
+  if (raw.startsWith(LLM_EXPORT_PREFIX)) {
+    let envelope: LlmEncryptedEnvelope;
+    try {
+      envelope = JSON.parse(decodeUtf8(base64ToBytes(raw.slice(LLM_EXPORT_PREFIX.length)))) as LlmEncryptedEnvelope;
+    } catch {
+      throw new Error("Invalid encrypted payload format.");
+    }
+
+    if (
+      !envelope ||
+      envelope.version !== 1 ||
+      envelope.cipher !== "aes-256-cbc" ||
+      envelope.kdf !== "pbkdf2-sha256" ||
+      !Number.isFinite(envelope.iterations) ||
+      envelope.iterations < 1000 ||
+      !envelope.salt ||
+      !envelope.iv ||
+      !envelope.ciphertext
+    ) {
+      throw new Error("Unsupported encrypted payload format.");
+    }
+
+    try {
+      const salt = CryptoJS.enc.Base64.parse(envelope.salt);
+      const iv = CryptoJS.enc.Base64.parse(envelope.iv);
+      const ciphertext = CryptoJS.enc.Base64.parse(envelope.ciphertext);
+      const key = deriveAesKey(passphrase, salt, envelope.iterations);
+      const decrypted = CryptoJS.AES.decrypt(CryptoJS.lib.CipherParams.create({ ciphertext }), key, {
+        iv,
+        mode: CryptoJS.mode.CBC,
+        padding: CryptoJS.pad.Pkcs7,
+      });
+      const plaintext = decrypted.toString(CryptoJS.enc.Utf8);
+      if (!plaintext) {
+        throw new Error("Decrypt failed");
+      }
+      return plaintext;
+    } catch {
+      throw new Error("Failed to decrypt payload. Check passphrase.");
+    }
+  }
+
+  if (raw.startsWith(LLM_EXPORT_PREFIX_LEGACY)) {
+    const key = encodeUtf8(passphrase);
+    const encrypted = base64ToBytes(raw.slice(LLM_EXPORT_PREFIX_LEGACY.length));
+    const decrypted = xorBytes(encrypted, key);
+    return decodeUtf8(decrypted);
+  }
+
+  throw new Error("Invalid encrypted LLM payload.");
+}
+
+function normalizeImportedProfile(profile: LlmProfile): LlmProfile {
+  return {
+    ...profile,
+    id: profile.id || makeId(),
+    name: profile.name?.trim() || "LLM Provider",
+    baseUrl: profile.baseUrl?.trim() || "",
+    model: profile.model?.trim() || "",
+    apiKey: profile.apiKey?.trim() || "",
+    requestPath: profile.requestPath?.trim() || undefined,
+    extraHeaders: profile.extraHeaders?.trim() || undefined,
+    azureDeployment: profile.azureDeployment?.trim() || undefined,
+    azureApiVersion: profile.azureApiVersion?.trim() || undefined,
+    kind:
+      profile.kind === "azure_openai"
+        ? "azure_openai"
+        : profile.kind === "anthropic"
+        ? "anthropic"
+        : profile.kind === "ollama"
+        ? "ollama"
+        : profile.kind === "gemini"
+        ? "gemini"
+        : "openai_compatible",
+  };
 }
 
 export function useLlmProfiles() {
@@ -168,42 +300,29 @@ export function useLlmProfiles() {
 
   const exportEncrypted = useCallback(
     (passphrase: string) => {
-      const key = encodeUtf8(passphrase.trim());
-      if (key.length === 0) {
-        throw new Error("Passphrase is required.");
-      }
-
+      const securedPassphrase = requirePassphrase(passphrase);
       const payload = JSON.stringify({
         version: 1,
         exported_at: new Date().toISOString(),
         activeProfileId,
         profiles,
       });
-
-      const encrypted = xorBytes(encodeUtf8(payload), key);
-      return `${LLM_EXPORT_PREFIX}${bytesToBase64(encrypted)}`;
+      return encryptPayload(payload, securedPassphrase);
     },
     [activeProfileId, profiles]
   );
 
   const importEncrypted = useCallback(
     async (blob: string, passphrase: string) => {
-      const key = encodeUtf8(passphrase.trim());
-      if (key.length === 0) {
-        throw new Error("Passphrase is required.");
-      }
-
-      const raw = blob.trim();
-      if (!raw.startsWith(LLM_EXPORT_PREFIX)) {
-        throw new Error("Invalid encrypted LLM payload.");
-      }
-
-      const encrypted = base64ToBytes(raw.slice(LLM_EXPORT_PREFIX.length));
-      const decrypted = xorBytes(encrypted, key);
+      const securedPassphrase = requirePassphrase(passphrase);
       let parsed: { profiles?: LlmProfile[]; activeProfileId?: string } | null = null;
+
       try {
-        parsed = JSON.parse(decodeUtf8(decrypted)) as { profiles?: LlmProfile[]; activeProfileId?: string };
-      } catch {
+        parsed = JSON.parse(decryptPayload(blob, securedPassphrase)) as { profiles?: LlmProfile[]; activeProfileId?: string };
+      } catch (error) {
+        if (error instanceof Error) {
+          throw error;
+        }
         throw new Error("Failed to decrypt payload. Check passphrase.");
       }
 
@@ -215,29 +334,8 @@ export function useLlmProfiles() {
       const mergedMap = new Map<string, LlmProfile>();
       profiles.forEach((profile) => mergedMap.set(profile.id, profile));
       incoming.forEach((profile) => {
-        const id = profile.id || makeId();
-        mergedMap.set(id, {
-          ...profile,
-          id,
-          name: profile.name?.trim() || "LLM Provider",
-          baseUrl: profile.baseUrl?.trim() || "",
-          model: profile.model?.trim() || "",
-          apiKey: profile.apiKey?.trim() || "",
-          requestPath: profile.requestPath?.trim() || undefined,
-          extraHeaders: profile.extraHeaders?.trim() || undefined,
-          azureDeployment: profile.azureDeployment?.trim() || undefined,
-          azureApiVersion: profile.azureApiVersion?.trim() || undefined,
-          kind:
-            profile.kind === "azure_openai"
-              ? "azure_openai"
-              : profile.kind === "anthropic"
-              ? "anthropic"
-              : profile.kind === "ollama"
-                ? "ollama"
-                : profile.kind === "gemini"
-                  ? "gemini"
-                  : "openai_compatible",
-        });
+        const normalized = normalizeImportedProfile(profile);
+        mergedMap.set(normalized.id, normalized);
       });
 
       const nextProfiles = Array.from(mergedMap.values());
