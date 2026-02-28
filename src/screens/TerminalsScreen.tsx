@@ -89,6 +89,36 @@ function glassesBrandLabel(brand: GlassesBrand): string {
   return "Custom";
 }
 
+function glassesBrandPreset(brand: GlassesBrand): {
+  textScale: number;
+  loopCaptureMs: number;
+  vadSilenceMs: number;
+  wakePhrase: string;
+} {
+  if (brand === "halo") {
+    return {
+      textScale: 1.15,
+      loopCaptureMs: 7600,
+      vadSilenceMs: 1100,
+      wakePhrase: "halo",
+    };
+  }
+  if (brand === "custom") {
+    return {
+      textScale: 1,
+      loopCaptureMs: 6800,
+      vadSilenceMs: 900,
+      wakePhrase: "nova",
+    };
+  }
+  return {
+    textScale: 1.05,
+    loopCaptureMs: 6400,
+    vadSilenceMs: 800,
+    wakePhrase: "xreal",
+  };
+}
+
 type ProcessSortMode = "cpu" | "mem" | "uptime" | "name";
 
 function normalizeProcessSorts(input: unknown): ProcessSortMode[] {
@@ -225,6 +255,10 @@ export function TerminalsScreen() {
     onSetGlassesWakePhraseEnabled,
     onSetGlassesWakePhrase,
     onSetGlassesMinimalMode,
+    onSetGlassesVadEnabled,
+    onSetGlassesVadSilenceMs,
+    onSetGlassesLoopCaptureMs,
+    onSetGlassesHeadsetPttEnabled,
     onOpenGlassesMode,
     onVoiceStartCapture,
     onVoiceStopCapture,
@@ -766,6 +800,21 @@ export function TerminalsScreen() {
             </Pressable>
           ))}
         </ScrollView>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.actionButton}
+          onPress={() => {
+            const preset = glassesBrandPreset(glassesMode.brand);
+            onSetGlassesTextScale(preset.textScale);
+            onSetGlassesLoopCaptureMs(preset.loopCaptureMs);
+            onSetGlassesVadSilenceMs(preset.vadSilenceMs);
+            if (!glassesMode.wakePhraseEnabled || !glassesMode.wakePhrase.trim()) {
+              onSetGlassesWakePhrase(preset.wakePhrase);
+            }
+          }}
+        >
+          <Text style={styles.actionButtonText}>{`Apply ${glassesBrandLabel(glassesMode.brand)} preset`}</Text>
+        </Pressable>
 
         <View style={styles.rowInlineSpace}>
           <Pressable
@@ -832,6 +881,42 @@ export function TerminalsScreen() {
             thumbColor={glassesMode.minimalMode ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.minimalMode}
             onValueChange={onSetGlassesMinimalMode}
+          />
+        </View>
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Server VAD assist</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.vadEnabled ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.vadEnabled}
+            onValueChange={onSetGlassesVadEnabled}
+          />
+        </View>
+        <TextInput
+          style={styles.input}
+          value={String(glassesMode.loopCaptureMs)}
+          onChangeText={(value) => onSetGlassesLoopCaptureMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
+          placeholder="Loop capture ms (1500-30000)"
+          placeholderTextColor="#7f7aa8"
+          keyboardType="number-pad"
+        />
+        {glassesMode.vadEnabled ? (
+          <TextInput
+            style={styles.input}
+            value={String(glassesMode.vadSilenceMs)}
+            onChangeText={(value) => onSetGlassesVadSilenceMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
+            placeholder="VAD silence ms (250-5000)"
+            placeholderTextColor="#7f7aa8"
+            keyboardType="number-pad"
+          />
+        ) : null}
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>BT remote push-to-talk keys</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.headsetPttEnabled ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.headsetPttEnabled}
+            onValueChange={onSetGlassesHeadsetPttEnabled}
           />
         </View>
 

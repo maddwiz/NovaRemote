@@ -519,6 +519,10 @@ export default function AppShell() {
     setWakePhraseEnabled: setGlassesWakePhraseEnabled,
     setWakePhrase: setGlassesWakePhrase,
     setMinimalMode: setGlassesMinimalMode,
+    setVadEnabled: setGlassesVadEnabled,
+    setVadSilenceMs: setGlassesVadSilenceMs,
+    setLoopCaptureMs: setGlassesLoopCaptureMs,
+    setHeadsetPttEnabled: setGlassesHeadsetPttEnabled,
   } = useGlassesMode();
   const {
     recording: voiceRecording,
@@ -884,37 +888,52 @@ export default function AppShell() {
 
   const stopVoiceCaptureIntoSession = useCallback(
     async (session: string) => {
-      const rawTranscript = (
-        await stopVoiceCaptureAndTranscribe({
-          wakePhrase: glassesMode.wakePhrase,
-          requireWakePhrase: glassesMode.wakePhraseEnabled,
-        })
-      ).trim();
-      if (!rawTranscript) {
-        throw new Error("No transcript detected. Try speaking closer to the microphone.");
-      }
-      const commandTranscript = glassesMode.wakePhraseEnabled
-        ? extractWakePhraseCommand(rawTranscript, glassesMode.wakePhrase)
-        : rawTranscript;
-      if (!commandTranscript) {
-        throw new Error(`Wake phrase "${glassesMode.wakePhrase}" was not detected.`);
-      }
-
-      if (commandTranscript !== rawTranscript) {
-        setVoiceTranscript(commandTranscript);
-      }
-
-      setDrafts((prev) => ({ ...prev, [session]: commandTranscript }));
-      if (!glassesMode.voiceAutoSend) {
-        if (glassesMode.voiceLoop) {
-          await startVoiceCapture();
+      let restartLoop = glassesMode.voiceLoop;
+      try {
+        const rawTranscript = (
+          await stopVoiceCaptureAndTranscribe({
+            wakePhrase: glassesMode.wakePhrase,
+            requireWakePhrase: glassesMode.wakePhraseEnabled,
+            vadEnabled: glassesMode.vadEnabled,
+            vadSilenceMs: glassesMode.vadSilenceMs,
+          })
+        ).trim();
+        if (!rawTranscript) {
+          throw new Error("No transcript detected. Try speaking closer to the microphone.");
         }
-        return;
-      }
-      setSessionMode(session, "ai");
-      await sendTextToSession(session, commandTranscript, "ai");
-      if (glassesMode.voiceLoop) {
-        await startVoiceCapture();
+        const commandTranscript = glassesMode.wakePhraseEnabled
+          ? extractWakePhraseCommand(rawTranscript, glassesMode.wakePhrase)
+          : rawTranscript;
+        if (!commandTranscript) {
+          throw new Error(`Wake phrase "${glassesMode.wakePhrase}" was not detected.`);
+        }
+
+        if (commandTranscript !== rawTranscript) {
+          setVoiceTranscript(commandTranscript);
+        }
+
+        setDrafts((prev) => ({ ...prev, [session]: commandTranscript }));
+        if (!glassesMode.voiceAutoSend) {
+          return;
+        }
+        setSessionMode(session, "ai");
+        await sendTextToSession(session, commandTranscript, "ai");
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (
+          /no transcription endpoint found|connect to a server|http \d+ from/i.test(message)
+        ) {
+          restartLoop = false;
+        }
+        throw error;
+      } finally {
+        if (restartLoop) {
+          try {
+            await startVoiceCapture();
+          } catch {
+            // best effort restart for continuous glasses mode
+          }
+        }
       }
     },
     [
@@ -922,6 +941,8 @@ export default function AppShell() {
       glassesMode.voiceLoop,
       glassesMode.wakePhrase,
       glassesMode.wakePhraseEnabled,
+      glassesMode.vadEnabled,
+      glassesMode.vadSilenceMs,
       sendTextToSession,
       setDrafts,
       setSessionMode,
@@ -1741,6 +1762,10 @@ export default function AppShell() {
     onSetGlassesWakePhraseEnabled: setGlassesWakePhraseEnabled,
     onSetGlassesWakePhrase: setGlassesWakePhrase,
     onSetGlassesMinimalMode: setGlassesMinimalMode,
+    onSetGlassesVadEnabled: setGlassesVadEnabled,
+    onSetGlassesVadSilenceMs: setGlassesVadSilenceMs,
+    onSetGlassesLoopCaptureMs: setGlassesLoopCaptureMs,
+    onSetGlassesHeadsetPttEnabled: setGlassesHeadsetPttEnabled,
     onOpenGlassesMode: () => {
       if (!glassesMode.enabled) {
         setGlassesEnabled(true);

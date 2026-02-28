@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View } from "react-native";
 
 import { AnsiText } from "../components/AnsiText";
 import { useAppContext } from "../context/AppContext";
@@ -26,6 +26,36 @@ function glassesAccent(brand: GlassesBrand): string {
   return "#87ffa4";
 }
 
+function brandPreset(brand: GlassesBrand): {
+  textScale: number;
+  loopCaptureMs: number;
+  vadSilenceMs: number;
+  wakePhrase: string;
+} {
+  if (brand === "halo") {
+    return {
+      textScale: 1.15,
+      loopCaptureMs: 7600,
+      vadSilenceMs: 1100,
+      wakePhrase: "halo",
+    };
+  }
+  if (brand === "custom") {
+    return {
+      textScale: 1,
+      loopCaptureMs: 6800,
+      vadSilenceMs: 900,
+      wakePhrase: "nova",
+    };
+  }
+  return {
+    textScale: 1.05,
+    loopCaptureMs: 6400,
+    vadSilenceMs: 800,
+    wakePhrase: "xreal",
+  };
+}
+
 export function GlassesModeScreen() {
   const {
     openSessions,
@@ -46,6 +76,11 @@ export function GlassesModeScreen() {
     onSetGlassesWakePhraseEnabled,
     onSetGlassesWakePhrase,
     onSetGlassesMinimalMode,
+    onSetGlassesTextScale,
+    onSetGlassesVadEnabled,
+    onSetGlassesVadSilenceMs,
+    onSetGlassesLoopCaptureMs,
+    onSetGlassesHeadsetPttEnabled,
     onVoiceStartCapture,
     onVoiceStopCapture,
     onVoiceSendTranscript,
@@ -54,6 +89,7 @@ export function GlassesModeScreen() {
 
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const outputRef = useRef<ScrollView | null>(null);
+  const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (openSessions.length === 0) {
@@ -94,6 +130,54 @@ export function GlassesModeScreen() {
     setActiveSession(openSessions[nextIndex]);
   };
 
+  const onPttKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    if (!glassesMode.headsetPttEnabled || !activeSession || voiceBusy) {
+      return;
+    }
+    const key = String(event.nativeEvent.key || "").toLowerCase();
+    if (key !== "enter" && key !== " " && key !== "space" && key !== "k" && key !== "headsethook") {
+      return;
+    }
+    if (voiceRecording) {
+      onVoiceStopCapture(activeSession);
+      return;
+    }
+    onVoiceStartCapture();
+  };
+
+  useEffect(() => {
+    if (!glassesMode.voiceLoop || !activeSession || !voiceRecording || voiceBusy) {
+      if (loopTimeoutRef.current) {
+        clearTimeout(loopTimeoutRef.current);
+        loopTimeoutRef.current = null;
+      }
+      return;
+    }
+    if (loopTimeoutRef.current) {
+      clearTimeout(loopTimeoutRef.current);
+      loopTimeoutRef.current = null;
+    }
+    loopTimeoutRef.current = setTimeout(() => {
+      onVoiceStopCapture(activeSession);
+    }, glassesMode.loopCaptureMs);
+
+    return () => {
+      if (loopTimeoutRef.current) {
+        clearTimeout(loopTimeoutRef.current);
+        loopTimeoutRef.current = null;
+      }
+    };
+  }, [activeSession, glassesMode.loopCaptureMs, glassesMode.voiceLoop, onVoiceStopCapture, voiceBusy, voiceRecording]);
+
+  useEffect(() => {
+    return () => {
+      if (loopTimeoutRef.current) {
+        clearTimeout(loopTimeoutRef.current);
+        loopTimeoutRef.current = null;
+      }
+    };
+  }, []);
+
   return (
     <View style={styles.glassesRoutePanel}>
       <View style={[styles.glassesRouteHeader, { borderColor: accent }]}>
@@ -113,6 +197,21 @@ export function GlassesModeScreen() {
             onValueChange={onSetGlassesMinimalMode}
           />
         </View>
+        <Pressable
+          accessibilityRole="button"
+          style={styles.glassesRouteButton}
+          onPress={() => {
+            const preset = brandPreset(glassesMode.brand);
+            onSetGlassesTextScale(preset.textScale);
+            onSetGlassesLoopCaptureMs(preset.loopCaptureMs);
+            onSetGlassesVadSilenceMs(preset.vadSilenceMs);
+            if (!glassesMode.wakePhraseEnabled || !glassesMode.wakePhrase.trim()) {
+              onSetGlassesWakePhrase(preset.wakePhrase);
+            }
+          }}
+        >
+          <Text style={styles.glassesRouteButtonText}>{`Apply ${glassesBrandLabel(glassesMode.brand)} preset`}</Text>
+        </Pressable>
       </View>
 
       {openSessions.length > 0 ? (
@@ -169,6 +268,14 @@ export function GlassesModeScreen() {
             onValueChange={onSetGlassesVoiceLoop}
           />
         </View>
+        <TextInput
+          style={styles.input}
+          value={String(glassesMode.loopCaptureMs)}
+          onChangeText={(value) => onSetGlassesLoopCaptureMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
+          placeholder="Loop capture ms (1500-30000)"
+          placeholderTextColor="#7f7aa8"
+          keyboardType="number-pad"
+        />
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Require wake phrase</Text>
           <Switch
@@ -189,6 +296,47 @@ export function GlassesModeScreen() {
             autoCorrect={false}
           />
         ) : null}
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Server VAD assist</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.vadEnabled ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.vadEnabled}
+            onValueChange={onSetGlassesVadEnabled}
+          />
+        </View>
+        {glassesMode.vadEnabled ? (
+          <TextInput
+            style={styles.input}
+            value={String(glassesMode.vadSilenceMs)}
+            onChangeText={(value) => onSetGlassesVadSilenceMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
+            placeholder="VAD silence ms (250-5000)"
+            placeholderTextColor="#7f7aa8"
+            keyboardType="number-pad"
+          />
+        ) : null}
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>BT remote push-to-talk keys</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.headsetPttEnabled ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.headsetPttEnabled}
+            onValueChange={onSetGlassesHeadsetPttEnabled}
+          />
+        </View>
+        {glassesMode.headsetPttEnabled ? (
+          <TextInput
+            style={styles.input}
+            placeholder="Focus here and press Enter/Space/K on BT remote"
+            placeholderTextColor="#7f7aa8"
+            autoCapitalize="none"
+            autoCorrect={false}
+            onKeyPress={onPttKeyPress}
+          />
+        ) : null}
+        <Text style={styles.emptyText}>
+          {`Loop ${glassesMode.loopCaptureMs}ms • VAD ${glassesMode.vadEnabled ? `${glassesMode.vadSilenceMs}ms` : "off"}`}
+        </Text>
 
         {!glassesMode.minimalMode ? (
           <TextInput

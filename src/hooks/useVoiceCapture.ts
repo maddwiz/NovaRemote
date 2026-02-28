@@ -4,7 +4,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { normalizeBaseUrl } from "../api/client";
 import { ServerProfile } from "../types";
 
-const TRANSCRIBE_ENDPOINTS = ["/voice/transcribe", "/speech/transcribe", "/ai/transcribe", "/llm/transcribe"];
+const BASE_TRANSCRIBE_ENDPOINTS = ["/voice/transcribe", "/speech/transcribe", "/ai/transcribe", "/llm/transcribe"];
+const VAD_TRANSCRIBE_ENDPOINTS = ["/voice/transcribe-vad", "/speech/transcribe-vad", "/ai/transcribe-vad", "/llm/transcribe-vad"];
 
 type UseVoiceCaptureArgs = {
   activeServer: ServerProfile | null;
@@ -14,6 +15,8 @@ type UseVoiceCaptureArgs = {
 type VoiceTranscribeOptions = {
   wakePhrase?: string;
   requireWakePhrase?: boolean;
+  vadEnabled?: boolean;
+  vadSilenceMs?: number;
 };
 
 function readTranscript(payload: unknown): string {
@@ -125,7 +128,11 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       const baseUrl = normalizeBaseUrl(activeServer.baseUrl);
       let lastHttpError: string | null = null;
 
-      for (const endpoint of TRANSCRIBE_ENDPOINTS) {
+      const endpointOrder = options.vadEnabled
+        ? [...VAD_TRANSCRIBE_ENDPOINTS, ...BASE_TRANSCRIBE_ENDPOINTS]
+        : BASE_TRANSCRIBE_ENDPOINTS;
+
+      for (const endpoint of endpointOrder) {
         const form = new FormData();
         form.append("file", {
           uri,
@@ -138,6 +145,11 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         }
         if (typeof options.requireWakePhrase === "boolean") {
           form.append("require_wake_phrase", options.requireWakePhrase ? "true" : "false");
+        }
+        if (options.vadEnabled) {
+          form.append("vad", "true");
+          const vadSilenceMs = Number.isFinite(options.vadSilenceMs) ? Math.max(250, Math.min(Number(options.vadSilenceMs), 5000)) : 900;
+          form.append("vad_silence_ms", String(vadSilenceMs));
         }
 
         try {
@@ -182,7 +194,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
 
       throw new Error(
         lastHttpError ||
-          "No transcription endpoint found. Add one of: /voice/transcribe, /speech/transcribe, /ai/transcribe, /llm/transcribe."
+          "No transcription endpoint found. Add one of: /voice/transcribe-vad, /voice/transcribe, /speech/transcribe, /ai/transcribe, /llm/transcribe."
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);

@@ -13,6 +13,10 @@ const DEFAULT_GLASSES_MODE: GlassesModeSettings = {
   wakePhraseEnabled: false,
   wakePhrase: "nova",
   minimalMode: true,
+  vadEnabled: false,
+  vadSilenceMs: 900,
+  loopCaptureMs: 6500,
+  headsetPttEnabled: true,
 };
 
 function normalizeBrand(value: unknown): GlassesBrand {
@@ -38,6 +42,22 @@ function normalizeWakePhrase(value: unknown): string {
   return normalized.slice(0, 32);
 }
 
+function normalizeVadSilenceMs(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value || ""), 10);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_GLASSES_MODE.vadSilenceMs;
+  }
+  return Math.max(250, Math.min(parsed, 5000));
+}
+
+function normalizeLoopCaptureMs(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number.parseInt(String(value || ""), 10);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_GLASSES_MODE.loopCaptureMs;
+  }
+  return Math.max(1500, Math.min(parsed, 30000));
+}
+
 export function useGlassesMode() {
   const [settings, setSettings] = useState<GlassesModeSettings>(DEFAULT_GLASSES_MODE);
 
@@ -61,6 +81,11 @@ export function useGlassesMode() {
             parsed.wakePhraseEnabled !== undefined ? Boolean(parsed.wakePhraseEnabled) : DEFAULT_GLASSES_MODE.wakePhraseEnabled,
           wakePhrase: normalizeWakePhrase(parsed.wakePhrase),
           minimalMode: parsed.minimalMode !== undefined ? Boolean(parsed.minimalMode) : DEFAULT_GLASSES_MODE.minimalMode,
+          vadEnabled: parsed.vadEnabled !== undefined ? Boolean(parsed.vadEnabled) : DEFAULT_GLASSES_MODE.vadEnabled,
+          vadSilenceMs: normalizeVadSilenceMs(parsed.vadSilenceMs),
+          loopCaptureMs: normalizeLoopCaptureMs(parsed.loopCaptureMs),
+          headsetPttEnabled:
+            parsed.headsetPttEnabled !== undefined ? Boolean(parsed.headsetPttEnabled) : DEFAULT_GLASSES_MODE.headsetPttEnabled,
         });
       } catch {
         setSettings(DEFAULT_GLASSES_MODE);
@@ -106,6 +131,22 @@ export function useGlassesMode() {
     setSettings((prev) => ({ ...prev, minimalMode }));
   }, []);
 
+  const setVadEnabled = useCallback((vadEnabled: boolean) => {
+    setSettings((prev) => ({ ...prev, vadEnabled }));
+  }, []);
+
+  const setVadSilenceMs = useCallback((vadSilenceMs: number) => {
+    setSettings((prev) => ({ ...prev, vadSilenceMs: normalizeVadSilenceMs(vadSilenceMs) }));
+  }, []);
+
+  const setLoopCaptureMs = useCallback((loopCaptureMs: number) => {
+    setSettings((prev) => ({ ...prev, loopCaptureMs: normalizeLoopCaptureMs(loopCaptureMs) }));
+  }, []);
+
+  const setHeadsetPttEnabled = useCallback((headsetPttEnabled: boolean) => {
+    setSettings((prev) => ({ ...prev, headsetPttEnabled }));
+  }, []);
+
   const setTextScale = useCallback((textScale: number) => {
     setSettings((prev) => ({ ...prev, textScale: normalizeTextScale(textScale) }));
   }, []);
@@ -119,6 +160,10 @@ export function useGlassesMode() {
     setWakePhraseEnabled,
     setWakePhrase,
     setMinimalMode,
+    setVadEnabled,
+    setVadSilenceMs,
+    setLoopCaptureMs,
+    setHeadsetPttEnabled,
     setTextScale,
   };
 }

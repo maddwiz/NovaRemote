@@ -315,6 +315,10 @@ NovaRemote can capture microphone audio on-device and post it to the companion s
 
 The app will try these endpoints in order until one succeeds:
 
+- `POST /voice/transcribe-vad` (preferred when VAD assist is enabled)
+- `POST /speech/transcribe-vad`
+- `POST /ai/transcribe-vad`
+- `POST /llm/transcribe-vad`
 - `POST /voice/transcribe`
 - `POST /speech/transcribe`
 - `POST /ai/transcribe`
@@ -327,6 +331,8 @@ Request format:
 - file field: `file` (audio/m4a)
 - optional field: `wake_phrase` (string, for example `nova`)
 - optional field: `require_wake_phrase` (`true`/`false`)
+- optional field: `vad` (`true`/`false`)
+- optional field: `vad_silence_ms` (integer, recommended `250-5000`)
 
 Recommended response format:
 

@@ -204,6 +204,10 @@ export type GlassesModeSettings = {
   wakePhraseEnabled: boolean;
   wakePhrase: string;
   minimalMode: boolean;
+  vadEnabled: boolean;
+  vadSilenceMs: number;
+  loopCaptureMs: number;
+  headsetPttEnabled: boolean;
 };
 
 export type LlmProfile = {
