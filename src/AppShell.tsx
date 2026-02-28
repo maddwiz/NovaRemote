@@ -1,6 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
   AppState,
@@ -17,6 +17,7 @@ import {
 import { apiRequest, normalizeBaseUrl } from "./api/client";
 import { FullscreenTerminal } from "./components/FullscreenTerminal";
 import { LockScreen } from "./components/LockScreen";
+import { DangerConfirmModal } from "./components/DangerConfirmModal";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { PaywallModal } from "./components/PaywallModal";
 import { ShareServerModal } from "./components/ShareServerModal";
@@ -37,6 +38,7 @@ import { useConnectionHealth } from "./hooks/useConnectionHealth";
 import { useNotifications } from "./hooks/useNotifications";
 import { useOnboarding } from "./hooks/useOnboarding";
 import { useRevenueCat } from "./hooks/useRevenueCat";
+import { useSafetyPolicy } from "./hooks/useSafetyPolicy";
 import { useServers } from "./hooks/useServers";
 import { useSessionTags } from "./hooks/useSessionTags";
 import { useServerCapabilities } from "./hooks/useServerCapabilities";
@@ -100,6 +102,27 @@ function makeFleetSessionName(): string {
   return `fleet-${stamp}-${suffix}`;
 }
 
+function isDangerousShellCommand(command: string): boolean {
+  const normalized = command.trim().toLowerCase();
+  if (!normalized) {
+    return false;
+  }
+
+  const patterns = [
+    /\brm\s+-rf\b/,
+    /\bmkfs(\.| )/,
+    /\bdd\s+if=/,
+    /\bshutdown\b/,
+    /\breboot\b/,
+    /\bpoweroff\b/,
+    /:\(\)\s*\{\s*:\|:\s*&\s*\};:/,
+    /\bchmod\s+-r\s+0\b/,
+    /\bchown\s+-r\s+root\b/,
+  ];
+
+  return patterns.some((pattern) => pattern.test(normalized));
+}
+
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -114,6 +137,12 @@ export default function AppShell() {
   const [fleetTargets, setFleetTargets] = useState<string[]>([]);
   const [fleetBusy, setFleetBusy] = useState<boolean>(false);
   const [fleetResults, setFleetResults] = useState<FleetRunResult[]>([]);
+  const [dangerPrompt, setDangerPrompt] = useState<{ visible: boolean; command: string; context: string }>({
+    visible: false,
+    command: "",
+    context: "",
+  });
+  const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -127,6 +156,7 @@ export default function AppShell() {
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
   const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
   const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
+  const { loading: safetyLoading, requireDangerConfirm, setRequireDangerConfirm } = useSafetyPolicy();
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet } = useSnippets();
@@ -344,6 +374,21 @@ export default function AppShell() {
     return true;
   }, [isPro]);
 
+  const requestDangerApproval = useCallback(async (command: string, context: string) => {
+    if (!requireDangerConfirm || !isDangerousShellCommand(command)) {
+      return true;
+    }
+
+    return await new Promise<boolean>((resolve) => {
+      dangerResolverRef.current = resolve;
+      setDangerPrompt({
+        visible: true,
+        command,
+        context,
+      });
+    });
+  }, [requireDangerConfirm]);
+
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") {
@@ -503,7 +548,7 @@ export default function AppShell() {
   const focusedMatchIndex = normalizeMatchIndex(focusedCursor, focusedMatchCount);
   const focusedSearchLabel = focusedMatchCount === 0 ? "0 matches" : `${focusedMatchIndex + 1}/${focusedMatchCount}`;
 
-  if (lockLoading || onboardingLoading || tutorialLoading) {
+  if (lockLoading || onboardingLoading || tutorialLoading || safetyLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="light" />
@@ -580,6 +625,7 @@ export default function AppShell() {
               editingServerId={editingServerId}
               tokenMasked={tokenMasked}
               requireBiometric={requireBiometric}
+              requireDangerConfirm={requireDangerConfirm}
               onUseServer={(serverId) => {
                 void runWithStatus("Switching server", async () => {
                   await useServer(serverId);
@@ -606,6 +652,11 @@ export default function AppShell() {
               onSetRequireBiometric={(value) => {
                 void runWithStatus("Updating lock setting", async () => {
                   await setRequireBiometric(value);
+                });
+              }}
+              onSetRequireDangerConfirm={(value) => {
+                void runWithStatus("Updating safety setting", async () => {
+                  await setRequireDangerConfirm(value);
                 });
               }}
               onToggleTokenMask={() => setTokenMasked((prev) => !prev)}
@@ -681,6 +732,13 @@ export default function AppShell() {
                     throw new Error("Active server does not support shell execution.");
                   }
 
+                  if (startKind === "shell" && startPrompt.trim()) {
+                    const approved = await requestDangerApproval(startPrompt, "Initial shell command");
+                    if (!approved) {
+                      return;
+                    }
+                  }
+
                   await handleStartSession();
                   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 });
@@ -752,6 +810,15 @@ export default function AppShell() {
               onSend={(session) => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 void runWithStatus(`Sending to ${session}`, async () => {
+                  const draft = (drafts[session] || "").trim();
+                  const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+                  if (mode === "shell") {
+                    const approved = await requestDangerApproval(draft, `Send to ${session}`);
+                    if (!approved) {
+                      return;
+                    }
+                  }
+
                   const sent = await handleSend(session);
                   if (sent) {
                     await addCommand(session, sent);
@@ -771,6 +838,10 @@ export default function AppShell() {
               }}
               onRunFleet={() => {
                 void runWithStatus("Running fleet command", async () => {
+                  const approved = await requestDangerApproval(fleetCommand, "Fleet execute");
+                  if (!approved) {
+                    return;
+                  }
                   await runFleetCommand();
                 });
               }}
@@ -804,6 +875,12 @@ export default function AppShell() {
               onRunSnippet={(session, command, mode) => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 void runWithStatus(`Running snippet in ${session}`, async () => {
+                  if (mode === "shell") {
+                    const approved = await requestDangerApproval(command, `Snippet in ${session}`);
+                    if (!approved) {
+                      return;
+                    }
+                  }
                   await sendCommand(session, command, mode, false);
                   await addCommand(session, command);
                   if (isPro) {
@@ -866,6 +943,10 @@ export default function AppShell() {
                 onSendPathCommand={(session, path) => {
                   void runWithStatus(`Running cat in ${session}`, async () => {
                     const command = `cat ${shellQuote(path)}`;
+                    const approved = await requestDangerApproval(command, `File command in ${session}`);
+                    if (!approved) {
+                      return;
+                    }
                     await sendCommand(session, command, "shell", false);
                     await addCommand(session, command);
                   });
@@ -962,6 +1043,12 @@ export default function AppShell() {
           }
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           void runWithStatus(`Sending to ${focusedSession}`, async () => {
+            if (focusedMode === "shell") {
+              const approved = await requestDangerApproval(focusedDraft, `Send to ${focusedSession}`);
+              if (!approved) {
+                return;
+              }
+            }
             const sent = await handleSend(focusedSession);
             if (sent) {
               await addCommand(focusedSession, sent);
@@ -1047,6 +1134,24 @@ export default function AppShell() {
         title={shareConfig?.title || "Server"}
         value={shareConfig?.link || ""}
         onClose={() => setShareConfig(null)}
+      />
+
+      <DangerConfirmModal
+        visible={dangerPrompt.visible}
+        command={dangerPrompt.command}
+        context={dangerPrompt.context}
+        onCancel={() => {
+          setDangerPrompt({ visible: false, command: "", context: "" });
+          const resolver = dangerResolverRef.current;
+          dangerResolverRef.current = null;
+          resolver?.(false);
+        }}
+        onConfirm={() => {
+          setDangerPrompt({ visible: false, command: "", context: "" });
+          const resolver = dangerResolverRef.current;
+          dangerResolverRef.current = null;
+          resolver?.(true);
+        }}
       />
 
       <TutorialModal

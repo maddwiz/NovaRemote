@@ -10,6 +10,7 @@ export const STORAGE_SESSION_TAGS_PREFIX = "novaremote.session_tags.v1";
 export const STORAGE_REQUIRE_BIOMETRIC = "novaremote.require_biometric.v1";
 export const STORAGE_ONBOARDING_DONE = "novaremote.onboarding_done.v1";
 export const STORAGE_TUTORIAL_DONE = "novaremote.tutorial_done.v1";
+export const STORAGE_REQUIRE_DANGER_CONFIRM = "novaremote.require_danger_confirm.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";

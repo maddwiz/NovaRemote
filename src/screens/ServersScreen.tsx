@@ -16,6 +16,7 @@ type ServersScreenProps = {
   editingServerId: string | null;
   tokenMasked: boolean;
   requireBiometric: boolean;
+  requireDangerConfirm: boolean;
   onUseServer: (serverId: string) => void;
   onBeginEditServer: (server: ServerProfile) => void;
   onDeleteServer: (serverId: string) => void;
@@ -25,6 +26,7 @@ type ServersScreenProps = {
   onSetServerToken: (value: string) => void;
   onSetServerCwd: (value: string) => void;
   onSetRequireBiometric: (value: boolean) => void;
+  onSetRequireDangerConfirm: (value: boolean) => void;
   onToggleTokenMask: () => void;
   onClearForm: () => void;
   onSaveServer: () => void;
@@ -41,6 +43,7 @@ export function ServersScreen({
   editingServerId,
   tokenMasked,
   requireBiometric,
+  requireDangerConfirm,
   onUseServer,
   onBeginEditServer,
   onDeleteServer,
@@ -50,6 +53,7 @@ export function ServersScreen({
   onSetServerToken,
   onSetServerCwd,
   onSetRequireBiometric,
+  onSetRequireDangerConfirm,
   onToggleTokenMask,
   onClearForm,
   onSaveServer,
@@ -130,6 +134,16 @@ export function ServersScreen({
           thumbColor={requireBiometric ? "#d4fdff" : "#d3dee5"}
           value={requireBiometric}
           onValueChange={onSetRequireBiometric}
+        />
+      </View>
+
+      <View style={styles.rowInlineSpace}>
+        <Text style={styles.switchLabel}>Confirm Dangerous Commands</Text>
+        <Switch
+          trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+          thumbColor={requireDangerConfirm ? "#d4fdff" : "#d3dee5"}
+          value={requireDangerConfirm}
+          onValueChange={onSetRequireDangerConfirm}
         />
       </View>
 
