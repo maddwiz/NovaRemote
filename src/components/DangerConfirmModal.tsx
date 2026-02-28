@@ -28,10 +28,10 @@ export function DangerConfirmModal({ visible, command, context, onCancel, onConf
           </View>
 
           <View style={styles.rowInlineSpace}>
-            <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onCancel}>
+            <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onCancel}>
               <Text style={styles.buttonGhostText}>Cancel</Text>
             </Pressable>
-            <Pressable style={[styles.actionDangerButton, styles.flexButton]} onPress={onConfirm}>
+            <Pressable accessibilityRole="button" style={[styles.actionDangerButton, styles.flexButton]} onPress={onConfirm}>
               <Text style={styles.actionDangerText}>Run Anyway</Text>
             </Pressable>
           </View>

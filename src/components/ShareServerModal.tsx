@@ -30,7 +30,7 @@ export function ShareServerModal({ visible, value, title, onClose }: ShareServer
             <Text style={styles.emptyText}>Unable to generate QR until a valid share link is available.</Text>
           )}
 
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.buttonGhost, !safeValue ? styles.buttonDisabled : null]}
             disabled={!safeValue}
             onPress={() => {
@@ -40,7 +40,7 @@ export function ShareServerModal({ visible, value, title, onClose }: ShareServer
             <Text style={styles.buttonGhostText}>Share Link</Text>
           </Pressable>
 
-          <Pressable style={styles.buttonPrimary} onPress={onClose}>
+          <Pressable accessibilityRole="button" style={styles.buttonPrimary} onPress={onClose}>
             <Text style={styles.buttonPrimaryText}>Done</Text>
           </Pressable>
         </View>

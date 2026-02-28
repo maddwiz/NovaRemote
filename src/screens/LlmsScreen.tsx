@@ -119,7 +119,7 @@ export function LlmsScreen({
         <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, or native Ollama.</Text>
 
         <View style={styles.actionsWrap}>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -132,7 +132,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>OpenAI</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -145,7 +145,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>OpenRouter</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -158,7 +158,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>Groq</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -171,7 +171,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>xAI</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -184,7 +184,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>Together</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -197,7 +197,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>Mistral</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -210,7 +210,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>DeepSeek</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -225,7 +225,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>Azure OpenAI</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -238,7 +238,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>Gemini</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset(
@@ -254,7 +254,7 @@ export function LlmsScreen({
           >
             <Text style={styles.actionButtonText}>Ollama Native</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={styles.actionButton}
             onPress={() => {
               applyPreset({
@@ -278,7 +278,7 @@ export function LlmsScreen({
         />
 
         <View style={styles.modeRow}>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.modeButton, kind === "openai_compatible" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("openai_compatible");
@@ -289,7 +289,7 @@ export function LlmsScreen({
           >
             <Text style={[styles.modeButtonText, kind === "openai_compatible" ? styles.modeButtonTextOn : null]}>OpenAI-Compatible</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.modeButton, kind === "azure_openai" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("azure_openai");
@@ -302,7 +302,7 @@ export function LlmsScreen({
           >
             <Text style={[styles.modeButtonText, kind === "azure_openai" ? styles.modeButtonTextOn : null]}>Azure OpenAI</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.modeButton, kind === "anthropic" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("anthropic");
@@ -313,7 +313,7 @@ export function LlmsScreen({
           >
             <Text style={[styles.modeButtonText, kind === "anthropic" ? styles.modeButtonTextOn : null]}>Anthropic</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.modeButton, kind === "gemini" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("gemini");
@@ -324,7 +324,7 @@ export function LlmsScreen({
           >
             <Text style={[styles.modeButtonText, kind === "gemini" ? styles.modeButtonTextOn : null]}>Gemini</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.modeButton, kind === "ollama" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("ollama");
@@ -441,7 +441,7 @@ export function LlmsScreen({
         />
 
         <View style={styles.rowInlineSpace}>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.buttonPrimary, styles.flexButton]}
             onPress={() => {
               if (!name.trim() || !baseUrl.trim() || !model.trim()) {
@@ -483,7 +483,7 @@ export function LlmsScreen({
           >
             <Text style={styles.buttonPrimaryText}>{editingId ? "Update Profile" : "Save Profile"}</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.buttonGhost, styles.flexButton]}
             onPress={() => {
               setEditingId(null);
@@ -521,10 +521,10 @@ export function LlmsScreen({
                 {profile.requestPath ? <Text style={styles.emptyText}>{`Path ${profile.requestPath}`}</Text> : null}
                 {profile.extraHeaders ? <Text style={styles.emptyText}>Custom headers configured</Text> : null}
                 <View style={styles.actionsWrap}>
-                  <Pressable style={styles.actionButton} onPress={() => onSetActive(profile.id)}>
+                  <Pressable accessibilityRole="button" style={styles.actionButton} onPress={() => onSetActive(profile.id)}>
                     <Text style={styles.actionButtonText}>{isActive ? "Active" : "Use"}</Text>
                   </Pressable>
-                  <Pressable
+                  <Pressable accessibilityRole="button"
                     style={styles.actionButton}
                     onPress={() => {
                       setEditingId(profile.id);
@@ -542,7 +542,7 @@ export function LlmsScreen({
                   >
                     <Text style={styles.actionButtonText}>Edit</Text>
                   </Pressable>
-                  <Pressable style={styles.actionDangerButton} onPress={() => onDeleteProfile(profile.id)}>
+                  <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={() => onDeleteProfile(profile.id)}>
                     <Text style={styles.actionDangerText}>Delete</Text>
                   </Pressable>
                 </View>
@@ -564,7 +564,7 @@ export function LlmsScreen({
           placeholderTextColor="#7f7aa8"
           multiline
         />
-        <Pressable
+        <Pressable accessibilityRole="button"
           style={[styles.buttonPrimary, testBusy ? styles.buttonDisabled : null]}
           disabled={!activeProfile || testBusy}
           onPress={() => {
@@ -595,7 +595,7 @@ export function LlmsScreen({
           autoCorrect={false}
         />
         <View style={styles.rowInlineSpace}>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.buttonPrimary, styles.flexButton, !transferPassphrase.trim() ? styles.buttonDisabled : null]}
             disabled={!transferPassphrase.trim()}
             onPress={() => {
@@ -605,7 +605,7 @@ export function LlmsScreen({
           >
             <Text style={styles.buttonPrimaryText}>Generate Encrypted Export</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.buttonGhost, styles.flexButton, !transferPassphrase.trim() || !importPayload.trim() ? styles.buttonDisabled : null]}
             disabled={!transferPassphrase.trim() || !importPayload.trim()}
             onPress={() => {

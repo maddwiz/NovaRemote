@@ -122,11 +122,11 @@ export function FullscreenTerminal({
           <Text style={styles.modalTitle}>{session || "Terminal"}</Text>
           <View style={styles.rowInlineSpace}>
             {session ? (
-              <Pressable style={styles.actionButton} onPress={onToggleMode}>
+              <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onToggleMode}>
                 <Text style={styles.actionButtonText}>{mode === "ai" ? "Switch to Shell" : "Switch to AI"}</Text>
               </Pressable>
             ) : null}
-            <Pressable style={styles.actionButton} onPress={onClose}>
+            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onClose}>
               <Text style={styles.actionButtonText}>Close</Text>
             </Pressable>
           </View>
@@ -161,10 +161,10 @@ export function FullscreenTerminal({
             />
 
             <View style={styles.rowInlineSpace}>
-              <Pressable style={styles.actionButton} onPress={onSearchPrev}>
+              <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onSearchPrev}>
                 <Text style={styles.actionButtonText}>Prev</Text>
               </Pressable>
-              <Pressable style={styles.actionButton} onPress={onSearchNext}>
+              <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onSearchNext}>
                 <Text style={styles.actionButtonText}>Next</Text>
               </Pressable>
               <Text style={styles.emptyText}>{searchMatchesLabel}</Text>
@@ -185,20 +185,20 @@ export function FullscreenTerminal({
             </Text>
 
             <View style={styles.rowInlineSpace}>
-              <Pressable style={styles.actionButton} onPress={onHistoryPrev}>
+              <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryPrev}>
                 <Text style={styles.actionButtonText}>↑</Text>
               </Pressable>
-              <Pressable style={styles.actionButton} onPress={onHistoryNext}>
+              <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryNext}>
                 <Text style={styles.actionButtonText}>↓</Text>
               </Pressable>
-              <Pressable
+              <Pressable accessibilityRole="button"
                 style={[styles.buttonPrimary, styles.flexButton, isSending || isReadOnly ? styles.buttonDisabled : null]}
                 disabled={isSending || isReadOnly}
                 onPress={onSend}
               >
                 <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : isReadOnly ? "Read-Only" : "Send"}</Text>
               </Pressable>
-              <Pressable
+              <Pressable accessibilityRole="button"
                 style={[styles.actionDangerButton, styles.flexButton, isReadOnly ? styles.buttonDisabled : null]}
                 onPress={onStop}
                 disabled={isReadOnly}

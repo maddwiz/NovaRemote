@@ -416,14 +416,14 @@ export function TerminalCard({
         </View>
 
         <View style={styles.modeRow}>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.modeButton, mode === "ai" ? styles.modeButtonOn : null, !aiAvailable ? styles.buttonDisabled : null]}
             onPress={() => onSetMode("ai")}
             disabled={!aiAvailable}
           >
             <Text style={[styles.modeButtonText, mode === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.modeButton, mode === "shell" ? styles.modeButtonOn : null, !shellAvailable ? styles.buttonDisabled : null]}
             onPress={() => onSetMode("shell")}
             disabled={!shellAvailable}
@@ -434,17 +434,17 @@ export function TerminalCard({
 
         {mode === "ai" ? (
           <View style={styles.modeRow}>
-            <Pressable style={[styles.modeButton, aiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetAiEngine("auto")}>
+            <Pressable accessibilityRole="button" style={[styles.modeButton, aiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetAiEngine("auto")}>
               <Text style={[styles.modeButtonText, aiEngine === "auto" ? styles.modeButtonTextOn : null]}>AI Auto</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               style={[styles.modeButton, aiEngine === "server" ? styles.modeButtonOn : null, !canUseServerAi ? styles.buttonDisabled : null]}
               onPress={() => onSetAiEngine("server")}
               disabled={!canUseServerAi}
             >
               <Text style={[styles.modeButtonText, aiEngine === "server" ? styles.modeButtonTextOn : null]}>Server</Text>
             </Pressable>
-            <Pressable
+            <Pressable accessibilityRole="button"
               style={[styles.modeButton, aiEngine === "external" ? styles.modeButtonOn : null, !canUseExternalAi ? styles.buttonDisabled : null]}
               onPress={() => onSetAiEngine("external")}
               disabled={!canUseExternalAi}
@@ -455,42 +455,42 @@ export function TerminalCard({
         ) : null}
 
         <View style={styles.actionsWrap}>
-          <Pressable style={[styles.actionButton, !canOpenOnMac ? styles.buttonDisabled : null]} onPress={onOpenOnMac} disabled={!canOpenOnMac}>
+          <Pressable accessibilityRole="button" style={[styles.actionButton, !canOpenOnMac ? styles.buttonDisabled : null]} onPress={onOpenOnMac} disabled={!canOpenOnMac}>
             <Text style={styles.actionButtonText}>Open on Mac</Text>
           </Pressable>
-          <Pressable style={[styles.actionButton, !canSync ? styles.buttonDisabled : null]} onPress={onSync} disabled={!canSync}>
+          <Pressable accessibilityRole="button" style={[styles.actionButton, !canSync ? styles.buttonDisabled : null]} onPress={onSync} disabled={!canSync}>
             <Text style={styles.actionButtonText}>Sync</Text>
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={onExport}>
+          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onExport}>
             <Text style={styles.actionButtonText}>Export</Text>
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={onFullscreen}>
+          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onFullscreen}>
             <Text style={styles.actionButtonText}>Fullscreen</Text>
           </Pressable>
-          <Pressable style={[styles.actionButton, pinned ? styles.modeButtonOn : null]} onPress={onTogglePin}>
+          <Pressable accessibilityRole="button" style={[styles.actionButton, pinned ? styles.modeButtonOn : null]} onPress={onTogglePin}>
             <Text style={styles.actionButtonText}>{pinned ? "Unpin" : "Pin"}</Text>
           </Pressable>
-          <Pressable style={[styles.actionButton, recordingActive ? styles.livePillOff : null]} onPress={onToggleRecording}>
+          <Pressable accessibilityRole="button" style={[styles.actionButton, recordingActive ? styles.livePillOff : null]} onPress={onToggleRecording}>
             <Text style={styles.actionButtonText}>{recordingActive ? "Stop Rec" : "Record"}</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.actionButton, recordingChunks === 0 ? styles.buttonDisabled : null]}
             onPress={onOpenPlayback}
             disabled={recordingChunks === 0}
           >
             <Text style={styles.actionButtonText}>Playback</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.actionDangerButton, !canStop || readOnly ? styles.buttonDisabled : null]}
             onPress={onStop}
             disabled={!canStop || readOnly}
           >
             <Text style={styles.actionDangerText}>Stop</Text>
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={onAutoName}>
+          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onAutoName}>
             <Text style={styles.actionButtonText}>Auto Name</Text>
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={onHide}>
+          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHide}>
             <Text style={styles.actionButtonText}>Hide</Text>
           </Pressable>
         </View>
@@ -509,10 +509,10 @@ export function TerminalCard({
           <View style={styles.rowInlineSpace}>
             <Text style={styles.panelLabel}>Collaboration</Text>
             <View style={styles.actionsWrap}>
-              <Pressable style={styles.actionButton} onPress={onRefreshPresence}>
+              <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onRefreshPresence}>
                 <Text style={styles.actionButtonText}>Refresh Viewers</Text>
               </Pressable>
-              <Pressable style={[styles.actionButton, readOnly ? styles.modeButtonOn : null]} onPress={() => onSetReadOnly(!readOnly)}>
+              <Pressable accessibilityRole="button" style={[styles.actionButton, readOnly ? styles.modeButtonOn : null]} onPress={() => onSetReadOnly(!readOnly)}>
                 <Text style={styles.actionButtonText}>{readOnly ? "Read-Only" : "Interactive"}</Text>
               </Pressable>
             </View>
@@ -543,18 +543,18 @@ export function TerminalCard({
           {autocomplete.length > 0 ? (
             <View style={styles.actionsWrap}>
               {autocomplete.map((command) => (
-                <Pressable key={`${session}-auto-${command}`} style={styles.chip} onPress={() => onDraftChange(command)}>
+                <Pressable accessibilityRole="button" key={`${session}-auto-${command}`} style={styles.chip} onPress={() => onDraftChange(command)}>
                   <Text style={styles.chipText}>{command}</Text>
                 </Pressable>
               ))}
             </View>
           ) : null}
 
-          <Pressable style={styles.actionButton} onPress={onAdaptDraftForBackend}>
+          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onAdaptDraftForBackend}>
             <Text style={styles.actionButtonText}>Adapt for Backend</Text>
           </Pressable>
 
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.actionButton, suggestionsBusy ? styles.buttonDisabled : null]}
             onPress={onRequestSuggestions}
             disabled={suggestionsBusy}
@@ -564,7 +564,7 @@ export function TerminalCard({
           {suggestions.length > 0 ? (
             <View style={styles.actionsWrap}>
               {suggestions.map((suggestion) => (
-                <Pressable key={`${session}-${suggestion}`} style={styles.chip} onPress={() => onUseSuggestion(suggestion)}>
+                <Pressable accessibilityRole="button" key={`${session}-${suggestion}`} style={styles.chip} onPress={() => onUseSuggestion(suggestion)}>
                   <Text style={styles.chipText}>{suggestion}</Text>
                 </Pressable>
               ))}
@@ -576,10 +576,10 @@ export function TerminalCard({
               <Text style={styles.panelLabel}>Error Triage</Text>
               <Text style={styles.emptyText}>{errorHint}</Text>
               <View style={styles.actionsWrap}>
-                <Pressable style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]} onPress={onExplainError} disabled={triageBusy}>
+                <Pressable accessibilityRole="button" style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]} onPress={onExplainError} disabled={triageBusy}>
                   <Text style={styles.actionButtonText}>{triageBusy ? "Analyzing..." : "Explain Error"}</Text>
                 </Pressable>
-                <Pressable
+                <Pressable accessibilityRole="button"
                   style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]}
                   onPress={onSuggestErrorFixes}
                   disabled={triageBusy}
@@ -591,7 +591,7 @@ export function TerminalCard({
               {triageFixes.length > 0 ? (
                 <View style={styles.actionsWrap}>
                   {triageFixes.map((command) => (
-                    <Pressable key={`${session}-triage-${command}`} style={styles.chip} onPress={() => onUseSuggestion(command)}>
+                    <Pressable accessibilityRole="button" key={`${session}-triage-${command}`} style={styles.chip} onPress={() => onUseSuggestion(command)}>
                       <Text style={styles.chipText}>{command}</Text>
                     </Pressable>
                   ))}
@@ -604,7 +604,7 @@ export function TerminalCard({
 
       <View style={styles.rowInlineSpace}>
         <Text style={styles.switchLabel}>Watch Mode</Text>
-        <Pressable style={[styles.actionButton, watchEnabled ? styles.modeButtonOn : null]} onPress={() => onToggleWatch(!watchEnabled)}>
+        <Pressable accessibilityRole="button" style={[styles.actionButton, watchEnabled ? styles.modeButtonOn : null]} onPress={() => onToggleWatch(!watchEnabled)}>
           <Text style={styles.actionButtonText}>{watchEnabled ? "Enabled" : "Disabled"}</Text>
         </Pressable>
       </View>
@@ -624,7 +624,7 @@ export function TerminalCard({
         <View style={styles.serverCard}>
           <View style={styles.rowInlineSpace}>
             <Text style={styles.panelLabel}>Watch Alerts</Text>
-            <Pressable style={styles.actionButton} onPress={onClearWatchAlerts}>
+            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onClearWatchAlerts}>
               <Text style={styles.actionButtonText}>Clear Alerts</Text>
             </Pressable>
           </View>
@@ -645,7 +645,7 @@ export function TerminalCard({
               {queuedFailed > 0 ? `, ${queuedFailed} failed` : ""}
               {")"}
             </Text>
-            <Pressable style={styles.actionButton} onPress={onFlushQueue}>
+            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onFlushQueue}>
               <Text style={styles.actionButtonText}>Flush Queue</Text>
             </Pressable>
           </View>
@@ -660,7 +660,7 @@ export function TerminalCard({
                 {status === "failed" && entry.lastError ? <Text style={styles.emptyText}>{entry.lastError}</Text> : null}
                 <View style={styles.rowInlineSpace}>
                   <Text style={styles.emptyText}>{new Date(entry.queuedAt).toLocaleTimeString()}</Text>
-                  <Pressable style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
+                  <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
                     <Text style={styles.actionDangerText}>Remove</Text>
                   </Pressable>
                 </View>
@@ -676,17 +676,17 @@ export function TerminalCard({
       {recordingChunks > 0 ? (
         <View style={styles.rowInlineSpace}>
           <Text style={styles.emptyText}>{`${recordingChunks} rec chunks · ${(recordingDurationMs / 1000).toFixed(1)}s`}</Text>
-          <Pressable style={styles.actionDangerButton} onPress={onDeleteRecording}>
+          <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={onDeleteRecording}>
             <Text style={styles.actionDangerText}>Delete Rec</Text>
           </Pressable>
         </View>
       ) : null}
 
       <View style={styles.rowInlineSpace}>
-        <Pressable style={styles.actionButton} onPress={onHistoryPrev}>
+        <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryPrev}>
           <Text style={styles.actionButtonText}>↑</Text>
         </Pressable>
-        <Pressable style={styles.actionButton} onPress={onHistoryNext}>
+        <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryNext}>
           <Text style={styles.actionButtonText}>↓</Text>
         </Pressable>
         <Text style={styles.emptyText}>{`History ${historyCount}`}</Text>
@@ -712,10 +712,10 @@ export function TerminalCard({
       />
 
       <View style={styles.rowInlineSpace}>
-        <Pressable style={[styles.buttonPrimary, styles.flexButton, isSending || readOnly ? styles.buttonDisabled : null]} disabled={isSending || readOnly} onPress={onSend}>
+        <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton, isSending || readOnly ? styles.buttonDisabled : null]} disabled={isSending || readOnly} onPress={onSend}>
           <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : readOnly ? "Read-Only" : "Send"}</Text>
         </Pressable>
-        <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onClear}>
+        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onClear}>
           <Text style={styles.buttonGhostText}>Clear</Text>
         </Pressable>
       </View>

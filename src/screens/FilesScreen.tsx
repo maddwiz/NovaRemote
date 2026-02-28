@@ -73,10 +73,10 @@ export function FilesScreen({
         />
 
         <View style={styles.rowInlineSpace}>
-          <Pressable style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefresh} disabled={!connected}>
+          <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefresh} disabled={!connected}>
             <Text style={styles.buttonPrimaryText}>List Directory</Text>
           </Pressable>
-          <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onGoUp} disabled={!connected}>
+          <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onGoUp} disabled={!connected}>
             <Text style={styles.buttonGhostText}>Go Up</Text>
           </Pressable>
         </View>
@@ -98,7 +98,7 @@ export function FilesScreen({
           <Text style={styles.emptyText}>No entries loaded yet.</Text>
         ) : (
           entries.map((entry) => (
-            <Pressable key={entry.path} style={styles.terminalCard} onPress={() => onOpenEntry(entry)}>
+            <Pressable accessibilityRole="button" key={entry.path} style={styles.terminalCard} onPress={() => onOpenEntry(entry)}>
               <View style={styles.terminalNameRow}>
                 <Text style={styles.terminalName}>{entry.is_dir ? `[DIR] ${entry.name}` : `[FILE] ${entry.name}`}</Text>
               </View>
@@ -114,7 +114,7 @@ export function FilesScreen({
         <Text style={styles.serverSubtitle}>{selectedFilePath || "Select a file to preview"}</Text>
 
         <View style={styles.rowInlineSpace}>
-          <Pressable style={[styles.actionButton, styles.flexButton]} disabled={!selectedFilePath} onPress={onReadSelected}>
+          <Pressable accessibilityRole="button" style={[styles.actionButton, styles.flexButton]} disabled={!selectedFilePath} onPress={onReadSelected}>
             <Text style={styles.actionButtonText}>Read</Text>
           </Pressable>
           <TextInput
@@ -125,7 +125,7 @@ export function FilesScreen({
             placeholder="200"
             placeholderTextColor="#7f7aa8"
           />
-          <Pressable style={[styles.actionButton, styles.flexButton]} disabled={!selectedFilePath} onPress={onTailSelected}>
+          <Pressable accessibilityRole="button" style={[styles.actionButton, styles.flexButton]} disabled={!selectedFilePath} onPress={onTailSelected}>
             <Text style={styles.actionButtonText}>Tail</Text>
           </Pressable>
         </View>
@@ -144,7 +144,7 @@ export function FilesScreen({
             {openSessions.map((session) => {
               const active = effectiveSession === session;
               return (
-                <Pressable key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => setTargetSession(session)}>
+                <Pressable accessibilityRole="button" key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => setTargetSession(session)}>
                   <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{session}</Text>
                 </Pressable>
               );
@@ -153,7 +153,7 @@ export function FilesScreen({
         )}
 
         <View style={styles.rowInlineSpace}>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.buttonGhost, styles.flexButton]}
             disabled={!selectedFilePath || !effectiveSession}
             onPress={() => {
@@ -164,7 +164,7 @@ export function FilesScreen({
           >
             <Text style={styles.buttonGhostText}>Insert Path</Text>
           </Pressable>
-          <Pressable
+          <Pressable accessibilityRole="button"
             style={[styles.buttonPrimary, styles.flexButton]}
             disabled={!selectedFilePath || !effectiveSession}
             onPress={() => {

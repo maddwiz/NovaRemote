@@ -45,17 +45,17 @@ export function TutorialModal({ visible, onDone }: TutorialModalProps) {
 
           <View style={styles.rowInlineSpace}>
             {index > 0 ? (
-              <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={() => setIndex((prev) => prev - 1)}>
+              <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={() => setIndex((prev) => prev - 1)}>
                 <Text style={styles.buttonGhostText}>Back</Text>
               </Pressable>
             ) : null}
 
             {index < STEPS.length - 1 ? (
-              <Pressable style={[styles.buttonPrimary, styles.flexButton]} onPress={() => setIndex((prev) => prev + 1)}>
+              <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton]} onPress={() => setIndex((prev) => prev + 1)}>
                 <Text style={styles.buttonPrimaryText}>Next</Text>
               </Pressable>
             ) : (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 style={[styles.buttonPrimary, styles.flexButton]}
                 onPress={() => {
                   setIndex(0);

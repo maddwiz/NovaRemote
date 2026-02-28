@@ -127,7 +127,7 @@ export function ServersScreen({
         <Text style={styles.serverSubtitle}>Metadata hint for server runtime and future orchestration defaults.</Text>
         <View style={styles.actionsWrap}>
           {(["auto", "tmux", "screen", "zellij", "powershell", "cmd", "pty"] as TerminalBackendKind[]).map((backend) => (
-            <Pressable
+            <Pressable accessibilityRole="button"
               key={backend}
               style={[styles.modeButton, serverBackendInput === backend ? styles.modeButtonOn : null]}
               onPress={() => onSetServerBackend(backend)}
@@ -141,10 +141,10 @@ export function ServersScreen({
       </View>
 
       <View style={styles.rowInlineSpace}>
-        <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onToggleTokenMask}>
+        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onToggleTokenMask}>
           <Text style={styles.buttonGhostText}>{tokenMasked ? "Show Token" : "Hide Token"}</Text>
         </Pressable>
-        <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onClearForm}>
+        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onClearForm}>
           <Text style={styles.buttonGhostText}>Clear Form</Text>
         </Pressable>
       </View>
@@ -170,10 +170,10 @@ export function ServersScreen({
       </View>
 
       <View style={styles.rowInlineSpace}>
-        <Pressable style={[styles.buttonPrimary, styles.flexButton]} onPress={onSaveServer}>
+        <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton]} onPress={onSaveServer}>
           <Text style={styles.buttonPrimaryText}>{editingServerId ? "Update Server" : "Save Server"}</Text>
         </Pressable>
-        <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onBackToTerminals}>
+        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onBackToTerminals}>
           <Text style={styles.buttonGhostText}>Back to Terminal</Text>
         </Pressable>
       </View>

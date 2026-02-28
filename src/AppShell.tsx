@@ -2196,15 +2196,28 @@ export default function AppShell() {
           void requestPermission();
         }}
         onTestConnection={async (server) => {
-          const response = await fetch(`${normalizeBaseUrl(server.url)}/health`, {
-            method: "GET",
-            headers: {
-              Authorization: `Bearer ${server.token}`,
-            },
-          });
+          const healthUrl = `${normalizeBaseUrl(server.url)}/health`;
+          let response: Response;
+          try {
+            response = await fetch(healthUrl, {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${server.token}`,
+              },
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Cannot reach server. Check URL and network connection. (${message})`);
+          }
 
           if (!response.ok) {
-            throw new Error(`Connection failed: ${response.status}`);
+            if (response.status === 401 || response.status === 403) {
+              throw new Error("Cannot authenticate with this server. Check your token and try again.");
+            }
+            if (response.status === 404) {
+              throw new Error("Server reachable, but `/health` was not found. Verify companion server routes.");
+            }
+            throw new Error(`Server returned HTTP ${response.status}. Check URL, token, and network access.`);
           }
 
           setReady("Server connection looks good");

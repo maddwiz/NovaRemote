@@ -102,7 +102,7 @@ export function OnboardingModal({
                 autoCorrect={false}
               />
 
-              <Pressable
+              <Pressable accessibilityRole="button"
                 style={[styles.buttonGhost, busy ? styles.buttonDisabled : null]}
                 disabled={busy}
                 onPress={() => {
@@ -130,7 +130,7 @@ export function OnboardingModal({
                 />
               </View>
 
-              <Pressable style={styles.buttonGhost} onPress={onRequestNotifications}>
+              <Pressable accessibilityRole="button" style={styles.buttonGhost} onPress={onRequestNotifications}>
                 <Text style={styles.buttonGhostText}>{notificationsGranted ? "Notifications Enabled" : "Enable Notifications"}</Text>
               </Pressable>
 
@@ -140,12 +140,12 @@ export function OnboardingModal({
 
           <View style={styles.rowInlineSpace}>
             {step > 0 ? (
-              <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={() => setStep((prev) => prev - 1)}>
+              <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={() => setStep((prev) => prev - 1)}>
                 <Text style={styles.buttonGhostText}>Back</Text>
               </Pressable>
             ) : null}
             {step < 2 ? (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 style={[styles.buttonPrimary, styles.flexButton, !canContinue ? styles.buttonDisabled : null]}
                 disabled={!canContinue}
                 onPress={() => setStep((prev) => prev + 1)}
@@ -153,7 +153,7 @@ export function OnboardingModal({
                 <Text style={styles.buttonPrimaryText}>Next</Text>
               </Pressable>
             ) : (
-              <Pressable
+              <Pressable accessibilityRole="button"
                 style={styles.buttonPrimary}
                 onPress={() => {
                   onComplete(server, requireBiometric);
