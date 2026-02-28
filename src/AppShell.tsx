@@ -698,7 +698,13 @@ export default function AppShell() {
     return Boolean(normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
   }, [activeServer]);
 
-  const { capabilities, terminalApiBasePath, supportedFeatures } = useServerCapabilities({ activeServer, connected });
+  const {
+    capabilities,
+    terminalApiBasePath,
+    supportedFeatures,
+    loading: capabilitiesLoading,
+    refresh: refreshCapabilities,
+  } = useServerCapabilities({ activeServer, connected });
   const parsedShellRunWaitMs = useMemo(
     () => Math.max(400, Math.min(Number.parseInt(shellRunWaitMs, 10) || DEFAULT_SHELL_WAIT_MS, 120000)),
     [shellRunWaitMs]
@@ -2197,6 +2203,7 @@ export default function AppShell() {
     startOpenOnMac,
     startKind,
     startAiEngine,
+    capabilitiesLoading,
     health,
     capabilities,
     supportedFeatures,
@@ -2240,6 +2247,11 @@ export default function AppShell() {
     onSetStartOpenOnMac: setStartOpenOnMac,
     onSetStartKind: setStartKind,
     onSetStartAiEngine: setStartAiEngine,
+    onRefreshCapabilities: () => {
+      void runWithStatus("Rechecking server features", async () => {
+        await refreshCapabilities(true);
+      });
+    },
     onRefreshSessions: () => {
       void runWithStatus("Refreshing sessions", async () => {
         await refreshSessions();

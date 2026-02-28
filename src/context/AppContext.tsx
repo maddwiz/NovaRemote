@@ -38,6 +38,7 @@ export type TerminalsViewModel = {
   startOpenOnMac: boolean;
   startKind: TerminalSendMode;
   startAiEngine: AiEnginePreference;
+  capabilitiesLoading: boolean;
   health: HealthMetrics;
   capabilities: ServerCapabilities;
   supportedFeatures: string;
@@ -81,6 +82,7 @@ export type TerminalsViewModel = {
   onSetStartOpenOnMac: (value: boolean) => void;
   onSetStartKind: (value: TerminalSendMode) => void;
   onSetStartAiEngine: (value: AiEnginePreference) => void;
+  onRefreshCapabilities: () => void;
   onRefreshSessions: () => void;
   onOpenServers: () => void;
   onStartSession: () => void;

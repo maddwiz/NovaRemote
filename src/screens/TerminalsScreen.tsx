@@ -107,6 +107,7 @@ export function TerminalsScreen() {
     startOpenOnMac,
     startKind,
     startAiEngine,
+    capabilitiesLoading,
     health,
     capabilities,
     supportedFeatures,
@@ -150,6 +151,7 @@ export function TerminalsScreen() {
     onSetStartOpenOnMac,
     onSetStartKind,
     onSetStartAiEngine,
+    onRefreshCapabilities,
     onRefreshSessions,
     onOpenServers,
     onStartSession,
@@ -644,7 +646,16 @@ export function TerminalsScreen() {
     <>
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Connection Health</Text>
-        <Text style={styles.serverSubtitle}>{`Streams ${health.activeStreams}/${health.openSessions}`}</Text>
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.serverSubtitle}>{`Streams ${health.activeStreams}/${health.openSessions}`}</Text>
+          <Pressable
+            style={[styles.actionButton, !connected || capabilitiesLoading ? styles.buttonDisabled : null]}
+            onPress={onRefreshCapabilities}
+            disabled={!connected || capabilitiesLoading}
+          >
+            <Text style={styles.actionButtonText}>{capabilitiesLoading ? "Checking..." : "Recheck Features"}</Text>
+          </Pressable>
+        </View>
         <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
         <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
         <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>

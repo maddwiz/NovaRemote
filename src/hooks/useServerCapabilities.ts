@@ -224,7 +224,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
   const [loading, setLoading] = useState<boolean>(false);
   const [lastError, setLastError] = useState<string | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (force: boolean = false) => {
     if (!activeServer || !connected) {
       setCapabilities(EMPTY_CAPABILITIES);
       setTerminalApiKind("tmux");
@@ -243,7 +243,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
       const persistKey = capabilityPersistKey(baseUrl);
       const now = Date.now();
       const cached = capabilityCache.get(cacheKey);
-      if (cached && cached.expiresAt > now) {
+      if (!force && cached && cached.expiresAt > now) {
         setCapabilities(cached.capabilities);
         setTerminalApiKind(cached.terminalApiKind);
         return cached.capabilities;
@@ -256,7 +256,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         persistedRaw = null;
       }
       persistedCache = readPersistedCache(persistedRaw);
-      if (persistedCache && persistedCache.expiresAt > now) {
+      if (!force && persistedCache && persistedCache.expiresAt > now) {
         setCapabilities(persistedCache.capabilities);
         setTerminalApiKind(persistedCache.terminalApiKind);
         capabilityCache.set(cacheKey, {
