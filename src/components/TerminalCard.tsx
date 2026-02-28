@@ -29,6 +29,7 @@ type TerminalCardProps = {
   watchPattern: string;
   tags: string[];
   pinned: boolean;
+  queuedCount: number;
   terminalViewStyle?: StyleProp<ViewStyle>;
   terminalTextStyle?: StyleProp<TextStyle>;
   onSetMode: (mode: TerminalSendMode) => void;
@@ -48,6 +49,7 @@ type TerminalCardProps = {
   onToggleWatch: (value: boolean) => void;
   onWatchPatternChange: (value: string) => void;
   onTogglePin: () => void;
+  onFlushQueue: () => void;
   onSend: () => void;
   onClear: () => void;
   historyCount: number;
@@ -77,6 +79,7 @@ export function TerminalCard({
   watchPattern,
   tags,
   pinned,
+  queuedCount,
   terminalViewStyle,
   terminalTextStyle,
   onSetMode,
@@ -96,6 +99,7 @@ export function TerminalCard({
   onToggleWatch,
   onWatchPatternChange,
   onTogglePin,
+  onFlushQueue,
   onSend,
   onClear,
   historyCount,
@@ -268,6 +272,15 @@ export function TerminalCard({
           autoCapitalize="none"
           autoCorrect={false}
         />
+      ) : null}
+
+      {queuedCount > 0 ? (
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.emptyText}>{`${queuedCount} queued command${queuedCount === 1 ? "" : "s"}`}</Text>
+          <Pressable style={styles.actionButton} onPress={onFlushQueue}>
+            <Text style={styles.actionButtonText}>Flush Queue</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       <View style={styles.rowInlineSpace}>

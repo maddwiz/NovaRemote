@@ -4,6 +4,7 @@ import {
   AiEnginePreference,
   FleetRunResult,
   HealthMetrics,
+  QueuedCommand,
   ServerCapabilities,
   ServerProfile,
   SessionConnectionMeta,
@@ -53,6 +54,7 @@ export type TerminalsViewModel = {
   suggestionBusyBySession: Record<string, boolean>;
   watchRules: Record<string, WatchRule>;
   terminalTheme: TerminalThemeSettings;
+  commandQueue: Record<string, QueuedCommand[]>;
   onShowPaywall: () => void;
   onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;
@@ -91,6 +93,7 @@ export type TerminalsViewModel = {
   onSetTerminalFontFamily: (fontFamily: TerminalFontFamily) => void;
   onSetTerminalFontSize: (fontSize: number) => void;
   onSetTerminalBackgroundOpacity: (opacity: number) => void;
+  onFlushQueue: (session: string) => void;
   onRunFleet: () => void;
 };
 

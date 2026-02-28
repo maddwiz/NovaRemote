@@ -35,6 +35,7 @@ import {
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
   POLL_INTERVAL_MS,
+  STORAGE_COMMAND_QUEUE_PREFIX,
   STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
 } from "./constants";
@@ -64,7 +65,7 @@ import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
-import { AiEnginePreference, FleetRunResult, RouteTab, ServerProfile, Status, TerminalSendMode, TmuxTailResponse, WatchRule } from "./types";
+import { AiEnginePreference, FleetRunResult, QueuedCommand, RouteTab, ServerProfile, Status, TerminalSendMode, TmuxTailResponse, WatchRule } from "./types";
 
 function parseCommaTags(raw: string): string[] {
   return Array.from(
@@ -217,6 +218,7 @@ export default function AppShell() {
   const [suggestionsBySession, setSuggestionsBySession] = useState<Record<string, string[]>>({});
   const [suggestionBusyBySession, setSuggestionBusyBySession] = useState<Record<string, boolean>>({});
   const [watchRules, setWatchRules] = useState<Record<string, WatchRule>>({});
+  const [commandQueue, setCommandQueue] = useState<Record<string, QueuedCommand[]>>({});
   const [dangerPrompt, setDangerPrompt] = useState<{ visible: boolean; command: string; context: string }>({
     visible: false,
     command: "",
@@ -616,6 +618,63 @@ export default function AppShell() {
     });
   }, [requireDangerConfirm]);
 
+  const queueSessionCommand = useCallback(
+    (session: string, command: string, mode: TerminalSendMode) => {
+      const trimmed = command.trim();
+      if (!trimmed) {
+        return;
+      }
+      setCommandQueue((prev) => {
+        const existing = prev[session] || [];
+        const nextQueue = [...existing, { command: trimmed, mode, queuedAt: new Date().toISOString() }].slice(-50);
+        return {
+          ...prev,
+          [session]: nextQueue,
+        };
+      });
+      setDrafts((prev) => ({ ...prev, [session]: "" }));
+      setReady(`Queued command for ${session}. It will run when connection is restored.`);
+    },
+    [setDrafts, setReady]
+  );
+
+  const flushSessionQueue = useCallback(
+    async (session: string) => {
+      const queue = commandQueue[session] || [];
+      if (queue.length === 0) {
+        return 0;
+      }
+
+      if (!connected && !isLocalSession(session)) {
+        throw new Error("Reconnect to flush queued commands for this session.");
+      }
+
+      let sentCount = 0;
+      for (const item of queue) {
+        if (item.mode === "ai" && shouldRouteToExternalAi(session)) {
+          const sent = await sendViaExternalLlm(session, item.command);
+          if (sent) {
+            await addCommand(session, sent);
+            sentCount += 1;
+          }
+          continue;
+        }
+
+        if (item.mode === "shell" && isLocalSession(session)) {
+          continue;
+        }
+
+        await sendCommand(session, item.command, item.mode, false);
+        await addCommand(session, item.command);
+        sentCount += 1;
+      }
+
+      setCommandQueue((prev) => ({ ...prev, [session]: [] }));
+      return sentCount;
+    },
+    [addCommand, commandQueue, connected, isLocalSession, sendCommand, sendViaExternalLlm, shouldRouteToExternalAi]
+  );
+
   useEffect(() => {
     if (!isPro) {
       return;
@@ -753,6 +812,24 @@ export default function AppShell() {
   }, [closeAllStreams, closeStreamsNotIn, connectStream, connected, remoteOpenSessions]);
 
   useEffect(() => {
+    if (!connected) {
+      return;
+    }
+    const pendingSessions = Object.keys(commandQueue).filter((session) => (commandQueue[session] || []).length > 0);
+    if (pendingSessions.length === 0) {
+      return;
+    }
+    pendingSessions.forEach((session) => {
+      void runWithStatus(`Flushing queued commands for ${session}`, async () => {
+        const sent = await flushSessionQueue(session);
+        if (sent > 0 && isPro) {
+          await notify("Queued commands sent", `${session}: ${sent} command${sent === 1 ? "" : "s"}.`);
+        }
+      });
+    });
+  }, [commandQueue, connected, flushSessionQueue, isPro, notify, runWithStatus]);
+
+  useEffect(() => {
     return () => {
       closeAllStreams();
     };
@@ -860,6 +937,13 @@ export default function AppShell() {
       });
       return next;
     });
+    setCommandQueue((prev) => {
+      const next: Record<string, QueuedCommand[]> = {};
+      allSessions.forEach((session) => {
+        next[session] = prev[session] || [];
+      });
+      return next;
+    });
   }, [allSessions]);
 
   useEffect(() => {
@@ -902,6 +986,44 @@ export default function AppShell() {
     }
     void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${activeServerId}`, JSON.stringify(watchRules));
   }, [activeServerId, watchRules]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadQueuedCommands() {
+      if (!activeServerId) {
+        if (mounted) {
+          setCommandQueue({});
+        }
+        return;
+      }
+
+      const raw = await SecureStore.getItemAsync(`${STORAGE_COMMAND_QUEUE_PREFIX}.${activeServerId}`);
+      if (!mounted) {
+        return;
+      }
+      if (!raw) {
+        setCommandQueue({});
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw) as Record<string, QueuedCommand[]>;
+        setCommandQueue(parsed && typeof parsed === "object" ? parsed : {});
+      } catch {
+        setCommandQueue({});
+      }
+    }
+    void loadQueuedCommands();
+    return () => {
+      mounted = false;
+    };
+  }, [activeServerId]);
+
+  useEffect(() => {
+    if (!activeServerId) {
+      return;
+    }
+    void SecureStore.setItemAsync(`${STORAGE_COMMAND_QUEUE_PREFIX}.${activeServerId}`, JSON.stringify(commandQueue));
+  }, [activeServerId, commandQueue]);
 
   useEffect(() => {
     if (route !== "files" || !connected || !capabilities.files) {
@@ -977,6 +1099,7 @@ export default function AppShell() {
     suggestionBusyBySession,
     watchRules,
     terminalTheme,
+    commandQueue,
     onShowPaywall: () => setPaywallVisible(true),
     onSetTagFilter: setTagFilter,
     onSetStartCwd: setStartCwd,
@@ -1162,6 +1285,11 @@ export default function AppShell() {
           }
         }
 
+        if (!connected && !isLocalSession(session)) {
+          queueSessionCommand(session, draft, mode);
+          return;
+        }
+
         const sent = await handleSend(session);
         if (sent) {
           await addCommand(session, sent);
@@ -1220,6 +1348,14 @@ export default function AppShell() {
     onSetTerminalFontFamily: setTerminalFontFamily,
     onSetTerminalFontSize: setTerminalFontSize,
     onSetTerminalBackgroundOpacity: setTerminalBackgroundOpacity,
+    onFlushQueue: (session) => {
+      void runWithStatus(`Flushing queued commands for ${session}`, async () => {
+        const sent = await flushSessionQueue(session);
+        if (sent > 0 && isPro) {
+          await notify("Queued commands sent", `${session}: ${sent} command${sent === 1 ? "" : "s"}.`);
+        }
+      });
+    },
     onRunFleet: () => {
       void runWithStatus("Running fleet command", async () => {
         const approved = await requestDangerApproval(fleetCommand, "Fleet execute");
@@ -1408,6 +1544,10 @@ export default function AppShell() {
                     if (!approved) {
                       return;
                     }
+                  }
+                  if (!connected && !isLocalSession(session)) {
+                    queueSessionCommand(session, command, mode);
+                    return;
                   }
                   await sendCommand(session, command, mode, false);
                   await addCommand(session, command);
@@ -1644,6 +1784,10 @@ export default function AppShell() {
               if (!approved) {
                 return;
               }
+            }
+            if (!connected && !isLocalSession(focusedSession)) {
+              queueSessionCommand(focusedSession, focusedDraft, focusedMode);
+              return;
             }
             const sent = await handleSend(focusedSession);
             if (sent) {

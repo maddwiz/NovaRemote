@@ -105,6 +105,7 @@ export function TerminalsScreen() {
     suggestionBusyBySession,
     watchRules,
     terminalTheme,
+    commandQueue,
     onShowPaywall,
     onSetTagFilter,
     onSetStartCwd,
@@ -143,6 +144,7 @@ export function TerminalsScreen() {
     onSetTerminalFontFamily,
     onSetTerminalFontSize,
     onSetTerminalBackgroundOpacity,
+    onFlushQueue,
     onRunFleet,
   } = useAppContext().terminals;
 
@@ -193,6 +195,7 @@ export function TerminalsScreen() {
           watchPattern={watch.pattern}
           tags={tags}
           pinned={pinnedSessions.includes(session)}
+          queuedCount={(commandQueue[session] || []).length}
           terminalViewStyle={terminalAppearance.terminalViewStyle}
           terminalTextStyle={terminalAppearance.terminalTextStyle}
           historyCount={historyCount[session] || 0}
@@ -213,6 +216,7 @@ export function TerminalsScreen() {
           onToggleWatch={(enabled) => onToggleWatch(session, enabled)}
           onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
           onTogglePin={() => onTogglePinSession(session)}
+          onFlushQueue={() => onFlushQueue(session)}
           onSend={() => onSend(session)}
           onClear={() => onClearDraft(session)}
         />
@@ -228,6 +232,7 @@ export function TerminalsScreen() {
     hasExternalLlm,
     historyCount,
     pinnedSessions,
+    commandQueue,
     terminalAppearance,
     onClearDraft,
     onFocusSession,
@@ -246,6 +251,7 @@ export function TerminalsScreen() {
     onSyncSession,
     onTogglePinSession,
     onToggleWatch,
+    onFlushQueue,
     onUseSuggestion,
     localAiSessions,
     sessionAiEngine,

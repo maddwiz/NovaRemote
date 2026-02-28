@@ -121,6 +121,12 @@ export type WatchRule = {
   lastMatch?: string | null;
 };
 
+export type QueuedCommand = {
+  command: string;
+  mode: TerminalSendMode;
+  queuedAt: string;
+};
+
 export type TerminalThemePresetId = "nova" | "solarized_dark" | "monokai" | "dracula" | "nord" | "one_dark";
 
 export type TerminalFontFamily = "menlo" | "sf_mono" | "jetbrains_mono";
