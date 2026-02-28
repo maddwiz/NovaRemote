@@ -81,6 +81,7 @@ type TerminalCardProps = {
   triageFixes: string[];
   watchEnabled: boolean;
   watchPattern: string;
+  watchAlerts: string[];
   tags: string[];
   pinned: boolean;
   queuedCount: number;
@@ -111,6 +112,7 @@ type TerminalCardProps = {
   onSuggestErrorFixes: () => void;
   onToggleWatch: (value: boolean) => void;
   onWatchPatternChange: (value: string) => void;
+  onClearWatchAlerts: () => void;
   onTogglePin: () => void;
   onFlushQueue: () => void;
   onRemoveQueuedCommand: (index: number) => void;
@@ -149,6 +151,7 @@ export function TerminalCard({
   triageFixes,
   watchEnabled,
   watchPattern,
+  watchAlerts,
   tags,
   pinned,
   queuedCount,
@@ -179,6 +182,7 @@ export function TerminalCard({
   onSuggestErrorFixes,
   onToggleWatch,
   onWatchPatternChange,
+  onClearWatchAlerts,
   onTogglePin,
   onFlushQueue,
   onRemoveQueuedCommand,
@@ -462,6 +466,23 @@ export function TerminalCard({
           autoCapitalize="none"
           autoCorrect={false}
         />
+      ) : null}
+
+      {watchAlerts.length > 0 ? (
+        <View style={styles.serverCard}>
+          <View style={styles.rowInlineSpace}>
+            <Text style={styles.panelLabel}>Watch Alerts</Text>
+            <Pressable style={styles.actionButton} onPress={onClearWatchAlerts}>
+              <Text style={styles.actionButtonText}>Clear Alerts</Text>
+            </Pressable>
+          </View>
+          {watchAlerts.slice(0, 4).map((alert, index) => (
+            <Text key={`${session}-watch-${index}`} style={styles.serverSubtitle}>
+              {alert}
+            </Text>
+          ))}
+          {watchAlerts.length > 4 ? <Text style={styles.emptyText}>{`+${watchAlerts.length - 4} more alerts`}</Text> : null}
+        </View>
       ) : null}
 
       {queuedCount > 0 ? (

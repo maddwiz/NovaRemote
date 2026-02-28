@@ -122,6 +122,7 @@ export function TerminalsScreen() {
     triageExplanationBySession,
     triageFixesBySession,
     watchRules,
+    watchAlertHistoryBySession,
     terminalTheme,
     commandQueue,
     recordings,
@@ -165,6 +166,7 @@ export function TerminalsScreen() {
     onSuggestErrorFixes,
     onToggleWatch,
     onSetWatchPattern,
+    onClearWatchAlerts,
     onSetTerminalPreset,
     onSetTerminalFontFamily,
     onSetTerminalFontSize,
@@ -243,6 +245,7 @@ export function TerminalsScreen() {
           triageFixes={triageFixesBySession[session] || []}
           watchEnabled={watch.enabled}
           watchPattern={watch.pattern}
+          watchAlerts={watchAlertHistoryBySession[session] || []}
           tags={tags}
           pinned={pinnedSessions.includes(session)}
           queuedCount={(commandQueue[session] || []).length}
@@ -274,6 +277,7 @@ export function TerminalsScreen() {
           onSuggestErrorFixes={() => onSuggestErrorFixes(session)}
           onToggleWatch={(enabled) => onToggleWatch(session, enabled)}
           onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
+          onClearWatchAlerts={() => onClearWatchAlerts(session)}
           onTogglePin={() => onTogglePinSession(session)}
           onFlushQueue={() => onFlushQueue(session)}
           onRemoveQueuedCommand={(index) => onRemoveQueuedCommand(session, index)}
@@ -300,6 +304,7 @@ export function TerminalsScreen() {
     triageBusyBySession,
     triageExplanationBySession,
     triageFixesBySession,
+    watchAlertHistoryBySession,
     pinnedSessions,
     commandQueue,
     recordings,
@@ -321,6 +326,7 @@ export function TerminalsScreen() {
     onSetSessionAlias,
     onAutoNameSession,
     onSetWatchPattern,
+    onClearWatchAlerts,
     onStopSession,
     onSyncSession,
     onTogglePinSession,

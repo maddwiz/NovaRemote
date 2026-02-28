@@ -360,6 +360,7 @@ export default function AppShell() {
   const [triageExplanationBySession, setTriageExplanationBySession] = useState<Record<string, string>>({});
   const [triageFixesBySession, setTriageFixesBySession] = useState<Record<string, string[]>>({});
   const [watchRules, setWatchRules] = useState<Record<string, WatchRule>>({});
+  const [watchAlertHistoryBySession, setWatchAlertHistoryBySession] = useState<Record<string, string[]>>({});
   const [commandQueue, setCommandQueue] = useState<Record<string, QueuedCommand[]>>({});
   const [recordings, setRecordings] = useState<Record<string, SessionRecording>>({});
   const [sysStats, setSysStats] = useState<SysStats | null>(null);
@@ -1017,6 +1018,16 @@ export default function AppShell() {
       return next;
     });
 
+    setWatchAlertHistoryBySession((prev) => {
+      const next = { ...prev };
+      pending.forEach(([session, match]) => {
+        const stamp = new Date().toLocaleTimeString();
+        const existing = next[session] || [];
+        next[session] = [`[${stamp}] ${match}`, ...existing].slice(0, 12);
+      });
+      return next;
+    });
+
     pending.forEach(([session, match]) => {
       void notify("Watch alert", `${session}: ${match.slice(0, 120)}`);
     });
@@ -1389,6 +1400,15 @@ export default function AppShell() {
       });
       return next;
     });
+    setWatchAlertHistoryBySession((prev) => {
+      const next: Record<string, string[]> = {};
+      allSessions.forEach((session) => {
+        if (prev[session]) {
+          next[session] = prev[session];
+        }
+      });
+      return next;
+    });
     setCommandQueue((prev) => {
       const next: Record<string, QueuedCommand[]> = {};
       allSessions.forEach((session) => {
@@ -1653,6 +1673,7 @@ export default function AppShell() {
     triageExplanationBySession,
     triageFixesBySession,
     watchRules,
+    watchAlertHistoryBySession,
     terminalTheme,
     commandQueue,
     recordings,
@@ -1946,6 +1967,18 @@ export default function AppShell() {
             lastMatch: null,
           },
         };
+      });
+      setWatchAlertHistoryBySession((prev) => {
+        const next = { ...prev };
+        delete next[session];
+        return next;
+      });
+    },
+    onClearWatchAlerts: (session) => {
+      setWatchAlertHistoryBySession((prev) => {
+        const next = { ...prev };
+        delete next[session];
+        return next;
       });
     },
     onSetTerminalPreset: setTerminalPreset,
