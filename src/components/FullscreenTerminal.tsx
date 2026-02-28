@@ -1,5 +1,18 @@
 import React, { useRef } from "react";
-import { Modal, Pressable, SafeAreaView, ScrollView, StyleProp, Text, TextInput, TextStyle, View, ViewStyle } from "react-native";
+import {
+  Modal,
+  NativeSyntheticEvent,
+  Pressable,
+  SafeAreaView,
+  ScrollView,
+  StyleProp,
+  Text,
+  TextInput,
+  TextInputKeyPressEventData,
+  TextStyle,
+  View,
+  ViewStyle,
+} from "react-native";
 
 import { styles } from "../theme/styles";
 import { TerminalSendMode } from "../types";
@@ -51,6 +64,20 @@ export function FullscreenTerminal({
   onStop,
 }: FullscreenTerminalProps) {
   const terminalRef = useRef<ScrollView | null>(null);
+  const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    const key = event.nativeEvent.key;
+    if (key === "ArrowUp") {
+      onHistoryPrev();
+      return;
+    }
+    if (key === "ArrowDown") {
+      onHistoryNext();
+      return;
+    }
+    if (mode === "shell" && key === "Enter" && !isSending) {
+      onSend();
+    }
+  };
 
   return (
     <Modal animationType="slide" transparent={false} visible={Boolean(session)} onRequestClose={onClose}>
@@ -113,6 +140,7 @@ export function FullscreenTerminal({
               editable={!isSending}
               placeholder={mode === "ai" ? "Message AI..." : "Run shell command..."}
               placeholderTextColor="#7f7aa8"
+              onKeyPress={onDraftKeyPress}
               onChangeText={onDraftChange}
             />
 

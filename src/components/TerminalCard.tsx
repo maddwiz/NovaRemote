@@ -1,5 +1,16 @@
 import React, { useMemo, useRef } from "react";
-import { StyleProp, TextStyle, Pressable, ScrollView, Text, TextInput, View, ViewStyle } from "react-native";
+import {
+  NativeSyntheticEvent,
+  StyleProp,
+  TextInputKeyPressEventData,
+  TextStyle,
+  Pressable,
+  ScrollView,
+  Text,
+  TextInput,
+  View,
+  ViewStyle,
+} from "react-native";
 
 import { styles } from "../theme/styles";
 import { AiEnginePreference, ConnectionState, TerminalSendMode } from "../types";
@@ -189,6 +200,21 @@ export function TerminalCard({
           ? "POLL"
           : "OFF";
 
+  const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    const key = event.nativeEvent.key;
+    if (key === "ArrowUp") {
+      onHistoryPrev();
+      return;
+    }
+    if (key === "ArrowDown") {
+      onHistoryNext();
+      return;
+    }
+    if (mode === "shell" && key === "Enter" && !isSending) {
+      onSend();
+    }
+  };
+
   return (
     <View style={styles.terminalCard}>
       <View style={styles.terminalHeader}>
@@ -304,6 +330,7 @@ export function TerminalCard({
         editable={!isSending}
         placeholder={mode === "ai" ? "Message AI..." : "Run shell command..."}
         placeholderTextColor="#7f7aa8"
+        onKeyPress={onDraftKeyPress}
         onChangeText={onDraftChange}
       />
 
