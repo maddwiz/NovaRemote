@@ -228,10 +228,12 @@ Request:
 {
   "session": "term-20260228-abcd",
   "command": "git status",
-  "wait_ms": 400,
+  "wait_ms": 1200,
   "tail_lines": 380
 }
 ```
+
+`wait_ms` is user-configurable in NovaRemote (Shell Wait Timeout panel). The app clamps values to `400-120000`.
 
 Response:
 

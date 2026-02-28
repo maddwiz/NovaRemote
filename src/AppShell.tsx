@@ -32,12 +32,14 @@ import {
   BRAND_LOGO,
   DEFAULT_CWD,
   DEFAULT_FLEET_WAIT_MS,
+  DEFAULT_SHELL_WAIT_MS,
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
   COLLAB_POLL_INTERVAL_MS,
   POLL_INTERVAL_MS,
   STORAGE_COMMAND_QUEUE_PREFIX,
+  STORAGE_SHELL_WAIT_MS,
   STORAGE_SESSION_COLLAB_READONLY_PREFIX,
   STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
@@ -596,6 +598,7 @@ export default function AppShell() {
   const [fleetBusy, setFleetBusy] = useState<boolean>(false);
   const [fleetResults, setFleetResults] = useState<FleetRunResult[]>([]);
   const [fleetWaitMs, setFleetWaitMs] = useState<string>(String(DEFAULT_FLEET_WAIT_MS));
+  const [shellRunWaitMs, setShellRunWaitMs] = useState<string>(String(DEFAULT_SHELL_WAIT_MS));
   const [startAiEngine, setStartAiEngine] = useState<AiEnginePreference>("auto");
   const [sessionAiEngine, setSessionAiEngine] = useState<Record<string, AiEnginePreference>>({});
   const [suggestionsBySession, setSuggestionsBySession] = useState<Record<string, string[]>>({});
@@ -695,6 +698,10 @@ export default function AppShell() {
   }, [activeServer]);
 
   const { capabilities, terminalApiBasePath, supportedFeatures } = useServerCapabilities({ activeServer, connected });
+  const parsedShellRunWaitMs = useMemo(
+    () => Math.max(400, Math.min(Number.parseInt(shellRunWaitMs, 10) || DEFAULT_SHELL_WAIT_MS, 120000)),
+    [shellRunWaitMs]
+  );
 
   const {
     allSessions,
@@ -732,6 +739,7 @@ export default function AppShell() {
     connected,
     terminalApiBasePath,
     supportsShellRun: capabilities.shellRun,
+    shellRunWaitMs: parsedShellRunWaitMs,
   });
 
   const remoteOpenSessions = useMemo(
@@ -1870,6 +1878,30 @@ export default function AppShell() {
 
   useEffect(() => {
     let mounted = true;
+    async function loadShellRunWait() {
+      const raw = await SecureStore.getItemAsync(STORAGE_SHELL_WAIT_MS);
+      if (!mounted || !raw) {
+        return;
+      }
+      const parsed = Number.parseInt(raw, 10);
+      if (!Number.isFinite(parsed)) {
+        return;
+      }
+      const clamped = Math.max(400, Math.min(parsed, 120000));
+      setShellRunWaitMs(String(clamped));
+    }
+    void loadShellRunWait();
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    void SecureStore.setItemAsync(STORAGE_SHELL_WAIT_MS, String(parsedShellRunWaitMs));
+  }, [parsedShellRunWaitMs]);
+
+  useEffect(() => {
+    let mounted = true;
     async function loadWatchRules() {
       if (!activeServerId) {
         if (mounted) {
@@ -2166,6 +2198,7 @@ export default function AppShell() {
     fleetTargets,
     fleetBusy,
     fleetWaitMs,
+    shellRunWaitMs,
     fleetResults,
     processes,
     processesBusy,
@@ -2430,6 +2463,7 @@ export default function AppShell() {
       setFleetTargets((prev) => (prev.includes(serverId) ? prev.filter((id) => id !== serverId) : [...prev, serverId]));
     },
     onSetFleetWaitMs: setFleetWaitMs,
+    onSetShellRunWaitMs: (value) => setShellRunWaitMs(value.replace(/[^0-9]/g, "")),
     onRefreshProcesses: () => {
       void runWithStatus("Refreshing processes", async () => {
         await refreshProcesses();

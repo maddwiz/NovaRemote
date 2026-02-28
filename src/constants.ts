@@ -20,12 +20,14 @@ export const STORAGE_COMMAND_QUEUE_PREFIX = "novaremote.command_queue.v1";
 export const STORAGE_SESSION_ALIASES_PREFIX = "novaremote.session_aliases.v1";
 export const STORAGE_PROCESS_PANEL_PREFS_PREFIX = "novaremote.process_panel.v1";
 export const STORAGE_SESSION_COLLAB_READONLY_PREFIX = "novaremote.collab_readonly.v1";
+export const STORAGE_SHELL_WAIT_MS = "novaremote.shell_wait_ms.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
 export const DEFAULT_SERVER_NAME = "My Server";
 export const DEFAULT_TERMINAL_BACKEND: TerminalBackendKind = "auto";
 export const DEFAULT_FLEET_WAIT_MS = 5000;
+export const DEFAULT_SHELL_WAIT_MS = 1200;
 
 export const SERVER_URL_PLACEHOLDER = "https://your-server:8787";
 export const CWD_PLACEHOLDER = "/path/to/your/project";

@@ -3,7 +3,7 @@ import * as SecureStore from "expo-secure-store";
 import { NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
 
 import { useAppContext } from "../context/AppContext";
-import { CWD_PLACEHOLDER, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
+import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
 import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
 import { styles } from "../theme/styles";
@@ -126,6 +126,7 @@ export function TerminalsScreen() {
     fleetTargets,
     fleetBusy,
     fleetWaitMs,
+    shellRunWaitMs,
     fleetResults,
     processes,
     processesBusy,
@@ -175,6 +176,7 @@ export function TerminalsScreen() {
     onSetFleetCwd,
     onToggleFleetTarget,
     onSetFleetWaitMs,
+    onSetShellRunWaitMs,
     onRefreshProcesses,
     onKillProcess,
     onKillProcesses,
@@ -646,6 +648,20 @@ export function TerminalsScreen() {
         <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
         <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
         <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Shell Wait Timeout</Text>
+        <Text style={styles.serverSubtitle}>Controls `/shell/run wait_ms` for regular shell sends.</Text>
+        <TextInput
+          style={styles.input}
+          value={shellRunWaitMs}
+          onChangeText={onSetShellRunWaitMs}
+          placeholder={`Wait ms (default ${DEFAULT_SHELL_WAIT_MS})`}
+          placeholderTextColor="#7f7aa8"
+          keyboardType="number-pad"
+        />
+        <Text style={styles.emptyText}>Range: 400-120000ms. Higher values wait longer for command output before returning.</Text>
       </View>
 
       <View style={styles.panel}>

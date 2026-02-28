@@ -57,6 +57,7 @@ export type TerminalsViewModel = {
   fleetTargets: string[];
   fleetBusy: boolean;
   fleetWaitMs: string;
+  shellRunWaitMs: string;
   fleetResults: FleetRunResult[];
   processes: ProcessInfo[];
   processesBusy: boolean;
@@ -106,6 +107,7 @@ export type TerminalsViewModel = {
   onSetFleetCwd: (value: string) => void;
   onToggleFleetTarget: (serverId: string) => void;
   onSetFleetWaitMs: (value: string) => void;
+  onSetShellRunWaitMs: (value: string) => void;
   onRefreshProcesses: () => void;
   onKillProcess: (pid: number, signal?: ProcessSignal) => void;
   onKillProcesses: (pids: number[], signal: ProcessSignal) => void;

@@ -17,9 +17,10 @@ type UseTerminalSessionsArgs = {
   connected: boolean;
   terminalApiBasePath: "/tmux" | "/terminal";
   supportsShellRun: boolean;
+  shellRunWaitMs: number;
 };
 
-export function useTerminalSessions({ activeServer, connected, terminalApiBasePath, supportsShellRun }: UseTerminalSessionsArgs) {
+export function useTerminalSessions({ activeServer, connected, terminalApiBasePath, supportsShellRun, shellRunWaitMs }: UseTerminalSessionsArgs) {
   const [allSessions, setAllSessions] = useState<string[]>([]);
   const [localAiSessions, setLocalAiSessions] = useState<string[]>([]);
   const [openSessions, setOpenSessions] = useState<string[]>([]);
@@ -233,7 +234,7 @@ export function useTerminalSessions({ activeServer, connected, terminalApiBasePa
           if (supportsShellRun) {
             const data = await apiRequest<ShellRunResponse>(activeServer.baseUrl, activeServer.token, "/shell/run", {
               method: "POST",
-              body: JSON.stringify({ session, command: currentDraft, wait_ms: 400, tail_lines: 380 }),
+              body: JSON.stringify({ session, command: currentDraft, wait_ms: shellRunWaitMs, tail_lines: 380 }),
             });
 
             if (data.output) {
@@ -265,7 +266,7 @@ export function useTerminalSessions({ activeServer, connected, terminalApiBasePa
         setSendBusy((prev) => ({ ...prev, [session]: false }));
       }
     },
-    [activeServer, connected, supportsShellRun, terminalApiBasePath]
+    [activeServer, connected, shellRunWaitMs, supportsShellRun, terminalApiBasePath]
   );
 
   const handleSend = useCallback(
