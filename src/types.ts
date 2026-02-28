@@ -201,4 +201,6 @@ export type LlmProfile = {
   apiKey: string;
   model: string;
   systemPrompt?: string;
+  requestPath?: string;
+  extraHeaders?: string;
 };

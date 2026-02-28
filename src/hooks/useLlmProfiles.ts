@@ -123,6 +123,8 @@ export function useLlmProfiles() {
         apiKey: input.apiKey.trim(),
         model: input.model.trim(),
         systemPrompt: input.systemPrompt?.trim() || undefined,
+        requestPath: input.requestPath?.trim() || undefined,
+        extraHeaders: input.extraHeaders?.trim() || undefined,
       };
 
       const nextProfiles = input.id
@@ -219,6 +221,8 @@ export function useLlmProfiles() {
           baseUrl: profile.baseUrl?.trim() || "",
           model: profile.model?.trim() || "",
           apiKey: profile.apiKey?.trim() || "",
+          requestPath: profile.requestPath?.trim() || undefined,
+          extraHeaders: profile.extraHeaders?.trim() || undefined,
           kind:
             profile.kind === "anthropic"
               ? "anthropic"

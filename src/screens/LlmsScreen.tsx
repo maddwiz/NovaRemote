@@ -65,6 +65,8 @@ export function LlmsScreen({
   const [apiKey, setApiKey] = useState<string>("");
   const [model, setModel] = useState<string>(defaultModel("openai_compatible"));
   const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const [requestPath, setRequestPath] = useState<string>("");
+  const [extraHeaders, setExtraHeaders] = useState<string>("");
   const [testPrompt, setTestPrompt] = useState<string>("Give me a one-line terminal command to list disk usage.");
   const [transferPassphrase, setTransferPassphrase] = useState<string>("");
   const [importPayload, setImportPayload] = useState<string>("");
@@ -90,6 +92,8 @@ export function LlmsScreen({
               setKind("openai_compatible");
               setBaseUrl("https://api.openai.com/v1");
               setModel("gpt-5-mini");
+              setRequestPath("");
+              setExtraHeaders("");
             }}
           >
             <Text style={styles.actionButtonText}>OpenAI</Text>
@@ -102,6 +106,8 @@ export function LlmsScreen({
               setKind("openai_compatible");
               setBaseUrl("https://openrouter.ai/api/v1");
               setModel("openai/gpt-5-mini");
+              setRequestPath("");
+              setExtraHeaders("");
             }}
           >
             <Text style={styles.actionButtonText}>OpenRouter</Text>
@@ -114,6 +120,8 @@ export function LlmsScreen({
               setKind("gemini");
               setBaseUrl("https://generativelanguage.googleapis.com/v1beta");
               setModel("gemini-2.5-flash");
+              setRequestPath("");
+              setExtraHeaders("");
             }}
           >
             <Text style={styles.actionButtonText}>Gemini</Text>
@@ -127,6 +135,8 @@ export function LlmsScreen({
               setBaseUrl("http://localhost:11434");
               setModel("llama3.1");
               setApiKey("");
+              setRequestPath("");
+              setExtraHeaders("");
             }}
           >
             <Text style={styles.actionButtonText}>Ollama Native</Text>
@@ -139,6 +149,8 @@ export function LlmsScreen({
               setKind("anthropic");
               setBaseUrl("https://api.anthropic.com");
               setModel("claude-3-5-sonnet-latest");
+              setRequestPath("");
+              setExtraHeaders("");
             }}
           >
             <Text style={styles.actionButtonText}>Anthropic</Text>
@@ -160,6 +172,7 @@ export function LlmsScreen({
               setKind("openai_compatible");
               setBaseUrl(defaultBaseUrl("openai_compatible"));
               setModel(defaultModel("openai_compatible"));
+              setRequestPath("");
             }}
           >
             <Text style={[styles.modeButtonText, kind === "openai_compatible" ? styles.modeButtonTextOn : null]}>OpenAI-Compatible</Text>
@@ -170,6 +183,7 @@ export function LlmsScreen({
               setKind("anthropic");
               setBaseUrl(defaultBaseUrl("anthropic"));
               setModel(defaultModel("anthropic"));
+              setRequestPath("");
             }}
           >
             <Text style={[styles.modeButtonText, kind === "anthropic" ? styles.modeButtonTextOn : null]}>Anthropic</Text>
@@ -180,6 +194,7 @@ export function LlmsScreen({
               setKind("gemini");
               setBaseUrl(defaultBaseUrl("gemini"));
               setModel(defaultModel("gemini"));
+              setRequestPath("");
             }}
           >
             <Text style={[styles.modeButtonText, kind === "gemini" ? styles.modeButtonTextOn : null]}>Gemini</Text>
@@ -191,6 +206,7 @@ export function LlmsScreen({
               setBaseUrl(defaultBaseUrl("ollama"));
               setModel(defaultModel("ollama"));
               setApiKey("");
+              setRequestPath("");
             }}
           >
             <Text style={[styles.modeButtonText, kind === "ollama" ? styles.modeButtonTextOn : null]}>Ollama</Text>
@@ -225,6 +241,18 @@ export function LlmsScreen({
           autoCorrect={false}
         />
 
+        {kind === "openai_compatible" ? (
+          <TextInput
+            style={styles.input}
+            value={requestPath}
+            onChangeText={setRequestPath}
+            placeholder="Request path override (optional, e.g. /chat/completions or /responses)"
+            placeholderTextColor="#7f7aa8"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        ) : null}
+
         <TextInput
           style={styles.input}
           value={apiKey}
@@ -240,6 +268,17 @@ export function LlmsScreen({
           secureTextEntry
           autoCapitalize="none"
           autoCorrect={false}
+        />
+
+        <TextInput
+          style={[styles.input, styles.multilineInput]}
+          value={extraHeaders}
+          onChangeText={setExtraHeaders}
+          placeholder="Optional custom headers, one per line (Header-Name: value)"
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
         />
 
         <TextInput
@@ -270,6 +309,8 @@ export function LlmsScreen({
                 apiKey,
                 model,
                 systemPrompt,
+                requestPath,
+                extraHeaders,
               });
 
               setEditingId(null);
@@ -278,6 +319,8 @@ export function LlmsScreen({
               setBaseUrl(defaultBaseUrl("openai_compatible"));
               setModel(defaultModel("openai_compatible"));
               setSystemPrompt("");
+              setRequestPath("");
+              setExtraHeaders("");
             }}
           >
             <Text style={styles.buttonPrimaryText}>{editingId ? "Update Profile" : "Save Profile"}</Text>
@@ -292,6 +335,8 @@ export function LlmsScreen({
               setApiKey("");
               setModel(defaultModel("openai_compatible"));
               setSystemPrompt("");
+              setRequestPath("");
+              setExtraHeaders("");
             }}
           >
             <Text style={styles.buttonGhostText}>Clear</Text>
@@ -311,6 +356,8 @@ export function LlmsScreen({
                 <Text style={styles.serverName}>{profile.name}</Text>
                 <Text style={styles.serverSubtitle}>{`${profile.kind} · ${profile.model}`}</Text>
                 <Text style={styles.emptyText}>{profile.baseUrl}</Text>
+                {profile.requestPath ? <Text style={styles.emptyText}>{`Path ${profile.requestPath}`}</Text> : null}
+                {profile.extraHeaders ? <Text style={styles.emptyText}>Custom headers configured</Text> : null}
                 <View style={styles.actionsWrap}>
                   <Pressable style={styles.actionButton} onPress={() => onSetActive(profile.id)}>
                     <Text style={styles.actionButtonText}>{isActive ? "Active" : "Use"}</Text>
@@ -325,6 +372,8 @@ export function LlmsScreen({
                       setApiKey(profile.apiKey);
                       setModel(profile.model);
                       setSystemPrompt(profile.systemPrompt || "");
+                      setRequestPath(profile.requestPath || "");
+                      setExtraHeaders(profile.extraHeaders || "");
                     }}
                   >
                     <Text style={styles.actionButtonText}>Edit</Text>

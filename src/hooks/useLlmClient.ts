@@ -44,6 +44,41 @@ function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
 
+function resolveRequestUrl(baseUrl: string, path: string | undefined, fallbackPath: string): string {
+  const raw = (path || fallbackPath).trim();
+  if (!raw) {
+    return `${baseUrl}${fallbackPath}`;
+  }
+  if (/^https?:\/\//i.test(raw)) {
+    return raw;
+  }
+  const normalizedPath = raw.startsWith("/") ? raw : `/${raw}`;
+  return `${baseUrl}${normalizedPath}`;
+}
+
+function parseExtraHeaders(raw: string | undefined): Record<string, string> {
+  if (!raw?.trim()) {
+    return {};
+  }
+  const headers: Record<string, string> = {};
+  raw.split(/\r?\n/).forEach((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      return;
+    }
+    const splitIndex = trimmed.indexOf(":");
+    if (splitIndex <= 0) {
+      return;
+    }
+    const key = trimmed.slice(0, splitIndex).trim();
+    const value = trimmed.slice(splitIndex + 1).trim();
+    if (key && value) {
+      headers[key] = value;
+    }
+  });
+  return headers;
+}
+
 function toText(content: unknown): string {
   if (typeof content === "string") {
     return content;
@@ -73,31 +108,39 @@ export function useLlmClient() {
     if (profile.apiKey.trim() && profile.kind !== "gemini") {
       headers.Authorization = `Bearer ${profile.apiKey}`;
     }
+    Object.assign(headers, parseExtraHeaders(profile.extraHeaders));
 
     if (profile.kind === "openai_compatible") {
       const baseUrl = normalizeUrl(profile.baseUrl || "https://api.openai.com/v1");
-      const response = await fetch(`${baseUrl}/chat/completions`, {
+      const isResponsesPath = Boolean(profile.requestPath?.trim() && /(^|\/)responses(\?|$)/i.test(profile.requestPath.trim()));
+      const primaryPath = profile.requestPath?.trim() || (isResponsesPath ? "/responses" : "/chat/completions");
+      const primaryUrl = resolveRequestUrl(baseUrl, primaryPath, "/chat/completions");
+
+      const chatBody = {
+        model: profile.model,
+        messages: [
+          ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2,
+      };
+      const responsesBody = {
+        model: profile.model,
+        instructions: profile.systemPrompt || undefined,
+        input: prompt,
+      };
+
+      const response = await fetch(primaryUrl, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          model: profile.model,
-          messages: [
-            ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
-            { role: "user", content: prompt },
-          ],
-          temperature: 0.2,
-        }),
+        body: JSON.stringify(isResponsesPath ? responsesBody : chatBody),
       });
 
-      if (response.status === 404 || response.status === 405) {
-        const fallback = await fetch(`${baseUrl}/responses`, {
+      if ((response.status === 404 || response.status === 405) && !isResponsesPath) {
+        const fallback = await fetch(resolveRequestUrl(baseUrl, "/responses", "/responses"), {
           method: "POST",
           headers,
-          body: JSON.stringify({
-            model: profile.model,
-            instructions: profile.systemPrompt || undefined,
-            input: prompt,
-          }),
+          body: JSON.stringify(responsesBody),
         });
 
         if (!fallback.ok) {
@@ -106,14 +149,7 @@ export function useLlmClient() {
         }
 
         const payload = (await fallback.json()) as OpenAiResponsesResponse;
-        const text =
-          payload.output_text ||
-          toText(
-            payload.output
-              ?.flatMap((entry) => entry.content || [])
-              .map((entry) => entry.text || "")
-              .filter(Boolean)
-          );
+        const text = payload.output_text || toText(payload.output?.flatMap((entry) => entry.content || []));
         if (!text) {
           throw new Error("LLM response was empty.");
         }
@@ -123,6 +159,15 @@ export function useLlmClient() {
       if (!response.ok) {
         const detail = await response.text();
         throw new Error(`LLM request failed: ${response.status} ${detail || response.statusText}`);
+      }
+
+      if (isResponsesPath) {
+        const payload = (await response.json()) as OpenAiResponsesResponse;
+        const text = payload.output_text || toText(payload.output?.flatMap((entry) => entry.content || []));
+        if (!text) {
+          throw new Error("LLM response was empty.");
+        }
+        return text;
       }
 
       const payload = (await response.json()) as OpenAiChatResponse;
