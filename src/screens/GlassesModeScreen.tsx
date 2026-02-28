@@ -273,6 +273,8 @@ export function GlassesModeScreen() {
         </View>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={`Apply ${glassesBrandLabel(glassesMode.brand)} glasses preset`}
+          accessibilityHint="Sets recommended text scale and voice timing defaults for this glasses brand."
           style={styles.glassesRouteButton}
           onPress={() => {
             const preset = brandPreset(glassesMode.brand);
@@ -452,6 +454,8 @@ export function GlassesModeScreen() {
         <View style={styles.glassesRouteActions}>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Start voice recording"
+            accessibilityHint="Starts listening for your spoken command."
             style={[styles.glassesRouteButton, voiceRecording || voiceBusy ? styles.buttonDisabled : null]}
             disabled={voiceRecording || voiceBusy || !activeSession}
             onPress={onVoiceStartCapture}
@@ -460,6 +464,8 @@ export function GlassesModeScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Stop voice and transcribe"
+            accessibilityHint="Stops recording and sends audio for transcription."
             style={[styles.glassesRouteButton, !voiceRecording || voiceBusy || !activeSession ? styles.buttonDisabled : null]}
             disabled={!voiceRecording || voiceBusy || !activeSession}
             onPress={() => {
@@ -473,6 +479,8 @@ export function GlassesModeScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Hold to talk"
+            accessibilityHint="Press and hold to record. Releasing stops recording and transcribes."
             style={[styles.glassesRouteButton, voiceBusy || !activeSession ? styles.buttonDisabled : null]}
             disabled={voiceBusy || !activeSession}
             onPressIn={() => {
@@ -492,6 +500,8 @@ export function GlassesModeScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Send transcript"
+            accessibilityHint="Sends the latest transcript to the active session."
             style={[styles.glassesRouteButton, !transcriptReady || voiceBusy || !activeSession ? styles.buttonDisabled : null]}
             disabled={!transcriptReady || voiceBusy || !activeSession}
             onPress={() => {
@@ -503,11 +513,20 @@ export function GlassesModeScreen() {
           >
             <Text style={styles.glassesRouteButtonText}>Send Transcript</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={styles.glassesRouteButton} onPress={goToNextSession} disabled={openSessions.length < 2}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Switch to next session"
+            accessibilityHint="Cycles to the next open terminal session."
+            style={styles.glassesRouteButton}
+            onPress={goToNextSession}
+            disabled={openSessions.length < 2}
+          >
             <Text style={styles.glassesRouteButtonText}>Next Session</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Send current draft"
+            accessibilityHint="Sends the current draft text to the active session."
             style={[styles.glassesRoutePrimary, !activeSession || Boolean(activeSession && sendBusy[activeSession]) ? styles.buttonDisabled : null]}
             disabled={!activeSession || Boolean(activeSession && sendBusy[activeSession])}
             onPress={() => {
@@ -523,6 +542,8 @@ export function GlassesModeScreen() {
           </Pressable>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Clear current draft"
+            accessibilityHint="Clears the draft input for the active session."
             style={styles.glassesRouteButton}
             onPress={() => {
               if (!activeSession) {

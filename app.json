@@ -37,8 +37,7 @@
     },
     "plugins": [
       "expo-local-authentication",
-      "expo-notifications",
-      "react-native-purchases"
+      "expo-notifications"
     ]
   }
 }

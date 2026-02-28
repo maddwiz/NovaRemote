@@ -808,6 +808,8 @@ export function TerminalsScreen() {
         </ScrollView>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={`Apply ${glassesBrandLabel(glassesMode.brand)} glasses preset`}
+          accessibilityHint="Sets recommended text and voice loop values for this glasses brand."
           style={styles.actionButton}
           onPress={() => {
             const preset = glassesBrandPreset(glassesMode.brand);
@@ -994,6 +996,8 @@ export function TerminalsScreen() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Open glasses HUD modal"
+                accessibilityHint="Opens a full-screen heads-up display for mirrored glasses use."
                 style={[styles.buttonPrimary, !glassesActiveSession ? styles.buttonDisabled : null]}
                 disabled={!glassesActiveSession}
                 onPress={() => setGlassesHudVisible(true)}
@@ -1002,6 +1006,8 @@ export function TerminalsScreen() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Open on-the-go glasses route"
+                accessibilityHint="Switches to the dedicated glasses screen with larger controls."
                 style={[styles.buttonGhost, !glassesActiveSession ? styles.buttonDisabled : null]}
                 disabled={!glassesActiveSession}
                 onPress={onOpenGlassesMode}
