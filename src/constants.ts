@@ -18,6 +18,8 @@ export const STORAGE_WATCH_RULES_PREFIX = "novaremote.watch_rules.v1";
 export const STORAGE_PINNED_SESSIONS_PREFIX = "novaremote.pinned_sessions.v1";
 export const STORAGE_COMMAND_QUEUE_PREFIX = "novaremote.command_queue.v1";
 export const STORAGE_SESSION_ALIASES_PREFIX = "novaremote.session_aliases.v1";
+export const STORAGE_PROCESS_PANEL_PREFS_PREFIX = "novaremote.process_panel.v1";
+export const STORAGE_SESSION_COLLAB_READONLY_PREFIX = "novaremote.collab_readonly.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
@@ -36,6 +38,7 @@ export const STREAM_RETRY_MAX_MS = 30000;
 
 export const POLL_INTERVAL_MS = 1800;
 export const HEALTH_PING_INTERVAL_MS = 15000;
+export const COLLAB_POLL_INTERVAL_MS = 7000;
 export const HISTORY_MAX_ITEMS = 50;
 export const FREE_SERVER_LIMIT = 1;
 export const FREE_SESSION_LIMIT = 2;

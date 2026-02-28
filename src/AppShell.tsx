@@ -35,8 +35,10 @@ import {
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
+  COLLAB_POLL_INTERVAL_MS,
   POLL_INTERVAL_MS,
   STORAGE_COMMAND_QUEUE_PREFIX,
+  STORAGE_SESSION_COLLAB_READONLY_PREFIX,
   STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
 } from "./constants";
@@ -77,6 +79,7 @@ import {
   RecordingChunk,
   RouteTab,
   ServerProfile,
+  SessionCollaborator,
   SessionRecording,
   Status,
   SysStats,
@@ -495,6 +498,89 @@ function normalizeProcessList(payload: unknown): ProcessInfo[] {
     .sort((a, b) => (b.cpu_percent || 0) - (a.cpu_percent || 0));
 }
 
+function toOptionalBool(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return value !== 0;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "1", "yes", "on", "readonly", "read_only"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "0", "no", "off", "interactive", "readwrite", "read_write"].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+}
+
+function parsePresenceTimestamp(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value > 10_000_000_000 ? value : value * 1000;
+  }
+  if (typeof value === "string") {
+    const parsed = Date.parse(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
+}
+
+function normalizeCollaboratorRole(value: unknown): SessionCollaborator["role"] {
+  if (typeof value !== "string") {
+    return "unknown";
+  }
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "owner" || normalized === "editor" || normalized === "viewer") {
+    return normalized;
+  }
+  return "unknown";
+}
+
+function normalizeSessionPresence(payload: unknown): { collaborators: SessionCollaborator[]; readOnly: boolean | null } {
+  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
+  const rawList = Array.isArray(payload)
+    ? payload
+    : Array.isArray(root?.collaborators)
+      ? root?.collaborators
+      : Array.isArray(root?.viewers)
+        ? root?.viewers
+        : Array.isArray(root?.participants)
+          ? root?.participants
+          : Array.isArray(root?.users)
+            ? root?.users
+            : [];
+
+  const collaborators = rawList
+    .map((entry, index) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const raw = entry as Record<string, unknown>;
+      const idValue = raw.id ?? raw.user_id ?? raw.uid ?? raw.socket_id;
+      const id = typeof idValue === "string" && idValue.trim() ? idValue.trim() : `viewer-${index + 1}`;
+      const nameValue = raw.name ?? raw.username ?? raw.display_name ?? raw.handle;
+      const name = typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : id;
+      const readOnly = toOptionalBool(raw.read_only ?? raw.readonly ?? raw.readOnly) ?? false;
+      const isSelf = toOptionalBool(raw.is_self ?? raw.self ?? raw.me) ?? false;
+      return {
+        id,
+        name,
+        role: normalizeCollaboratorRole(raw.role),
+        readOnly,
+        isSelf,
+        lastSeenAt: parsePresenceTimestamp(raw.last_seen_at ?? raw.lastSeenAt ?? raw.last_seen ?? raw.updated_at ?? raw.updatedAt),
+      } satisfies SessionCollaborator;
+    })
+    .filter((entry): entry is SessionCollaborator => Boolean(entry))
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const readOnly = toOptionalBool(root?.read_only ?? root?.readonly ?? root?.readOnly ?? root?.mode);
+  return { collaborators, readOnly };
+}
+
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -525,6 +611,8 @@ export default function AppShell() {
   const [sysStats, setSysStats] = useState<SysStats | null>(null);
   const [processes, setProcesses] = useState<ProcessInfo[]>([]);
   const [processesBusy, setProcessesBusy] = useState<boolean>(false);
+  const [sessionPresence, setSessionPresence] = useState<Record<string, SessionCollaborator[]>>({});
+  const [sessionReadOnly, setSessionReadOnly] = useState<Record<string, boolean>>({});
   const [playbackSession, setPlaybackSession] = useState<string | null>(null);
   const [playbackTimeMs, setPlaybackTimeMs] = useState<number>(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
@@ -541,6 +629,7 @@ export default function AppShell() {
   const autoOpenedPinsServerRef = useRef<string | null>(null);
   const recordingTailRef = useRef<Record<string, string>>({});
   const triageHintRef = useRef<Record<string, string>>({});
+  const presenceInFlightRef = useRef<Set<string>>(new Set());
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -988,6 +1077,66 @@ export default function AppShell() {
     }
   }, [activeServer, capabilities.processes, connected]);
 
+  const refreshSessionPresence = useCallback(
+    async (session: string, showErrors: boolean = false) => {
+      if (isLocalSession(session)) {
+        setSessionPresence((prev) => ({ ...prev, [session]: [] }));
+        return;
+      }
+      if (!activeServer || !connected || !capabilities.collaboration) {
+        return;
+      }
+      if (presenceInFlightRef.current.has(session)) {
+        return;
+      }
+      presenceInFlightRef.current.add(session);
+      try {
+        const candidates = [
+          `${terminalApiBasePath}/presence?session=${encodeURIComponent(session)}`,
+          `/collab/presence?session=${encodeURIComponent(session)}`,
+          `/presence?session=${encodeURIComponent(session)}`,
+        ];
+        let payload: unknown = null;
+        let lastError: unknown = null;
+        for (const path of candidates) {
+          try {
+            payload = await apiRequest<unknown>(activeServer.baseUrl, activeServer.token, path);
+            break;
+          } catch (error) {
+            lastError = error;
+            const message = error instanceof Error ? error.message : String(error);
+            if (message.startsWith("404") || message.startsWith("405") || message.startsWith("501")) {
+              continue;
+            }
+          }
+        }
+        if (payload === null) {
+          if (showErrors && lastError) {
+            throw lastError;
+          }
+          setSessionPresence((prev) => ({ ...prev, [session]: [] }));
+          return;
+        }
+        const normalized = normalizeSessionPresence(payload);
+        setSessionPresence((prev) => ({ ...prev, [session]: normalized.collaborators }));
+        if (normalized.readOnly !== null) {
+          setSessionReadOnly((prev) => {
+            const next = { ...prev };
+            if (normalized.readOnly) {
+              next[session] = true;
+            } else {
+              delete next[session];
+            }
+            return next;
+          });
+        }
+      } finally {
+        presenceInFlightRef.current.delete(session);
+      }
+    },
+    [activeServer, capabilities.collaboration, connected, isLocalSession, terminalApiBasePath]
+  );
+
   const runWithStatus = useCallback(
     async (label: string, fn: () => Promise<void>) => {
       setStatus({ text: label, error: false });
@@ -1062,6 +1211,9 @@ export default function AppShell() {
         return 0;
       }
       const includeFailed = options?.includeFailed ?? true;
+      if (sessionReadOnly[session]) {
+        throw new Error(`${session} is read-only. Disable read-only to flush queued commands.`);
+      }
 
       if (!connected && !isLocalSession(session)) {
         throw new Error("Reconnect to flush queued commands for this session.");
@@ -1166,7 +1318,7 @@ export default function AppShell() {
       });
       return sentCount;
     },
-    [addCommand, commandQueue, connected, isLocalSession, sendCommand, sendViaExternalLlm, shouldRouteToExternalAi]
+    [addCommand, commandQueue, connected, isLocalSession, sendCommand, sendViaExternalLlm, sessionReadOnly, shouldRouteToExternalAi]
   );
 
   const toggleRecording = useCallback(
@@ -1376,7 +1528,7 @@ export default function AppShell() {
       return;
     }
     const pendingSessions = Object.keys(commandQueue).filter((session) =>
-      (commandQueue[session] || []).some((item) => queueStatus(item) === "pending")
+      (commandQueue[session] || []).some((item) => queueStatus(item) === "pending") && !sessionReadOnly[session]
     );
     if (pendingSessions.length === 0) {
       return;
@@ -1389,7 +1541,7 @@ export default function AppShell() {
         }
       });
     });
-  }, [commandQueue, connected, flushSessionQueue, isPro, notify, runWithStatus]);
+  }, [commandQueue, connected, flushSessionQueue, isPro, notify, runWithStatus, sessionReadOnly]);
 
   useEffect(() => {
     return () => {
@@ -1422,6 +1574,28 @@ export default function AppShell() {
       void fetchTail(session, false);
     });
   }, [connected, fetchTail, remoteOpenSessions]);
+
+  useEffect(() => {
+    if (!connected || !capabilities.collaboration || remoteOpenSessions.length === 0) {
+      return;
+    }
+    remoteOpenSessions.forEach((session) => {
+      void refreshSessionPresence(session, false);
+    });
+    const id = setInterval(() => {
+      remoteOpenSessions.forEach((session) => {
+        void refreshSessionPresence(session, false);
+      });
+    }, COLLAB_POLL_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [capabilities.collaboration, connected, refreshSessionPresence, remoteOpenSessions]);
+
+  useEffect(() => {
+    if (connected && capabilities.collaboration) {
+      return;
+    }
+    setSessionPresence({});
+  }, [capabilities.collaboration, connected]);
 
   useEffect(() => {
     void removeMissingSessions(allSessions);
@@ -1665,6 +1839,24 @@ export default function AppShell() {
       });
       return next;
     });
+    setSessionPresence((prev) => {
+      const next: Record<string, SessionCollaborator[]> = {};
+      allSessions.forEach((session) => {
+        if (prev[session]) {
+          next[session] = prev[session];
+        }
+      });
+      return next;
+    });
+    setSessionReadOnly((prev) => {
+      const next: Record<string, boolean> = {};
+      allSessions.forEach((session) => {
+        if (prev[session]) {
+          next[session] = true;
+        }
+      });
+      return next;
+    });
     setRecordings((prev) => {
       const next: Record<string, SessionRecording> = {};
       allSessions.forEach((session) => {
@@ -1716,6 +1908,54 @@ export default function AppShell() {
     }
     void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${activeServerId}`, JSON.stringify(watchRules));
   }, [activeServerId, watchRules]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadCollabReadOnly() {
+      if (!activeServerId) {
+        if (mounted) {
+          setSessionReadOnly({});
+        }
+        return;
+      }
+      const raw = await SecureStore.getItemAsync(`${STORAGE_SESSION_COLLAB_READONLY_PREFIX}.${activeServerId}`);
+      if (!mounted) {
+        return;
+      }
+      if (!raw) {
+        setSessionReadOnly({});
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== "object") {
+          setSessionReadOnly({});
+          return;
+        }
+        const next: Record<string, boolean> = {};
+        Object.entries(parsed).forEach(([session, value]) => {
+          const bool = toOptionalBool(value);
+          if (bool !== null) {
+            next[session] = bool;
+          }
+        });
+        setSessionReadOnly(next);
+      } catch {
+        setSessionReadOnly({});
+      }
+    }
+    void loadCollabReadOnly();
+    return () => {
+      mounted = false;
+    };
+  }, [activeServerId]);
+
+  useEffect(() => {
+    if (!activeServerId) {
+      return;
+    }
+    void SecureStore.setItemAsync(`${STORAGE_SESSION_COLLAB_READONLY_PREFIX}.${activeServerId}`, JSON.stringify(sessionReadOnly));
+  }, [activeServerId, sessionReadOnly]);
 
   useEffect(() => {
     let mounted = true;
@@ -1929,6 +2169,8 @@ export default function AppShell() {
     fleetResults,
     processes,
     processesBusy,
+    sessionPresence,
+    sessionReadOnly,
     suggestionsBySession,
     suggestionBusyBySession,
     errorHintsBySession,
@@ -2087,6 +2329,9 @@ export default function AppShell() {
         if (isLocalSession(session)) {
           throw new Error("Local LLM sessions do not support Ctrl-C.");
         }
+        if (sessionReadOnly[session]) {
+          throw new Error(`${session} is read-only. Disable read-only before sending Ctrl-C.`);
+        }
         await handleStop(session);
       });
     },
@@ -2142,6 +2387,9 @@ export default function AppShell() {
       void runWithStatus(`Sending to ${session}`, async () => {
         const draft = (drafts[session] || "").trim();
         const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+        if (sessionReadOnly[session]) {
+          throw new Error(`${session} is read-only. Disable read-only to send commands.`);
+        }
         if (mode === "ai" && shouldRouteToExternalAi(session)) {
           const sent = await sendViaExternalLlm(session, draft);
           if (sent) {
@@ -2217,6 +2465,22 @@ export default function AppShell() {
           )
         );
         await refreshProcesses();
+      });
+    },
+    onRefreshSessionPresence: (session) => {
+      void runWithStatus(`Refreshing presence for ${session}`, async () => {
+        await refreshSessionPresence(session, true);
+      });
+    },
+    onSetSessionReadOnly: (session, value) => {
+      setSessionReadOnly((prev) => {
+        const next = { ...prev };
+        if (value) {
+          next[session] = true;
+        } else {
+          delete next[session];
+        }
+        return next;
       });
     },
     onRequestSuggestions: (session) => {
@@ -2474,6 +2738,9 @@ export default function AppShell() {
               onRunSnippet={(session, command, mode) => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 void runWithStatus(`Running snippet in ${session}`, async () => {
+                  if (sessionReadOnly[session]) {
+                    throw new Error(`${session} is read-only. Disable read-only to run snippets.`);
+                  }
                   if (isLocalSession(session) && mode === "shell") {
                     throw new Error("Shell snippets are not available for local LLM sessions.");
                   }
@@ -2558,6 +2825,9 @@ export default function AppShell() {
                     if (isLocalSession(session)) {
                       throw new Error("Local LLM sessions cannot execute file shell commands.");
                     }
+                    if (sessionReadOnly[session]) {
+                      throw new Error(`${session} is read-only. Disable read-only to run file commands.`);
+                    }
                     const command = `cat ${shellQuote(path)}`;
                     const approved = await requestDangerApproval(command, `File command in ${session}`);
                     if (!approved) {
@@ -2636,6 +2906,8 @@ export default function AppShell() {
         draft={focusedDraft}
         mode={focusedMode}
         isSending={focusedIsSending}
+        isReadOnly={focusedSession ? Boolean(sessionReadOnly[focusedSession]) : false}
+        collaboratorCount={focusedSession ? (sessionPresence[focusedSession] || []).length : 0}
         searchTerm={focusedSearchTerm}
         searchMatchesLabel={focusedSearchLabel}
         activeMatchIndex={focusedMatchIndex}
@@ -2717,6 +2989,9 @@ export default function AppShell() {
           }
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           void runWithStatus(`Sending to ${focusedSession}`, async () => {
+            if (sessionReadOnly[focusedSession]) {
+              throw new Error(`${focusedSession} is read-only. Disable read-only to send commands.`);
+            }
             if (focusedMode === "ai" && shouldRouteToExternalAi(focusedSession)) {
               const sent = await sendViaExternalLlm(focusedSession, focusedDraft);
               if (sent) {
@@ -2748,6 +3023,9 @@ export default function AppShell() {
           void runWithStatus(`Stopping ${focusedSession}`, async () => {
             if (isLocalSession(focusedSession)) {
               throw new Error("Local LLM sessions do not support Ctrl-C.");
+            }
+            if (sessionReadOnly[focusedSession]) {
+              throw new Error(`${focusedSession} is read-only. Disable read-only before sending Ctrl-C.`);
             }
             await handleStop(focusedSession);
           });

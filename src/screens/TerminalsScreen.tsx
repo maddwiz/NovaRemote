@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
+import * as SecureStore from "expo-secure-store";
+import { NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
 
 import { useAppContext } from "../context/AppContext";
-import { CWD_PLACEHOLDER, isLikelyAiSession } from "../constants";
+import { CWD_PLACEHOLDER, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
 import { TerminalCard } from "../components/TerminalCard";
+import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
 import { styles } from "../theme/styles";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
@@ -75,6 +77,17 @@ function formatNumber(value: number | undefined, decimals: number = 0): string {
   return value.toFixed(decimals);
 }
 
+type ProcessSortMode = "cpu" | "mem" | "uptime" | "name";
+
+function normalizeProcessSorts(input: unknown): ProcessSortMode[] {
+  if (!Array.isArray(input)) {
+    return ["cpu"];
+  }
+  const allowed: ProcessSortMode[] = ["cpu", "mem", "uptime", "name"];
+  const next = Array.from(new Set(input.filter((entry): entry is ProcessSortMode => allowed.includes(entry as ProcessSortMode))));
+  return next.length > 0 ? next : ["cpu"];
+}
+
 export function TerminalsScreen() {
   const {
     activeServer,
@@ -116,6 +129,8 @@ export function TerminalsScreen() {
     fleetResults,
     processes,
     processesBusy,
+    sessionPresence,
+    sessionReadOnly,
     suggestionsBySession,
     suggestionBusyBySession,
     errorHintsBySession,
@@ -163,6 +178,8 @@ export function TerminalsScreen() {
     onRefreshProcesses,
     onKillProcess,
     onKillProcesses,
+    onRefreshSessionPresence,
+    onSetSessionReadOnly,
     onRequestSuggestions,
     onUseSuggestion,
     onExplainError,
@@ -189,18 +206,75 @@ export function TerminalsScreen() {
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
   const [processFilter, setProcessFilter] = useState<string>("");
-  const [processSort, setProcessSort] = useState<"cpu" | "mem" | "uptime" | "name">("cpu");
+  const [processSorts, setProcessSorts] = useState<ProcessSortMode[]>(["cpu"]);
   const [processSignal, setProcessSignal] = useState<ProcessSignal>("TERM");
   const [selectedProcessPids, setSelectedProcessPids] = useState<number[]>([]);
+  const [pendingProcessKill, setPendingProcessKill] = useState<{ pids: number[]; signal: ProcessSignal } | null>(null);
   const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
+  const onStartPromptKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
+    const native = event.nativeEvent as TextInputKeyPressEventData & { ctrlKey?: boolean; metaKey?: boolean };
+    const key = (native.key || "").toLowerCase();
+    if ((native.metaKey || native.ctrlKey) && key === "enter" && connected) {
+      onStartSession();
+    }
+  };
 
   useEffect(() => {
     const valid = new Set(processes.map((entry) => entry.pid));
     setSelectedProcessPids((prev) => prev.filter((pid) => valid.has(pid)));
   }, [processes]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadProcessPrefs() {
+      if (!activeServer?.id) {
+        if (mounted) {
+          setProcessFilter("");
+          setProcessSorts(["cpu"]);
+          setProcessSignal("TERM");
+        }
+        return;
+      }
+      const raw = await SecureStore.getItemAsync(`${STORAGE_PROCESS_PANEL_PREFS_PREFIX}.${activeServer.id}`);
+      if (!mounted) {
+        return;
+      }
+      if (!raw) {
+        setProcessFilter("");
+        setProcessSorts(["cpu"]);
+        setProcessSignal("TERM");
+        return;
+      }
+      try {
+        const parsed = JSON.parse(raw) as { filter?: unknown; sorts?: unknown; signal?: unknown };
+        const nextSignal = parsed.signal === "KILL" || parsed.signal === "INT" ? parsed.signal : "TERM";
+        setProcessFilter(typeof parsed.filter === "string" ? parsed.filter : "");
+        setProcessSorts(normalizeProcessSorts(parsed.sorts));
+        setProcessSignal(nextSignal);
+      } catch {
+        setProcessFilter("");
+        setProcessSorts(["cpu"]);
+        setProcessSignal("TERM");
+      }
+    }
+    void loadProcessPrefs();
+    return () => {
+      mounted = false;
+    };
+  }, [activeServer?.id]);
+
+  useEffect(() => {
+    if (!activeServer?.id) {
+      return;
+    }
+    void SecureStore.setItemAsync(
+      `${STORAGE_PROCESS_PANEL_PREFS_PREFIX}.${activeServer.id}`,
+      JSON.stringify({ filter: processFilter, sorts: processSorts, signal: processSignal })
+    );
+  }, [activeServer?.id, processFilter, processSignal, processSorts]);
 
   const visibleProcesses = useMemo(() => {
     const needle = processFilter.trim().toLowerCase();
@@ -217,19 +291,37 @@ export function TerminalsScreen() {
     });
 
     const sorted = filtered.slice().sort((a, b) => {
-      if (processSort === "name") {
-        return a.name.localeCompare(b.name);
+      for (const mode of processSorts) {
+        if (mode === "name") {
+          const diff = a.name.localeCompare(b.name);
+          if (diff !== 0) {
+            return diff;
+          }
+          continue;
+        }
+        if (mode === "mem") {
+          const diff = (b.mem_percent || 0) - (a.mem_percent || 0);
+          if (diff !== 0) {
+            return diff;
+          }
+          continue;
+        }
+        if (mode === "uptime") {
+          const diff = (b.uptime_seconds || 0) - (a.uptime_seconds || 0);
+          if (diff !== 0) {
+            return diff;
+          }
+          continue;
+        }
+        const diff = (b.cpu_percent || 0) - (a.cpu_percent || 0);
+        if (diff !== 0) {
+          return diff;
+        }
       }
-      if (processSort === "mem") {
-        return (b.mem_percent || 0) - (a.mem_percent || 0);
-      }
-      if (processSort === "uptime") {
-        return (b.uptime_seconds || 0) - (a.uptime_seconds || 0);
-      }
-      return (b.cpu_percent || 0) - (a.cpu_percent || 0);
+      return a.pid - b.pid;
     });
     return sorted;
-  }, [processFilter, processSort, processes]);
+  }, [processFilter, processSorts, processes]);
 
   useEffect(() => {
     if (sortedOpenSessions.length === 0) {
@@ -256,6 +348,8 @@ export function TerminalsScreen() {
       const aiEngine = sessionAiEngine[session] || (isLocalOnly ? "external" : "auto");
       const watch = watchRules[session] || { enabled: false, pattern: "", lastMatch: null };
       const recording = recordings[session];
+      const collaborators = sessionPresence[session] || [];
+      const readOnly = Boolean(sessionReadOnly[session]);
       const recordingDuration = recording?.chunks.length ? recording.chunks[recording.chunks.length - 1]?.atMs || 0 : 0;
 
       return (
@@ -288,6 +382,9 @@ export function TerminalsScreen() {
           watchEnabled={watch.enabled}
           watchPattern={watch.pattern}
           watchAlerts={watchAlertHistoryBySession[session] || []}
+          collaborationAvailable={!isLocalOnly && capabilities.collaboration}
+          collaborators={collaborators}
+          readOnly={readOnly}
           tags={tags}
           pinned={pinnedSessions.includes(session)}
           queuedItems={commandQueue[session] || []}
@@ -321,6 +418,8 @@ export function TerminalsScreen() {
           onToggleWatch={(enabled) => onToggleWatch(session, enabled)}
           onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
           onClearWatchAlerts={() => onClearWatchAlerts(session)}
+          onRefreshPresence={() => onRefreshSessionPresence(session)}
+          onSetReadOnly={(value) => onSetSessionReadOnly(session, value)}
           onTogglePin={() => onTogglePinSession(session)}
           onFlushQueue={() => onFlushQueue(session)}
           onRemoveQueuedCommand={(index) => onRemoveQueuedCommand(session, index)}
@@ -336,6 +435,7 @@ export function TerminalsScreen() {
     capabilities.codex,
     capabilities.terminal,
     capabilities.macAttach,
+    capabilities.collaboration,
     connected,
     connectionMeta,
     drafts,
@@ -343,6 +443,8 @@ export function TerminalsScreen() {
     commandHistory,
     historyCount,
     sessionAliases,
+    sessionPresence,
+    sessionReadOnly,
     errorHintsBySession,
     triageBusyBySession,
     triageExplanationBySession,
@@ -371,6 +473,8 @@ export function TerminalsScreen() {
     onAdaptDraftForBackend,
     onSetWatchPattern,
     onClearWatchAlerts,
+    onRefreshSessionPresence,
+    onSetSessionReadOnly,
     onStopSession,
     onSyncSession,
     onTogglePinSession,
@@ -600,16 +704,29 @@ export function TerminalsScreen() {
             />
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-              {(["cpu", "mem", "uptime", "name"] as const).map((sortMode) => (
-                <Pressable
-                  key={`sort-${sortMode}`}
-                  style={[styles.chip, processSort === sortMode ? styles.chipActive : null]}
-                  onPress={() => setProcessSort(sortMode)}
-                >
-                  <Text style={[styles.chipText, processSort === sortMode ? styles.chipTextActive : null]}>{`Sort ${sortMode}`}</Text>
-                </Pressable>
-              ))}
+              {(["cpu", "mem", "uptime", "name"] as ProcessSortMode[]).map((sortMode) => {
+                const index = processSorts.indexOf(sortMode);
+                const active = index >= 0;
+                return (
+                  <Pressable
+                    key={`sort-${sortMode}`}
+                    style={[styles.chip, active ? styles.chipActive : null]}
+                    onPress={() => setProcessSorts((prev) => [sortMode, ...prev.filter((entry) => entry !== sortMode)])}
+                    onLongPress={() =>
+                      setProcessSorts((prev) => {
+                        const next = prev.filter((entry) => entry !== sortMode);
+                        return next.length > 0 ? next : ["cpu"];
+                      })
+                    }
+                  >
+                    <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
+                      {active ? `#${index + 1} ${sortMode}` : `+ ${sortMode}`}
+                    </Text>
+                  </Pressable>
+                );
+              })}
             </ScrollView>
+            <Text style={styles.emptyText}>Tap to prioritize sort. Long-press to remove from sort chain.</Text>
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
               {(["TERM", "KILL", "INT"] as ProcessSignal[]).map((signal) => (
@@ -628,10 +745,7 @@ export function TerminalsScreen() {
               <Pressable
                 style={[styles.actionDangerButton, selectedProcessPids.length === 0 ? styles.buttonDisabled : null]}
                 disabled={selectedProcessPids.length === 0}
-                onPress={() => {
-                  onKillProcesses(selectedProcessPids, processSignal);
-                  setSelectedProcessPids([]);
-                }}
+                onPress={() => setPendingProcessKill({ pids: selectedProcessPids, signal: processSignal })}
               >
                 <Text style={styles.actionDangerText}>{`Kill Selected (${processSignal})`}</Text>
               </Pressable>
@@ -653,7 +767,7 @@ export function TerminalsScreen() {
                   >
                     <Text style={styles.actionButtonText}>{selected ? "Selected" : "Select"}</Text>
                   </Pressable>
-                  <Pressable style={styles.actionDangerButton} onPress={() => onKillProcess(process.pid, processSignal)}>
+                  <Pressable style={styles.actionDangerButton} onPress={() => setPendingProcessKill({ pids: [process.pid], signal: processSignal })}>
                     <Text style={styles.actionDangerText}>{`Kill ${processSignal}`}</Text>
                   </Pressable>
                 </View>
@@ -803,6 +917,7 @@ export function TerminalsScreen() {
           multiline
           placeholder={startKind === "ai" ? "Optional first message" : "Optional first command"}
           placeholderTextColor="#7f7aa8"
+          onKeyPress={onStartPromptKeyPress}
           onChangeText={onSetStartPrompt}
         />
 
@@ -860,6 +975,28 @@ export function TerminalsScreen() {
     </>
   );
 
+  const processKillModal = (
+    <ProcessKillConfirmModal
+      visible={Boolean(pendingProcessKill)}
+      pids={pendingProcessKill?.pids || []}
+      signal={pendingProcessKill?.signal || "TERM"}
+      onCancel={() => setPendingProcessKill(null)}
+      onConfirm={() => {
+        if (!pendingProcessKill) {
+          return;
+        }
+        const targetPids = pendingProcessKill.pids;
+        if (targetPids.length === 1) {
+          onKillProcess(targetPids[0], pendingProcessKill.signal);
+        } else {
+          onKillProcesses(targetPids, pendingProcessKill.signal);
+        }
+        setSelectedProcessPids((prev) => prev.filter((pid) => !targetPids.includes(pid)));
+        setPendingProcessKill(null);
+      }}
+    />
+  );
+
   if (wantsSplit && !splitEnabled) {
     return (
       <>
@@ -875,21 +1012,25 @@ export function TerminalsScreen() {
           <Text style={styles.panelLabel}>Open Terminals</Text>
           {renderOpenTerminals()}
         </View>
+        {processKillModal}
       </>
     );
   }
 
   if (wantsSplit && splitEnabled) {
     return (
-      <View style={styles.splitRow}>
-        <View style={styles.splitLeft}>{topPanels}</View>
-        <View style={styles.splitRight}>
-          <View style={styles.panel}>
-            <Text style={styles.panelLabel}>Open Terminals</Text>
-            {renderOpenTerminals()}
+      <>
+        <View style={styles.splitRow}>
+          <View style={styles.splitLeft}>{topPanels}</View>
+          <View style={styles.splitRight}>
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Open Terminals</Text>
+              {renderOpenTerminals()}
+            </View>
           </View>
         </View>
-      </View>
+        {processKillModal}
+      </>
     );
   }
 
@@ -900,6 +1041,7 @@ export function TerminalsScreen() {
         <Text style={styles.panelLabel}>Open Terminals</Text>
         {renderOpenTerminals()}
       </View>
+      {processKillModal}
     </>
   );
 }

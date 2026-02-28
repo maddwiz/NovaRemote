@@ -7,6 +7,7 @@ import {
   ProcessInfo,
   ProcessSignal,
   QueuedCommand,
+  SessionCollaborator,
   SessionRecording,
   ServerCapabilities,
   ServerProfile,
@@ -59,6 +60,8 @@ export type TerminalsViewModel = {
   fleetResults: FleetRunResult[];
   processes: ProcessInfo[];
   processesBusy: boolean;
+  sessionPresence: Record<string, SessionCollaborator[]>;
+  sessionReadOnly: Record<string, boolean>;
   suggestionsBySession: Record<string, string[]>;
   suggestionBusyBySession: Record<string, boolean>;
   errorHintsBySession: Record<string, string>;
@@ -106,6 +109,8 @@ export type TerminalsViewModel = {
   onRefreshProcesses: () => void;
   onKillProcess: (pid: number, signal?: ProcessSignal) => void;
   onKillProcesses: (pids: number[], signal: ProcessSignal) => void;
+  onRefreshSessionPresence: (session: string) => void;
+  onSetSessionReadOnly: (session: string, value: boolean) => void;
   onRequestSuggestions: (session: string) => void;
   onUseSuggestion: (session: string, value: string) => void;
   onExplainError: (session: string) => void;

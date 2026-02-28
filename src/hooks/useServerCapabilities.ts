@@ -13,6 +13,7 @@ const EMPTY_CAPABILITIES: ServerCapabilities = {
   stream: false,
   sysStats: false,
   processes: false,
+  collaboration: false,
 };
 
 type UseServerCapabilitiesArgs = {
@@ -178,7 +179,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         (readPath(manifestRoot, "features") as Record<string, unknown> | undefined) ||
         manifestRoot;
 
-      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe, procListProbe] = await Promise.all([
+      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe, procListProbe, collabProbe] = await Promise.all([
         endpointExists(baseUrl, token, "/tmux/sessions"),
         endpointExists(baseUrl, token, "/terminal/sessions"),
         endpointExists(baseUrl, token, "/files/list?path=%2F"),
@@ -187,6 +188,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         endpointSupportsAction(baseUrl, token, "/codex/start"),
         endpointExists(baseUrl, token, "/sys/stats"),
         endpointExists(baseUrl, token, "/proc/list"),
+        endpointSupportsAction(baseUrl, token, "/collab/presence"),
       ]);
 
       const manifestTerminal = readBool(manifest, [
@@ -212,6 +214,15 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
       const manifestStream = readBool(manifest, ["stream.available", "stream", "terminal.stream", "tmux.stream"]);
       const manifestSysStats = readBool(manifest, ["sys.stats", "sysStats", "stats.system", "system.stats"]);
       const manifestProcesses = readBool(manifest, ["proc.list", "proc", "processes", "process.list"]);
+      const manifestCollaboration = readBool(manifest, [
+        "collaboration",
+        "collaboration.available",
+        "collab",
+        "collab.available",
+        "presence",
+        "presence.available",
+        "multiplayer",
+      ]);
 
       const terminalAvailable = manifestTerminal ?? (terminalSessions || tmuxSessions);
       const next: ServerCapabilities = {
@@ -224,6 +235,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         stream: manifestStream ?? terminalAvailable,
         sysStats: manifestSysStats ?? sysStatsProbe,
         processes: manifestProcesses ?? procListProbe,
+        collaboration: manifestCollaboration ?? collabProbe,
       };
 
       const nextApiKind = pickTerminalApiKind(manifest, terminalSessions, tmuxSessions);
@@ -272,6 +284,9 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
     }
     if (capabilities.processes) {
       features.push("proc");
+    }
+    if (capabilities.collaboration) {
+      features.push("collab");
     }
     return features.join(", ");
   }, [activeServer?.terminalBackend, capabilities, terminalApiKind]);

@@ -24,6 +24,8 @@ type FullscreenTerminalProps = {
   draft: string;
   mode: TerminalSendMode;
   isSending: boolean;
+  isReadOnly: boolean;
+  collaboratorCount: number;
   searchTerm: string;
   searchMatchesLabel: string;
   activeMatchIndex: number;
@@ -47,6 +49,8 @@ export function FullscreenTerminal({
   draft,
   mode,
   isSending,
+  isReadOnly,
+  collaboratorCount,
   searchTerm,
   searchMatchesLabel,
   activeMatchIndex,
@@ -64,17 +68,49 @@ export function FullscreenTerminal({
   onStop,
 }: FullscreenTerminalProps) {
   const terminalRef = useRef<ScrollView | null>(null);
+  const searchRef = useRef<TextInput | null>(null);
+  type KeyPressEventWithModifiers = TextInputKeyPressEventData & {
+    ctrlKey?: boolean;
+    metaKey?: boolean;
+  };
   const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
-    const key = event.nativeEvent.key;
-    if (key === "ArrowUp") {
+    const native = event.nativeEvent as KeyPressEventWithModifiers;
+    const key = (native.key || "").toLowerCase();
+    const hasCtrl = Boolean(native.ctrlKey);
+    const hasMeta = Boolean(native.metaKey);
+    if ((hasMeta || hasCtrl) && key === "enter") {
+      if (!isSending && !isReadOnly) {
+        onSend();
+      }
+      return;
+    }
+    if (hasCtrl && key === "c") {
+      if (!isReadOnly) {
+        onStop();
+      }
+      return;
+    }
+    if (hasMeta && key === "k") {
+      onDraftChange("");
+      return;
+    }
+    if (hasMeta && key === "w") {
+      onClose();
+      return;
+    }
+    if (hasMeta && key === "f") {
+      searchRef.current?.focus();
+      return;
+    }
+    if (key === "arrowup") {
       onHistoryPrev();
       return;
     }
-    if (key === "ArrowDown") {
+    if (key === "arrowdown") {
       onHistoryNext();
       return;
     }
-    if (mode === "shell" && key === "Enter" && !isSending) {
+    if (mode === "shell" && key === "enter" && !isSending && !isReadOnly) {
       onSend();
     }
   };
@@ -114,6 +150,7 @@ export function FullscreenTerminal({
         {session ? (
           <>
             <TextInput
+              ref={searchRef}
               style={styles.input}
               value={searchTerm}
               onChangeText={onSearchChange}
@@ -137,12 +174,15 @@ export function FullscreenTerminal({
               style={[styles.input, styles.modalInput]}
               value={draft}
               multiline
-              editable={!isSending}
-              placeholder={mode === "ai" ? "Message AI..." : "Run shell command..."}
+              editable={!isSending && !isReadOnly}
+              placeholder={isReadOnly ? "Read-only collaboration mode is enabled" : mode === "ai" ? "Message AI..." : "Run shell command..."}
               placeholderTextColor="#7f7aa8"
               onKeyPress={onDraftKeyPress}
               onChangeText={onDraftChange}
             />
+            <Text style={styles.emptyText}>
+              {`Viewers ${collaboratorCount} · Shortcuts: Cmd/Ctrl+Enter send, Ctrl+C stop, Cmd+K clear, Cmd+F search, Cmd+W close.`}
+            </Text>
 
             <View style={styles.rowInlineSpace}>
               <Pressable style={styles.actionButton} onPress={onHistoryPrev}>
@@ -152,13 +192,17 @@ export function FullscreenTerminal({
                 <Text style={styles.actionButtonText}>↓</Text>
               </Pressable>
               <Pressable
-                style={[styles.buttonPrimary, styles.flexButton, isSending ? styles.buttonDisabled : null]}
-                disabled={isSending}
+                style={[styles.buttonPrimary, styles.flexButton, isSending || isReadOnly ? styles.buttonDisabled : null]}
+                disabled={isSending || isReadOnly}
                 onPress={onSend}
               >
-                <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : "Send"}</Text>
+                <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : isReadOnly ? "Read-Only" : "Send"}</Text>
               </Pressable>
-              <Pressable style={[styles.actionDangerButton, styles.flexButton]} onPress={onStop}>
+              <Pressable
+                style={[styles.actionDangerButton, styles.flexButton, isReadOnly ? styles.buttonDisabled : null]}
+                onPress={onStop}
+                disabled={isReadOnly}
+              >
                 <Text style={styles.actionDangerText}>Ctrl-C</Text>
               </Pressable>
             </View>

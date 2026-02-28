@@ -39,6 +39,15 @@ export type TmuxStreamMessage = {
   data: string;
 };
 
+export type SessionCollaborator = {
+  id: string;
+  name: string;
+  role: "owner" | "editor" | "viewer" | "unknown";
+  readOnly: boolean;
+  isSelf: boolean;
+  lastSeenAt: number | null;
+};
+
 export type ServerProfile = {
   id: string;
   name: string;
@@ -100,6 +109,7 @@ export type ServerCapabilities = {
   stream: boolean;
   sysStats: boolean;
   processes: boolean;
+  collaboration: boolean;
 };
 
 export type TerminalApiKind = "tmux" | "terminal";
