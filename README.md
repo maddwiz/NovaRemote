@@ -12,6 +12,7 @@ NovaRemote is an Expo + React Native app for controlling remote tmux/Codex sessi
 - Session tags + tag filtering
 - Fullscreen terminal search (highlighted matches)
 - Snippets/macros (Pro)
+- Remote file explorer (list/read/tail and path-to-terminal actions)
 - Biometric app unlock (Face ID / Touch ID)
 - Pull-to-refresh + connection health metrics
 - First-run in-app tutorial overlay

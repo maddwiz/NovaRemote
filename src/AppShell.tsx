@@ -43,6 +43,8 @@ import { useSnippets } from "./hooks/useSnippets";
 import { useTerminalSessions } from "./hooks/useTerminalSessions";
 import { useTutorial } from "./hooks/useTutorial";
 import { useWebSocket } from "./hooks/useWebSocket";
+import { useFilesBrowser } from "./hooks/useFilesBrowser";
+import { FilesScreen } from "./screens/FilesScreen";
 import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
@@ -85,6 +87,10 @@ function toServerShareLink(server: ServerProfile): string {
       cwd: server.defaultCwd,
     },
   });
+}
+
+function shellQuote(value: string): string {
+  return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
 export default function AppShell() {
@@ -178,6 +184,22 @@ export default function AppShell() {
 
   const { historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(activeServerId);
   const { sessionTags, allTags, setTagsForSession, removeMissingSessions } = useSessionTags(activeServerId);
+  const {
+    currentPath,
+    setCurrentPath,
+    includeHidden,
+    setIncludeHidden,
+    entries: fileEntries,
+    selectedFilePath,
+    selectedContent,
+    tailLines,
+    setTailLines,
+    listDirectory,
+    readFile,
+    tailFile,
+    openEntry,
+    goUp,
+  } = useFilesBrowser({ activeServer, connected });
 
   const { streamLive, connectionMeta, fetchTail, connectStream, closeStream, closeAllStreams, closeStreamsNotIn } = useWebSocket({
     activeServer,
@@ -358,6 +380,15 @@ export default function AppShell() {
   useEffect(() => {
     void removeMissingSessions(allSessions);
   }, [allSessions, removeMissingSessions]);
+
+  useEffect(() => {
+    if (route !== "files" || !connected) {
+      return;
+    }
+    void runWithStatus("Loading files", async () => {
+      await listDirectory();
+    });
+  }, [activeServerId, connected, includeHidden, listDirectory, route, runWithStatus]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -648,6 +679,64 @@ export default function AppShell() {
                   if (isPro) {
                     await notify("Snippet completed", `${session}: ${command.slice(0, 80)}`);
                   }
+                });
+              }}
+            />
+          ) : null}
+
+          {route === "files" ? (
+            <FilesScreen
+              connected={connected}
+              currentPath={currentPath}
+              includeHidden={includeHidden}
+              entries={fileEntries}
+              selectedFilePath={selectedFilePath}
+              selectedContent={selectedContent}
+              tailLines={tailLines}
+              openSessions={openSessions}
+              onSetCurrentPath={setCurrentPath}
+              onSetIncludeHidden={setIncludeHidden}
+              onSetTailLines={setTailLines}
+              onRefresh={() => {
+                void runWithStatus("Listing files", async () => {
+                  await listDirectory();
+                });
+              }}
+              onGoUp={() => {
+                void runWithStatus("Navigating up", async () => {
+                  await goUp();
+                });
+              }}
+              onOpenEntry={(entry) => {
+                void runWithStatus(entry.is_dir ? `Opening ${entry.name}` : `Reading ${entry.name}`, async () => {
+                  await openEntry(entry);
+                });
+              }}
+              onReadSelected={() => {
+                if (!selectedFilePath) {
+                  return;
+                }
+                void runWithStatus("Reading file", async () => {
+                  await readFile(selectedFilePath);
+                });
+              }}
+              onTailSelected={() => {
+                if (!selectedFilePath) {
+                  return;
+                }
+                void runWithStatus("Tailing file", async () => {
+                  await tailFile(selectedFilePath);
+                });
+              }}
+              onInsertPath={(session, path) => {
+                setRoute("terminals");
+                setDrafts((prev) => ({ ...prev, [session]: path }));
+              }}
+              onSendPathCommand={(session, path) => {
+                void runWithStatus(`Running cat in ${session}`, async () => {
+                  const command = `cat ${shellQuote(path)}`;
+                  await sendCommand(session, command, "shell", false);
+                  await addCommand(session, command);
                 });
               }}
             />

@@ -218,6 +218,58 @@ Response:
 { "ok": true, "session": "codexchat-20260228-abc123" }
 ```
 
+## Optional Endpoints (Files Tab)
+
+These power NovaRemote's remote file explorer.
+
+### `GET /files/list?path=<dir>&hidden=<bool>`
+
+Purpose: list directory entries.
+
+Response:
+
+```json
+{
+  "path": "/path/to/project",
+  "entries": [
+    {
+      "name": "src",
+      "path": "/path/to/project/src",
+      "is_dir": true,
+      "size": 4096,
+      "mtime": 1700000000.0
+    }
+  ]
+}
+```
+
+### `GET /files/read?path=<file>`
+
+Purpose: read text file content (server may cap bytes).
+
+Response:
+
+```json
+{
+  "path": "/path/to/project/README.md",
+  "content": "...file text..."
+}
+```
+
+### `GET /files/tail?path=<file>&lines=<n>`
+
+Purpose: fetch last N lines from text file.
+
+Response:
+
+```json
+{
+  "path": "/path/to/project/logs/app.log",
+  "lines": 200,
+  "content": "...tail lines..."
+}
+```
+
 ## Quick Start (Codex Remote Reference Server)
 
 If you are using the included `codex_remote` server from the parent workspace:

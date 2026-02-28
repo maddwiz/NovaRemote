@@ -200,6 +200,11 @@ export const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
   },
+  tailInput: {
+    minWidth: 84,
+    textAlign: "center",
+    paddingVertical: 8,
+  },
   multilineInput: {
     minHeight: 86,
     textAlignVertical: "top",

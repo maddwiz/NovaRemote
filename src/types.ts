@@ -49,7 +49,7 @@ export type ServerProfile = {
 
 export type TerminalSendMode = "ai" | "shell";
 
-export type RouteTab = "terminals" | "servers" | "snippets";
+export type RouteTab = "terminals" | "servers" | "snippets" | "files";
 
 export type Status = {
   text: string;
@@ -77,4 +77,12 @@ export type HealthMetrics = {
   latencyMs: number | null;
   activeStreams: number;
   openSessions: number;
+};
+
+export type RemoteFileEntry = {
+  name: string;
+  path: string;
+  is_dir: boolean;
+  size: number;
+  mtime: number;
 };
