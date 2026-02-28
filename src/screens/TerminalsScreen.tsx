@@ -116,6 +116,10 @@ export function TerminalsScreen() {
     processesBusy,
     suggestionsBySession,
     suggestionBusyBySession,
+    errorHintsBySession,
+    triageBusyBySession,
+    triageExplanationBySession,
+    triageFixesBySession,
     watchRules,
     terminalTheme,
     commandQueue,
@@ -156,6 +160,8 @@ export function TerminalsScreen() {
     onKillProcess,
     onRequestSuggestions,
     onUseSuggestion,
+    onExplainError,
+    onSuggestErrorFixes,
     onToggleWatch,
     onSetWatchPattern,
     onSetTerminalPreset,
@@ -229,6 +235,10 @@ export function TerminalsScreen() {
           canUseExternalAi={hasExternalLlm}
           suggestions={suggestionsBySession[session] || []}
           suggestionsBusy={Boolean(suggestionBusyBySession[session])}
+          errorHint={errorHintsBySession[session] || null}
+          triageBusy={Boolean(triageBusyBySession[session])}
+          triageExplanation={triageExplanationBySession[session] || ""}
+          triageFixes={triageFixesBySession[session] || []}
           watchEnabled={watch.enabled}
           watchPattern={watch.pattern}
           tags={tags}
@@ -256,6 +266,8 @@ export function TerminalsScreen() {
           onDraftChange={(value) => onSetDraft(session, value)}
           onRequestSuggestions={() => onRequestSuggestions(session)}
           onUseSuggestion={(value) => onUseSuggestion(session, value)}
+          onExplainError={() => onExplainError(session)}
+          onSuggestErrorFixes={() => onSuggestErrorFixes(session)}
           onToggleWatch={(enabled) => onToggleWatch(session, enabled)}
           onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
           onTogglePin={() => onTogglePinSession(session)}
@@ -278,6 +290,10 @@ export function TerminalsScreen() {
     hasExternalLlm,
     historyCount,
     sessionAliases,
+    errorHintsBySession,
+    triageBusyBySession,
+    triageExplanationBySession,
+    triageFixesBySession,
     pinnedSessions,
     commandQueue,
     recordings,
@@ -288,6 +304,8 @@ export function TerminalsScreen() {
     onHistoryNext,
     onHistoryPrev,
     onOpenOnMac,
+    onExplainError,
+    onSuggestErrorFixes,
     onRequestSuggestions,
     onSend,
     onSetDraft,

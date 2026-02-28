@@ -75,6 +75,10 @@ type TerminalCardProps = {
   canUseExternalAi: boolean;
   suggestions: string[];
   suggestionsBusy: boolean;
+  errorHint: string | null;
+  triageBusy: boolean;
+  triageExplanation: string;
+  triageFixes: string[];
   watchEnabled: boolean;
   watchPattern: string;
   tags: string[];
@@ -101,6 +105,8 @@ type TerminalCardProps = {
   onDraftChange: (value: string) => void;
   onRequestSuggestions: () => void;
   onUseSuggestion: (value: string) => void;
+  onExplainError: () => void;
+  onSuggestErrorFixes: () => void;
   onToggleWatch: (value: boolean) => void;
   onWatchPatternChange: (value: string) => void;
   onTogglePin: () => void;
@@ -134,6 +140,10 @@ export function TerminalCard({
   canUseExternalAi,
   suggestions,
   suggestionsBusy,
+  errorHint,
+  triageBusy,
+  triageExplanation,
+  triageFixes,
   watchEnabled,
   watchPattern,
   tags,
@@ -160,6 +170,8 @@ export function TerminalCard({
   onDraftChange,
   onRequestSuggestions,
   onUseSuggestion,
+  onExplainError,
+  onSuggestErrorFixes,
   onToggleWatch,
   onWatchPatternChange,
   onTogglePin,
@@ -372,6 +384,35 @@ export function TerminalCard({
                   <Text style={styles.chipText}>{suggestion}</Text>
                 </Pressable>
               ))}
+            </View>
+          ) : null}
+
+          {errorHint ? (
+            <View style={styles.serverCard}>
+              <Text style={styles.panelLabel}>Error Triage</Text>
+              <Text style={styles.emptyText}>{errorHint}</Text>
+              <View style={styles.actionsWrap}>
+                <Pressable style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]} onPress={onExplainError} disabled={triageBusy}>
+                  <Text style={styles.actionButtonText}>{triageBusy ? "Analyzing..." : "Explain Error"}</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]}
+                  onPress={onSuggestErrorFixes}
+                  disabled={triageBusy}
+                >
+                  <Text style={styles.actionButtonText}>Fix Commands</Text>
+                </Pressable>
+              </View>
+              {triageExplanation ? <Text style={styles.serverSubtitle}>{triageExplanation}</Text> : null}
+              {triageFixes.length > 0 ? (
+                <View style={styles.actionsWrap}>
+                  {triageFixes.map((command) => (
+                    <Pressable key={`${session}-triage-${command}`} style={styles.chip} onPress={() => onUseSuggestion(command)}>
+                      <Text style={styles.chipText}>{command}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>

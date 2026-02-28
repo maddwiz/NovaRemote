@@ -59,6 +59,10 @@ export type TerminalsViewModel = {
   processesBusy: boolean;
   suggestionsBySession: Record<string, string[]>;
   suggestionBusyBySession: Record<string, boolean>;
+  errorHintsBySession: Record<string, string>;
+  triageBusyBySession: Record<string, boolean>;
+  triageExplanationBySession: Record<string, string>;
+  triageFixesBySession: Record<string, string[]>;
   watchRules: Record<string, WatchRule>;
   terminalTheme: TerminalThemeSettings;
   commandQueue: Record<string, QueuedCommand[]>;
@@ -99,6 +103,8 @@ export type TerminalsViewModel = {
   onKillProcess: (pid: number) => void;
   onRequestSuggestions: (session: string) => void;
   onUseSuggestion: (session: string, value: string) => void;
+  onExplainError: (session: string) => void;
+  onSuggestErrorFixes: (session: string) => void;
   onToggleWatch: (session: string, enabled: boolean) => void;
   onSetWatchPattern: (session: string, pattern: string) => void;
   onSetTerminalPreset: (preset: TerminalThemePresetId) => void;
