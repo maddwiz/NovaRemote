@@ -1960,6 +1960,18 @@ export default function AppShell() {
         }
       });
     },
+    onRemoveQueuedCommand: (session, index) => {
+      setCommandQueue((prev) => {
+        const current = prev[session] || [];
+        if (index < 0 || index >= current.length) {
+          return prev;
+        }
+        return {
+          ...prev,
+          [session]: current.filter((_, itemIndex) => itemIndex !== index),
+        };
+      });
+    },
     onToggleRecording: toggleRecording,
     onOpenPlayback: openPlayback,
     onDeleteRecording: deleteRecording,

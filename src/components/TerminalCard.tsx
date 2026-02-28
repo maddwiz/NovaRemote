@@ -84,6 +84,7 @@ type TerminalCardProps = {
   tags: string[];
   pinned: boolean;
   queuedCount: number;
+  queuedCommands: string[];
   recordingActive: boolean;
   recordingChunks: number;
   recordingDurationMs: number;
@@ -112,6 +113,7 @@ type TerminalCardProps = {
   onWatchPatternChange: (value: string) => void;
   onTogglePin: () => void;
   onFlushQueue: () => void;
+  onRemoveQueuedCommand: (index: number) => void;
   onToggleRecording: () => void;
   onOpenPlayback: () => void;
   onDeleteRecording: () => void;
@@ -150,6 +152,7 @@ export function TerminalCard({
   tags,
   pinned,
   queuedCount,
+  queuedCommands,
   recordingActive,
   recordingChunks,
   recordingDurationMs,
@@ -178,6 +181,7 @@ export function TerminalCard({
   onWatchPatternChange,
   onTogglePin,
   onFlushQueue,
+  onRemoveQueuedCommand,
   onToggleRecording,
   onOpenPlayback,
   onDeleteRecording,
@@ -461,11 +465,24 @@ export function TerminalCard({
       ) : null}
 
       {queuedCount > 0 ? (
-        <View style={styles.rowInlineSpace}>
-          <Text style={styles.emptyText}>{`${queuedCount} queued command${queuedCount === 1 ? "" : "s"}`}</Text>
-          <Pressable style={styles.actionButton} onPress={onFlushQueue}>
-            <Text style={styles.actionButtonText}>Flush Queue</Text>
-          </Pressable>
+        <View style={styles.serverCard}>
+          <View style={styles.rowInlineSpace}>
+            <Text style={styles.emptyText}>{`${queuedCount} queued command${queuedCount === 1 ? "" : "s"}`}</Text>
+            <Pressable style={styles.actionButton} onPress={onFlushQueue}>
+              <Text style={styles.actionButtonText}>Flush Queue</Text>
+            </Pressable>
+          </View>
+          {queuedCommands.slice(0, 5).map((command, index) => (
+            <View key={`${session}-queue-${index}`} style={styles.rowInlineSpace}>
+              <Text style={styles.serverSubtitle}>{command}</Text>
+              <Pressable style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
+                <Text style={styles.actionDangerText}>Remove</Text>
+              </Pressable>
+            </View>
+          ))}
+          {queuedCommands.length > 5 ? (
+            <Text style={styles.emptyText}>{`+${queuedCommands.length - 5} more queued`}</Text>
+          ) : null}
         </View>
       ) : null}
 

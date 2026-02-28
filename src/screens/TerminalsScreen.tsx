@@ -170,6 +170,7 @@ export function TerminalsScreen() {
     onSetTerminalFontSize,
     onSetTerminalBackgroundOpacity,
     onFlushQueue,
+    onRemoveQueuedCommand,
     onToggleRecording,
     onOpenPlayback,
     onDeleteRecording,
@@ -245,6 +246,7 @@ export function TerminalsScreen() {
           tags={tags}
           pinned={pinnedSessions.includes(session)}
           queuedCount={(commandQueue[session] || []).length}
+          queuedCommands={(commandQueue[session] || []).map((entry) => entry.command)}
           recordingActive={Boolean(recording?.active)}
           recordingChunks={recording?.chunks.length || 0}
           recordingDurationMs={recordingDuration}
@@ -274,6 +276,7 @@ export function TerminalsScreen() {
           onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
           onTogglePin={() => onTogglePinSession(session)}
           onFlushQueue={() => onFlushQueue(session)}
+          onRemoveQueuedCommand={(index) => onRemoveQueuedCommand(session, index)}
           onToggleRecording={() => onToggleRecording(session)}
           onOpenPlayback={() => onOpenPlayback(session)}
           onDeleteRecording={() => onDeleteRecording(session)}
@@ -323,6 +326,7 @@ export function TerminalsScreen() {
     onTogglePinSession,
     onToggleWatch,
     onFlushQueue,
+    onRemoveQueuedCommand,
     onToggleRecording,
     onOpenPlayback,
     onDeleteRecording,

@@ -113,6 +113,7 @@ export type TerminalsViewModel = {
   onSetTerminalFontSize: (fontSize: number) => void;
   onSetTerminalBackgroundOpacity: (opacity: number) => void;
   onFlushQueue: (session: string) => void;
+  onRemoveQueuedCommand: (session: string, index: number) => void;
   onToggleRecording: (session: string) => void;
   onOpenPlayback: (session: string) => void;
   onDeleteRecording: (session: string) => void;
