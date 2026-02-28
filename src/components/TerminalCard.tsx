@@ -14,6 +14,8 @@ type TerminalCardProps = {
   isServerConnected: boolean;
   connectionState: ConnectionState;
   mode: TerminalSendMode;
+  aiAvailable: boolean;
+  canOpenOnMac: boolean;
   tags: string[];
   onSetMode: (mode: TerminalSendMode) => void;
   onOpenOnMac: () => void;
@@ -39,6 +41,8 @@ export function TerminalCard({
   isServerConnected,
   connectionState,
   mode,
+  aiAvailable,
+  canOpenOnMac,
   tags,
   onSetMode,
   onOpenOnMac,
@@ -95,7 +99,11 @@ export function TerminalCard({
         </View>
 
         <View style={styles.modeRow}>
-          <Pressable style={[styles.modeButton, mode === "ai" ? styles.modeButtonOn : null]} onPress={() => onSetMode("ai")}>
+          <Pressable
+            style={[styles.modeButton, mode === "ai" ? styles.modeButtonOn : null, !aiAvailable ? styles.buttonDisabled : null]}
+            onPress={() => onSetMode("ai")}
+            disabled={!aiAvailable}
+          >
             <Text style={[styles.modeButtonText, mode === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
           </Pressable>
           <Pressable
@@ -107,7 +115,7 @@ export function TerminalCard({
         </View>
 
         <View style={styles.actionsWrap}>
-          <Pressable style={styles.actionButton} onPress={onOpenOnMac}>
+          <Pressable style={[styles.actionButton, !canOpenOnMac ? styles.buttonDisabled : null]} onPress={onOpenOnMac} disabled={!canOpenOnMac}>
             <Text style={styles.actionButtonText}>Open on Mac</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={onSync}>

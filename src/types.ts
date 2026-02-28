@@ -86,3 +86,21 @@ export type RemoteFileEntry = {
   size: number;
   mtime: number;
 };
+
+export type ServerCapabilities = {
+  tmux: boolean;
+  codex: boolean;
+  files: boolean;
+  shellRun: boolean;
+  macAttach: boolean;
+  stream: boolean;
+};
+
+export type FleetRunResult = {
+  serverId: string;
+  serverName: string;
+  session: string | null;
+  ok: boolean;
+  output: string;
+  error?: string;
+};

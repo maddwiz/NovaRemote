@@ -2,13 +2,21 @@ import React, { useMemo } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 
 import { CWD_PLACEHOLDER, isLikelyAiSession } from "../constants";
-import { styles } from "../theme/styles";
-import { HealthMetrics, ServerProfile, SessionConnectionMeta, TerminalSendMode } from "../types";
 import { TerminalCard } from "../components/TerminalCard";
+import { styles } from "../theme/styles";
+import {
+  FleetRunResult,
+  HealthMetrics,
+  ServerCapabilities,
+  ServerProfile,
+  SessionConnectionMeta,
+  TerminalSendMode,
+} from "../types";
 
 type TerminalsScreenProps = {
   activeServer: ServerProfile | null;
   connected: boolean;
+  servers: ServerProfile[];
   allSessions: string[];
   openSessions: string[];
   tails: Record<string, string>;
@@ -22,11 +30,18 @@ type TerminalsScreenProps = {
   startOpenOnMac: boolean;
   startKind: TerminalSendMode;
   health: HealthMetrics;
+  capabilities: ServerCapabilities;
+  supportedFeatures: string;
   historyCount: Record<string, number>;
   sessionTags: Record<string, string[]>;
   allTags: string[];
   tagFilter: string;
   isPro: boolean;
+  fleetCommand: string;
+  fleetCwd: string;
+  fleetTargets: string[];
+  fleetBusy: boolean;
+  fleetResults: FleetRunResult[];
   onShowPaywall: () => void;
   onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;
@@ -49,6 +64,10 @@ type TerminalsScreenProps = {
   onSetDraft: (session: string, value: string) => void;
   onSend: (session: string) => void;
   onClearDraft: (session: string) => void;
+  onSetFleetCommand: (value: string) => void;
+  onSetFleetCwd: (value: string) => void;
+  onToggleFleetTarget: (serverId: string) => void;
+  onRunFleet: () => void;
 };
 
 function renderSessionChips(
@@ -87,6 +106,7 @@ function renderSessionChips(
 export function TerminalsScreen({
   activeServer,
   connected,
+  servers,
   allSessions,
   openSessions,
   tails,
@@ -100,11 +120,18 @@ export function TerminalsScreen({
   startOpenOnMac,
   startKind,
   health,
+  capabilities,
+  supportedFeatures,
   historyCount,
   sessionTags,
   allTags,
   tagFilter,
   isPro,
+  fleetCommand,
+  fleetCwd,
+  fleetTargets,
+  fleetBusy,
+  fleetResults,
   onShowPaywall,
   onSetTagFilter,
   onSetStartCwd,
@@ -127,6 +154,10 @@ export function TerminalsScreen({
   onSetDraft,
   onSend,
   onClearDraft,
+  onSetFleetCommand,
+  onSetFleetCwd,
+  onToggleFleetTarget,
+  onRunFleet,
 }: TerminalsScreenProps) {
   const { width } = useWindowDimensions();
   const wantsSplit = width >= 900;
@@ -153,6 +184,8 @@ export function TerminalsScreen({
           isServerConnected={connected}
           connectionState={meta?.state ?? "disconnected"}
           mode={mode}
+          aiAvailable={capabilities.codex}
+          canOpenOnMac={capabilities.macAttach}
           tags={tags}
           historyCount={historyCount[session] || 0}
           onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
@@ -171,6 +204,9 @@ export function TerminalsScreen({
       );
     });
   }, [
+    capabilities.codex,
+    capabilities.macAttach,
+    connected,
     connectionMeta,
     drafts,
     historyCount,
@@ -194,15 +230,75 @@ export function TerminalsScreen({
     tails,
   ]);
 
+  const fleetPanel = (
+    <View style={styles.panel}>
+      <Text style={styles.panelLabel}>Fleet Execute</Text>
+      <Text style={styles.serverSubtitle}>Run one shell command across multiple servers with grouped output.</Text>
+
+      <TextInput
+        style={[styles.input, styles.multilineInput]}
+        value={fleetCommand}
+        onChangeText={onSetFleetCommand}
+        placeholder="Command to run on all selected servers"
+        placeholderTextColor="#7f7aa8"
+        multiline
+      />
+      <TextInput
+        style={styles.input}
+        value={fleetCwd}
+        onChangeText={onSetFleetCwd}
+        placeholder={CWD_PLACEHOLDER}
+        placeholderTextColor="#7f7aa8"
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+        {servers.map((server) => {
+          const active = fleetTargets.includes(server.id);
+          return (
+            <Pressable key={server.id} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleFleetTarget(server.id)}>
+              <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{server.name}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+
+      <Pressable
+        style={[styles.buttonPrimary, fleetBusy ? styles.buttonDisabled : null]}
+        onPress={onRunFleet}
+        disabled={fleetBusy || !capabilities.shellRun}
+      >
+        <Text style={styles.buttonPrimaryText}>{fleetBusy ? "Running Fleet Command..." : "Run Across Fleet"}</Text>
+      </Pressable>
+
+      {!capabilities.shellRun ? <Text style={styles.emptyText}>Current server does not advertise shell-run support.</Text> : null}
+
+      {fleetResults.length > 0 ? (
+        <View style={styles.serverListWrap}>
+          {fleetResults.map((result) => (
+            <View key={`${result.serverId}-${result.session || "none"}`} style={styles.terminalCard}>
+              <View style={styles.terminalNameRow}>
+                <Text style={styles.terminalName}>{result.serverName}</Text>
+                <Text style={[styles.livePill, result.ok ? styles.livePillOn : styles.livePillOff]}>{result.ok ? "OK" : "ERR"}</Text>
+              </View>
+              <Text style={styles.serverSubtitle}>{result.session ? `Session ${result.session}` : "No session"}</Text>
+              <Text style={styles.emptyText}>{result.error || result.output.slice(0, 1000) || "No output"}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+    </View>
+  );
+
   const topPanels = (
     <>
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Connection Health</Text>
         <Text style={styles.serverSubtitle}>{`Streams ${health.activeStreams}/${health.openSessions}`}</Text>
         <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
-        <Text style={styles.serverSubtitle}>
-          {`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}
-        </Text>
+        <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
+        <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>
       </View>
 
       <View style={styles.panel}>
@@ -211,7 +307,7 @@ export function TerminalsScreen({
         <Text style={styles.serverSubtitle}>{activeServer?.baseUrl || "Go to Servers tab to add one"}</Text>
 
         <View style={styles.rowInlineSpace}>
-          <Pressable style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefreshSessions} disabled={!connected}>
+          <Pressable style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefreshSessions} disabled={!connected || !capabilities.tmux}>
             <Text style={styles.buttonPrimaryText}>Refresh Sessions</Text>
           </Pressable>
           <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onOpenServers}>
@@ -223,12 +319,17 @@ export function TerminalsScreen({
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Start New Session</Text>
         <View style={styles.modeRow}>
-          <Pressable style={[styles.modeButton, startKind === "ai" ? styles.modeButtonOn : null]} onPress={() => onSetStartKind("ai")}>
+          <Pressable
+            style={[styles.modeButton, startKind === "ai" ? styles.modeButtonOn : null, !capabilities.codex ? styles.buttonDisabled : null]}
+            onPress={() => onSetStartKind("ai")}
+            disabled={!capabilities.codex}
+          >
             <Text style={[styles.modeButtonText, startKind === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
           </Pressable>
           <Pressable
-            style={[styles.modeButton, startKind === "shell" ? styles.modeButtonOn : null]}
+            style={[styles.modeButton, startKind === "shell" ? styles.modeButtonOn : null, !capabilities.shellRun ? styles.buttonDisabled : null]}
             onPress={() => onSetStartKind("shell")}
+            disabled={!capabilities.shellRun}
           >
             <Text style={[styles.modeButtonText, startKind === "shell" ? styles.modeButtonTextOn : null]}>Shell</Text>
           </Pressable>
@@ -264,10 +365,12 @@ export function TerminalsScreen({
           </View>
         ) : null}
 
-        <Pressable style={styles.buttonPrimary} onPress={onStartSession} disabled={!connected}>
+        <Pressable style={[styles.buttonPrimary, !connected ? styles.buttonDisabled : null]} onPress={onStartSession} disabled={!connected}>
           <Text style={styles.buttonPrimaryText}>Start {startKind === "ai" ? "AI" : "Shell"} Session</Text>
         </Pressable>
       </View>
+
+      {fleetPanel}
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Available Sessions</Text>
@@ -284,11 +387,7 @@ export function TerminalsScreen({
         {allTags.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {allTags.map((tag) => (
-              <Pressable
-                key={tag}
-                style={[styles.chip, tagFilter === tag ? styles.chipActive : null]}
-                onPress={() => onSetTagFilter(tagFilter === tag ? "" : tag)}
-              >
+              <Pressable key={tag} style={[styles.chip, tagFilter === tag ? styles.chipActive : null]} onPress={() => onSetTagFilter(tagFilter === tag ? "" : tag)}>
                 <Text style={[styles.chipText, tagFilter === tag ? styles.chipTextActive : null]}>{tag}</Text>
               </Pressable>
             ))}

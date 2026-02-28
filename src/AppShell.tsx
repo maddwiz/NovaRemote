@@ -14,7 +14,7 @@ import {
   View,
 } from "react-native";
 
-import { normalizeBaseUrl } from "./api/client";
+import { apiRequest, normalizeBaseUrl } from "./api/client";
 import { FullscreenTerminal } from "./components/FullscreenTerminal";
 import { LockScreen } from "./components/LockScreen";
 import { OnboardingModal } from "./components/OnboardingModal";
@@ -39,6 +39,7 @@ import { useOnboarding } from "./hooks/useOnboarding";
 import { useRevenueCat } from "./hooks/useRevenueCat";
 import { useServers } from "./hooks/useServers";
 import { useSessionTags } from "./hooks/useSessionTags";
+import { useServerCapabilities } from "./hooks/useServerCapabilities";
 import { useSnippets } from "./hooks/useSnippets";
 import { useTerminalSessions } from "./hooks/useTerminalSessions";
 import { useTutorial } from "./hooks/useTutorial";
@@ -49,7 +50,7 @@ import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
-import { RouteTab, ServerProfile, Status } from "./types";
+import { FleetRunResult, RouteTab, ServerProfile, Status, TerminalSendMode } from "./types";
 
 function parseCommaTags(raw: string): string[] {
   return Array.from(
@@ -93,6 +94,12 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function makeFleetSessionName(): string {
+  const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+  const suffix = Math.random().toString(36).slice(2, 6);
+  return `fleet-${stamp}-${suffix}`;
+}
+
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -102,6 +109,11 @@ export default function AppShell() {
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [searchIndex, setSearchIndex] = useState<Record<string, number>>({});
   const [shareConfig, setShareConfig] = useState<{ title: string; link: string } | null>(null);
+  const [fleetCommand, setFleetCommand] = useState<string>("");
+  const [fleetCwd, setFleetCwd] = useState<string>("");
+  const [fleetTargets, setFleetTargets] = useState<string[]>([]);
+  const [fleetBusy, setFleetBusy] = useState<boolean>(false);
+  const [fleetResults, setFleetResults] = useState<FleetRunResult[]>([]);
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -150,6 +162,8 @@ export default function AppShell() {
     }
     return Boolean(normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
   }, [activeServer]);
+
+  const { capabilities, supportedFeatures } = useServerCapabilities({ activeServer, connected });
 
   const {
     allSessions,
@@ -235,6 +249,79 @@ export default function AppShell() {
       return activeServerId ? snippet.serverId === activeServerId : false;
     });
   }, [activeServerId, snippets]);
+
+  useEffect(() => {
+    if (servers.length === 0) {
+      setFleetTargets([]);
+      return;
+    }
+
+    setFleetTargets((prev) => {
+      if (prev.length === 0 && activeServerId) {
+        return [activeServerId];
+      }
+      const available = new Set(servers.map((server) => server.id));
+      const filtered = prev.filter((id) => available.has(id));
+      if (filtered.length > 0) {
+        return filtered;
+      }
+      return activeServerId ? [activeServerId] : [servers[0].id];
+    });
+  }, [activeServerId, servers]);
+
+  const runFleetCommand = useCallback(async () => {
+    const command = fleetCommand.trim();
+    if (!command) {
+      throw new Error("Fleet command is required.");
+    }
+
+    const selectedServers = servers.filter((server) => fleetTargets.includes(server.id));
+    if (selectedServers.length === 0) {
+      throw new Error("Select at least one target server.");
+    }
+
+    setFleetBusy(true);
+    try {
+      const settled = await Promise.all(
+        selectedServers.map(async (server): Promise<FleetRunResult> => {
+          const cwd = fleetCwd.trim() || server.defaultCwd || DEFAULT_CWD;
+          const session = makeFleetSessionName();
+          try {
+            await apiRequest(server.baseUrl, server.token, "/tmux/session", {
+              method: "POST",
+              body: JSON.stringify({ session, cwd }),
+            });
+
+            const data = await apiRequest<{ output?: string }>(server.baseUrl, server.token, "/shell/run", {
+              method: "POST",
+              body: JSON.stringify({ session, command, wait_ms: 1200, tail_lines: 280 }),
+            });
+
+            return {
+              serverId: server.id,
+              serverName: server.name,
+              session,
+              ok: true,
+              output: data.output || "",
+            };
+          } catch (error) {
+            return {
+              serverId: server.id,
+              serverName: server.name,
+              session: null,
+              ok: false,
+              output: "",
+              error: error instanceof Error ? error.message : String(error),
+            };
+          }
+        })
+      );
+
+      setFleetResults(settled);
+    } finally {
+      setFleetBusy(false);
+    }
+  }, [fleetCommand, fleetCwd, fleetTargets, servers]);
 
   const runWithStatus = useCallback(
     async (label: string, fn: () => Promise<void>) => {
@@ -382,13 +469,13 @@ export default function AppShell() {
   }, [allSessions, removeMissingSessions]);
 
   useEffect(() => {
-    if (route !== "files" || !connected) {
+    if (route !== "files" || !connected || !capabilities.files) {
       return;
     }
     void runWithStatus("Loading files", async () => {
       await listDirectory();
     });
-  }, [activeServerId, connected, includeHidden, listDirectory, route, runWithStatus]);
+  }, [activeServerId, capabilities.files, connected, includeHidden, listDirectory, route, runWithStatus]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -474,6 +561,10 @@ export default function AppShell() {
                 setPaywallVisible(true);
                 return;
               }
+              if (next === "files" && !capabilities.files) {
+                setStatus({ text: "Active server does not support file APIs.", error: true });
+                return;
+              }
               setRoute(next);
             }}
           />
@@ -537,6 +628,7 @@ export default function AppShell() {
             <TerminalsScreen
               activeServer={activeServer}
               connected={connected}
+              servers={servers}
               allSessions={allSessions}
               openSessions={openSessions}
               tails={tails}
@@ -550,11 +642,18 @@ export default function AppShell() {
               startOpenOnMac={startOpenOnMac}
               startKind={startKind}
               health={health}
+              capabilities={capabilities}
+              supportedFeatures={supportedFeatures}
               historyCount={historyCount}
               sessionTags={sessionTags}
               allTags={allTags}
               tagFilter={tagFilter}
               isPro={isPro}
+              fleetCommand={fleetCommand}
+              fleetCwd={fleetCwd}
+              fleetTargets={fleetTargets}
+              fleetBusy={fleetBusy}
+              fleetResults={fleetResults}
               onShowPaywall={() => setPaywallVisible(true)}
               onSetTagFilter={setTagFilter}
               onSetStartCwd={setStartCwd}
@@ -574,6 +673,14 @@ export default function AppShell() {
                     return;
                   }
 
+                  if (startKind === "ai" && !capabilities.codex) {
+                    throw new Error("Active server does not support Codex sessions.");
+                  }
+
+                  if (startKind === "shell" && !capabilities.shellRun) {
+                    throw new Error("Active server does not support shell execution.");
+                  }
+
                   await handleStartSession();
                   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 });
@@ -586,9 +693,22 @@ export default function AppShell() {
                 void Haptics.selectionAsync();
                 toggleSessionVisible(session);
               }}
-              onSetSessionMode={setSessionMode}
+              onSetSessionMode={(session, mode) => {
+                if (mode === "ai" && !capabilities.codex) {
+                  setStatus({ text: "Active server does not support AI mode.", error: true });
+                  return;
+                }
+                if (mode === "shell" && !capabilities.shellRun) {
+                  setStatus({ text: "Active server does not support shell mode.", error: true });
+                  return;
+                }
+                setSessionMode(session, mode);
+              }}
               onOpenOnMac={(session) => {
                 void runWithStatus(`Opening ${session} on Mac`, async () => {
+                  if (!capabilities.macAttach) {
+                    throw new Error("Active server does not support mac attach.");
+                  }
                   await handleOpenOnMac(session);
                 });
               }}
@@ -644,6 +764,16 @@ export default function AppShell() {
               onClearDraft={(session) => {
                 setDrafts((prev) => ({ ...prev, [session]: "" }));
               }}
+              onSetFleetCommand={setFleetCommand}
+              onSetFleetCwd={setFleetCwd}
+              onToggleFleetTarget={(serverId) => {
+                setFleetTargets((prev) => (prev.includes(serverId) ? prev.filter((id) => id !== serverId) : [...prev, serverId]));
+              }}
+              onRunFleet={() => {
+                void runWithStatus("Running fleet command", async () => {
+                  await runFleetCommand();
+                });
+              }}
             />
           ) : null}
 
@@ -685,61 +815,68 @@ export default function AppShell() {
           ) : null}
 
           {route === "files" ? (
-            <FilesScreen
-              connected={connected}
-              currentPath={currentPath}
-              includeHidden={includeHidden}
-              entries={fileEntries}
-              selectedFilePath={selectedFilePath}
-              selectedContent={selectedContent}
-              tailLines={tailLines}
-              openSessions={openSessions}
-              onSetCurrentPath={setCurrentPath}
-              onSetIncludeHidden={setIncludeHidden}
-              onSetTailLines={setTailLines}
-              onRefresh={() => {
-                void runWithStatus("Listing files", async () => {
-                  await listDirectory();
-                });
-              }}
-              onGoUp={() => {
-                void runWithStatus("Navigating up", async () => {
-                  await goUp();
-                });
-              }}
-              onOpenEntry={(entry) => {
-                void runWithStatus(entry.is_dir ? `Opening ${entry.name}` : `Reading ${entry.name}`, async () => {
-                  await openEntry(entry);
-                });
-              }}
-              onReadSelected={() => {
-                if (!selectedFilePath) {
-                  return;
-                }
-                void runWithStatus("Reading file", async () => {
-                  await readFile(selectedFilePath);
-                });
-              }}
-              onTailSelected={() => {
-                if (!selectedFilePath) {
-                  return;
-                }
-                void runWithStatus("Tailing file", async () => {
-                  await tailFile(selectedFilePath);
-                });
-              }}
-              onInsertPath={(session, path) => {
-                setRoute("terminals");
-                setDrafts((prev) => ({ ...prev, [session]: path }));
-              }}
-              onSendPathCommand={(session, path) => {
-                void runWithStatus(`Running cat in ${session}`, async () => {
-                  const command = `cat ${shellQuote(path)}`;
-                  await sendCommand(session, command, "shell", false);
-                  await addCommand(session, command);
-                });
-              }}
-            />
+            capabilities.files ? (
+              <FilesScreen
+                connected={connected}
+                currentPath={currentPath}
+                includeHidden={includeHidden}
+                entries={fileEntries}
+                selectedFilePath={selectedFilePath}
+                selectedContent={selectedContent}
+                tailLines={tailLines}
+                openSessions={openSessions}
+                onSetCurrentPath={setCurrentPath}
+                onSetIncludeHidden={setIncludeHidden}
+                onSetTailLines={setTailLines}
+                onRefresh={() => {
+                  void runWithStatus("Listing files", async () => {
+                    await listDirectory();
+                  });
+                }}
+                onGoUp={() => {
+                  void runWithStatus("Navigating up", async () => {
+                    await goUp();
+                  });
+                }}
+                onOpenEntry={(entry) => {
+                  void runWithStatus(entry.is_dir ? `Opening ${entry.name}` : `Reading ${entry.name}`, async () => {
+                    await openEntry(entry);
+                  });
+                }}
+                onReadSelected={() => {
+                  if (!selectedFilePath) {
+                    return;
+                  }
+                  void runWithStatus("Reading file", async () => {
+                    await readFile(selectedFilePath);
+                  });
+                }}
+                onTailSelected={() => {
+                  if (!selectedFilePath) {
+                    return;
+                  }
+                  void runWithStatus("Tailing file", async () => {
+                    await tailFile(selectedFilePath);
+                  });
+                }}
+                onInsertPath={(session, path) => {
+                  setRoute("terminals");
+                  setDrafts((prev) => ({ ...prev, [session]: path }));
+                }}
+                onSendPathCommand={(session, path) => {
+                  void runWithStatus(`Running cat in ${session}`, async () => {
+                    const command = `cat ${shellQuote(path)}`;
+                    await sendCommand(session, command, "shell", false);
+                    await addCommand(session, command);
+                  });
+                }}
+              />
+            ) : (
+              <View style={styles.panel}>
+                <Text style={styles.panelLabel}>Files Unavailable</Text>
+                <Text style={styles.serverSubtitle}>This server does not expose `/files/*` endpoints.</Text>
+              </View>
+            )
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -759,7 +896,16 @@ export default function AppShell() {
             return;
           }
           void Haptics.selectionAsync();
-          setSessionMode(focusedSession, focusedMode === "ai" ? "shell" : "ai");
+          const nextMode: TerminalSendMode = focusedMode === "ai" ? "shell" : "ai";
+          if (nextMode === "ai" && !capabilities.codex) {
+            setStatus({ text: "Active server does not support AI mode.", error: true });
+            return;
+          }
+          if (nextMode === "shell" && !capabilities.shellRun) {
+            setStatus({ text: "Active server does not support shell mode.", error: true });
+            return;
+          }
+          setSessionMode(focusedSession, nextMode);
         }}
         onSearchChange={(value) => {
           if (!focusedSession) {
