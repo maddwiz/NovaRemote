@@ -370,6 +370,11 @@ export const styles = StyleSheet.create({
     borderColor: "#27d9ff",
     backgroundColor: "rgba(39, 217, 255, 0.16)",
   },
+  livePillWarn: {
+    color: "#fff3d2",
+    borderColor: "#ffc75a",
+    backgroundColor: "rgba(255, 199, 90, 0.2)",
+  },
   livePillOff: {
     color: "#ffdff4",
     borderColor: "#b66da0",
@@ -447,5 +452,43 @@ export const styles = StyleSheet.create({
   emptyText: {
     color: "#8cb6db",
     fontSize: 13,
+  },
+  overlayBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(2, 1, 10, 0.75)",
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 16,
+  },
+  overlayCard: {
+    width: "100%",
+    maxWidth: 520,
+    borderRadius: 18,
+    borderWidth: 1,
+    borderColor: "#3a2d71",
+    backgroundColor: "rgba(11, 8, 30, 0.98)",
+    padding: 14,
+    gap: 10,
+  },
+  centeredWrap: {
+    flex: 1,
+    justifyContent: "center",
+    padding: 16,
+  },
+  qrWrap: {
+    alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 10,
+  },
+  splitRow: {
+    flexDirection: "row",
+    gap: 12,
+  },
+  splitLeft: {
+    width: 320,
+    gap: 12,
+  },
+  splitRight: {
+    flex: 1,
   },
 });

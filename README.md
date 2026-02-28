@@ -2,14 +2,27 @@
 
 NovaRemote is an Expo + React Native app for controlling remote tmux/Codex sessions through a companion server.
 
-## Current Features
+## Features
 
-- Multi-server profile management with secure storage (`expo-secure-store`)
-- Session discovery (`GET /tmux/sessions`)
-- Live terminal streaming (`WS /tmux/stream`) with polling fallback (`GET /tmux/tail`)
-- AI mode (`POST /codex/start`, `POST /codex/message`)
-- Shell mode (`POST /tmux/session`, `POST /shell/run`, `POST /tmux/send`)
-- Session controls (`POST /tmux/ctrl`, `POST /mac/attach`)
+- Multi-server profiles with secure storage
+- AI and shell session control
+- Live terminal streaming + polling fallback
+- ANSI color rendering
+- Command history (per server/session, persisted)
+- Session tags + tag filtering
+- Fullscreen terminal search (highlighted matches)
+- Snippets/macros (Pro)
+- Biometric app unlock (Face ID / Touch ID)
+- Pull-to-refresh + connection health metrics
+- Shareable server config links/QR (token excluded)
+- iPad split-view layout (Pro)
+- RevenueCat paywall scaffolding (free tier: 1 server, 2 sessions)
+- Onboarding wizard with connection test
+
+## Requirements
+
+- Companion API server (see `docs/SERVER_SETUP.md`)
+- Expo SDK 55 environment
 
 ## Local Run
 
@@ -19,28 +32,19 @@ npm install
 npm run start
 ```
 
-Open in Expo Go on your device and add a server profile in-app:
+## Optional Environment Variables
 
-- Server URL example: `https://your-server:8787`
-- Default CWD example: `/path/to/your/project`
-- Token: your companion server bearer token
+RevenueCat is optional in development. To enable purchase flows:
 
-## iOS/Android IDs
+- `EXPO_PUBLIC_REVENUECAT_API_KEY_IOS`
+- `EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID`
 
-- iOS bundle id: `com.novaai.novaremote`
-- Android package: `com.novaai.novaremote`
+Without these keys, paywall UI still renders but purchasing/restoring is disabled.
 
-## Native iOS Build
+## Companion Server Setup
 
-```bash
-cd /path/to/NovaRemote
-npm run prebuild:ios
-npm run ios:sim
-```
+See `docs/SERVER_SETUP.md` for endpoint contracts and auth requirements.
 
-## App Store Prep (Checklist)
+## App Store / Launch Checklist
 
-1. Configure EAS credentials and build profiles.
-2. Finalize privacy policy + terms URLs.
-3. Build preview/prod artifacts with EAS.
-4. Capture store screenshots and finalize metadata.
+See `docs/APP_STORE_PREP.md`.

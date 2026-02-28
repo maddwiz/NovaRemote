@@ -1,4 +1,4 @@
-import { useCallback, useState, useRef } from "react";
+import { useCallback, useRef, useState } from "react";
 
 import { apiRequest } from "../api/client";
 import { DEFAULT_CWD, isLikelyAiSession, makeShellSessionName, sortByCreatedAt } from "../constants";
@@ -138,7 +138,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
         throw new Error(data.open_on_mac.error || "Session started, but Mac open failed.");
       }
 
-      return;
+      return session;
     }
 
     const session = makeShellSessionName();
@@ -166,28 +166,30 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     setOpenSessions((prev) => (prev.includes(session) ? prev : [session, ...prev]));
     setSendModes((prev) => ({ ...prev, [session]: "shell" }));
     setTails((prev) => ({ ...prev, [session]: tail.output || "" }));
+
+    return session;
   }, [activeServer, connected, startCwd, startKind, startOpenOnMac, startPrompt]);
 
-  const handleSend = useCallback(
-    async (session: string) => {
+  const sendCommand = useCallback(
+    async (session: string, command: string, mode: TerminalSendMode, clearDraft: boolean = false) => {
       if (!activeServer || !connected) {
         throw new Error("Connect to a server first.");
+      }
+
+      const currentDraft = command.trim();
+      if (!currentDraft) {
+        return;
       }
 
       if (sendInFlight.current.has(session)) {
         return;
       }
 
-      const currentDraft = (drafts[session] || "").trim();
-      if (!currentDraft) {
-        return;
-      }
-
-      const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
-
       sendInFlight.current.add(session);
       setSendBusy((prev) => ({ ...prev, [session]: true }));
-      setDrafts((prev) => ({ ...prev, [session]: "" }));
+      if (clearDraft) {
+        setDrafts((prev) => ({ ...prev, [session]: "" }));
+      }
 
       try {
         if (mode === "ai") {
@@ -210,14 +212,34 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
           }
         }
       } catch (error) {
-        setDrafts((prev) => ({ ...prev, [session]: currentDraft }));
+        if (clearDraft) {
+          setDrafts((prev) => ({ ...prev, [session]: currentDraft }));
+        }
         throw error;
       } finally {
         sendInFlight.current.delete(session);
         setSendBusy((prev) => ({ ...prev, [session]: false }));
       }
     },
-    [activeServer, connected, drafts, sendModes]
+    [activeServer, connected]
+  );
+
+  const handleSend = useCallback(
+    async (session: string) => {
+      if (!activeServer || !connected) {
+        throw new Error("Connect to a server first.");
+      }
+
+      const currentDraft = (drafts[session] || "").trim();
+      if (!currentDraft) {
+        return "";
+      }
+
+      const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+      await sendCommand(session, currentDraft, mode, true);
+      return currentDraft;
+    },
+    [activeServer, connected, drafts, sendCommand, sendModes]
   );
 
   const handleStop = useCallback(
@@ -275,6 +297,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     setSessionMode,
     handleStartSession,
     handleSend,
+    sendCommand,
     handleStop,
     handleOpenOnMac,
   };

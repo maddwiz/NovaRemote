@@ -17,9 +17,10 @@ import { ServerProfile } from "../types";
 
 type UseServersArgs = {
   onError: (error: unknown) => void;
+  enabled?: boolean;
 };
 
-export function useServers({ onError }: UseServersArgs) {
+export function useServers({ onError, enabled = true }: UseServersArgs) {
   const [servers, setServers] = useState<ServerProfile[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [loadingSettings, setLoadingSettings] = useState<boolean>(true);
@@ -59,6 +60,14 @@ export function useServers({ onError }: UseServersArgs) {
     setServerUrlInput(server.baseUrl);
     setServerTokenInput(server.token);
     setServerCwdInput(server.defaultCwd);
+  }, []);
+
+  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string }) => {
+    setEditingServerId(null);
+    setServerNameInput(config.name?.trim() || DEFAULT_SERVER_NAME);
+    setServerUrlInput(normalizeBaseUrl(config.url || ""));
+    setServerTokenInput("");
+    setServerCwdInput(config.cwd?.trim() || DEFAULT_CWD);
   }, []);
 
   const saveServer = useCallback(async () => {
@@ -119,6 +128,31 @@ export function useServers({ onError }: UseServersArgs) {
     servers,
   ]);
 
+  const addServerDirect = useCallback(
+    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string }) => {
+      const cleanedBaseUrl = normalizeBaseUrl(server.baseUrl);
+      const cleanedToken = server.token.trim();
+      if (!cleanedBaseUrl || !cleanedToken) {
+        throw new Error("Server URL and token are required.");
+      }
+
+      const newServer: ServerProfile = {
+        id: makeId(),
+        name: server.name.trim() || DEFAULT_SERVER_NAME,
+        baseUrl: cleanedBaseUrl,
+        token: cleanedToken,
+        defaultCwd: server.defaultCwd.trim(),
+      };
+
+      const nextServers = [newServer, ...servers];
+      setServers(nextServers);
+      setActiveServerId(newServer.id);
+      await persistServers(nextServers, newServer.id);
+      return newServer.id;
+    },
+    [persistServers, servers]
+  );
+
   const deleteServer = useCallback(
     async (serverId: string) => {
       const nextServers = servers.filter((server) => server.id !== serverId);
@@ -146,7 +180,17 @@ export function useServers({ onError }: UseServersArgs) {
     let mounted = true;
 
     async function loadSettings() {
+      if (!enabled) {
+        if (mounted) {
+          setLoadingSettings(false);
+        }
+        return;
+      }
+
       try {
+        if (mounted) {
+          setLoadingSettings(true);
+        }
         const [savedServersRaw, savedActiveId, legacyBaseUrl, legacyToken] = await Promise.all([
           SecureStore.getItemAsync(STORAGE_SERVERS),
           SecureStore.getItemAsync(STORAGE_ACTIVE_SERVER_ID),
@@ -200,7 +244,7 @@ export function useServers({ onError }: UseServersArgs) {
     return () => {
       mounted = false;
     };
-  }, [onError]);
+  }, [enabled, onError]);
 
   return {
     servers,
@@ -220,6 +264,8 @@ export function useServers({ onError }: UseServersArgs) {
     setTokenMasked,
     beginCreateServer,
     beginEditServer,
+    importServerConfig,
+    addServerDirect,
     saveServer,
     deleteServer,
     useServer,

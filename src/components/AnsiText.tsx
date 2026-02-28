@@ -13,10 +13,13 @@ type AnsiSpan = {
 type AnsiTextProps = {
   text: string;
   style?: StyleProp<TextStyle>;
+  searchTerm?: string;
 };
 
-export function AnsiText({ text, style }: AnsiTextProps) {
+export function AnsiText({ text, style, searchTerm }: AnsiTextProps) {
   const parsed = Anser.ansiToJson(text, { use_classes: false }) as unknown as AnsiSpan[];
+  const normalizedSearch = searchTerm?.trim().toLowerCase() || "";
+  const escapedSearch = normalizedSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
   return (
     <Text style={style}>
@@ -24,6 +27,12 @@ export function AnsiText({ text, style }: AnsiTextProps) {
         const isBold = span.decoration?.includes("bold") ?? false;
         const isItalic = span.decoration?.includes("italic") ?? false;
         const isUnderline = span.decoration?.includes("underline") ?? false;
+        const content = span.content || "";
+
+        const pieces =
+          normalizedSearch && content
+            ? content.split(new RegExp(`(${escapedSearch})`, "ig"))
+            : [content];
 
         return (
           <Text
@@ -36,7 +45,18 @@ export function AnsiText({ text, style }: AnsiTextProps) {
               textDecorationLine: isUnderline ? "underline" : "none",
             }}
           >
-            {span.content}
+            {pieces.map((piece, pieceIndex) => {
+              const matches =
+                normalizedSearch.length > 0 && piece.toLowerCase() === normalizedSearch;
+              if (!matches) {
+                return piece;
+              }
+              return (
+                <Text key={`${index}-${pieceIndex}`} style={{ backgroundColor: "rgba(255, 200, 87, 0.45)" }}>
+                  {piece}
+                </Text>
+              );
+            })}
           </Text>
         );
       })}

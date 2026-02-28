@@ -2,7 +2,7 @@
   "expo": {
     "name": "NovaRemote",
     "slug": "novaremote",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "scheme": "novaremote",
     "orientation": "portrait",
     "icon": "./assets/novaai-logo-user.png",
@@ -15,9 +15,10 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.novaai.novaremote",
-      "buildNumber": "1.0.0",
+      "buildNumber": "1.1.0",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSFaceIDUsageDescription": "NovaRemote uses Face ID to protect your saved server credentials."
       }
     },
     "android": {
@@ -32,6 +33,11 @@
     },
     "web": {
       "favicon": "./assets/novaai-logo-user.png"
-    }
+    },
+    "plugins": [
+      "expo-local-authentication",
+      "expo-notifications",
+      "react-native-purchases"
+    ]
   }
 }

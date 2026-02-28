@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
@@ -15,13 +15,16 @@ type ServersScreenProps = {
   serverCwdInput: string;
   editingServerId: string | null;
   tokenMasked: boolean;
+  requireBiometric: boolean;
   onUseServer: (serverId: string) => void;
   onBeginEditServer: (server: ServerProfile) => void;
   onDeleteServer: (serverId: string) => void;
+  onShareServer: (server: ServerProfile) => void;
   onSetServerName: (value: string) => void;
   onSetServerUrl: (value: string) => void;
   onSetServerToken: (value: string) => void;
   onSetServerCwd: (value: string) => void;
+  onSetRequireBiometric: (value: boolean) => void;
   onToggleTokenMask: () => void;
   onClearForm: () => void;
   onSaveServer: () => void;
@@ -37,13 +40,16 @@ export function ServersScreen({
   serverCwdInput,
   editingServerId,
   tokenMasked,
+  requireBiometric,
   onUseServer,
   onBeginEditServer,
   onDeleteServer,
+  onShareServer,
   onSetServerName,
   onSetServerUrl,
   onSetServerToken,
   onSetServerCwd,
+  onSetRequireBiometric,
   onToggleTokenMask,
   onClearForm,
   onSaveServer,
@@ -63,6 +69,7 @@ export function ServersScreen({
             onUse={onUseServer}
             onEdit={onBeginEditServer}
             onDelete={onDeleteServer}
+            onShare={onShareServer}
           />
         ))}
       </View>
@@ -114,6 +121,16 @@ export function ServersScreen({
         <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onClearForm}>
           <Text style={styles.buttonGhostText}>Clear Form</Text>
         </Pressable>
+      </View>
+
+      <View style={styles.rowInlineSpace}>
+        <Text style={styles.switchLabel}>Require Face ID / Touch ID</Text>
+        <Switch
+          trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+          thumbColor={requireBiometric ? "#d4fdff" : "#d3dee5"}
+          value={requireBiometric}
+          onValueChange={onSetRequireBiometric}
+        />
       </View>
 
       <View style={styles.rowInlineSpace}>

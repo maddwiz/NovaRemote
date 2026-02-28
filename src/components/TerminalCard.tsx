@@ -2,7 +2,7 @@ import React, { useRef } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { styles } from "../theme/styles";
-import { TerminalSendMode } from "../types";
+import { ConnectionState, TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
 
 type TerminalCardProps = {
@@ -11,16 +11,22 @@ type TerminalCardProps = {
   draft: string;
   isSending: boolean;
   isLive: boolean;
+  connectionState: ConnectionState;
   mode: TerminalSendMode;
+  tags: string[];
   onSetMode: (mode: TerminalSendMode) => void;
   onOpenOnMac: () => void;
   onSync: () => void;
   onFullscreen: () => void;
   onStop: () => void;
   onHide: () => void;
+  onHistoryPrev: () => void;
+  onHistoryNext: () => void;
+  onTagsChange: (raw: string) => void;
   onDraftChange: (value: string) => void;
   onSend: () => void;
   onClear: () => void;
+  historyCount: number;
 };
 
 export function TerminalCard({
@@ -29,18 +35,27 @@ export function TerminalCard({
   draft,
   isSending,
   isLive,
+  connectionState,
   mode,
+  tags,
   onSetMode,
   onOpenOnMac,
   onSync,
   onFullscreen,
   onStop,
   onHide,
+  onHistoryPrev,
+  onHistoryNext,
+  onTagsChange,
   onDraftChange,
   onSend,
   onClear,
+  historyCount,
 }: TerminalCardProps) {
   const terminalRef = useRef<ScrollView | null>(null);
+
+  const liveLabel =
+    connectionState === "connected" ? "LIVE" : connectionState === "reconnecting" ? "RETRY" : isLive ? "SYNC" : "OFF";
 
   return (
     <View style={styles.terminalCard}>
@@ -51,7 +66,14 @@ export function TerminalCard({
             <Text style={[styles.modePill, mode === "ai" ? styles.modePillAi : styles.modePillShell]}>
               {mode.toUpperCase()}
             </Text>
-            <Text style={[styles.livePill, isLive ? styles.livePillOn : styles.livePillOff]}>{isLive ? "LIVE" : "SYNC"}</Text>
+            <Text
+              style={[
+                styles.livePill,
+                connectionState === "connected" ? styles.livePillOn : connectionState === "reconnecting" ? styles.livePillWarn : styles.livePillOff,
+              ]}
+            >
+              {liveLabel}
+            </Text>
           </View>
         </View>
 
@@ -102,6 +124,26 @@ export function TerminalCard({
         placeholder={mode === "ai" ? "Message AI..." : "Run shell command..."}
         placeholderTextColor="#7f7aa8"
         onChangeText={onDraftChange}
+      />
+
+      <View style={styles.rowInlineSpace}>
+        <Pressable style={styles.actionButton} onPress={onHistoryPrev}>
+          <Text style={styles.actionButtonText}>↑</Text>
+        </Pressable>
+        <Pressable style={styles.actionButton} onPress={onHistoryNext}>
+          <Text style={styles.actionButtonText}>↓</Text>
+        </Pressable>
+        <Text style={styles.emptyText}>{`History ${historyCount}`}</Text>
+      </View>
+
+      <TextInput
+        style={styles.input}
+        value={tags.join(", ")}
+        onChangeText={onTagsChange}
+        placeholder="Tags (comma separated)"
+        placeholderTextColor="#7f7aa8"
+        autoCapitalize="none"
+        autoCorrect={false}
       />
 
       <View style={styles.rowInlineSpace}>

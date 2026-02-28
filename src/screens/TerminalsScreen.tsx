@@ -1,9 +1,9 @@
-import React from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import React, { useMemo } from "react";
+import { Pressable, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 
 import { CWD_PLACEHOLDER, isLikelyAiSession } from "../constants";
 import { styles } from "../theme/styles";
-import { ServerProfile, TerminalSendMode } from "../types";
+import { HealthMetrics, ServerProfile, SessionConnectionMeta, TerminalSendMode } from "../types";
 import { TerminalCard } from "../components/TerminalCard";
 
 type TerminalsScreenProps = {
@@ -15,11 +15,20 @@ type TerminalsScreenProps = {
   drafts: Record<string, string>;
   sendBusy: Record<string, boolean>;
   streamLive: Record<string, boolean>;
+  connectionMeta: Record<string, SessionConnectionMeta>;
   sendModes: Record<string, TerminalSendMode>;
   startCwd: string;
   startPrompt: string;
   startOpenOnMac: boolean;
   startKind: TerminalSendMode;
+  health: HealthMetrics;
+  historyCount: Record<string, number>;
+  sessionTags: Record<string, string[]>;
+  allTags: string[];
+  tagFilter: string;
+  isPro: boolean;
+  onShowPaywall: () => void;
+  onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;
   onSetStartPrompt: (value: string) => void;
   onSetStartOpenOnMac: (value: boolean) => void;
@@ -34,10 +43,46 @@ type TerminalsScreenProps = {
   onFocusSession: (session: string) => void;
   onStopSession: (session: string) => void;
   onHideSession: (session: string) => void;
+  onHistoryPrev: (session: string) => void;
+  onHistoryNext: (session: string) => void;
+  onSetTags: (session: string, raw: string) => void;
   onSetDraft: (session: string, value: string) => void;
   onSend: (session: string) => void;
   onClearDraft: (session: string) => void;
 };
+
+function renderSessionChips(
+  allSessions: string[],
+  openSessions: string[],
+  onToggleSessionVisible: (session: string) => void,
+  sessionTags: Record<string, string[]>,
+  tagFilter: string
+) {
+  const normalizedFilter = tagFilter.trim().toLowerCase();
+  const visible = allSessions.filter((session) => {
+    if (!normalizedFilter) {
+      return true;
+    }
+    return (sessionTags[session] || []).includes(normalizedFilter);
+  });
+
+  if (visible.length === 0) {
+    return <Text style={styles.emptyText}>No sessions match the current tag filter.</Text>;
+  }
+
+  return (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+      {visible.map((session) => {
+        const active = openSessions.includes(session);
+        return (
+          <Pressable key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleSessionVisible(session)}>
+            <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{active ? `Open - ${session}` : session}</Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
 
 export function TerminalsScreen({
   activeServer,
@@ -48,11 +93,20 @@ export function TerminalsScreen({
   drafts,
   sendBusy,
   streamLive,
+  connectionMeta,
   sendModes,
   startCwd,
   startPrompt,
   startOpenOnMac,
   startKind,
+  health,
+  historyCount,
+  sessionTags,
+  allTags,
+  tagFilter,
+  isPro,
+  onShowPaywall,
+  onSetTagFilter,
   onSetStartCwd,
   onSetStartPrompt,
   onSetStartOpenOnMac,
@@ -67,12 +121,89 @@ export function TerminalsScreen({
   onFocusSession,
   onStopSession,
   onHideSession,
+  onHistoryPrev,
+  onHistoryNext,
+  onSetTags,
   onSetDraft,
   onSend,
   onClearDraft,
 }: TerminalsScreenProps) {
-  return (
+  const { width } = useWindowDimensions();
+  const wantsSplit = width >= 900;
+  const splitEnabled = !wantsSplit || isPro;
+
+  const openTerminalCards = useMemo(() => {
+    return openSessions.map((session) => {
+      const output = tails[session] ?? "";
+      const draft = drafts[session] ?? "";
+      const isSending = Boolean(sendBusy[session]);
+      const isLive = Boolean(streamLive[session]);
+      const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+      const tags = sessionTags[session] || [];
+      const meta = connectionMeta[session];
+
+      return (
+        <TerminalCard
+          key={session}
+          session={session}
+          output={output}
+          draft={draft}
+          isSending={isSending}
+          isLive={isLive}
+          connectionState={meta?.state ?? "disconnected"}
+          mode={mode}
+          tags={tags}
+          historyCount={historyCount[session] || 0}
+          onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
+          onOpenOnMac={() => onOpenOnMac(session)}
+          onSync={() => onSyncSession(session)}
+          onFullscreen={() => onFocusSession(session)}
+          onStop={() => onStopSession(session)}
+          onHide={() => onHideSession(session)}
+          onHistoryPrev={() => onHistoryPrev(session)}
+          onHistoryNext={() => onHistoryNext(session)}
+          onTagsChange={(raw) => onSetTags(session, raw)}
+          onDraftChange={(value) => onSetDraft(session, value)}
+          onSend={() => onSend(session)}
+          onClear={() => onClearDraft(session)}
+        />
+      );
+    });
+  }, [
+    connectionMeta,
+    drafts,
+    historyCount,
+    onClearDraft,
+    onFocusSession,
+    onHideSession,
+    onHistoryNext,
+    onHistoryPrev,
+    onOpenOnMac,
+    onSend,
+    onSetDraft,
+    onSetSessionMode,
+    onSetTags,
+    onStopSession,
+    onSyncSession,
+    openSessions,
+    sendBusy,
+    sendModes,
+    sessionTags,
+    streamLive,
+    tails,
+  ]);
+
+  const topPanels = (
     <>
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Connection Health</Text>
+        <Text style={styles.serverSubtitle}>{`Streams ${health.activeStreams}/${health.openSessions}`}</Text>
+        <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
+        <Text style={styles.serverSubtitle}>
+          {`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}
+        </Text>
+      </View>
+
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Active Server</Text>
         <Text style={styles.serverTitle}>{activeServer?.name || "No server selected"}</Text>
@@ -139,56 +270,78 @@ export function TerminalsScreen({
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Available Sessions</Text>
+
+        <TextInput
+          style={styles.input}
+          value={tagFilter}
+          onChangeText={onSetTagFilter}
+          placeholder="Filter by tag"
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {allTags.length > 0 ? (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {allTags.map((tag) => (
+              <Pressable
+                key={tag}
+                style={[styles.chip, tagFilter === tag ? styles.chipActive : null]}
+                onPress={() => onSetTagFilter(tagFilter === tag ? "" : tag)}
+              >
+                <Text style={[styles.chipText, tagFilter === tag ? styles.chipTextActive : null]}>{tag}</Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+        ) : null}
+
         {allSessions.length === 0 ? (
           <Text style={styles.emptyText}>No sessions found yet.</Text>
         ) : (
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {allSessions.map((session) => {
-              const active = openSessions.includes(session);
-              return (
-                <Pressable key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleSessionVisible(session)}>
-                  <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{active ? `Open - ${session}` : session}</Text>
-                </Pressable>
-              );
-            })}
-          </ScrollView>
+          renderSessionChips(allSessions, openSessions, onToggleSessionVisible, sessionTags, tagFilter)
         )}
       </View>
+    </>
+  );
 
+  if (wantsSplit && !splitEnabled) {
+    return (
+      <>
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>iPad Split View</Text>
+          <Text style={styles.serverSubtitle}>Split layout is a Pro feature.</Text>
+          <Pressable style={styles.buttonPrimary} onPress={onShowPaywall}>
+            <Text style={styles.buttonPrimaryText}>Upgrade to Pro</Text>
+          </Pressable>
+        </View>
+        {topPanels}
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>Open Terminals</Text>
+          {openTerminalCards.length === 0 ? <Text style={styles.emptyText}>Tap a session above to open it.</Text> : openTerminalCards}
+        </View>
+      </>
+    );
+  }
+
+  if (wantsSplit && splitEnabled) {
+    return (
+      <View style={styles.splitRow}>
+        <View style={styles.splitLeft}>{topPanels}</View>
+        <View style={styles.splitRight}>
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Open Terminals</Text>
+            {openTerminalCards.length === 0 ? <Text style={styles.emptyText}>Tap a session above to open it.</Text> : openTerminalCards}
+          </View>
+        </View>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      {topPanels}
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Open Terminals</Text>
-        {openSessions.length === 0 ? (
-          <Text style={styles.emptyText}>Tap a session above to open it.</Text>
-        ) : (
-          openSessions.map((session) => {
-            const output = tails[session] ?? "";
-            const draft = drafts[session] ?? "";
-            const isSending = Boolean(sendBusy[session]);
-            const isLive = Boolean(streamLive[session]);
-            const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
-
-            return (
-              <TerminalCard
-                key={session}
-                session={session}
-                output={output}
-                draft={draft}
-                isSending={isSending}
-                isLive={isLive}
-                mode={mode}
-                onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
-                onOpenOnMac={() => onOpenOnMac(session)}
-                onSync={() => onSyncSession(session)}
-                onFullscreen={() => onFocusSession(session)}
-                onStop={() => onStopSession(session)}
-                onHide={() => onHideSession(session)}
-                onDraftChange={(value) => onSetDraft(session, value)}
-                onSend={() => onSend(session)}
-                onClear={() => onClearDraft(session)}
-              />
-            );
-          })
-        )}
+        {openTerminalCards.length === 0 ? <Text style={styles.emptyText}>Tap a session above to open it.</Text> : openTerminalCards}
       </View>
     </>
   );

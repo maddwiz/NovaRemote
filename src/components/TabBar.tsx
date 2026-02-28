@@ -24,6 +24,12 @@ export function TabBar({ route, onChange }: TabBarProps) {
       >
         <Text style={[styles.tabButtonText, route === "servers" ? styles.tabButtonTextOn : null]}>Servers</Text>
       </Pressable>
+      <Pressable
+        style={[styles.tabButton, route === "snippets" ? styles.tabButtonOn : null]}
+        onPress={() => onChange("snippets")}
+      >
+        <Text style={[styles.tabButtonText, route === "snippets" ? styles.tabButtonTextOn : null]}>Snippets</Text>
+      </Pressable>
     </View>
   );
 }

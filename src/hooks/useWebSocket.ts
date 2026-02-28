@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 import { apiRequest, websocketUrl } from "../api/client";
 import { STREAM_RETRY_BASE_MS, STREAM_RETRY_FACTOR, STREAM_RETRY_MAX_MS } from "../constants";
-import { ServerProfile, TmuxStreamMessage, TmuxTailResponse } from "../types";
+import { ServerProfile, SessionConnectionMeta, TmuxStreamMessage, TmuxTailResponse } from "../types";
 
 type UseWebSocketArgs = {
   activeServer: ServerProfile | null;
@@ -10,6 +10,8 @@ type UseWebSocketArgs = {
   openSessions: string[];
   setTails: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onError: (error: unknown) => void;
+  onSessionClosed?: (session: string) => void;
+  onStreamError?: (session: string, message: string) => void;
 };
 
 type ReactNativeWebSocketCtor = new (
@@ -20,8 +22,17 @@ type ReactNativeWebSocketCtor = new (
 
 const ReactNativeWebSocket = WebSocket as unknown as ReactNativeWebSocketCtor;
 
-export function useWebSocket({ activeServer, connected, openSessions, setTails, onError }: UseWebSocketArgs) {
+export function useWebSocket({
+  activeServer,
+  connected,
+  openSessions,
+  setTails,
+  onError,
+  onSessionClosed,
+  onStreamError,
+}: UseWebSocketArgs) {
   const [streamLive, setStreamLive] = useState<Record<string, boolean>>({});
+  const [connectionMeta, setConnectionMeta] = useState<Record<string, SessionConnectionMeta>>({});
 
   const pollInFlight = useRef<Set<string>>(new Set());
   const streamRefs = useRef<Record<string, WebSocket | null>>({});
@@ -69,6 +80,14 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
       delete next[session];
       return next;
     });
+    setConnectionMeta((prev) => ({
+      ...prev,
+      [session]: {
+        state: connectedRef.current ? "disconnected" : "disconnected",
+        retryCount: 0,
+        lastMessageAt: prev[session]?.lastMessageAt ?? null,
+      },
+    }));
   }, []);
 
   const closeAllStreams = useCallback(() => {
@@ -135,6 +154,14 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
         },
       });
       streamRefs.current[session] = ws;
+      setConnectionMeta((prev) => ({
+        ...prev,
+        [session]: {
+          state: prev[session]?.retryCount ? "reconnecting" : "connecting",
+          retryCount: prev[session]?.retryCount ?? 0,
+          lastMessageAt: prev[session]?.lastMessageAt ?? null,
+        },
+      }));
 
       ws.onopen = () => {
         streamRetryCount.current[session] = 0;
@@ -149,6 +176,14 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
           return;
         }
         setStreamLive((prev) => ({ ...prev, [session]: true }));
+        setConnectionMeta((prev) => ({
+          ...prev,
+          [session]: {
+            state: "connected",
+            retryCount: 0,
+            lastMessageAt: prev[session]?.lastMessageAt ?? Date.now(),
+          },
+        }));
       };
 
       ws.onmessage = (event) => {
@@ -162,6 +197,15 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
         if (!message || message.session !== session) {
           return;
         }
+
+        setConnectionMeta((prev) => ({
+          ...prev,
+          [session]: {
+            state: "connected",
+            retryCount: prev[session]?.retryCount ?? 0,
+            lastMessageAt: Date.now(),
+          },
+        }));
 
         if (message.type === "snapshot") {
           const output = message.data ?? "";
@@ -183,11 +227,13 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
 
         if (message.type === "session_closed") {
           closeStream(session);
+          onSessionClosed?.(session);
           return;
         }
 
         if (message.type === "error" && message.data) {
           onError(new Error(message.data));
+          onStreamError?.(session, message.data);
         }
       };
 
@@ -196,6 +242,14 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
         streamRefs.current[session] = null;
 
         if (!connectedRef.current || !openSessionsRef.current.includes(session)) {
+          setConnectionMeta((prev) => ({
+            ...prev,
+            [session]: {
+              state: "disconnected",
+              retryCount: 0,
+              lastMessageAt: prev[session]?.lastMessageAt ?? null,
+            },
+          }));
           return;
         }
 
@@ -205,6 +259,14 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
           STREAM_RETRY_BASE_MS * Math.pow(STREAM_RETRY_FACTOR, count - 1),
           STREAM_RETRY_MAX_MS
         );
+        setConnectionMeta((prev) => ({
+          ...prev,
+          [session]: {
+            state: "reconnecting",
+            retryCount: count,
+            lastMessageAt: prev[session]?.lastMessageAt ?? null,
+          },
+        }));
 
         streamRetryRefs.current[session] = setTimeout(() => {
           streamRetryRefs.current[session] = null;
@@ -221,6 +283,7 @@ export function useWebSocket({ activeServer, connected, openSessions, setTails, 
 
   return {
     streamLive,
+    connectionMeta,
     setStreamLive,
     fetchTail,
     connectStream,

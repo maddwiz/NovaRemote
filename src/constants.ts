@@ -4,6 +4,11 @@ export const STORAGE_SERVERS = "novaremote.servers.v1";
 export const STORAGE_ACTIVE_SERVER_ID = "novaremote.active_server_id.v1";
 export const STORAGE_LEGACY_BASE_URL = "novaremote.base_url";
 export const STORAGE_LEGACY_TOKEN = "novaremote.token";
+export const STORAGE_HISTORY_PREFIX = "novaremote.history.v1";
+export const STORAGE_SNIPPETS = "novaremote.snippets.v1";
+export const STORAGE_SESSION_TAGS_PREFIX = "novaremote.session_tags.v1";
+export const STORAGE_REQUIRE_BIOMETRIC = "novaremote.require_biometric.v1";
+export const STORAGE_ONBOARDING_DONE = "novaremote.onboarding_done.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
@@ -19,6 +24,10 @@ export const STREAM_RETRY_FACTOR = 1.5;
 export const STREAM_RETRY_MAX_MS = 30000;
 
 export const POLL_INTERVAL_MS = 1800;
+export const HEALTH_PING_INTERVAL_MS = 15000;
+export const HISTORY_MAX_ITEMS = 50;
+export const FREE_SERVER_LIMIT = 1;
+export const FREE_SESSION_LIMIT = 2;
 
 export function makeId(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

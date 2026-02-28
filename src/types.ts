@@ -49,9 +49,32 @@ export type ServerProfile = {
 
 export type TerminalSendMode = "ai" | "shell";
 
-export type RouteTab = "terminals" | "servers";
+export type RouteTab = "terminals" | "servers" | "snippets";
 
 export type Status = {
   text: string;
   error: boolean;
+};
+
+export type ConnectionState = "disconnected" | "connecting" | "connected" | "reconnecting";
+
+export type SessionConnectionMeta = {
+  state: ConnectionState;
+  retryCount: number;
+  lastMessageAt: number | null;
+};
+
+export type Snippet = {
+  id: string;
+  name: string;
+  command: string;
+  serverId?: string;
+  mode: TerminalSendMode;
+};
+
+export type HealthMetrics = {
+  lastPingAt: number | null;
+  latencyMs: number | null;
+  activeStreams: number;
+  openSessions: number;
 };

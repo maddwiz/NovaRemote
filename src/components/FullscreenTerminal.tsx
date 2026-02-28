@@ -11,8 +11,15 @@ type FullscreenTerminalProps = {
   draft: string;
   mode: TerminalSendMode;
   isSending: boolean;
+  searchTerm: string;
+  searchMatchesLabel: string;
   onClose: () => void;
   onToggleMode: () => void;
+  onSearchChange: (value: string) => void;
+  onSearchPrev: () => void;
+  onSearchNext: () => void;
+  onHistoryPrev: () => void;
+  onHistoryNext: () => void;
   onDraftChange: (value: string) => void;
   onSend: () => void;
   onStop: () => void;
@@ -24,8 +31,15 @@ export function FullscreenTerminal({
   draft,
   mode,
   isSending,
+  searchTerm,
+  searchMatchesLabel,
   onClose,
   onToggleMode,
+  onSearchChange,
+  onSearchPrev,
+  onSearchNext,
+  onHistoryPrev,
+  onHistoryNext,
   onDraftChange,
   onSend,
   onStop,
@@ -56,11 +70,31 @@ export function FullscreenTerminal({
             terminalRef.current?.scrollToEnd({ animated: true });
           }}
         >
-          <AnsiText text={output || "Waiting for output..."} style={styles.terminalText} />
+          <AnsiText text={output || "Waiting for output..."} style={styles.terminalText} searchTerm={searchTerm} />
         </ScrollView>
 
         {session ? (
           <>
+            <TextInput
+              style={styles.input}
+              value={searchTerm}
+              onChangeText={onSearchChange}
+              placeholder="Search in terminal output"
+              placeholderTextColor="#7f7aa8"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <View style={styles.rowInlineSpace}>
+              <Pressable style={styles.actionButton} onPress={onSearchPrev}>
+                <Text style={styles.actionButtonText}>Prev</Text>
+              </Pressable>
+              <Pressable style={styles.actionButton} onPress={onSearchNext}>
+                <Text style={styles.actionButtonText}>Next</Text>
+              </Pressable>
+              <Text style={styles.emptyText}>{searchMatchesLabel}</Text>
+            </View>
+
             <TextInput
               style={[styles.input, styles.modalInput]}
               value={draft}
@@ -72,6 +106,12 @@ export function FullscreenTerminal({
             />
 
             <View style={styles.rowInlineSpace}>
+              <Pressable style={styles.actionButton} onPress={onHistoryPrev}>
+                <Text style={styles.actionButtonText}>↑</Text>
+              </Pressable>
+              <Pressable style={styles.actionButton} onPress={onHistoryNext}>
+                <Text style={styles.actionButtonText}>↓</Text>
+              </Pressable>
               <Pressable
                 style={[styles.buttonPrimary, styles.flexButton, isSending ? styles.buttonDisabled : null]}
                 disabled={isSending}

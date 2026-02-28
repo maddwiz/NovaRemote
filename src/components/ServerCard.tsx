@@ -10,9 +10,10 @@ type ServerCardProps = {
   onUse: (serverId: string) => void;
   onEdit: (server: ServerProfile) => void;
   onDelete: (serverId: string) => void;
+  onShare: (server: ServerProfile) => void;
 };
 
-export function ServerCard({ server, isActive, onUse, onEdit, onDelete }: ServerCardProps) {
+export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare }: ServerCardProps) {
   return (
     <View style={[styles.serverCard, isActive ? styles.serverCardActive : null]}>
       <View style={styles.serverCardHeader}>
@@ -25,6 +26,9 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete }: Server
         </Pressable>
         <Pressable style={styles.actionButton} onPress={() => onEdit(server)}>
           <Text style={styles.actionButtonText}>Edit</Text>
+        </Pressable>
+        <Pressable style={styles.actionButton} onPress={() => onShare(server)}>
+          <Text style={styles.actionButtonText}>Share</Text>
         </Pressable>
         <Pressable style={styles.actionDangerButton} onPress={() => onDelete(server.id)}>
           <Text style={styles.actionDangerText}>Delete</Text>
