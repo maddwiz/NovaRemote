@@ -23,6 +23,8 @@ import {
   TerminalSendMode,
 } from "../types";
 import { AnsiText } from "./AnsiText";
+import { TerminalCardHeader } from "./terminal-card/TerminalCardHeader";
+import { TerminalCardShellAssist } from "./terminal-card/TerminalCardShellAssist";
 
 const SHELL_AUTOCOMPLETE_COMMON: string[] = [
   "git status",
@@ -385,116 +387,39 @@ export function TerminalCard({
 
   return (
     <View style={styles.terminalCard}>
-      <View style={styles.terminalHeader}>
-        <View style={styles.terminalNameRow}>
-          <View style={styles.flexButton}>
-            <Text style={styles.terminalName}>{sessionAlias.trim() || session}</Text>
-            {sessionAlias.trim() ? <Text style={styles.serverSubtitle}>{session}</Text> : null}
-          </View>
-          <View style={styles.pillGroup}>
-            <Text style={[styles.modePill, mode === "ai" ? styles.modePillAi : styles.modePillShell]}>
-              {mode.toUpperCase()}
-            </Text>
-            {collaborationAvailable ? (
-              <Text style={[styles.livePill, styles.livePillWarn]}>{`VIEW ${activeCollaborators.length}`}</Text>
-            ) : null}
-            <Text
-              style={[
-                styles.livePill,
-                streamState === "live" ? styles.livePillOn : streamState === "disconnected" ? styles.livePillOff : styles.livePillWarn,
-              ]}
-            >
-              {liveLabel}
-            </Text>
-            <View
-              style={[
-                styles.liveDot,
-                streamState === "live" ? styles.liveDotGreen : streamState === "disconnected" ? styles.liveDotRed : styles.liveDotYellow,
-              ]}
-            />
-          </View>
-        </View>
-
-        <View style={styles.modeRow}>
-          <Pressable accessibilityRole="button"
-            style={[styles.modeButton, mode === "ai" ? styles.modeButtonOn : null, !aiAvailable ? styles.buttonDisabled : null]}
-            onPress={() => onSetMode("ai")}
-            disabled={!aiAvailable}
-          >
-            <Text style={[styles.modeButtonText, mode === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button"
-            style={[styles.modeButton, mode === "shell" ? styles.modeButtonOn : null, !shellAvailable ? styles.buttonDisabled : null]}
-            onPress={() => onSetMode("shell")}
-            disabled={!shellAvailable}
-          >
-            <Text style={[styles.modeButtonText, mode === "shell" ? styles.modeButtonTextOn : null]}>Shell</Text>
-          </Pressable>
-        </View>
-
-        {mode === "ai" ? (
-          <View style={styles.modeRow}>
-            <Pressable accessibilityRole="button" style={[styles.modeButton, aiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetAiEngine("auto")}>
-              <Text style={[styles.modeButtonText, aiEngine === "auto" ? styles.modeButtonTextOn : null]}>AI Auto</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              style={[styles.modeButton, aiEngine === "server" ? styles.modeButtonOn : null, !canUseServerAi ? styles.buttonDisabled : null]}
-              onPress={() => onSetAiEngine("server")}
-              disabled={!canUseServerAi}
-            >
-              <Text style={[styles.modeButtonText, aiEngine === "server" ? styles.modeButtonTextOn : null]}>Server</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button"
-              style={[styles.modeButton, aiEngine === "external" ? styles.modeButtonOn : null, !canUseExternalAi ? styles.buttonDisabled : null]}
-              onPress={() => onSetAiEngine("external")}
-              disabled={!canUseExternalAi}
-            >
-              <Text style={[styles.modeButtonText, aiEngine === "external" ? styles.modeButtonTextOn : null]}>External</Text>
-            </Pressable>
-          </View>
-        ) : null}
-
-        <View style={styles.actionsWrap}>
-          <Pressable accessibilityRole="button" style={[styles.actionButton, !canOpenOnMac ? styles.buttonDisabled : null]} onPress={onOpenOnMac} disabled={!canOpenOnMac}>
-            <Text style={styles.actionButtonText}>Open on Mac</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.actionButton, !canSync ? styles.buttonDisabled : null]} onPress={onSync} disabled={!canSync}>
-            <Text style={styles.actionButtonText}>Sync</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onExport}>
-            <Text style={styles.actionButtonText}>Export</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onFullscreen}>
-            <Text style={styles.actionButtonText}>Fullscreen</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.actionButton, pinned ? styles.modeButtonOn : null]} onPress={onTogglePin}>
-            <Text style={styles.actionButtonText}>{pinned ? "Unpin" : "Pin"}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.actionButton, recordingActive ? styles.livePillOff : null]} onPress={onToggleRecording}>
-            <Text style={styles.actionButtonText}>{recordingActive ? "Stop Rec" : "Record"}</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button"
-            style={[styles.actionButton, recordingChunks === 0 ? styles.buttonDisabled : null]}
-            onPress={onOpenPlayback}
-            disabled={recordingChunks === 0}
-          >
-            <Text style={styles.actionButtonText}>Playback</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button"
-            style={[styles.actionDangerButton, !canStop || readOnly ? styles.buttonDisabled : null]}
-            onPress={onStop}
-            disabled={!canStop || readOnly}
-          >
-            <Text style={styles.actionDangerText}>Stop</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onAutoName}>
-            <Text style={styles.actionButtonText}>Auto Name</Text>
-          </Pressable>
-          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHide}>
-            <Text style={styles.actionButtonText}>Hide</Text>
-          </Pressable>
-        </View>
-      </View>
+      <TerminalCardHeader
+        session={session}
+        sessionAlias={sessionAlias}
+        mode={mode}
+        aiAvailable={aiAvailable}
+        shellAvailable={shellAvailable}
+        aiEngine={aiEngine}
+        canUseServerAi={canUseServerAi}
+        canUseExternalAi={canUseExternalAi}
+        collaborationAvailable={collaborationAvailable}
+        activeCollaboratorCount={activeCollaborators.length}
+        streamState={streamState}
+        liveLabel={liveLabel}
+        canOpenOnMac={canOpenOnMac}
+        canSync={canSync}
+        canStop={canStop}
+        pinned={pinned}
+        recordingActive={recordingActive}
+        recordingChunks={recordingChunks}
+        readOnly={readOnly}
+        onSetMode={onSetMode}
+        onSetAiEngine={onSetAiEngine}
+        onOpenOnMac={onOpenOnMac}
+        onSync={onSync}
+        onExport={onExport}
+        onFullscreen={onFullscreen}
+        onTogglePin={onTogglePin}
+        onToggleRecording={onToggleRecording}
+        onOpenPlayback={onOpenPlayback}
+        onStop={onStop}
+        onAutoName={onAutoName}
+        onHide={onHide}
+      />
 
       <ScrollView
         ref={terminalRef}
@@ -539,67 +464,22 @@ export function TerminalCard({
       />
 
       {mode === "shell" ? (
-        <View style={styles.serverListWrap}>
-          {autocomplete.length > 0 ? (
-            <View style={styles.actionsWrap}>
-              {autocomplete.map((command) => (
-                <Pressable accessibilityRole="button" key={`${session}-auto-${command}`} style={styles.chip} onPress={() => onDraftChange(command)}>
-                  <Text style={styles.chipText}>{command}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
-          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onAdaptDraftForBackend}>
-            <Text style={styles.actionButtonText}>Adapt for Backend</Text>
-          </Pressable>
-
-          <Pressable accessibilityRole="button"
-            style={[styles.actionButton, suggestionsBusy ? styles.buttonDisabled : null]}
-            onPress={onRequestSuggestions}
-            disabled={suggestionsBusy}
-          >
-            <Text style={styles.actionButtonText}>{suggestionsBusy ? "Thinking..." : "AI Suggestions"}</Text>
-          </Pressable>
-          {suggestions.length > 0 ? (
-            <View style={styles.actionsWrap}>
-              {suggestions.map((suggestion) => (
-                <Pressable accessibilityRole="button" key={`${session}-${suggestion}`} style={styles.chip} onPress={() => onUseSuggestion(suggestion)}>
-                  <Text style={styles.chipText}>{suggestion}</Text>
-                </Pressable>
-              ))}
-            </View>
-          ) : null}
-
-          {errorHint ? (
-            <View style={styles.serverCard}>
-              <Text style={styles.panelLabel}>Error Triage</Text>
-              <Text style={styles.emptyText}>{errorHint}</Text>
-              <View style={styles.actionsWrap}>
-                <Pressable accessibilityRole="button" style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]} onPress={onExplainError} disabled={triageBusy}>
-                  <Text style={styles.actionButtonText}>{triageBusy ? "Analyzing..." : "Explain Error"}</Text>
-                </Pressable>
-                <Pressable accessibilityRole="button"
-                  style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]}
-                  onPress={onSuggestErrorFixes}
-                  disabled={triageBusy}
-                >
-                  <Text style={styles.actionButtonText}>Fix Commands</Text>
-                </Pressable>
-              </View>
-              {triageExplanation ? <Text style={styles.serverSubtitle}>{triageExplanation}</Text> : null}
-              {triageFixes.length > 0 ? (
-                <View style={styles.actionsWrap}>
-                  {triageFixes.map((command) => (
-                    <Pressable accessibilityRole="button" key={`${session}-triage-${command}`} style={styles.chip} onPress={() => onUseSuggestion(command)}>
-                      <Text style={styles.chipText}>{command}</Text>
-                    </Pressable>
-                  ))}
-                </View>
-              ) : null}
-            </View>
-          ) : null}
-        </View>
+        <TerminalCardShellAssist
+          session={session}
+          autocomplete={autocomplete}
+          suggestionsBusy={suggestionsBusy}
+          suggestions={suggestions}
+          errorHint={errorHint}
+          triageBusy={triageBusy}
+          triageExplanation={triageExplanation}
+          triageFixes={triageFixes}
+          onDraftChange={onDraftChange}
+          onAdaptDraftForBackend={onAdaptDraftForBackend}
+          onRequestSuggestions={onRequestSuggestions}
+          onUseSuggestion={onUseSuggestion}
+          onExplainError={onExplainError}
+          onSuggestErrorFixes={onSuggestErrorFixes}
+        />
       ) : null}
 
       <View style={styles.rowInlineSpace}>
