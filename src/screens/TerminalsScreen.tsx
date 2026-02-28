@@ -150,6 +150,7 @@ export function TerminalsScreen({
           draft={draft}
           isSending={isSending}
           isLive={isLive}
+          isServerConnected={connected}
           connectionState={meta?.state ?? "disconnected"}
           mode={mode}
           tags={tags}

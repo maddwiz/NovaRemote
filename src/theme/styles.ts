@@ -380,6 +380,20 @@ export const styles = StyleSheet.create({
     borderColor: "#b66da0",
     backgroundColor: "rgba(182, 109, 160, 0.16)",
   },
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 999,
+  },
+  liveDotGreen: {
+    backgroundColor: "#23f7be",
+  },
+  liveDotYellow: {
+    backgroundColor: "#ffc75a",
+  },
+  liveDotRed: {
+    backgroundColor: "#ff6ca6",
+  },
   actionsWrap: {
     flexDirection: "row",
     flexWrap: "wrap",

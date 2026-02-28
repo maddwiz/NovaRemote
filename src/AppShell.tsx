@@ -22,6 +22,7 @@ import { PaywallModal } from "./components/PaywallModal";
 import { ShareServerModal } from "./components/ShareServerModal";
 import { StatusPill } from "./components/StatusPill";
 import { TabBar } from "./components/TabBar";
+import { TutorialModal } from "./components/TutorialModal";
 import {
   BRAND_LOGO,
   DEFAULT_CWD,
@@ -40,6 +41,7 @@ import { useServers } from "./hooks/useServers";
 import { useSessionTags } from "./hooks/useSessionTags";
 import { useSnippets } from "./hooks/useSnippets";
 import { useTerminalSessions } from "./hooks/useTerminalSessions";
+import { useTutorial } from "./hooks/useTutorial";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
@@ -66,6 +68,13 @@ function countMatches(output: string, searchTerm: string): number {
 
   const regex = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
   return (output.match(regex) || []).length;
+}
+
+function normalizeMatchIndex(index: number, total: number): number {
+  if (total <= 0) {
+    return 0;
+  }
+  return ((index % total) + total) % total;
 }
 
 function toServerShareLink(server: ServerProfile): string {
@@ -99,6 +108,7 @@ export default function AppShell() {
 
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
   const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
+  const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet } = useSnippets();
@@ -372,9 +382,10 @@ export default function AppShell() {
   const focusedSearchTerm = focusedSession ? searchTerms[focusedSession] ?? "" : "";
   const focusedMatchCount = focusedSession ? countMatches(focusedOutput, focusedSearchTerm) : 0;
   const focusedCursor = focusedSession ? searchIndex[focusedSession] ?? 0 : 0;
-  const focusedSearchLabel = focusedMatchCount === 0 ? "0 matches" : `${(focusedCursor % focusedMatchCount) + 1}/${focusedMatchCount}`;
+  const focusedMatchIndex = normalizeMatchIndex(focusedCursor, focusedMatchCount);
+  const focusedSearchLabel = focusedMatchCount === 0 ? "0 matches" : `${focusedMatchIndex + 1}/${focusedMatchCount}`;
 
-  if (lockLoading || onboardingLoading) {
+  if (lockLoading || onboardingLoading || tutorialLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
         <StatusBar style="light" />
@@ -536,7 +547,10 @@ export default function AppShell() {
                   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 });
               }}
-              onToggleSessionVisible={toggleSessionVisible}
+              onToggleSessionVisible={(session) => {
+                void Haptics.selectionAsync();
+                toggleSessionVisible(session);
+              }}
               onSetSessionMode={setSessionMode}
               onOpenOnMac={(session) => {
                 void runWithStatus(`Opening ${session} on Mac`, async () => {
@@ -642,6 +656,7 @@ export default function AppShell() {
         isSending={focusedIsSending}
         searchTerm={focusedSearchTerm}
         searchMatchesLabel={focusedSearchLabel}
+        activeMatchIndex={focusedMatchIndex}
         onClose={() => setFocusedSession(null)}
         onToggleMode={() => {
           if (!focusedSession) {
@@ -663,7 +678,7 @@ export default function AppShell() {
           }
           setSearchIndex((prev) => ({
             ...prev,
-            [focusedSession]: (prev[focusedSession] ?? 0) - 1 + focusedMatchCount,
+            [focusedSession]: (prev[focusedSession] ?? 0) - 1,
           }));
         }}
         onSearchNext={() => {
@@ -794,6 +809,15 @@ export default function AppShell() {
         title={shareConfig?.title || "Server"}
         value={shareConfig?.link || ""}
         onClose={() => setShareConfig(null)}
+      />
+
+      <TutorialModal
+        visible={onboardingCompleted && !tutorialDone}
+        onDone={() => {
+          void runWithStatus("Tutorial complete", async () => {
+            await finishTutorial();
+          });
+        }}
       />
     </SafeAreaView>
   );

@@ -14,12 +14,14 @@ type AnsiTextProps = {
   text: string;
   style?: StyleProp<TextStyle>;
   searchTerm?: string;
+  activeMatchIndex?: number;
 };
 
-export function AnsiText({ text, style, searchTerm }: AnsiTextProps) {
+export function AnsiText({ text, style, searchTerm, activeMatchIndex }: AnsiTextProps) {
   const parsed = Anser.ansiToJson(text, { use_classes: false }) as unknown as AnsiSpan[];
   const normalizedSearch = searchTerm?.trim().toLowerCase() || "";
   const escapedSearch = normalizedSearch.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  let matchCursor = 0;
 
   return (
     <Text style={style}>
@@ -51,8 +53,16 @@ export function AnsiText({ text, style, searchTerm }: AnsiTextProps) {
               if (!matches) {
                 return piece;
               }
+              const isActive = activeMatchIndex !== undefined && matchCursor === activeMatchIndex;
+              matchCursor += 1;
               return (
-                <Text key={`${index}-${pieceIndex}`} style={{ backgroundColor: "rgba(255, 200, 87, 0.45)" }}>
+                <Text
+                  key={`${index}-${pieceIndex}`}
+                  style={{
+                    backgroundColor: isActive ? "rgba(255, 235, 120, 0.82)" : "rgba(255, 200, 87, 0.45)",
+                    color: isActive ? "#1b1100" : undefined,
+                  }}
+                >
                   {piece}
                 </Text>
               );

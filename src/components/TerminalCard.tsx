@@ -11,6 +11,7 @@ type TerminalCardProps = {
   draft: string;
   isSending: boolean;
   isLive: boolean;
+  isServerConnected: boolean;
   connectionState: ConnectionState;
   mode: TerminalSendMode;
   tags: string[];
@@ -35,6 +36,7 @@ export function TerminalCard({
   draft,
   isSending,
   isLive,
+  isServerConnected,
   connectionState,
   mode,
   tags,
@@ -54,8 +56,17 @@ export function TerminalCard({
 }: TerminalCardProps) {
   const terminalRef = useRef<ScrollView | null>(null);
 
+  const streamState: "live" | "reconnecting" | "polling" | "disconnected" =
+    connectionState === "connected"
+      ? "live"
+      : connectionState === "reconnecting"
+        ? "reconnecting"
+        : isServerConnected
+          ? "polling"
+          : "disconnected";
+
   const liveLabel =
-    connectionState === "connected" ? "LIVE" : connectionState === "reconnecting" ? "RETRY" : isLive ? "SYNC" : "OFF";
+    streamState === "live" ? "LIVE" : streamState === "reconnecting" ? "RETRY" : streamState === "polling" ? "POLL" : "OFF";
 
   return (
     <View style={styles.terminalCard}>
@@ -69,11 +80,17 @@ export function TerminalCard({
             <Text
               style={[
                 styles.livePill,
-                connectionState === "connected" ? styles.livePillOn : connectionState === "reconnecting" ? styles.livePillWarn : styles.livePillOff,
+                streamState === "live" ? styles.livePillOn : streamState === "disconnected" ? styles.livePillOff : styles.livePillWarn,
               ]}
             >
               {liveLabel}
             </Text>
+            <View
+              style={[
+                styles.liveDot,
+                streamState === "live" ? styles.liveDotGreen : streamState === "disconnected" ? styles.liveDotRed : styles.liveDotYellow,
+              ]}
+            />
           </View>
         </View>
 

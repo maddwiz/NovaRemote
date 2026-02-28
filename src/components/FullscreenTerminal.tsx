@@ -13,6 +13,7 @@ type FullscreenTerminalProps = {
   isSending: boolean;
   searchTerm: string;
   searchMatchesLabel: string;
+  activeMatchIndex: number;
   onClose: () => void;
   onToggleMode: () => void;
   onSearchChange: (value: string) => void;
@@ -33,6 +34,7 @@ export function FullscreenTerminal({
   isSending,
   searchTerm,
   searchMatchesLabel,
+  activeMatchIndex,
   onClose,
   onToggleMode,
   onSearchChange,
@@ -70,7 +72,12 @@ export function FullscreenTerminal({
             terminalRef.current?.scrollToEnd({ animated: true });
           }}
         >
-          <AnsiText text={output || "Waiting for output..."} style={styles.terminalText} searchTerm={searchTerm} />
+          <AnsiText
+            text={output || "Waiting for output..."}
+            style={styles.terminalText}
+            searchTerm={searchTerm}
+            activeMatchIndex={activeMatchIndex}
+          />
         </ScrollView>
 
         {session ? (
