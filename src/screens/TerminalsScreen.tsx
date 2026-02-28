@@ -290,8 +290,7 @@ export function TerminalsScreen() {
           watchAlerts={watchAlertHistoryBySession[session] || []}
           tags={tags}
           pinned={pinnedSessions.includes(session)}
-          queuedCount={(commandQueue[session] || []).length}
-          queuedCommands={(commandQueue[session] || []).map((entry) => entry.command)}
+          queuedItems={commandQueue[session] || []}
           recordingActive={Boolean(recording?.active)}
           recordingChunks={recording?.chunks.length || 0}
           recordingDurationMs={recordingDuration}

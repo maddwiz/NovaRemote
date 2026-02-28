@@ -123,10 +123,16 @@ export type WatchRule = {
   lastMatch?: string | null;
 };
 
+export type QueuedCommandStatus = "pending" | "sending" | "sent" | "failed";
+
 export type QueuedCommand = {
+  id?: string;
   command: string;
   mode: TerminalSendMode;
   queuedAt: string;
+  status?: QueuedCommandStatus;
+  lastError?: string | null;
+  sentAt?: string | null;
 };
 
 export type RecordingChunk = {

@@ -73,6 +73,7 @@ import {
   ProcessInfo,
   ProcessSignal,
   QueuedCommand,
+  QueuedCommandStatus,
   RecordingChunk,
   RouteTab,
   ServerProfile,
@@ -132,6 +133,39 @@ function makeFleetSessionName(): string {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const suffix = Math.random().toString(36).slice(2, 6);
   return `fleet-${stamp}-${suffix}`;
+}
+
+function makeQueueCommandId(): string {
+  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+}
+
+function queueStatus(item: QueuedCommand): QueuedCommandStatus {
+  if (item.status === "sending" || item.status === "sent" || item.status === "failed") {
+    return item.status;
+  }
+  return "pending";
+}
+
+function normalizeQueuedCommand(item: unknown): QueuedCommand | null {
+  if (!item || typeof item !== "object") {
+    return null;
+  }
+  const raw = item as Record<string, unknown>;
+  const command = typeof raw.command === "string" ? raw.command.trim() : "";
+  if (!command) {
+    return null;
+  }
+  const mode = raw.mode === "ai" ? "ai" : "shell";
+  const status = raw.status === "sending" || raw.status === "sent" || raw.status === "failed" ? raw.status : "pending";
+  return {
+    id: typeof raw.id === "string" && raw.id ? raw.id : makeQueueCommandId(),
+    command,
+    mode,
+    queuedAt: typeof raw.queuedAt === "string" && raw.queuedAt ? raw.queuedAt : new Date().toISOString(),
+    status,
+    lastError: typeof raw.lastError === "string" ? raw.lastError : null,
+    sentAt: typeof raw.sentAt === "string" ? raw.sentAt : null,
+  };
 }
 
 async function endpointAvailable(baseUrl: string, token: string, path: string, init: RequestInit): Promise<boolean> {
@@ -998,7 +1032,18 @@ export default function AppShell() {
       }
       setCommandQueue((prev) => {
         const existing = prev[session] || [];
-        const nextQueue = [...existing, { command: trimmed, mode, queuedAt: new Date().toISOString() }].slice(-50);
+        const nextQueue = [
+          ...existing,
+          {
+            id: makeQueueCommandId(),
+            command: trimmed,
+            mode,
+            queuedAt: new Date().toISOString(),
+            status: "pending" as QueuedCommandStatus,
+            lastError: null,
+            sentAt: null,
+          },
+        ].slice(-50);
         return {
           ...prev,
           [session]: nextQueue,
@@ -1011,37 +1056,114 @@ export default function AppShell() {
   );
 
   const flushSessionQueue = useCallback(
-    async (session: string) => {
-      const queue = commandQueue[session] || [];
-      if (queue.length === 0) {
+    async (session: string, options?: { includeFailed?: boolean }) => {
+      const initialQueue = commandQueue[session] || [];
+      if (initialQueue.length === 0) {
         return 0;
       }
+      const includeFailed = options?.includeFailed ?? true;
 
       if (!connected && !isLocalSession(session)) {
         throw new Error("Reconnect to flush queued commands for this session.");
       }
 
+      const queue = initialQueue.map((item) => (item.id ? item : { ...item, id: makeQueueCommandId() }));
+      if (queue.some((item, index) => initialQueue[index]?.id !== item.id)) {
+        setCommandQueue((prev) => ({ ...prev, [session]: queue }));
+      }
+
+      const shouldFlushItem = (item: QueuedCommand): boolean => {
+        const status = queueStatus(item);
+        if (status === "pending" || status === "sending") {
+          return true;
+        }
+        return includeFailed && status === "failed";
+      };
+
+      const updatable = queue.filter(shouldFlushItem);
+      if (updatable.length === 0) {
+        return 0;
+      }
+
       let sentCount = 0;
-      for (const item of queue) {
+      for (const item of updatable) {
+        const itemId = item.id as string;
+        setCommandQueue((prev) => ({
+          ...prev,
+          [session]: (prev[session] || []).map((entry) =>
+            entry.id === itemId ? { ...entry, status: "sending" as QueuedCommandStatus, lastError: null } : entry
+          ),
+        }));
+
         if (item.mode === "ai" && shouldRouteToExternalAi(session)) {
-          const sent = await sendViaExternalLlm(session, item.command);
-          if (sent) {
-            await addCommand(session, sent);
-            sentCount += 1;
+          try {
+            const sent = await sendViaExternalLlm(session, item.command);
+            if (sent) {
+              await addCommand(session, sent);
+              sentCount += 1;
+              setCommandQueue((prev) => ({
+                ...prev,
+                [session]: (prev[session] || []).map((entry) =>
+                  entry.id === itemId
+                    ? { ...entry, status: "sent" as QueuedCommandStatus, sentAt: new Date().toISOString(), lastError: null }
+                    : entry
+                ),
+              }));
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            setCommandQueue((prev) => ({
+              ...prev,
+              [session]: (prev[session] || []).map((entry) =>
+                entry.id === itemId ? { ...entry, status: "failed" as QueuedCommandStatus, lastError: message } : entry
+              ),
+            }));
           }
           continue;
         }
 
         if (item.mode === "shell" && isLocalSession(session)) {
+          setCommandQueue((prev) => ({
+            ...prev,
+            [session]: (prev[session] || []).map((entry) =>
+              entry.id === itemId
+                ? { ...entry, status: "failed" as QueuedCommandStatus, lastError: "Shell queueing is unavailable for local-only AI sessions." }
+                : entry
+            ),
+          }));
           continue;
         }
 
-        await sendCommand(session, item.command, item.mode, false);
-        await addCommand(session, item.command);
-        sentCount += 1;
+        try {
+          await sendCommand(session, item.command, item.mode, false);
+          await addCommand(session, item.command);
+          sentCount += 1;
+          setCommandQueue((prev) => ({
+            ...prev,
+            [session]: (prev[session] || []).map((entry) =>
+              entry.id === itemId
+                ? { ...entry, status: "sent" as QueuedCommandStatus, sentAt: new Date().toISOString(), lastError: null }
+                : entry
+            ),
+          }));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setCommandQueue((prev) => ({
+            ...prev,
+            [session]: (prev[session] || []).map((entry) =>
+              entry.id === itemId ? { ...entry, status: "failed" as QueuedCommandStatus, lastError: message } : entry
+            ),
+          }));
+        }
       }
 
-      setCommandQueue((prev) => ({ ...prev, [session]: [] }));
+      setCommandQueue((prev) => {
+        const current = prev[session] || [];
+        const retained = current
+          .filter((entry) => queueStatus(entry) !== "sent")
+          .map((entry) => (queueStatus(entry) === "sending" ? { ...entry, status: "pending" as QueuedCommandStatus } : entry));
+        return { ...prev, [session]: retained };
+      });
       return sentCount;
     },
     [addCommand, commandQueue, connected, isLocalSession, sendCommand, sendViaExternalLlm, shouldRouteToExternalAi]
@@ -1253,13 +1375,15 @@ export default function AppShell() {
     if (!connected) {
       return;
     }
-    const pendingSessions = Object.keys(commandQueue).filter((session) => (commandQueue[session] || []).length > 0);
+    const pendingSessions = Object.keys(commandQueue).filter((session) =>
+      (commandQueue[session] || []).some((item) => queueStatus(item) === "pending")
+    );
     if (pendingSessions.length === 0) {
       return;
     }
     pendingSessions.forEach((session) => {
       void runWithStatus(`Flushing queued commands for ${session}`, async () => {
-        const sent = await flushSessionQueue(session);
+        const sent = await flushSessionQueue(session, { includeFailed: false });
         if (sent > 0 && isPro) {
           await notify("Queued commands sent", `${session}: ${sent} command${sent === 1 ? "" : "s"}.`);
         }
@@ -1612,8 +1736,22 @@ export default function AppShell() {
         return;
       }
       try {
-        const parsed = JSON.parse(raw) as Record<string, QueuedCommand[]>;
-        setCommandQueue(parsed && typeof parsed === "object" ? parsed : {});
+        const parsed = JSON.parse(raw) as Record<string, unknown>;
+        if (!parsed || typeof parsed !== "object") {
+          setCommandQueue({});
+          return;
+        }
+        const next: Record<string, QueuedCommand[]> = {};
+        Object.entries(parsed).forEach(([session, value]) => {
+          if (!Array.isArray(value)) {
+            return;
+          }
+          next[session] = value
+            .map((entry) => normalizeQueuedCommand(entry))
+            .filter((entry): entry is QueuedCommand => Boolean(entry))
+            .slice(-50);
+        });
+        setCommandQueue(next);
       } catch {
         setCommandQueue({});
       }
@@ -2142,7 +2280,7 @@ export default function AppShell() {
     onSetTerminalBackgroundOpacity: setTerminalBackgroundOpacity,
     onFlushQueue: (session) => {
       void runWithStatus(`Flushing queued commands for ${session}`, async () => {
-        const sent = await flushSessionQueue(session);
+        const sent = await flushSessionQueue(session, { includeFailed: true });
         if (sent > 0 && isPro) {
           await notify("Queued commands sent", `${session}: ${sent} command${sent === 1 ? "" : "s"}.`);
         }

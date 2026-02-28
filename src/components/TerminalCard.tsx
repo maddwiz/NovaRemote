@@ -13,7 +13,7 @@ import {
 } from "react-native";
 
 import { styles } from "../theme/styles";
-import { AiEnginePreference, ConnectionState, TerminalBackendKind, TerminalSendMode } from "../types";
+import { AiEnginePreference, ConnectionState, QueuedCommand, QueuedCommandStatus, TerminalBackendKind, TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
 
 const SHELL_AUTOCOMPLETE_COMMON: string[] = [
@@ -105,6 +105,14 @@ function backendAutocompleteCommands(backend: TerminalBackendKind | undefined): 
   return [...SHELL_AUTOCOMPLETE_COMMON, ...SHELL_AUTOCOMPLETE_UNIX];
 }
 
+function queueStatus(entry: QueuedCommand): QueuedCommandStatus {
+  const status = entry.status;
+  if (status === "sending" || status === "sent" || status === "failed") {
+    return status;
+  }
+  return "pending";
+}
+
 type TerminalCardProps = {
   session: string;
   sessionAlias: string;
@@ -135,8 +143,7 @@ type TerminalCardProps = {
   watchAlerts: string[];
   tags: string[];
   pinned: boolean;
-  queuedCount: number;
-  queuedCommands: string[];
+  queuedItems: QueuedCommand[];
   recordingActive: boolean;
   recordingChunks: number;
   recordingDurationMs: number;
@@ -207,8 +214,7 @@ export function TerminalCard({
   watchAlerts,
   tags,
   pinned,
-  queuedCount,
-  queuedCommands,
+  queuedItems,
   recordingActive,
   recordingChunks,
   recordingDurationMs,
@@ -304,6 +310,9 @@ export function TerminalCard({
         : streamState === "polling"
           ? "POLL"
           : "OFF";
+  const queuedCount = queuedItems.length;
+  const queuedPending = queuedItems.filter((entry) => queueStatus(entry) === "pending" || queueStatus(entry) === "sending").length;
+  const queuedFailed = queuedItems.filter((entry) => queueStatus(entry) === "failed").length;
 
   const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     const key = event.nativeEvent.key;
@@ -547,21 +556,35 @@ export function TerminalCard({
       {queuedCount > 0 ? (
         <View style={styles.serverCard}>
           <View style={styles.rowInlineSpace}>
-            <Text style={styles.emptyText}>{`${queuedCount} queued command${queuedCount === 1 ? "" : "s"}`}</Text>
+            <Text style={styles.emptyText}>
+              {`${queuedCount} queued (${queuedPending} pending`}
+              {queuedFailed > 0 ? `, ${queuedFailed} failed` : ""}
+              {")"}
+            </Text>
             <Pressable style={styles.actionButton} onPress={onFlushQueue}>
               <Text style={styles.actionButtonText}>Flush Queue</Text>
             </Pressable>
           </View>
-          {queuedCommands.slice(0, 5).map((command, index) => (
-            <View key={`${session}-queue-${index}`} style={styles.rowInlineSpace}>
-              <Text style={styles.serverSubtitle}>{command}</Text>
-              <Pressable style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
-                <Text style={styles.actionDangerText}>Remove</Text>
-              </Pressable>
-            </View>
-          ))}
-          {queuedCommands.length > 5 ? (
-            <Text style={styles.emptyText}>{`+${queuedCommands.length - 5} more queued`}</Text>
+          {queuedItems.slice(0, 5).map((entry, index) => {
+            const status = queueStatus(entry);
+            return (
+              <View key={`${entry.id || session}-${index}`} style={styles.serverCard}>
+                <View style={styles.rowInlineSpace}>
+                  <Text style={styles.serverSubtitle}>{entry.command}</Text>
+                  <Text style={styles.emptyText}>{status.toUpperCase()}</Text>
+                </View>
+                {status === "failed" && entry.lastError ? <Text style={styles.emptyText}>{entry.lastError}</Text> : null}
+                <View style={styles.rowInlineSpace}>
+                  <Text style={styles.emptyText}>{new Date(entry.queuedAt).toLocaleTimeString()}</Text>
+                  <Pressable style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
+                    <Text style={styles.actionDangerText}>Remove</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+          {queuedItems.length > 5 ? (
+            <Text style={styles.emptyText}>{`+${queuedItems.length - 5} more queued`}</Text>
           ) : null}
         </View>
       ) : null}
