@@ -4,6 +4,7 @@ import {
   AiEnginePreference,
   FleetRunResult,
   HealthMetrics,
+  ProcessInfo,
   QueuedCommand,
   SessionRecording,
   ServerCapabilities,
@@ -54,6 +55,8 @@ export type TerminalsViewModel = {
   fleetBusy: boolean;
   fleetWaitMs: string;
   fleetResults: FleetRunResult[];
+  processes: ProcessInfo[];
+  processesBusy: boolean;
   suggestionsBySession: Record<string, string[]>;
   suggestionBusyBySession: Record<string, boolean>;
   watchRules: Record<string, WatchRule>;
@@ -92,6 +95,8 @@ export type TerminalsViewModel = {
   onSetFleetCwd: (value: string) => void;
   onToggleFleetTarget: (serverId: string) => void;
   onSetFleetWaitMs: (value: string) => void;
+  onRefreshProcesses: () => void;
+  onKillProcess: (pid: number) => void;
   onRequestSuggestions: (session: string) => void;
   onUseSuggestion: (session: string, value: string) => void;
   onToggleWatch: (session: string, enabled: boolean) => void;

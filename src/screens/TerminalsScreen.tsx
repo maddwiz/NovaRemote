@@ -112,6 +112,8 @@ export function TerminalsScreen() {
     fleetBusy,
     fleetWaitMs,
     fleetResults,
+    processes,
+    processesBusy,
     suggestionsBySession,
     suggestionBusyBySession,
     watchRules,
@@ -150,6 +152,8 @@ export function TerminalsScreen() {
     onSetFleetCwd,
     onToggleFleetTarget,
     onSetFleetWaitMs,
+    onRefreshProcesses,
+    onKillProcess,
     onRequestSuggestions,
     onUseSuggestion,
     onToggleWatch,
@@ -495,6 +499,35 @@ export function TerminalsScreen() {
           </>
         ) : (
           <Text style={styles.emptyText}>This server does not expose `/sys/stats`.</Text>
+        )}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Process Manager</Text>
+        {capabilities.processes ? (
+          <>
+            <View style={styles.rowInlineSpace}>
+              <Text style={styles.serverSubtitle}>{`${processes.length} processes`}</Text>
+              <Pressable style={[styles.actionButton, processesBusy ? styles.buttonDisabled : null]} onPress={onRefreshProcesses} disabled={processesBusy}>
+                <Text style={styles.actionButtonText}>{processesBusy ? "Refreshing..." : "Refresh"}</Text>
+              </Pressable>
+            </View>
+            {processes.slice(0, 12).map((process) => (
+              <View key={`proc-${process.pid}`} style={styles.serverCard}>
+                <Text style={styles.serverName}>{`${process.name} (PID ${process.pid})`}</Text>
+                <Text style={styles.serverSubtitle}>{`CPU ${formatNumber(process.cpu_percent, 1)}% · MEM ${formatNumber(process.mem_percent, 1)}% · Uptime ${formatNumber(process.uptime_seconds, 0)}s`}</Text>
+                {process.command ? <Text style={styles.emptyText}>{process.command}</Text> : null}
+                <View style={styles.actionsWrap}>
+                  <Pressable style={styles.actionDangerButton} onPress={() => onKillProcess(process.pid)}>
+                    <Text style={styles.actionDangerText}>Kill</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+            {processes.length > 12 ? <Text style={styles.emptyText}>Showing top 12 by CPU.</Text> : null}
+          </>
+        ) : (
+          <Text style={styles.emptyText}>This server does not expose `/proc/list` and `/proc/kill`.</Text>
         )}
       </View>
 

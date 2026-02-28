@@ -12,6 +12,7 @@ const EMPTY_CAPABILITIES: ServerCapabilities = {
   macAttach: false,
   stream: false,
   sysStats: false,
+  processes: false,
 };
 
 type UseServerCapabilitiesArgs = {
@@ -177,7 +178,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         (readPath(manifestRoot, "features") as Record<string, unknown> | undefined) ||
         manifestRoot;
 
-      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe] = await Promise.all([
+      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe, procListProbe] = await Promise.all([
         endpointExists(baseUrl, token, "/tmux/sessions"),
         endpointExists(baseUrl, token, "/terminal/sessions"),
         endpointExists(baseUrl, token, "/files/list?path=%2F"),
@@ -185,6 +186,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         endpointSupportsAction(baseUrl, token, "/mac/attach"),
         endpointSupportsAction(baseUrl, token, "/codex/start"),
         endpointExists(baseUrl, token, "/sys/stats"),
+        endpointExists(baseUrl, token, "/proc/list"),
       ]);
 
       const manifestTerminal = readBool(manifest, [
@@ -209,6 +211,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
       ]);
       const manifestStream = readBool(manifest, ["stream.available", "stream", "terminal.stream", "tmux.stream"]);
       const manifestSysStats = readBool(manifest, ["sys.stats", "sysStats", "stats.system", "system.stats"]);
+      const manifestProcesses = readBool(manifest, ["proc.list", "proc", "processes", "process.list"]);
 
       const terminalAvailable = manifestTerminal ?? (terminalSessions || tmuxSessions);
       const next: ServerCapabilities = {
@@ -220,6 +223,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         macAttach: manifestMacAttach ?? macAttachProbe,
         stream: manifestStream ?? terminalAvailable,
         sysStats: manifestSysStats ?? sysStatsProbe,
+        processes: manifestProcesses ?? procListProbe,
       };
 
       const nextApiKind = pickTerminalApiKind(manifest, terminalSessions, tmuxSessions);
@@ -265,6 +269,9 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
     }
     if (capabilities.sysStats) {
       features.push("sys-stats");
+    }
+    if (capabilities.processes) {
+      features.push("proc");
     }
     return features.join(", ");
   }, [activeServer?.terminalBackend, capabilities, terminalApiKind]);

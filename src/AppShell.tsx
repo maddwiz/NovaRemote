@@ -70,6 +70,7 @@ import { buildTerminalAppearance } from "./theme/terminalTheme";
 import {
   AiEnginePreference,
   FleetRunResult,
+  ProcessInfo,
   QueuedCommand,
   RecordingChunk,
   RouteTab,
@@ -260,6 +261,40 @@ function inferSessionAlias(session: string, output: string, commands: string[]):
   return "";
 }
 
+function normalizeProcessList(payload: unknown): ProcessInfo[] {
+  const source = Array.isArray(payload)
+    ? payload
+    : payload && typeof payload === "object" && Array.isArray((payload as { processes?: unknown[] }).processes)
+      ? (payload as { processes: unknown[] }).processes
+      : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown[] }).items)
+        ? (payload as { items: unknown[] }).items
+        : [];
+
+  return source
+    .map((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return null;
+      }
+      const raw = entry as Record<string, unknown>;
+      const pid = Number(raw.pid);
+      if (!Number.isFinite(pid) || pid <= 0) {
+        return null;
+      }
+      return {
+        pid,
+        name: typeof raw.name === "string" ? raw.name : typeof raw.command === "string" ? raw.command.split(" ")[0] || "process" : "process",
+        cpu_percent: typeof raw.cpu_percent === "number" ? raw.cpu_percent : typeof raw.cpu === "number" ? raw.cpu : undefined,
+        mem_percent: typeof raw.mem_percent === "number" ? raw.mem_percent : typeof raw.mem === "number" ? raw.mem : undefined,
+        uptime_seconds:
+          typeof raw.uptime_seconds === "number" ? raw.uptime_seconds : typeof raw.uptime === "number" ? raw.uptime : undefined,
+        user: typeof raw.user === "string" ? raw.user : undefined,
+        command: typeof raw.command === "string" ? raw.command : undefined,
+      } as ProcessInfo;
+    })
+    .filter((entry): entry is ProcessInfo => Boolean(entry))
+    .sort((a, b) => (b.cpu_percent || 0) - (a.cpu_percent || 0));
+}
+
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -283,6 +318,8 @@ export default function AppShell() {
   const [commandQueue, setCommandQueue] = useState<Record<string, QueuedCommand[]>>({});
   const [recordings, setRecordings] = useState<Record<string, SessionRecording>>({});
   const [sysStats, setSysStats] = useState<SysStats | null>(null);
+  const [processes, setProcesses] = useState<ProcessInfo[]>([]);
+  const [processesBusy, setProcessesBusy] = useState<boolean>(false);
   const [playbackSession, setPlaybackSession] = useState<string | null>(null);
   const [playbackTimeMs, setPlaybackTimeMs] = useState<number>(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
@@ -651,6 +688,20 @@ export default function AppShell() {
     },
     [activeProfile, commandHistory, drafts, sendPrompt, tails]
   );
+
+  const refreshProcesses = useCallback(async () => {
+    if (!activeServer || !connected || !capabilities.processes) {
+      setProcesses([]);
+      return;
+    }
+    setProcessesBusy(true);
+    try {
+      const payload = await apiRequest<unknown>(activeServer.baseUrl, activeServer.token, "/proc/list");
+      setProcesses(normalizeProcessList(payload));
+    } finally {
+      setProcessesBusy(false);
+    }
+  }, [activeServer, capabilities.processes, connected]);
 
   const runWithStatus = useCallback(
     async (label: string, fn: () => Promise<void>) => {
@@ -1248,6 +1299,18 @@ export default function AppShell() {
     };
   }, [activeServer, capabilities.sysStats, connected]);
 
+  useEffect(() => {
+    if (!connected || !capabilities.processes) {
+      setProcesses([]);
+      return;
+    }
+    void refreshProcesses();
+    const id = setInterval(() => {
+      void refreshProcesses();
+    }, 5000);
+    return () => clearInterval(id);
+  }, [capabilities.processes, connected, refreshProcesses]);
+
   const activePlaybackRecording = playbackSession ? recordings[playbackSession] || null : null;
   const playbackDuration = recordingDurationMs(activePlaybackRecording);
   const playbackOutput = useMemo(
@@ -1365,6 +1428,8 @@ export default function AppShell() {
     fleetBusy,
     fleetWaitMs,
     fleetResults,
+    processes,
+    processesBusy,
     suggestionsBySession,
     suggestionBusyBySession,
     watchRules,
@@ -1603,6 +1668,23 @@ export default function AppShell() {
       setFleetTargets((prev) => (prev.includes(serverId) ? prev.filter((id) => id !== serverId) : [...prev, serverId]));
     },
     onSetFleetWaitMs: setFleetWaitMs,
+    onRefreshProcesses: () => {
+      void runWithStatus("Refreshing processes", async () => {
+        await refreshProcesses();
+      });
+    },
+    onKillProcess: (pid) => {
+      void runWithStatus(`Killing PID ${pid}`, async () => {
+        if (!activeServer || !connected || !capabilities.processes) {
+          throw new Error("Process manager is unavailable on the active server.");
+        }
+        await apiRequest(activeServer.baseUrl, activeServer.token, "/proc/kill", {
+          method: "POST",
+          body: JSON.stringify({ pid, signal: "TERM" }),
+        });
+        await refreshProcesses();
+      });
+    },
     onRequestSuggestions: (session) => {
       void runWithStatus(`Generating suggestions for ${session}`, async () => {
         await requestShellSuggestions(session);

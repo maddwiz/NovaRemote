@@ -99,6 +99,7 @@ export type ServerCapabilities = {
   macAttach: boolean;
   stream: boolean;
   sysStats: boolean;
+  processes: boolean;
 };
 
 export type TerminalApiKind = "tmux" | "terminal";
@@ -151,6 +152,16 @@ export type SysStats = {
   uptime_seconds?: number;
   host?: string;
   platform?: string;
+};
+
+export type ProcessInfo = {
+  pid: number;
+  name: string;
+  cpu_percent?: number;
+  mem_percent?: number;
+  uptime_seconds?: number;
+  user?: string;
+  command?: string;
 };
 
 export type TerminalThemePresetId = "nova" | "solarized_dark" | "monokai" | "dracula" | "nord" | "one_dark";
