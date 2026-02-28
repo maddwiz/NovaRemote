@@ -40,6 +40,7 @@ export type TerminalsViewModel = {
   hasExternalLlm: boolean;
   localAiSessions: string[];
   historyCount: Record<string, number>;
+  sessionAliases: Record<string, string>;
   sessionTags: Record<string, string[]>;
   allTags: string[];
   tagFilter: string;
@@ -79,6 +80,8 @@ export type TerminalsViewModel = {
   onHistoryPrev: (session: string) => void;
   onHistoryNext: (session: string) => void;
   onSetTags: (session: string, raw: string) => void;
+  onSetSessionAlias: (session: string, alias: string) => void;
+  onAutoNameSession: (session: string) => void;
   onSetDraft: (session: string, value: string) => void;
   onSend: (session: string) => void;
   onClearDraft: (session: string) => void;

@@ -17,6 +17,7 @@ export const STORAGE_TERMINAL_THEME = "novaremote.terminal_theme.v1";
 export const STORAGE_WATCH_RULES_PREFIX = "novaremote.watch_rules.v1";
 export const STORAGE_PINNED_SESSIONS_PREFIX = "novaremote.pinned_sessions.v1";
 export const STORAGE_COMMAND_QUEUE_PREFIX = "novaremote.command_queue.v1";
+export const STORAGE_SESSION_ALIASES_PREFIX = "novaremote.session_aliases.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";

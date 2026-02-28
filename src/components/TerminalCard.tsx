@@ -56,6 +56,7 @@ const SHELL_AUTOCOMPLETE_COMMANDS: string[] = [
 
 type TerminalCardProps = {
   session: string;
+  sessionAlias: string;
   output: string;
   draft: string;
   isSending: boolean;
@@ -95,6 +96,8 @@ type TerminalCardProps = {
   onHistoryPrev: () => void;
   onHistoryNext: () => void;
   onTagsChange: (raw: string) => void;
+  onSessionAliasChange: (value: string) => void;
+  onAutoName: () => void;
   onDraftChange: (value: string) => void;
   onRequestSuggestions: () => void;
   onUseSuggestion: (value: string) => void;
@@ -112,6 +115,7 @@ type TerminalCardProps = {
 
 export function TerminalCard({
   session,
+  sessionAlias,
   output,
   draft,
   isSending,
@@ -151,6 +155,8 @@ export function TerminalCard({
   onHistoryPrev,
   onHistoryNext,
   onTagsChange,
+  onSessionAliasChange,
+  onAutoName,
   onDraftChange,
   onRequestSuggestions,
   onUseSuggestion,
@@ -219,7 +225,10 @@ export function TerminalCard({
     <View style={styles.terminalCard}>
       <View style={styles.terminalHeader}>
         <View style={styles.terminalNameRow}>
-          <Text style={styles.terminalName}>{session}</Text>
+          <View style={styles.flexButton}>
+            <Text style={styles.terminalName}>{sessionAlias.trim() || session}</Text>
+            {sessionAlias.trim() ? <Text style={styles.serverSubtitle}>{session}</Text> : null}
+          </View>
           <View style={styles.pillGroup}>
             <Text style={[styles.modePill, mode === "ai" ? styles.modePillAi : styles.modePillShell]}>
               {mode.toUpperCase()}
@@ -308,6 +317,9 @@ export function TerminalCard({
           </Pressable>
           <Pressable style={[styles.actionDangerButton, !canStop ? styles.buttonDisabled : null]} onPress={onStop} disabled={!canStop}>
             <Text style={styles.actionDangerText}>Stop</Text>
+          </Pressable>
+          <Pressable style={styles.actionButton} onPress={onAutoName}>
+            <Text style={styles.actionButtonText}>Auto Name</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={onHide}>
             <Text style={styles.actionButtonText}>Hide</Text>
@@ -410,6 +422,15 @@ export function TerminalCard({
         </Pressable>
         <Text style={styles.emptyText}>{`History ${historyCount}`}</Text>
       </View>
+
+      <TextInput
+        style={styles.input}
+        value={sessionAlias}
+        onChangeText={onSessionAliasChange}
+        placeholder="Session label (optional)"
+        placeholderTextColor="#7f7aa8"
+        autoCorrect={false}
+      />
 
       <TextInput
         style={styles.input}

@@ -21,7 +21,8 @@ function renderSessionChips(
   onToggleSessionVisible: (session: string) => void,
   sessionTags: Record<string, string[]>,
   tagFilter: string,
-  pinnedSessions: string[]
+  pinnedSessions: string[],
+  sessionAliases: Record<string, string>
 ) {
   const normalizedFilter = tagFilter.trim().toLowerCase();
   const pinnedSet = new Set(pinnedSessions);
@@ -40,10 +41,11 @@ function renderSessionChips(
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
       {visible.map((session) => {
         const active = openSessions.includes(session);
+        const label = sessionAliases[session]?.trim() || session;
         return (
           <Pressable key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleSessionVisible(session)}>
             <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
-              {active ? `Open - ${session}` : session}
+              {active ? `Open - ${label}` : label}
               {pinnedSet.has(session) ? " • PIN" : ""}
             </Text>
           </Pressable>
@@ -90,6 +92,7 @@ export function TerminalsScreen() {
     hasExternalLlm,
     localAiSessions,
     historyCount,
+    sessionAliases,
     sessionTags,
     allTags,
     tagFilter,
@@ -129,6 +132,8 @@ export function TerminalsScreen() {
     onHistoryPrev,
     onHistoryNext,
     onSetTags,
+    onSetSessionAlias,
+    onAutoNameSession,
     onSetDraft,
     onSend,
     onClearDraft,
@@ -179,6 +184,7 @@ export function TerminalsScreen() {
         <TerminalCard
           key={session}
           session={session}
+          sessionAlias={sessionAliases[session] || ""}
           output={output}
           draft={draft}
           isSending={isSending}
@@ -219,6 +225,8 @@ export function TerminalsScreen() {
           onHistoryPrev={() => onHistoryPrev(session)}
           onHistoryNext={() => onHistoryNext(session)}
           onTagsChange={(raw) => onSetTags(session, raw)}
+          onSessionAliasChange={(value) => onSetSessionAlias(session, value)}
+          onAutoName={() => onAutoNameSession(session)}
           onDraftChange={(value) => onSetDraft(session, value)}
           onRequestSuggestions={() => onRequestSuggestions(session)}
           onUseSuggestion={(value) => onUseSuggestion(session, value)}
@@ -243,6 +251,7 @@ export function TerminalsScreen() {
     drafts,
     hasExternalLlm,
     historyCount,
+    sessionAliases,
     pinnedSessions,
     commandQueue,
     recordings,
@@ -259,6 +268,8 @@ export function TerminalsScreen() {
     onSetSessionMode,
     onSetSessionAiEngine,
     onSetTags,
+    onSetSessionAlias,
+    onAutoNameSession,
     onSetWatchPattern,
     onStopSession,
     onSyncSession,
@@ -275,6 +286,7 @@ export function TerminalsScreen() {
     sendModes,
     suggestionBusyBySession,
     suggestionsBySession,
+    sessionAliases,
     sessionTags,
     streamLive,
     sortedOpenSessions,
@@ -548,7 +560,7 @@ export function TerminalsScreen() {
         {allSessions.length === 0 ? (
           <Text style={styles.emptyText}>No sessions found yet.</Text>
         ) : (
-          renderSessionChips(sortedAllSessions, openSessions, onToggleSessionVisible, sessionTags, tagFilter, pinnedSessions)
+          renderSessionChips(sortedAllSessions, openSessions, onToggleSessionVisible, sessionTags, tagFilter, pinnedSessions, sessionAliases)
         )}
       </View>
     </>

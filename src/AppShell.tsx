@@ -49,6 +49,7 @@ import { useRevenueCat } from "./hooks/useRevenueCat";
 import { useSafetyPolicy } from "./hooks/useSafetyPolicy";
 import { useServers } from "./hooks/useServers";
 import { useSessionTags } from "./hooks/useSessionTags";
+import { useSessionAliases } from "./hooks/useSessionAliases";
 import { useServerCapabilities } from "./hooks/useServerCapabilities";
 import { useSnippets } from "./hooks/useSnippets";
 import { useTerminalSessions } from "./hooks/useTerminalSessions";
@@ -225,6 +226,39 @@ function recordingDurationMs(recording: SessionRecording | null): number {
   return recording.chunks[recording.chunks.length - 1]?.atMs || 0;
 }
 
+function inferSessionAlias(session: string, output: string, commands: string[]): string {
+  const lowerSession = session.toLowerCase();
+  const lowerOutput = output.toLowerCase();
+  const commandBlob = commands.join("\n").toLowerCase();
+  const haystack = `${lowerSession}\n${lowerOutput}\n${commandBlob}`;
+
+  if (lowerSession.startsWith("llm-") || lowerSession.includes("codex") || haystack.includes("assistant")) {
+    return "AI Assistant";
+  }
+  if (/npm run dev|pnpm dev|yarn dev|vite|next dev|webpack-dev-server/.test(haystack)) {
+    return "Dev Server";
+  }
+  if (/pytest|jest|vitest|go test|cargo test/.test(haystack)) {
+    return "Test Runner";
+  }
+  if (/docker compose|kubectl|helm|k8s/.test(haystack)) {
+    return "Infra Ops";
+  }
+  if (/deploy|terraform|ansible/.test(haystack)) {
+    return "Deploy";
+  }
+  if (/python .*train|epoch|loss:/.test(haystack)) {
+    return "Training";
+  }
+  if (/git status|git log|git diff|merge conflict|rebase/.test(haystack)) {
+    return "Git";
+  }
+  if (/tail -f|journalctl|error|warn|stack trace/.test(haystack)) {
+    return "Logs";
+  }
+  return "";
+}
+
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -372,6 +406,7 @@ export default function AppShell() {
   );
 
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(activeServerId);
+  const { sessionAliases, setAliasForSession, removeMissingAliases } = useSessionAliases(activeServerId);
   const { sessionTags, allTags, setTagsForSession, removeMissingSessions } = useSessionTags(activeServerId);
   const { pinnedSessions, togglePinnedSession, removeMissingPins } = usePinnedSessions(activeServerId);
   const {
@@ -955,6 +990,10 @@ export default function AppShell() {
   }, [allSessions, removeMissingSessions]);
 
   useEffect(() => {
+    void removeMissingAliases(allSessions);
+  }, [allSessions, removeMissingAliases]);
+
+  useEffect(() => {
     void removeMissingPins(allSessions);
   }, [allSessions, removeMissingPins]);
 
@@ -1044,6 +1083,17 @@ export default function AppShell() {
       return next;
     });
   }, [allSessions, localAiSessions]);
+
+  useEffect(() => {
+    const unnamed = allSessions.filter((session) => !(sessionAliases[session] || "").trim());
+    unnamed.forEach((session) => {
+      const guess = inferSessionAlias(session, tails[session] || "", commandHistory[session] || []);
+      if (!guess) {
+        return;
+      }
+      void setAliasForSession(session, guess);
+    });
+  }, [allSessions, commandHistory, sessionAliases, setAliasForSession, tails]);
 
   useEffect(() => {
     setSuggestionsBySession((prev) => {
@@ -1272,6 +1322,7 @@ export default function AppShell() {
     hasExternalLlm: Boolean(activeProfile),
     localAiSessions,
     historyCount,
+    sessionAliases,
     sessionTags,
     allTags,
     tagFilter,
@@ -1409,6 +1460,7 @@ export default function AppShell() {
           exported_at: new Date().toISOString(),
           server: activeServer?.name || "",
           session,
+          alias: sessionAliases[session] || "",
           mode: sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell"),
           commands: commandHistory[session] || [],
           output: tails[session] || "",
@@ -1456,6 +1508,18 @@ export default function AppShell() {
     },
     onSetTags: (session, raw) => {
       void setTagsForSession(session, parseCommaTags(raw));
+    },
+    onSetSessionAlias: (session, alias) => {
+      void setAliasForSession(session, alias);
+    },
+    onAutoNameSession: (session) => {
+      const guess = inferSessionAlias(session, tails[session] || "", commandHistory[session] || []);
+      if (!guess) {
+        setStatus({ text: `No obvious alias detected for ${session}.`, error: false });
+        return;
+      }
+      void setAliasForSession(session, guess);
+      setStatus({ text: `${session} renamed to ${guess}.`, error: false });
     },
     onSetDraft: (session, value) => {
       setDrafts((prev) => ({
