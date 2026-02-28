@@ -345,6 +345,18 @@ function inferSessionAlias(session: string, output: string, commands: string[]):
 }
 
 function adaptCommandForBackend(command: string, backend: TerminalBackendKind | undefined): string {
+  const parts = command.split(/(\|\||&&|;|\|)/);
+  if (parts.length > 1) {
+    return parts
+      .map((part, index) => {
+        if (index % 2 === 1) {
+          return part;
+        }
+        return adaptCommandForBackend(part, backend);
+      })
+      .join("");
+  }
+
   const trimmed = command.trim();
   if (!trimmed) {
     return command;
@@ -468,11 +480,23 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
 }
 
 function normalizeProcessList(payload: unknown): ProcessInfo[] {
+  const hasPidShape = (value: unknown[]): boolean =>
+    value.some((entry) => {
+      if (!entry || typeof entry !== "object") {
+        return false;
+      }
+      const raw = entry as Record<string, unknown>;
+      return Number.isFinite(Number(raw.pid));
+    });
+
   const source = Array.isArray(payload)
     ? payload
     : payload && typeof payload === "object" && Array.isArray((payload as { processes?: unknown[] }).processes)
       ? (payload as { processes: unknown[] }).processes
-      : payload && typeof payload === "object" && Array.isArray((payload as { items?: unknown[] }).items)
+      : payload &&
+          typeof payload === "object" &&
+          Array.isArray((payload as { items?: unknown[] }).items) &&
+          hasPidShape((payload as { items: unknown[] }).items)
         ? (payload as { items: unknown[] }).items
         : [];
 
@@ -635,6 +659,7 @@ export default function AppShell() {
   const recordingTailRef = useRef<Record<string, string>>({});
   const triageHintRef = useRef<Record<string, string>>({});
   const presenceInFlightRef = useRef<Set<string>>(new Set());
+  const aliasGuessRef = useRef<Record<string, string>>({});
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -1397,6 +1422,10 @@ export default function AppShell() {
     if (!isPro) {
       return;
     }
+    const enabledRules = Object.values(watchRules).some((rule) => Boolean(rule?.enabled && rule.pattern?.trim()));
+    if (!enabledRules) {
+      return;
+    }
 
     const matchesBySession: Record<string, string> = {};
     for (const session of Object.keys(watchRules)) {
@@ -1551,13 +1580,10 @@ export default function AppShell() {
     }
     pendingSessions.forEach((session) => {
       void runWithStatus(`Flushing queued commands for ${session}`, async () => {
-        const sent = await flushSessionQueue(session, { includeFailed: false });
-        if (sent > 0 && isPro) {
-          await notify("Queued commands sent", `${session}: ${sent} command${sent === 1 ? "" : "s"}.`);
-        }
+        await flushSessionQueue(session, { includeFailed: false });
       });
     });
-  }, [commandQueue, connected, flushSessionQueue, isPro, notify, runWithStatus, sessionReadOnly]);
+  }, [commandQueue, connected, flushSessionQueue, runWithStatus, sessionReadOnly]);
 
   useEffect(() => {
     return () => {
@@ -1595,16 +1621,16 @@ export default function AppShell() {
     if (!connected || !capabilities.collaboration || remoteOpenSessions.length === 0) {
       return;
     }
-    remoteOpenSessions.forEach((session) => {
-      void refreshSessionPresence(session, false);
-    });
+    const targetSession = focusedSession && remoteOpenSessions.includes(focusedSession) ? focusedSession : remoteOpenSessions[0];
+    if (!targetSession) {
+      return;
+    }
+    void refreshSessionPresence(targetSession, false);
     const id = setInterval(() => {
-      remoteOpenSessions.forEach((session) => {
-        void refreshSessionPresence(session, false);
-      });
+      void refreshSessionPresence(targetSession, false);
     }, COLLAB_POLL_INTERVAL_MS);
     return () => clearInterval(id);
-  }, [capabilities.collaboration, connected, refreshSessionPresence, remoteOpenSessions]);
+  }, [capabilities.collaboration, connected, focusedSession, refreshSessionPresence, remoteOpenSessions]);
 
   useEffect(() => {
     if (connected && capabilities.collaboration) {
@@ -1768,11 +1794,23 @@ export default function AppShell() {
 
   useEffect(() => {
     const unnamed = allSessions.filter((session) => !(sessionAliases[session] || "").trim());
+    if (unnamed.length === 0) {
+      return;
+    }
+    const pending: Array<{ session: string; guess: string; fingerprint: string }> = [];
     unnamed.forEach((session) => {
       const guess = inferSessionAlias(session, tails[session] || "", commandHistory[session] || []);
       if (!guess) {
         return;
       }
+      const fingerprint = `${guess}::${(commandHistory[session] || []).length}::${(tails[session] || "").slice(-240)}`;
+      if (aliasGuessRef.current[session] === fingerprint) {
+        return;
+      }
+      aliasGuessRef.current[session] = fingerprint;
+      pending.push({ session, guess, fingerprint });
+    });
+    pending.forEach(({ session, guess }) => {
       void setAliasForSession(session, guess);
     });
   }, [allSessions, commandHistory, sessionAliases, setAliasForSession, tails]);
@@ -2135,7 +2173,7 @@ export default function AppShell() {
     if (!playbackPlaying || !activePlaybackRecording) {
       return;
     }
-    const tickMs = 160;
+    const tickMs = 80;
     const id = setInterval(() => {
       setPlaybackTimeMs((prev) => {
         const next = prev + Math.round(tickMs * playbackSpeed);
@@ -2476,9 +2514,6 @@ export default function AppShell() {
         const sent = await handleSend(session);
         if (sent) {
           await addCommand(session, sent);
-          if (isPro) {
-            await notify("Command sent", `${session}: ${sent.slice(0, 80)}`);
-          }
         }
       });
     },
@@ -2609,10 +2644,7 @@ export default function AppShell() {
     onSetTerminalBackgroundOpacity: setTerminalBackgroundOpacity,
     onFlushQueue: (session) => {
       void runWithStatus(`Flushing queued commands for ${session}`, async () => {
-        const sent = await flushSessionQueue(session, { includeFailed: true });
-        if (sent > 0 && isPro) {
-          await notify("Queued commands sent", `${session}: ${sent} command${sent === 1 ? "" : "s"}.`);
-        }
+        await flushSessionQueue(session, { includeFailed: true });
       });
     },
     onRemoveQueuedCommand: (session, index) => {
@@ -2828,9 +2860,6 @@ export default function AppShell() {
                   }
                   await sendCommand(session, command, mode, false);
                   await addCommand(session, command);
-                  if (isPro) {
-                    await notify("Snippet sent", `${session}: ${command.slice(0, 80)}`);
-                  }
                 });
               }}
             />
