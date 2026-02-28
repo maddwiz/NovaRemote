@@ -13,10 +13,10 @@ import {
 } from "react-native";
 
 import { styles } from "../theme/styles";
-import { AiEnginePreference, ConnectionState, TerminalSendMode } from "../types";
+import { AiEnginePreference, ConnectionState, TerminalBackendKind, TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
 
-const SHELL_AUTOCOMPLETE_COMMANDS: string[] = [
+const SHELL_AUTOCOMPLETE_COMMON: string[] = [
   "git status",
   "git pull --rebase",
   "git checkout -b feature/",
@@ -37,6 +37,10 @@ const SHELL_AUTOCOMPLETE_COMMANDS: string[] = [
   "docker compose logs -f",
   "kubectl get pods -A",
   "kubectl describe pod ",
+  "kubectl logs -f ",
+];
+
+const SHELL_AUTOCOMPLETE_UNIX: string[] = [
   "ls -la",
   "pwd",
   "cd ",
@@ -53,6 +57,53 @@ const SHELL_AUTOCOMPLETE_COMMANDS: string[] = [
   "tmux ls",
   "tmux attach -t ",
 ];
+
+const SHELL_AUTOCOMPLETE_POWERSHELL: string[] = [
+  "Get-ChildItem",
+  "Get-Location",
+  "Set-Location ",
+  "Get-Content ",
+  "Get-Content -Tail 100 -Wait ",
+  "Select-String -Path .\\* -Pattern \"\"",
+  "Get-Process",
+  "Stop-Process -Id ",
+  "Get-Service",
+  "Restart-Service -Name ",
+  "Copy-Item -Recurse ",
+  "Move-Item ",
+  "Remove-Item -Recurse -Force ",
+  "Invoke-WebRequest -Uri ",
+  "Test-Connection -Count 4 ",
+];
+
+const SHELL_AUTOCOMPLETE_CMD: string[] = [
+  "dir",
+  "cd",
+  "type ",
+  "findstr /S /I \"\" *",
+  "tasklist",
+  "taskkill /PID  /F",
+  "copy ",
+  "move ",
+  "del /F ",
+  "rmdir /S /Q ",
+  "ipconfig /all",
+  "ping -n 4 ",
+  "where ",
+];
+
+function backendAutocompleteCommands(backend: TerminalBackendKind | undefined): string[] {
+  if (backend === "powershell") {
+    return [...SHELL_AUTOCOMPLETE_COMMON, ...SHELL_AUTOCOMPLETE_POWERSHELL];
+  }
+  if (backend === "cmd") {
+    return [...SHELL_AUTOCOMPLETE_COMMON, ...SHELL_AUTOCOMPLETE_CMD];
+  }
+  if (backend === "auto") {
+    return [...SHELL_AUTOCOMPLETE_COMMON, ...SHELL_AUTOCOMPLETE_UNIX, ...SHELL_AUTOCOMPLETE_POWERSHELL, ...SHELL_AUTOCOMPLETE_CMD];
+  }
+  return [...SHELL_AUTOCOMPLETE_COMMON, ...SHELL_AUTOCOMPLETE_UNIX];
+}
 
 type TerminalCardProps = {
   session: string;
@@ -90,6 +141,7 @@ type TerminalCardProps = {
   recordingChunks: number;
   recordingDurationMs: number;
   historySuggestions: string[];
+  terminalBackend?: TerminalBackendKind;
   terminalViewStyle?: StyleProp<ViewStyle>;
   terminalTextStyle?: StyleProp<TextStyle>;
   onSetMode: (mode: TerminalSendMode) => void;
@@ -161,6 +213,7 @@ export function TerminalCard({
   recordingChunks,
   recordingDurationMs,
   historySuggestions,
+  terminalBackend,
   terminalViewStyle,
   terminalTextStyle,
   onSetMode,
@@ -204,7 +257,7 @@ export function TerminalCard({
     if (normalized.length < 1) {
       return [];
     }
-    const source = [...historySuggestions.slice().reverse(), ...SHELL_AUTOCOMPLETE_COMMANDS];
+    const source = [...historySuggestions.slice().reverse(), ...backendAutocompleteCommands(terminalBackend)];
     const seen = new Set<string>();
     const ranked = source
       .map((command) => command.trim())
@@ -229,7 +282,7 @@ export function TerminalCard({
         return a.length - b.length;
       });
     return ranked.filter((command) => command.toLowerCase() !== normalized).slice(0, 6);
-  }, [draft, historySuggestions, mode]);
+  }, [draft, historySuggestions, mode, terminalBackend]);
 
   const streamState: "live" | "reconnecting" | "polling" | "disconnected" | "local" =
     isLocalOnly

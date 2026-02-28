@@ -310,38 +310,59 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
     return command;
   }
 
-  const windows = backend === "powershell" || backend === "cmd";
+  const isPowerShell = backend === "powershell";
+  const isCmd = backend === "cmd";
+  const windows = isPowerShell || isCmd;
   const unixLike = !windows;
   const [first] = trimmed.split(/\s+/);
   const lower = first.toLowerCase();
 
   if (windows) {
     if (lower === "ls") {
-      return trimmed.replace(/^ls\b/i, "dir");
+      return trimmed.replace(/^ls\b/i, isPowerShell ? "Get-ChildItem" : "dir");
     }
     if (lower === "pwd") {
-      return trimmed.replace(/^pwd\b/i, "cd");
+      return trimmed.replace(/^pwd\b/i, isPowerShell ? "Get-Location" : "cd");
     }
     if (lower === "cat") {
-      return trimmed.replace(/^cat\b/i, "type");
+      return trimmed.replace(/^cat\b/i, isPowerShell ? "Get-Content" : "type");
     }
     if (lower === "cp") {
-      return trimmed.replace(/^cp\b/i, "copy");
+      return trimmed.replace(/^cp\b/i, isPowerShell ? "Copy-Item" : "copy");
     }
     if (lower === "mv") {
-      return trimmed.replace(/^mv\b/i, "move");
+      return trimmed.replace(/^mv\b/i, isPowerShell ? "Move-Item" : "move");
     }
     if (lower === "rm") {
+      if (isPowerShell) {
+        if (/\s+-r[f]?\b|\s+-f\b/i.test(trimmed)) {
+          return trimmed.replace(/^rm\b.*/i, "Remove-Item -Recurse -Force");
+        }
+        return trimmed.replace(/^rm\b/i, "Remove-Item");
+      }
       if (/\s+-r[f]?\b|\s+-f\b/i.test(trimmed)) {
         return trimmed.replace(/^rm\b.*/i, "rmdir /s /q");
       }
-      return trimmed.replace(/^rm\b/i, "del");
+      return trimmed.replace(/^rm\b/i, "del /f");
     }
     if (lower === "grep") {
-      return trimmed.replace(/^grep\b/i, "findstr");
+      return trimmed.replace(/^grep\b/i, isPowerShell ? "Select-String" : "findstr");
     }
     if (lower === "export") {
+      const assignment = trimmed.match(/^export\s+([a-zA-Z_][a-zA-Z0-9_]*)=(.*)$/);
+      if (isPowerShell) {
+        if (assignment) {
+          return `$env:${assignment[1]}=${assignment[2]}`;
+        }
+        return trimmed.replace(/^export\s+/i, "$env:");
+      }
       return trimmed.replace(/^export\s+/i, "set ");
+    }
+    if (lower === "tail" && /\s+-f\b/i.test(trimmed)) {
+      return trimmed.replace(/^tail\b.*-f\s+(.+)$/i, isPowerShell ? "Get-Content -Tail 100 -Wait $1" : "type $1");
+    }
+    if (lower === "ps") {
+      return trimmed.replace(/^ps\b/i, isPowerShell ? "Get-Process" : "tasklist");
     }
     return command;
   }
@@ -365,8 +386,41 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
     if (lower === "findstr") {
       return trimmed.replace(/^findstr\b/i, "grep");
     }
+    if (lower === "get-childitem") {
+      return trimmed.replace(/^get-childitem\b/i, "ls");
+    }
+    if (lower === "get-location") {
+      return trimmed.replace(/^get-location\b/i, "pwd");
+    }
+    if (lower === "set-location") {
+      return trimmed.replace(/^set-location\b/i, "cd");
+    }
+    if (lower === "get-content") {
+      return trimmed.replace(/^get-content\b/i, "cat");
+    }
+    if (lower === "copy-item") {
+      return trimmed.replace(/^copy-item\b/i, "cp");
+    }
+    if (lower === "move-item") {
+      return trimmed.replace(/^move-item\b/i, "mv");
+    }
+    if (lower === "remove-item") {
+      return trimmed.replace(/^remove-item\b/i, "rm");
+    }
+    if (lower === "select-string") {
+      return trimmed.replace(/^select-string\b/i, "grep");
+    }
+    if (lower === "tasklist") {
+      return trimmed.replace(/^tasklist\b/i, "ps aux");
+    }
+    if (lower === "taskkill") {
+      return trimmed.replace(/^taskkill\b/i, "kill");
+    }
     if (lower === "set") {
       return trimmed.replace(/^set\s+/i, "export ");
+    }
+    if (/^\$env:[a-zA-Z_][a-zA-Z0-9_]*=/.test(trimmed)) {
+      return trimmed.replace(/^\$env:([a-zA-Z_][a-zA-Z0-9_]*)=/, "export $1=");
     }
   }
 

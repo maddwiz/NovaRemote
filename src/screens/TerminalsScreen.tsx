@@ -185,6 +185,7 @@ export function TerminalsScreen() {
   const { width } = useWindowDimensions();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
+  const activeBackend = activeServer?.terminalBackend;
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
   const [processFilter, setProcessFilter] = useState<string>("");
@@ -295,6 +296,7 @@ export function TerminalsScreen() {
           recordingChunks={recording?.chunks.length || 0}
           recordingDurationMs={recordingDuration}
           historySuggestions={commandHistory[session] || []}
+          terminalBackend={activeBackend}
           terminalViewStyle={terminalAppearance.terminalViewStyle}
           terminalTextStyle={terminalAppearance.terminalTextStyle}
           historyCount={historyCount[session] || 0}
@@ -392,6 +394,7 @@ export function TerminalsScreen() {
     sortedOpenSessions,
     tails,
     watchRules,
+    activeBackend,
   ]);
 
   const tabActiveIndex = activeTabSession ? sortedOpenSessions.indexOf(activeTabSession) : -1;
