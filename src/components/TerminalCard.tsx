@@ -1,9 +1,47 @@
-import React, { useRef } from "react";
+import React, { useMemo, useRef } from "react";
 import { StyleProp, TextStyle, Pressable, ScrollView, Text, TextInput, View, ViewStyle } from "react-native";
 
 import { styles } from "../theme/styles";
 import { AiEnginePreference, ConnectionState, TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
+
+const SHELL_AUTOCOMPLETE_COMMANDS: string[] = [
+  "git status",
+  "git pull --rebase",
+  "git checkout -b feature/",
+  "git add .",
+  "git commit -m \"\"",
+  "git push",
+  "npm install",
+  "npm run dev",
+  "npm run build",
+  "npm test",
+  "pnpm install",
+  "pnpm dev",
+  "yarn install",
+  "yarn dev",
+  "docker ps",
+  "docker logs -f ",
+  "docker compose up -d",
+  "docker compose logs -f",
+  "kubectl get pods -A",
+  "kubectl describe pod ",
+  "ls -la",
+  "pwd",
+  "cd ",
+  "cat ",
+  "tail -f ",
+  "grep -R \"\" .",
+  "find . -name \"\"",
+  "ps aux | grep ",
+  "top",
+  "du -sh *",
+  "df -h",
+  "curl -I ",
+  "ssh ",
+  "tmux ls",
+  "tmux attach -t ",
+];
 
 type TerminalCardProps = {
   session: string;
@@ -105,6 +143,18 @@ export function TerminalCard({
   historyCount,
 }: TerminalCardProps) {
   const terminalRef = useRef<ScrollView | null>(null);
+  const autocomplete = useMemo(() => {
+    if (mode !== "shell") {
+      return [];
+    }
+    const normalized = draft.trim().toLowerCase();
+    if (normalized.length < 2) {
+      return [];
+    }
+    return SHELL_AUTOCOMPLETE_COMMANDS.filter((command) => command.toLowerCase().startsWith(normalized))
+      .filter((command) => command.toLowerCase() !== normalized)
+      .slice(0, 4);
+  }, [draft, mode]);
 
   const streamState: "live" | "reconnecting" | "polling" | "disconnected" | "local" =
     isLocalOnly
@@ -237,6 +287,16 @@ export function TerminalCard({
 
       {mode === "shell" ? (
         <View style={styles.serverListWrap}>
+          {autocomplete.length > 0 ? (
+            <View style={styles.actionsWrap}>
+              {autocomplete.map((command) => (
+                <Pressable key={`${session}-auto-${command}`} style={styles.chip} onPress={() => onDraftChange(command)}>
+                  <Text style={styles.chipText}>{command}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+
           <Pressable
             style={[styles.actionButton, suggestionsBusy ? styles.buttonDisabled : null]}
             onPress={onRequestSuggestions}
