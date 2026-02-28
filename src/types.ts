@@ -113,7 +113,7 @@ export type FleetRunResult = {
   error?: string;
 };
 
-export type LlmProviderKind = "openai_compatible" | "anthropic" | "ollama";
+export type LlmProviderKind = "openai_compatible" | "anthropic" | "ollama" | "gemini";
 
 export type AiEnginePreference = "auto" | "server" | "external";
 

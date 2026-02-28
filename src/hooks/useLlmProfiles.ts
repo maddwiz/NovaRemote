@@ -219,7 +219,14 @@ export function useLlmProfiles() {
           baseUrl: profile.baseUrl?.trim() || "",
           model: profile.model?.trim() || "",
           apiKey: profile.apiKey?.trim() || "",
-          kind: profile.kind === "anthropic" ? "anthropic" : profile.kind === "ollama" ? "ollama" : "openai_compatible",
+          kind:
+            profile.kind === "anthropic"
+              ? "anthropic"
+              : profile.kind === "ollama"
+                ? "ollama"
+                : profile.kind === "gemini"
+                  ? "gemini"
+                  : "openai_compatible",
         });
       });
 

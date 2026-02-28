@@ -35,6 +35,8 @@ export function LlmsScreen({
     switch (provider) {
       case "anthropic":
         return "https://api.anthropic.com";
+      case "gemini":
+        return "https://generativelanguage.googleapis.com/v1beta";
       case "ollama":
         return "http://localhost:11434";
       case "openai_compatible":
@@ -46,6 +48,8 @@ export function LlmsScreen({
     switch (provider) {
       case "anthropic":
         return "claude-3-5-sonnet-latest";
+      case "gemini":
+        return "gemini-2.5-flash";
       case "ollama":
         return "llama3.1";
       case "openai_compatible":
@@ -75,7 +79,7 @@ export function LlmsScreen({
     <>
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>LLM Profiles</Text>
-        <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Anthropic, or native Ollama.</Text>
+        <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Anthropic, Gemini, or native Ollama.</Text>
 
         <View style={styles.actionsWrap}>
           <Pressable
@@ -101,6 +105,18 @@ export function LlmsScreen({
             }}
           >
             <Text style={styles.actionButtonText}>OpenRouter</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              setEditingId(null);
+              setName("Gemini");
+              setKind("gemini");
+              setBaseUrl("https://generativelanguage.googleapis.com/v1beta");
+              setModel("gemini-2.5-flash");
+            }}
+          >
+            <Text style={styles.actionButtonText}>Gemini</Text>
           </Pressable>
           <Pressable
             style={styles.actionButton}
@@ -159,6 +175,16 @@ export function LlmsScreen({
             <Text style={[styles.modeButtonText, kind === "anthropic" ? styles.modeButtonTextOn : null]}>Anthropic</Text>
           </Pressable>
           <Pressable
+            style={[styles.modeButton, kind === "gemini" ? styles.modeButtonOn : null]}
+            onPress={() => {
+              setKind("gemini");
+              setBaseUrl(defaultBaseUrl("gemini"));
+              setModel(defaultModel("gemini"));
+            }}
+          >
+            <Text style={[styles.modeButtonText, kind === "gemini" ? styles.modeButtonTextOn : null]}>Gemini</Text>
+          </Pressable>
+          <Pressable
             style={[styles.modeButton, kind === "ollama" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("ollama");
@@ -176,7 +202,13 @@ export function LlmsScreen({
           value={baseUrl}
           onChangeText={setBaseUrl}
           placeholder={
-            kind === "anthropic" ? "https://api.anthropic.com" : kind === "ollama" ? "http://localhost:11434" : "https://api.openai.com/v1"
+            kind === "anthropic"
+              ? "https://api.anthropic.com"
+              : kind === "gemini"
+                ? "https://generativelanguage.googleapis.com/v1beta"
+                : kind === "ollama"
+                  ? "http://localhost:11434"
+                  : "https://api.openai.com/v1"
           }
           placeholderTextColor="#7f7aa8"
           autoCapitalize="none"
@@ -197,7 +229,13 @@ export function LlmsScreen({
           style={styles.input}
           value={apiKey}
           onChangeText={setApiKey}
-          placeholder={kind === "anthropic" ? "API Key (required)" : kind === "ollama" ? "API Key (usually empty)" : "API Key (optional)"}
+          placeholder={
+            kind === "anthropic" || kind === "gemini"
+              ? "API Key (required)"
+              : kind === "ollama"
+                ? "API Key (usually empty)"
+                : "API Key (optional)"
+          }
           placeholderTextColor="#7f7aa8"
           secureTextEntry
           autoCapitalize="none"
@@ -220,7 +258,7 @@ export function LlmsScreen({
               if (!name.trim() || !baseUrl.trim() || !model.trim()) {
                 return;
               }
-              if (kind === "anthropic" && !apiKey.trim()) {
+              if ((kind === "anthropic" || kind === "gemini") && !apiKey.trim()) {
                 return;
               }
 

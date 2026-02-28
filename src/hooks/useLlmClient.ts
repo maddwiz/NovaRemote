@@ -29,6 +29,17 @@ type OllamaGenerateResponse = {
   error?: string;
 };
 
+type GeminiResponse = {
+  candidates?: Array<{
+    content?: {
+      parts?: Array<{ text?: string }>;
+    };
+  }>;
+  error?: {
+    message?: string;
+  };
+};
+
 function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
@@ -59,7 +70,7 @@ export function useLlmClient() {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (profile.apiKey.trim()) {
+    if (profile.apiKey.trim() && profile.kind !== "gemini") {
       headers.Authorization = `Bearer ${profile.apiKey}`;
     }
 
@@ -173,6 +184,50 @@ export function useLlmClient() {
       const text = payload.response || payload.message?.content || "";
       if (!text.trim()) {
         throw new Error("LLM response was empty.");
+      }
+      return text.trim();
+    }
+
+    if (profile.kind === "gemini") {
+      if (!profile.apiKey.trim()) {
+        throw new Error("Gemini API key is required.");
+      }
+      const baseUrl = normalizeUrl(profile.baseUrl || "https://generativelanguage.googleapis.com/v1beta");
+      const model = profile.model.trim().replace(/^models\//, "");
+      const response = await fetch(`${baseUrl}/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(profile.apiKey)}`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          ...(profile.systemPrompt
+            ? {
+                systemInstruction: {
+                  role: "system",
+                  parts: [{ text: profile.systemPrompt }],
+                },
+              }
+            : {}),
+          generationConfig: {
+            temperature: 0.2,
+          },
+          contents: [
+            {
+              role: "user",
+              parts: [{ text: prompt }],
+            },
+          ],
+        }),
+      });
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`LLM request failed: ${response.status} ${detail || response.statusText}`);
+      }
+
+      const payload = (await response.json()) as GeminiResponse;
+      const text = toText(payload.candidates?.[0]?.content?.parts || []);
+      if (!text.trim()) {
+        const errorDetail = payload.error?.message;
+        throw new Error(errorDetail ? `LLM response was empty: ${errorDetail}` : "LLM response was empty.");
       }
       return text.trim();
     }
