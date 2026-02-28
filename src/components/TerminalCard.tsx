@@ -106,6 +106,7 @@ type TerminalCardProps = {
   onSessionAliasChange: (value: string) => void;
   onAutoName: () => void;
   onDraftChange: (value: string) => void;
+  onAdaptDraftForBackend: () => void;
   onRequestSuggestions: () => void;
   onUseSuggestion: (value: string) => void;
   onExplainError: () => void;
@@ -176,6 +177,7 @@ export function TerminalCard({
   onSessionAliasChange,
   onAutoName,
   onDraftChange,
+  onAdaptDraftForBackend,
   onRequestSuggestions,
   onUseSuggestion,
   onExplainError,
@@ -401,6 +403,10 @@ export function TerminalCard({
               ))}
             </View>
           ) : null}
+
+          <Pressable style={styles.actionButton} onPress={onAdaptDraftForBackend}>
+            <Text style={styles.actionButtonText}>Adapt for Backend</Text>
+          </Pressable>
 
           <Pressable
             style={[styles.actionButton, suggestionsBusy ? styles.buttonDisabled : null]}

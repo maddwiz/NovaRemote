@@ -78,6 +78,7 @@ import {
   SessionRecording,
   Status,
   SysStats,
+  TerminalBackendKind,
   TerminalSendMode,
   TmuxTailResponse,
   WatchRule,
@@ -300,6 +301,75 @@ function inferSessionAlias(session: string, output: string, commands: string[]):
     return "Logs";
   }
   return "";
+}
+
+function adaptCommandForBackend(command: string, backend: TerminalBackendKind | undefined): string {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return command;
+  }
+
+  const windows = backend === "powershell" || backend === "cmd";
+  const unixLike = !windows;
+  const [first] = trimmed.split(/\s+/);
+  const lower = first.toLowerCase();
+
+  if (windows) {
+    if (lower === "ls") {
+      return trimmed.replace(/^ls\b/i, "dir");
+    }
+    if (lower === "pwd") {
+      return trimmed.replace(/^pwd\b/i, "cd");
+    }
+    if (lower === "cat") {
+      return trimmed.replace(/^cat\b/i, "type");
+    }
+    if (lower === "cp") {
+      return trimmed.replace(/^cp\b/i, "copy");
+    }
+    if (lower === "mv") {
+      return trimmed.replace(/^mv\b/i, "move");
+    }
+    if (lower === "rm") {
+      if (/\s+-r[f]?\b|\s+-f\b/i.test(trimmed)) {
+        return trimmed.replace(/^rm\b.*/i, "rmdir /s /q");
+      }
+      return trimmed.replace(/^rm\b/i, "del");
+    }
+    if (lower === "grep") {
+      return trimmed.replace(/^grep\b/i, "findstr");
+    }
+    if (lower === "export") {
+      return trimmed.replace(/^export\s+/i, "set ");
+    }
+    return command;
+  }
+
+  if (unixLike) {
+    if (lower === "dir") {
+      return trimmed.replace(/^dir\b/i, "ls");
+    }
+    if (lower === "type") {
+      return trimmed.replace(/^type\b/i, "cat");
+    }
+    if (lower === "copy") {
+      return trimmed.replace(/^copy\b/i, "cp");
+    }
+    if (lower === "move") {
+      return trimmed.replace(/^move\b/i, "mv");
+    }
+    if (lower === "del") {
+      return trimmed.replace(/^del\b/i, "rm -f");
+    }
+    if (lower === "findstr") {
+      return trimmed.replace(/^findstr\b/i, "grep");
+    }
+    if (lower === "set") {
+      return trimmed.replace(/^set\s+/i, "export ");
+    }
+  }
+
+  return command;
 }
 
 function normalizeProcessList(payload: unknown): ProcessInfo[] {
@@ -1863,6 +1933,16 @@ export default function AppShell() {
         ...prev,
         [session]: value,
       }));
+    },
+    onAdaptDraftForBackend: (session) => {
+      const source = drafts[session] || "";
+      const adapted = adaptCommandForBackend(source, activeServer?.terminalBackend);
+      if (adapted === source) {
+        setStatus({ text: "No backend adaptation needed.", error: false });
+        return;
+      }
+      setDrafts((prev) => ({ ...prev, [session]: adapted }));
+      setStatus({ text: `Adapted command for ${activeServer?.terminalBackend || "auto"} backend.`, error: false });
     },
     onSend: (session) => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
