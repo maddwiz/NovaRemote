@@ -7,6 +7,7 @@ import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PRE
 import { AnsiText } from "../components/AnsiText";
 import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
+import { GlassesHudModal } from "../components/GlassesHudModal";
 import { styles } from "../theme/styles";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
@@ -233,6 +234,7 @@ export function TerminalsScreen() {
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
   const [glassesSession, setGlassesSession] = useState<string | null>(null);
+  const [glassesHudVisible, setGlassesHudVisible] = useState<boolean>(false);
   const [processFilter, setProcessFilter] = useState<string>("");
   const [processSorts, setProcessSorts] = useState<ProcessSortMode[]>(["cpu"]);
   const [processSignal, setProcessSignal] = useState<ProcessSignal>("TERM");
@@ -387,6 +389,12 @@ export function TerminalsScreen() {
       setGlassesSession(sortedOpenSessions[0]);
     }
   }, [glassesSession, sortedOpenSessions]);
+
+  useEffect(() => {
+    if (!glassesMode.enabled && glassesHudVisible) {
+      setGlassesHudVisible(false);
+    }
+  }, [glassesHudVisible, glassesMode.enabled]);
 
   const openTerminalCards = useMemo(() => {
     return sortedOpenSessions.map((session) => {
@@ -839,6 +847,14 @@ export function TerminalsScreen() {
               >
                 <Text style={styles.actionButtonText}>Send Transcript</Text>
               </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.buttonPrimary, !glassesActiveSession ? styles.buttonDisabled : null]}
+                disabled={!glassesActiveSession}
+                onPress={() => setGlassesHudVisible(true)}
+              >
+                <Text style={styles.buttonPrimaryText}>Open HUD</Text>
+              </Pressable>
             </View>
 
             <Text style={styles.emptyText}>
@@ -1236,6 +1252,57 @@ export function TerminalsScreen() {
     />
   );
 
+  const glassesHudModal = (
+    <GlassesHudModal
+      visible={glassesHudVisible && glassesMode.enabled}
+      brand={glassesMode.brand}
+      session={glassesActiveSession}
+      sessionLabel={glassesSessionLabel}
+      sessions={sortedOpenSessions.map((session) => ({ id: session, label: sessionAliases[session]?.trim() || session }))}
+      textScale={glassesMode.textScale}
+      output={glassesOutput}
+      draft={glassesDraft}
+      isSending={Boolean(glassesActiveSession ? sendBusy[glassesActiveSession] : false)}
+      voiceRecording={voiceRecording}
+      voiceBusy={voiceBusy}
+      voiceTranscript={voiceTranscript}
+      voiceError={voiceError}
+      onClose={() => setGlassesHudVisible(false)}
+      onSelectSession={setGlassesSession}
+      onDraftChange={(value) => {
+        if (!glassesActiveSession) {
+          return;
+        }
+        onSetDraft(glassesActiveSession, value);
+      }}
+      onSend={() => {
+        if (!glassesActiveSession) {
+          return;
+        }
+        onSend(glassesActiveSession);
+      }}
+      onClearDraft={() => {
+        if (!glassesActiveSession) {
+          return;
+        }
+        onClearDraft(glassesActiveSession);
+      }}
+      onVoiceStart={onVoiceStartCapture}
+      onVoiceStop={() => {
+        if (!glassesActiveSession) {
+          return;
+        }
+        onVoiceStopCapture(glassesActiveSession);
+      }}
+      onVoiceSendTranscript={() => {
+        if (!glassesActiveSession) {
+          return;
+        }
+        onVoiceSendTranscript(glassesActiveSession);
+      }}
+    />
+  );
+
   if (wantsSplit && !splitEnabled) {
     return (
       <>
@@ -1252,6 +1319,7 @@ export function TerminalsScreen() {
           {renderOpenTerminals()}
         </View>
         {processKillModal}
+        {glassesHudModal}
       </>
     );
   }
@@ -1269,6 +1337,7 @@ export function TerminalsScreen() {
           </View>
         </View>
         {processKillModal}
+        {glassesHudModal}
       </>
     );
   }
@@ -1281,6 +1350,7 @@ export function TerminalsScreen() {
         {renderOpenTerminals()}
       </View>
       {processKillModal}
+      {glassesHudModal}
     </>
   );
 }
