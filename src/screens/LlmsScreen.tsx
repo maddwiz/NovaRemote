@@ -31,10 +31,28 @@ export function LlmsScreen({
   onExportEncrypted,
   onImportEncrypted,
 }: LlmsScreenProps) {
-  const defaultBaseUrl = (provider: LlmProviderKind): string =>
-    provider === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
-  const defaultModel = (provider: LlmProviderKind): string =>
-    provider === "anthropic" ? "claude-3-5-sonnet-latest" : "gpt-5-mini";
+  const defaultBaseUrl = (provider: LlmProviderKind): string => {
+    switch (provider) {
+      case "anthropic":
+        return "https://api.anthropic.com";
+      case "ollama":
+        return "http://localhost:11434";
+      case "openai_compatible":
+      default:
+        return "https://api.openai.com/v1";
+    }
+  };
+  const defaultModel = (provider: LlmProviderKind): string => {
+    switch (provider) {
+      case "anthropic":
+        return "claude-3-5-sonnet-latest";
+      case "ollama":
+        return "llama3.1";
+      case "openai_compatible":
+      default:
+        return "gpt-5-mini";
+    }
+  };
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState<string>("");
@@ -57,7 +75,7 @@ export function LlmsScreen({
     <>
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>LLM Profiles</Text>
-        <Text style={styles.serverSubtitle}>Configure providers to support any OpenAI-compatible endpoint or Anthropic.</Text>
+        <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Anthropic, or native Ollama.</Text>
 
         <View style={styles.actionsWrap}>
           <Pressable
@@ -89,13 +107,13 @@ export function LlmsScreen({
             onPress={() => {
               setEditingId(null);
               setName("Ollama");
-              setKind("openai_compatible");
-              setBaseUrl("http://localhost:11434/v1");
+              setKind("ollama");
+              setBaseUrl("http://localhost:11434");
               setModel("llama3.1");
               setApiKey("");
             }}
           >
-            <Text style={styles.actionButtonText}>Ollama</Text>
+            <Text style={styles.actionButtonText}>Ollama Native</Text>
           </Pressable>
           <Pressable
             style={styles.actionButton}
@@ -140,13 +158,26 @@ export function LlmsScreen({
           >
             <Text style={[styles.modeButtonText, kind === "anthropic" ? styles.modeButtonTextOn : null]}>Anthropic</Text>
           </Pressable>
+          <Pressable
+            style={[styles.modeButton, kind === "ollama" ? styles.modeButtonOn : null]}
+            onPress={() => {
+              setKind("ollama");
+              setBaseUrl(defaultBaseUrl("ollama"));
+              setModel(defaultModel("ollama"));
+              setApiKey("");
+            }}
+          >
+            <Text style={[styles.modeButtonText, kind === "ollama" ? styles.modeButtonTextOn : null]}>Ollama</Text>
+          </Pressable>
         </View>
 
         <TextInput
           style={styles.input}
           value={baseUrl}
           onChangeText={setBaseUrl}
-          placeholder={kind === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
+          placeholder={
+            kind === "anthropic" ? "https://api.anthropic.com" : kind === "ollama" ? "http://localhost:11434" : "https://api.openai.com/v1"
+          }
           placeholderTextColor="#7f7aa8"
           autoCapitalize="none"
           autoCorrect={false}
@@ -166,7 +197,7 @@ export function LlmsScreen({
           style={styles.input}
           value={apiKey}
           onChangeText={setApiKey}
-          placeholder={kind === "anthropic" ? "API Key (required)" : "API Key (optional)"}
+          placeholder={kind === "anthropic" ? "API Key (required)" : kind === "ollama" ? "API Key (usually empty)" : "API Key (optional)"}
           placeholderTextColor="#7f7aa8"
           secureTextEntry
           autoCapitalize="none"

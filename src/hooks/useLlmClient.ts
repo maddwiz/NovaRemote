@@ -21,6 +21,14 @@ type AnthropicResponse = {
   content?: Array<{ type?: string; text?: string }>;
 };
 
+type OllamaGenerateResponse = {
+  response?: string;
+  message?: {
+    content?: string;
+  };
+  error?: string;
+};
+
 function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
@@ -48,15 +56,15 @@ function toText(content: unknown): string {
 
 export function useLlmClient() {
   const sendPrompt = useCallback(async (profile: LlmProfile, prompt: string): Promise<string> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+    };
+    if (profile.apiKey.trim()) {
+      headers.Authorization = `Bearer ${profile.apiKey}`;
+    }
+
     if (profile.kind === "openai_compatible") {
       const baseUrl = normalizeUrl(profile.baseUrl || "https://api.openai.com/v1");
-      const headers: Record<string, string> = {
-        "Content-Type": "application/json",
-      };
-      if (profile.apiKey.trim()) {
-        headers.Authorization = `Bearer ${profile.apiKey}`;
-      }
-
       const response = await fetch(`${baseUrl}/chat/completions`, {
         method: "POST",
         headers,
@@ -112,6 +120,61 @@ export function useLlmClient() {
         throw new Error("LLM response was empty.");
       }
       return text;
+    }
+
+    if (profile.kind === "ollama") {
+      const baseUrl = normalizeUrl(profile.baseUrl || "http://localhost:11434");
+      const requestBody = {
+        model: profile.model,
+        prompt,
+        system: profile.systemPrompt || undefined,
+        stream: false,
+      };
+
+      const response = await fetch(`${baseUrl}/api/generate`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify(requestBody),
+      });
+
+      if (response.status === 404 || response.status === 405) {
+        const fallback = await fetch(`${baseUrl}/api/chat`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: profile.model,
+            stream: false,
+            messages: [
+              ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
+              { role: "user", content: prompt },
+            ],
+          }),
+        });
+
+        if (!fallback.ok) {
+          const detail = await fallback.text();
+          throw new Error(`LLM request failed: ${fallback.status} ${detail || fallback.statusText}`);
+        }
+
+        const payload = (await fallback.json()) as OllamaGenerateResponse;
+        const text = payload.response || payload.message?.content || "";
+        if (!text.trim()) {
+          throw new Error("LLM response was empty.");
+        }
+        return text.trim();
+      }
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`LLM request failed: ${response.status} ${detail || response.statusText}`);
+      }
+
+      const payload = (await response.json()) as OllamaGenerateResponse;
+      const text = payload.response || payload.message?.content || "";
+      if (!text.trim()) {
+        throw new Error("LLM response was empty.");
+      }
+      return text.trim();
     }
 
     if (!profile.apiKey.trim()) {
