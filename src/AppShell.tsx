@@ -26,6 +26,7 @@ import { ShareServerModal } from "./components/ShareServerModal";
 import { StatusPill } from "./components/StatusPill";
 import { TabBar } from "./components/TabBar";
 import { TutorialModal } from "./components/TutorialModal";
+import { AppProvider, TerminalsViewModel } from "./context/AppContext";
 import {
   BRAND_LOGO,
   DEFAULT_CWD,
@@ -898,6 +899,289 @@ export default function AppShell() {
   const focusedCursor = focusedSession ? searchIndex[focusedSession] ?? 0 : 0;
   const focusedMatchIndex = normalizeMatchIndex(focusedCursor, focusedMatchCount);
   const focusedSearchLabel = focusedMatchCount === 0 ? "0 matches" : `${focusedMatchIndex + 1}/${focusedMatchCount}`;
+  const terminalsViewModel: TerminalsViewModel = {
+    activeServer,
+    connected,
+    servers,
+    allSessions,
+    openSessions,
+    tails,
+    drafts,
+    sendBusy,
+    streamLive,
+    connectionMeta,
+    sendModes,
+    sessionAiEngine,
+    startCwd,
+    startPrompt,
+    startOpenOnMac,
+    startKind,
+    startAiEngine,
+    health,
+    capabilities,
+    supportedFeatures,
+    hasExternalLlm: Boolean(activeProfile),
+    localAiSessions,
+    historyCount,
+    sessionTags,
+    allTags,
+    tagFilter,
+    isPro,
+    fleetCommand,
+    fleetCwd,
+    fleetTargets,
+    fleetBusy,
+    fleetWaitMs,
+    fleetResults,
+    suggestionsBySession,
+    suggestionBusyBySession,
+    watchRules,
+    onShowPaywall: () => setPaywallVisible(true),
+    onSetTagFilter: setTagFilter,
+    onSetStartCwd: setStartCwd,
+    onSetStartPrompt: setStartPrompt,
+    onSetStartOpenOnMac: setStartOpenOnMac,
+    onSetStartKind: setStartKind,
+    onSetStartAiEngine: setStartAiEngine,
+    onRefreshSessions: () => {
+      void runWithStatus("Refreshing sessions", async () => {
+        await refreshSessions();
+      });
+    },
+    onOpenServers: () => setRoute("servers"),
+    onStartSession: () => {
+      void runWithStatus("Starting session", async () => {
+        if (!isPro && openSessions.length >= FREE_SESSION_LIMIT) {
+          setPaywallVisible(true);
+          return;
+        }
+
+        if (startKind === "ai") {
+          if (startAiEngine === "server" && !capabilities.codex) {
+            throw new Error("Server AI engine is not available on the active server.");
+          }
+          const shouldStartExternal = startAiEngine === "external" || (startAiEngine === "auto" && !capabilities.codex);
+          if (shouldStartExternal) {
+            if (!activeProfile) {
+              throw new Error("No active external LLM profile selected.");
+            }
+            const localSession = createLocalAiSession(startPrompt.trim());
+            setSessionAiEngine((prev) => ({ ...prev, [localSession]: "external" }));
+            if (startPrompt.trim()) {
+              await sendViaExternalLlm(localSession, startPrompt);
+              setStartPrompt("");
+            }
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            return;
+          }
+        }
+
+        if (startKind === "shell" && !capabilities.terminal) {
+          throw new Error("Active server does not support terminal shell sessions.");
+        }
+
+        if (startKind === "shell" && startPrompt.trim()) {
+          const approved = await requestDangerApproval(startPrompt, "Initial shell command");
+          if (!approved) {
+            return;
+          }
+        }
+
+        const session = await handleStartSession();
+        if (startKind === "ai") {
+          setSessionAiEngine((prev) => ({
+            ...prev,
+            [session]: startAiEngine === "server" ? "server" : "auto",
+          }));
+        }
+        void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      });
+    },
+    onToggleSessionVisible: (session) => {
+      if (!isPro && !openSessions.includes(session) && openSessions.length >= FREE_SESSION_LIMIT) {
+        setPaywallVisible(true);
+        return;
+      }
+      void Haptics.selectionAsync();
+      toggleSessionVisible(session);
+    },
+    onSetSessionMode: (session, mode) => {
+      if (mode === "ai" && !capabilities.codex && !activeProfile) {
+        setStatus({ text: "No server AI or external LLM is configured.", error: true });
+        return;
+      }
+      if (mode === "shell" && isLocalSession(session)) {
+        setStatus({ text: "Local LLM sessions only support AI mode.", error: true });
+        return;
+      }
+      if (mode === "shell" && !capabilities.terminal) {
+        setStatus({ text: "Active server does not support terminal shell mode.", error: true });
+        return;
+      }
+      setSessionMode(session, mode);
+    },
+    onSetSessionAiEngine: (session, engine) => {
+      if (engine === "server" && !capabilities.codex) {
+        setStatus({ text: "Server AI is unavailable for this server.", error: true });
+        return;
+      }
+      if (engine === "external" && !activeProfile) {
+        setStatus({ text: "No external LLM profile is configured.", error: true });
+        return;
+      }
+      setSessionAiEngine((prev) => ({ ...prev, [session]: engine }));
+    },
+    onOpenOnMac: (session) => {
+      void runWithStatus(`Opening ${session} on Mac`, async () => {
+        if (isLocalSession(session)) {
+          throw new Error("Local LLM sessions are not attached to a server terminal.");
+        }
+        if (!capabilities.macAttach) {
+          throw new Error("Active server does not support mac attach.");
+        }
+        await handleOpenOnMac(session);
+      });
+    },
+    onSyncSession: (session) => {
+      void runWithStatus(`Syncing ${session}`, async () => {
+        if (isLocalSession(session)) {
+          throw new Error("Local LLM sessions are already in sync.");
+        }
+        await fetchTail(session, true);
+      });
+    },
+    onExportSession: (session) => {
+      void runWithStatus(`Exporting ${session}`, async () => {
+        const payload = {
+          exported_at: new Date().toISOString(),
+          server: activeServer?.name || "",
+          session,
+          mode: sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell"),
+          commands: commandHistory[session] || [],
+          output: tails[session] || "",
+        };
+
+        await Share.share({
+          title: `NovaRemote ${session} export`,
+          message: JSON.stringify(payload, null, 2),
+        });
+      });
+    },
+    onFocusSession: setFocusedSession,
+    onStopSession: (session) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      void runWithStatus(`Stopping ${session}`, async () => {
+        if (isLocalSession(session)) {
+          throw new Error("Local LLM sessions do not support Ctrl-C.");
+        }
+        await handleStop(session);
+      });
+    },
+    onHideSession: (session) => {
+      removeOpenSession(session);
+      closeStream(session);
+    },
+    onHistoryPrev: (session) => {
+      const prev = recallPrev(session);
+      if (prev !== null) {
+        setDrafts((existing) => ({ ...existing, [session]: prev }));
+      }
+    },
+    onHistoryNext: (session) => {
+      const next = recallNext(session);
+      if (next !== null) {
+        setDrafts((existing) => ({ ...existing, [session]: next }));
+      }
+    },
+    onSetTags: (session, raw) => {
+      void setTagsForSession(session, parseCommaTags(raw));
+    },
+    onSetDraft: (session, value) => {
+      setDrafts((prev) => ({
+        ...prev,
+        [session]: value,
+      }));
+    },
+    onSend: (session) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void runWithStatus(`Sending to ${session}`, async () => {
+        const draft = (drafts[session] || "").trim();
+        const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+        if (mode === "ai" && shouldRouteToExternalAi(session)) {
+          const sent = await sendViaExternalLlm(session, draft);
+          if (sent) {
+            await addCommand(session, sent);
+          }
+          return;
+        }
+        if (mode === "shell") {
+          const approved = await requestDangerApproval(draft, `Send to ${session}`);
+          if (!approved) {
+            return;
+          }
+        }
+
+        const sent = await handleSend(session);
+        if (sent) {
+          await addCommand(session, sent);
+          if (isPro) {
+            await notify("Command sent", `${session}: ${sent.slice(0, 80)}`);
+          }
+        }
+      });
+    },
+    onClearDraft: (session) => {
+      setDrafts((prev) => ({ ...prev, [session]: "" }));
+    },
+    onSetFleetCommand: setFleetCommand,
+    onSetFleetCwd: setFleetCwd,
+    onToggleFleetTarget: (serverId) => {
+      setFleetTargets((prev) => (prev.includes(serverId) ? prev.filter((id) => id !== serverId) : [...prev, serverId]));
+    },
+    onSetFleetWaitMs: setFleetWaitMs,
+    onRequestSuggestions: (session) => {
+      void runWithStatus(`Generating suggestions for ${session}`, async () => {
+        await requestShellSuggestions(session);
+      });
+    },
+    onUseSuggestion: (session, value) => {
+      setDrafts((prev) => ({ ...prev, [session]: value }));
+    },
+    onToggleWatch: (session, enabled) => {
+      setWatchRules((prev) => {
+        const existing = prev[session] || { enabled: false, pattern: "", lastMatch: null };
+        return {
+          ...prev,
+          [session]: {
+            ...existing,
+            enabled,
+          },
+        };
+      });
+    },
+    onSetWatchPattern: (session, pattern) => {
+      setWatchRules((prev) => {
+        const existing = prev[session] || { enabled: true, pattern: "", lastMatch: null };
+        return {
+          ...prev,
+          [session]: {
+            ...existing,
+            pattern,
+            lastMatch: null,
+          },
+        };
+      });
+    },
+    onRunFleet: () => {
+      void runWithStatus("Running fleet command", async () => {
+        const approved = await requestDangerApproval(fleetCommand, "Fleet execute");
+        if (!approved) {
+          return;
+        }
+        await runFleetCommand();
+      });
+    },
+  };
 
   if (lockLoading || onboardingLoading || tutorialLoading || safetyLoading) {
     return (
@@ -1029,289 +1313,9 @@ export default function AppShell() {
           ) : null}
 
           {route === "terminals" ? (
-            <TerminalsScreen
-              activeServer={activeServer}
-              connected={connected}
-              servers={servers}
-              allSessions={allSessions}
-              openSessions={openSessions}
-              tails={tails}
-              drafts={drafts}
-              sendBusy={sendBusy}
-              streamLive={streamLive}
-              connectionMeta={connectionMeta}
-              sendModes={sendModes}
-              sessionAiEngine={sessionAiEngine}
-              startCwd={startCwd}
-              startPrompt={startPrompt}
-              startOpenOnMac={startOpenOnMac}
-              startKind={startKind}
-              startAiEngine={startAiEngine}
-              health={health}
-              capabilities={capabilities}
-              supportedFeatures={supportedFeatures}
-              hasExternalLlm={Boolean(activeProfile)}
-              localAiSessions={localAiSessions}
-              historyCount={historyCount}
-              sessionTags={sessionTags}
-              allTags={allTags}
-              tagFilter={tagFilter}
-              isPro={isPro}
-              fleetCommand={fleetCommand}
-              fleetCwd={fleetCwd}
-              fleetTargets={fleetTargets}
-              fleetBusy={fleetBusy}
-              fleetWaitMs={fleetWaitMs}
-              fleetResults={fleetResults}
-              suggestionsBySession={suggestionsBySession}
-              suggestionBusyBySession={suggestionBusyBySession}
-              watchRules={watchRules}
-              onShowPaywall={() => setPaywallVisible(true)}
-              onSetTagFilter={setTagFilter}
-              onSetStartCwd={setStartCwd}
-              onSetStartPrompt={setStartPrompt}
-              onSetStartOpenOnMac={setStartOpenOnMac}
-              onSetStartKind={setStartKind}
-              onSetStartAiEngine={setStartAiEngine}
-              onRefreshSessions={() => {
-                void runWithStatus("Refreshing sessions", async () => {
-                  await refreshSessions();
-                });
-              }}
-              onOpenServers={() => setRoute("servers")}
-              onStartSession={() => {
-                void runWithStatus("Starting session", async () => {
-                  if (!isPro && openSessions.length >= FREE_SESSION_LIMIT) {
-                    setPaywallVisible(true);
-                    return;
-                  }
-
-                  if (startKind === "ai") {
-                    if (startAiEngine === "server" && !capabilities.codex) {
-                      throw new Error("Server AI engine is not available on the active server.");
-                    }
-                    const shouldStartExternal = startAiEngine === "external" || (startAiEngine === "auto" && !capabilities.codex);
-                    if (shouldStartExternal) {
-                      if (!activeProfile) {
-                        throw new Error("No active external LLM profile selected.");
-                      }
-                      const localSession = createLocalAiSession(startPrompt.trim());
-                      setSessionAiEngine((prev) => ({ ...prev, [localSession]: "external" }));
-                      if (startPrompt.trim()) {
-                        await sendViaExternalLlm(localSession, startPrompt);
-                        setStartPrompt("");
-                      }
-                      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      return;
-                    }
-                  }
-
-                  if (startKind === "shell" && !capabilities.terminal) {
-                    throw new Error("Active server does not support terminal shell sessions.");
-                  }
-
-                  if (startKind === "shell" && startPrompt.trim()) {
-                    const approved = await requestDangerApproval(startPrompt, "Initial shell command");
-                    if (!approved) {
-                      return;
-                    }
-                  }
-
-                  const session = await handleStartSession();
-                  if (startKind === "ai") {
-                    setSessionAiEngine((prev) => ({
-                      ...prev,
-                      [session]: startAiEngine === "server" ? "server" : "auto",
-                    }));
-                  }
-                  void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                });
-              }}
-              onToggleSessionVisible={(session) => {
-                if (!isPro && !openSessions.includes(session) && openSessions.length >= FREE_SESSION_LIMIT) {
-                  setPaywallVisible(true);
-                  return;
-                }
-                void Haptics.selectionAsync();
-                toggleSessionVisible(session);
-              }}
-              onSetSessionMode={(session, mode) => {
-                if (mode === "ai" && !capabilities.codex && !activeProfile) {
-                  setStatus({ text: "No server AI or external LLM is configured.", error: true });
-                  return;
-                }
-                if (mode === "shell" && isLocalSession(session)) {
-                  setStatus({ text: "Local LLM sessions only support AI mode.", error: true });
-                  return;
-                }
-                if (mode === "shell" && !capabilities.terminal) {
-                  setStatus({ text: "Active server does not support terminal shell mode.", error: true });
-                  return;
-                }
-                setSessionMode(session, mode);
-              }}
-              onSetSessionAiEngine={(session, engine) => {
-                if (engine === "server" && !capabilities.codex) {
-                  setStatus({ text: "Server AI is unavailable for this server.", error: true });
-                  return;
-                }
-                if (engine === "external" && !activeProfile) {
-                  setStatus({ text: "No external LLM profile is configured.", error: true });
-                  return;
-                }
-                setSessionAiEngine((prev) => ({ ...prev, [session]: engine }));
-              }}
-              onOpenOnMac={(session) => {
-                void runWithStatus(`Opening ${session} on Mac`, async () => {
-                  if (isLocalSession(session)) {
-                    throw new Error("Local LLM sessions are not attached to a server terminal.");
-                  }
-                  if (!capabilities.macAttach) {
-                    throw new Error("Active server does not support mac attach.");
-                  }
-                  await handleOpenOnMac(session);
-                });
-              }}
-              onSyncSession={(session) => {
-                void runWithStatus(`Syncing ${session}`, async () => {
-                  if (isLocalSession(session)) {
-                    throw new Error("Local LLM sessions are already in sync.");
-                  }
-                  await fetchTail(session, true);
-                });
-              }}
-              onExportSession={(session) => {
-                void runWithStatus(`Exporting ${session}`, async () => {
-                  const payload = {
-                    exported_at: new Date().toISOString(),
-                    server: activeServer?.name || "",
-                    session,
-                    mode: sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell"),
-                    commands: commandHistory[session] || [],
-                    output: tails[session] || "",
-                  };
-
-                  await Share.share({
-                    title: `NovaRemote ${session} export`,
-                    message: JSON.stringify(payload, null, 2),
-                  });
-                });
-              }}
-              onFocusSession={setFocusedSession}
-              onStopSession={(session) => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-                void runWithStatus(`Stopping ${session}`, async () => {
-                  if (isLocalSession(session)) {
-                    throw new Error("Local LLM sessions do not support Ctrl-C.");
-                  }
-                  await handleStop(session);
-                });
-              }}
-              onHideSession={(session) => {
-                removeOpenSession(session);
-                closeStream(session);
-              }}
-              onHistoryPrev={(session) => {
-                const prev = recallPrev(session);
-                if (prev !== null) {
-                  setDrafts((existing) => ({ ...existing, [session]: prev }));
-                }
-              }}
-              onHistoryNext={(session) => {
-                const next = recallNext(session);
-                if (next !== null) {
-                  setDrafts((existing) => ({ ...existing, [session]: next }));
-                }
-              }}
-              onSetTags={(session, raw) => {
-                void setTagsForSession(session, parseCommaTags(raw));
-              }}
-              onSetDraft={(session, value) => {
-                setDrafts((prev) => ({
-                  ...prev,
-                  [session]: value,
-                }));
-              }}
-              onSend={(session) => {
-                void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-                void runWithStatus(`Sending to ${session}`, async () => {
-                  const draft = (drafts[session] || "").trim();
-                  const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
-                  if (mode === "ai" && shouldRouteToExternalAi(session)) {
-                    const sent = await sendViaExternalLlm(session, draft);
-                    if (sent) {
-                      await addCommand(session, sent);
-                    }
-                    return;
-                  }
-                  if (mode === "shell") {
-                    const approved = await requestDangerApproval(draft, `Send to ${session}`);
-                    if (!approved) {
-                      return;
-                    }
-                  }
-
-                  const sent = await handleSend(session);
-                  if (sent) {
-                    await addCommand(session, sent);
-                    if (isPro) {
-                      await notify("Command sent", `${session}: ${sent.slice(0, 80)}`);
-                    }
-                  }
-                });
-              }}
-              onClearDraft={(session) => {
-                setDrafts((prev) => ({ ...prev, [session]: "" }));
-              }}
-              onSetFleetCommand={setFleetCommand}
-              onSetFleetCwd={setFleetCwd}
-              onToggleFleetTarget={(serverId) => {
-                setFleetTargets((prev) => (prev.includes(serverId) ? prev.filter((id) => id !== serverId) : [...prev, serverId]));
-              }}
-              onSetFleetWaitMs={setFleetWaitMs}
-              onRequestSuggestions={(session) => {
-                void runWithStatus(`Generating suggestions for ${session}`, async () => {
-                  await requestShellSuggestions(session);
-                });
-              }}
-              onUseSuggestion={(session, value) => {
-                setDrafts((prev) => ({ ...prev, [session]: value }));
-              }}
-              onToggleWatch={(session, enabled) => {
-                setWatchRules((prev) => {
-                  const existing = prev[session] || { enabled: false, pattern: "", lastMatch: null };
-                  return {
-                    ...prev,
-                    [session]: {
-                      ...existing,
-                      enabled,
-                    },
-                  };
-                });
-              }}
-              onSetWatchPattern={(session, pattern) => {
-                setWatchRules((prev) => {
-                  const existing = prev[session] || { enabled: true, pattern: "", lastMatch: null };
-                  return {
-                    ...prev,
-                    [session]: {
-                      ...existing,
-                      pattern,
-                      lastMatch: null,
-                    },
-                  };
-                });
-              }}
-              onRunFleet={() => {
-                void runWithStatus("Running fleet command", async () => {
-                  const approved = await requestDangerApproval(fleetCommand, "Fleet execute");
-                  if (!approved) {
-                    return;
-                  }
-                  await runFleetCommand();
-                });
-              }}
-            />
+            <AppProvider value={{ terminals: terminalsViewModel }}>
+              <TerminalsScreen />
+            </AppProvider>
           ) : null}
 
           {route === "snippets" ? (

@@ -1,92 +1,10 @@
 import React, { useMemo } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 
+import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, isLikelyAiSession } from "../constants";
 import { TerminalCard } from "../components/TerminalCard";
 import { styles } from "../theme/styles";
-import {
-  AiEnginePreference,
-  FleetRunResult,
-  HealthMetrics,
-  ServerCapabilities,
-  ServerProfile,
-  SessionConnectionMeta,
-  TerminalSendMode,
-  WatchRule,
-} from "../types";
-
-type TerminalsScreenProps = {
-  activeServer: ServerProfile | null;
-  connected: boolean;
-  servers: ServerProfile[];
-  allSessions: string[];
-  openSessions: string[];
-  tails: Record<string, string>;
-  drafts: Record<string, string>;
-  sendBusy: Record<string, boolean>;
-  streamLive: Record<string, boolean>;
-  connectionMeta: Record<string, SessionConnectionMeta>;
-  sendModes: Record<string, TerminalSendMode>;
-  sessionAiEngine: Record<string, AiEnginePreference>;
-  startCwd: string;
-  startPrompt: string;
-  startOpenOnMac: boolean;
-  startKind: TerminalSendMode;
-  startAiEngine: AiEnginePreference;
-  health: HealthMetrics;
-  capabilities: ServerCapabilities;
-  supportedFeatures: string;
-  hasExternalLlm: boolean;
-  localAiSessions: string[];
-  historyCount: Record<string, number>;
-  sessionTags: Record<string, string[]>;
-  allTags: string[];
-  tagFilter: string;
-  isPro: boolean;
-  fleetCommand: string;
-  fleetCwd: string;
-  fleetTargets: string[];
-  fleetBusy: boolean;
-  fleetWaitMs: string;
-  fleetResults: FleetRunResult[];
-  suggestionsBySession: Record<string, string[]>;
-  suggestionBusyBySession: Record<string, boolean>;
-  watchRules: Record<string, WatchRule>;
-  onShowPaywall: () => void;
-  onSetTagFilter: (value: string) => void;
-  onSetStartCwd: (value: string) => void;
-  onSetStartPrompt: (value: string) => void;
-  onSetStartOpenOnMac: (value: boolean) => void;
-  onSetStartKind: (value: TerminalSendMode) => void;
-  onSetStartAiEngine: (value: AiEnginePreference) => void;
-  onRefreshSessions: () => void;
-  onOpenServers: () => void;
-  onStartSession: () => void;
-  onToggleSessionVisible: (session: string) => void;
-  onSetSessionMode: (session: string, mode: TerminalSendMode) => void;
-  onSetSessionAiEngine: (session: string, engine: AiEnginePreference) => void;
-  onOpenOnMac: (session: string) => void;
-  onSyncSession: (session: string) => void;
-  onExportSession: (session: string) => void;
-  onFocusSession: (session: string) => void;
-  onStopSession: (session: string) => void;
-  onHideSession: (session: string) => void;
-  onHistoryPrev: (session: string) => void;
-  onHistoryNext: (session: string) => void;
-  onSetTags: (session: string, raw: string) => void;
-  onSetDraft: (session: string, value: string) => void;
-  onSend: (session: string) => void;
-  onClearDraft: (session: string) => void;
-  onSetFleetCommand: (value: string) => void;
-  onSetFleetCwd: (value: string) => void;
-  onToggleFleetTarget: (serverId: string) => void;
-  onSetFleetWaitMs: (value: string) => void;
-  onRequestSuggestions: (session: string) => void;
-  onUseSuggestion: (session: string, value: string) => void;
-  onToggleWatch: (session: string, enabled: boolean) => void;
-  onSetWatchPattern: (session: string, pattern: string) => void;
-  onRunFleet: () => void;
-};
 
 function renderSessionChips(
   allSessions: string[],
@@ -121,78 +39,80 @@ function renderSessionChips(
   );
 }
 
-export function TerminalsScreen({
-  activeServer,
-  connected,
-  servers,
-  allSessions,
-  openSessions,
-  tails,
-  drafts,
-  sendBusy,
-  streamLive,
-  connectionMeta,
-  sendModes,
-  sessionAiEngine,
-  startCwd,
-  startPrompt,
-  startOpenOnMac,
-  startKind,
-  startAiEngine,
-  health,
-  capabilities,
-  supportedFeatures,
-  hasExternalLlm,
-  localAiSessions,
-  historyCount,
-  sessionTags,
-  allTags,
-  tagFilter,
-  isPro,
-  fleetCommand,
-  fleetCwd,
-  fleetTargets,
-  fleetBusy,
-  fleetWaitMs,
-  fleetResults,
-  suggestionsBySession,
-  suggestionBusyBySession,
-  watchRules,
-  onShowPaywall,
-  onSetTagFilter,
-  onSetStartCwd,
-  onSetStartPrompt,
-  onSetStartOpenOnMac,
-  onSetStartKind,
-  onSetStartAiEngine,
-  onRefreshSessions,
-  onOpenServers,
-  onStartSession,
-  onToggleSessionVisible,
-  onSetSessionMode,
-  onSetSessionAiEngine,
-  onOpenOnMac,
-  onSyncSession,
-  onExportSession,
-  onFocusSession,
-  onStopSession,
-  onHideSession,
-  onHistoryPrev,
-  onHistoryNext,
-  onSetTags,
-  onSetDraft,
-  onSend,
-  onClearDraft,
-  onSetFleetCommand,
-  onSetFleetCwd,
-  onToggleFleetTarget,
-  onSetFleetWaitMs,
-  onRequestSuggestions,
-  onUseSuggestion,
-  onToggleWatch,
-  onSetWatchPattern,
-  onRunFleet,
-}: TerminalsScreenProps) {
+export function TerminalsScreen() {
+  const {
+    activeServer,
+    connected,
+    servers,
+    allSessions,
+    openSessions,
+    tails,
+    drafts,
+    sendBusy,
+    streamLive,
+    connectionMeta,
+    sendModes,
+    sessionAiEngine,
+    startCwd,
+    startPrompt,
+    startOpenOnMac,
+    startKind,
+    startAiEngine,
+    health,
+    capabilities,
+    supportedFeatures,
+    hasExternalLlm,
+    localAiSessions,
+    historyCount,
+    sessionTags,
+    allTags,
+    tagFilter,
+    isPro,
+    fleetCommand,
+    fleetCwd,
+    fleetTargets,
+    fleetBusy,
+    fleetWaitMs,
+    fleetResults,
+    suggestionsBySession,
+    suggestionBusyBySession,
+    watchRules,
+    onShowPaywall,
+    onSetTagFilter,
+    onSetStartCwd,
+    onSetStartPrompt,
+    onSetStartOpenOnMac,
+    onSetStartKind,
+    onSetStartAiEngine,
+    onRefreshSessions,
+    onOpenServers,
+    onStartSession,
+    onToggleSessionVisible,
+    onSetSessionMode,
+    onSetSessionAiEngine,
+    onOpenOnMac,
+    onSyncSession,
+    onExportSession,
+    onFocusSession,
+    onStopSession,
+    onHideSession,
+    onHistoryPrev,
+    onHistoryNext,
+    onSetTags,
+    onSetDraft,
+    onSend,
+    onClearDraft,
+    onSetFleetCommand,
+    onSetFleetCwd,
+    onToggleFleetTarget,
+    onSetFleetWaitMs,
+    onRequestSuggestions,
+    onUseSuggestion,
+    onToggleWatch,
+    onSetWatchPattern,
+    onRunFleet,
+  } = useAppContext().terminals;
+
   const { width } = useWindowDimensions();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
