@@ -22,6 +22,7 @@ export const STORAGE_PROCESS_PANEL_PREFS_PREFIX = "novaremote.process_panel.v1";
 export const STORAGE_SESSION_COLLAB_READONLY_PREFIX = "novaremote.collab_readonly.v1";
 export const STORAGE_SHELL_WAIT_MS = "novaremote.shell_wait_ms.v1";
 export const STORAGE_SHELL_WAIT_MS_PREFIX = "novaremote.shell_wait_ms.v2";
+export const STORAGE_CAPABILITIES_CACHE_PREFIX = "novaremote.capabilities_cache.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";

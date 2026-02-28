@@ -1,5 +1,7 @@
+import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { STORAGE_CAPABILITIES_CACHE_PREFIX } from "../constants";
 import { normalizeBaseUrl } from "../api/client";
 import { ServerCapabilities, ServerProfile, TerminalApiKind } from "../types";
 
@@ -17,6 +19,7 @@ const EMPTY_CAPABILITIES: ServerCapabilities = {
 };
 
 const CAPABILITY_CACHE_TTL_MS = 45000;
+const CAPABILITY_PERSIST_TTL_MS = 300000;
 
 type CachedCapabilities = {
   capabilities: ServerCapabilities;
@@ -156,6 +159,46 @@ function capabilityCacheKey(baseUrl: string, token: string): string {
   return `${normalizeBaseUrl(baseUrl)}::${token}`;
 }
 
+function capabilityPersistKey(baseUrl: string): string {
+  const encoded = encodeURIComponent(normalizeBaseUrl(baseUrl)).replace(/%/g, "_");
+  return `${STORAGE_CAPABILITIES_CACHE_PREFIX}.${encoded}`;
+}
+
+function readTerminalApiKind(value: unknown): TerminalApiKind | null {
+  if (value === "terminal" || value === "tmux") {
+    return value;
+  }
+  return null;
+}
+
+function readPersistedCache(value: string | null): CachedCapabilities | null {
+  if (!value) {
+    return null;
+  }
+  try {
+    const parsed = JSON.parse(value) as {
+      capabilities?: ServerCapabilities;
+      terminalApiKind?: unknown;
+      expiresAt?: unknown;
+    };
+    if (!parsed || typeof parsed !== "object" || !parsed.capabilities || typeof parsed.capabilities !== "object") {
+      return null;
+    }
+    const terminalApiKind = readTerminalApiKind(parsed.terminalApiKind);
+    const expiresAt = typeof parsed.expiresAt === "number" ? parsed.expiresAt : 0;
+    if (!terminalApiKind || !Number.isFinite(expiresAt)) {
+      return null;
+    }
+    return {
+      capabilities: parsed.capabilities,
+      terminalApiKind,
+      expiresAt,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function pickTerminalApiKind(
   manifest: Record<string, unknown>,
   terminalSessions: boolean,
@@ -191,16 +234,36 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
 
     setLoading(true);
     setLastError(null);
+    let persistedCache: CachedCapabilities | null = null;
 
     try {
       const baseUrl = activeServer.baseUrl;
       const token = activeServer.token;
       const cacheKey = capabilityCacheKey(baseUrl, token);
+      const persistKey = capabilityPersistKey(baseUrl);
+      const now = Date.now();
       const cached = capabilityCache.get(cacheKey);
-      if (cached && cached.expiresAt > Date.now()) {
+      if (cached && cached.expiresAt > now) {
         setCapabilities(cached.capabilities);
         setTerminalApiKind(cached.terminalApiKind);
         return cached.capabilities;
+      }
+
+      let persistedRaw: string | null = null;
+      try {
+        persistedRaw = await SecureStore.getItemAsync(persistKey);
+      } catch {
+        persistedRaw = null;
+      }
+      persistedCache = readPersistedCache(persistedRaw);
+      if (persistedCache && persistedCache.expiresAt > now) {
+        setCapabilities(persistedCache.capabilities);
+        setTerminalApiKind(persistedCache.terminalApiKind);
+        capabilityCache.set(cacheKey, {
+          ...persistedCache,
+          expiresAt: now + CAPABILITY_CACHE_TTL_MS,
+        });
+        return persistedCache.capabilities;
       }
 
       const manifestRoot = await readManifest(baseUrl, token);
@@ -277,12 +340,20 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
       capabilityCache.set(cacheKey, {
         capabilities: next,
         terminalApiKind: nextApiKind,
-        expiresAt: Date.now() + CAPABILITY_CACHE_TTL_MS,
+        expiresAt: now + CAPABILITY_CACHE_TTL_MS,
       });
+      void SecureStore.setItemAsync(
+        persistKey,
+        JSON.stringify({
+          capabilities: next,
+          terminalApiKind: nextApiKind,
+          expiresAt: now + CAPABILITY_PERSIST_TTL_MS,
+        })
+      ).catch(() => {});
       return next;
     } catch (error) {
       const cacheKey = capabilityCacheKey(activeServer.baseUrl, activeServer.token);
-      const stale = capabilityCache.get(cacheKey);
+      const stale = capabilityCache.get(cacheKey) || persistedCache;
       if (stale) {
         setCapabilities(stale.capabilities);
         setTerminalApiKind(stale.terminalApiKind);
