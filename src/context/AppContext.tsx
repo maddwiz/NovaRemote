@@ -149,6 +149,7 @@ export type TerminalsViewModel = {
   onSetGlassesMinimalMode: (minimalMode: boolean) => void;
   onSetGlassesVadEnabled: (vadEnabled: boolean) => void;
   onSetGlassesVadSilenceMs: (vadSilenceMs: number) => void;
+  onSetGlassesVadSensitivityDb: (vadSensitivityDb: number) => void;
   onSetGlassesLoopCaptureMs: (loopCaptureMs: number) => void;
   onSetGlassesHeadsetPttEnabled: (enabled: boolean) => void;
   onOpenGlassesMode: () => void;

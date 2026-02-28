@@ -437,6 +437,8 @@ export default function AppShell() {
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const autoOpenedPinsServerRef = useRef<string | null>(null);
   const aliasGuessRef = useRef<Record<string, string>>({});
+  const voiceLoopRetryCountRef = useRef<Record<string, number>>({});
+  const voiceLoopRestartTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -521,6 +523,7 @@ export default function AppShell() {
     setMinimalMode: setGlassesMinimalMode,
     setVadEnabled: setGlassesVadEnabled,
     setVadSilenceMs: setGlassesVadSilenceMs,
+    setVadSensitivityDb: setGlassesVadSensitivityDb,
     setLoopCaptureMs: setGlassesLoopCaptureMs,
     setHeadsetPttEnabled: setGlassesHeadsetPttEnabled,
   } = useGlassesMode();
@@ -530,6 +533,8 @@ export default function AppShell() {
     lastTranscript: voiceTranscript,
     lastError: voiceError,
     meteringDb: voiceMeteringDb,
+    permissionStatus: voicePermissionStatus,
+    requestCapturePermission: requestVoicePermission,
     startCapture: startVoiceCapture,
     stopAndTranscribe: stopVoiceCaptureAndTranscribe,
     setLastTranscript: setVoiceTranscript,
@@ -887,9 +892,31 @@ export default function AppShell() {
     [addCommand, connected, isLocalSession, queueSessionCommand, sendCommand, sendViaExternalLlm, sessionReadOnly, shouldRouteToExternalAi]
   );
 
+  const clearVoiceLoopRestart = useCallback((session: string) => {
+    const pending = voiceLoopRestartTimerRef.current[session];
+    if (!pending) {
+      return;
+    }
+    clearTimeout(pending);
+    voiceLoopRestartTimerRef.current[session] = null;
+  }, []);
+
+  const scheduleVoiceLoopRestart = useCallback(
+    (session: string, delayMs: number) => {
+      clearVoiceLoopRestart(session);
+      voiceLoopRestartTimerRef.current[session] = setTimeout(() => {
+        voiceLoopRestartTimerRef.current[session] = null;
+        void startVoiceCapture().catch((error) => {
+          const message = error instanceof Error ? error.message : String(error);
+          setStatus({ text: `Voice loop restart failed: ${message}`, error: true });
+        });
+      }, Math.max(120, Math.min(delayMs, 15000)));
+    },
+    [clearVoiceLoopRestart, startVoiceCapture]
+  );
+
   const stopVoiceCaptureIntoSession = useCallback(
-    async (session: string) => {
-      let restartLoop = glassesMode.voiceLoop;
+    async (session: string): Promise<boolean> => {
       try {
         const rawTranscript = (
           await stopVoiceCaptureAndTranscribe({
@@ -915,26 +942,30 @@ export default function AppShell() {
 
         setDrafts((prev) => ({ ...prev, [session]: commandTranscript }));
         if (!glassesMode.voiceAutoSend) {
-          return;
+          voiceLoopRetryCountRef.current[session] = 0;
+          if (glassesMode.voiceLoop) {
+            scheduleVoiceLoopRestart(session, 180);
+          }
+          return true;
         }
         setSessionMode(session, "ai");
         await sendTextToSession(session, commandTranscript, "ai");
+        voiceLoopRetryCountRef.current[session] = 0;
+        if (glassesMode.voiceLoop) {
+          scheduleVoiceLoopRestart(session, 180);
+        }
+        return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
-        if (
-          /no transcription endpoint found|connect to a server|http \d+ from/i.test(message)
-        ) {
-          restartLoop = false;
+        if (glassesMode.voiceLoop) {
+          const nextRetry = (voiceLoopRetryCountRef.current[session] || 0) + 1;
+          voiceLoopRetryCountRef.current[session] = nextRetry;
+          const delayMs = Math.min(Math.round(900 * Math.pow(1.45, nextRetry - 1)), 10000);
+          setStatus({ text: `Voice loop retry in ${Math.round(delayMs / 100) / 10}s: ${message}`, error: true });
+          scheduleVoiceLoopRestart(session, delayMs);
+          return false;
         }
         throw error;
-      } finally {
-        if (restartLoop) {
-          try {
-            await startVoiceCapture();
-          } catch {
-            // best effort restart for continuous glasses mode
-          }
-        }
       }
     },
     [
@@ -944,11 +975,12 @@ export default function AppShell() {
       glassesMode.wakePhraseEnabled,
       glassesMode.vadEnabled,
       glassesMode.vadSilenceMs,
+      scheduleVoiceLoopRestart,
       sendTextToSession,
       setDrafts,
       setSessionMode,
+      setStatus,
       setVoiceTranscript,
-      startVoiceCapture,
       stopVoiceCaptureAndTranscribe,
     ]
   );
@@ -1037,6 +1069,31 @@ export default function AppShell() {
       sub.remove();
     };
   }, [lock]);
+
+  useEffect(() => {
+    if (glassesMode.voiceLoop) {
+      return;
+    }
+    Object.values(voiceLoopRestartTimerRef.current).forEach((timer) => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+    voiceLoopRestartTimerRef.current = {};
+    voiceLoopRetryCountRef.current = {};
+  }, [glassesMode.voiceLoop]);
+
+  useEffect(() => {
+    return () => {
+      Object.values(voiceLoopRestartTimerRef.current).forEach((timer) => {
+        if (timer) {
+          clearTimeout(timer);
+        }
+      });
+      voiceLoopRestartTimerRef.current = {};
+      voiceLoopRetryCountRef.current = {};
+    };
+  }, []);
 
   useEffect(() => {
     if (route === "glasses" && !glassesMode.enabled) {
@@ -1766,11 +1823,19 @@ export default function AppShell() {
     onSetGlassesMinimalMode: setGlassesMinimalMode,
     onSetGlassesVadEnabled: setGlassesVadEnabled,
     onSetGlassesVadSilenceMs: setGlassesVadSilenceMs,
+    onSetGlassesVadSensitivityDb: setGlassesVadSensitivityDb,
     onSetGlassesLoopCaptureMs: setGlassesLoopCaptureMs,
     onSetGlassesHeadsetPttEnabled: setGlassesHeadsetPttEnabled,
     onOpenGlassesMode: () => {
       if (!glassesMode.enabled) {
         setGlassesEnabled(true);
+      }
+      if (voicePermissionStatus !== "granted") {
+        setStatus({
+          text: "Glasses voice mode needs microphone access. Please allow microphone permission.",
+          error: false,
+        });
+        void requestVoicePermission();
       }
       setRoute("glasses");
     },
@@ -1779,12 +1844,26 @@ export default function AppShell() {
     },
     onVoiceStartCapture: () => {
       void runWithStatus("Starting voice capture", async () => {
+        await Haptics.selectionAsync();
         await startVoiceCapture();
       });
     },
     onVoiceStopCapture: (session) => {
+      if (glassesMode.voiceLoop) {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        void stopVoiceCaptureIntoSession(session).then((ok) => {
+          if (ok) {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            return;
+          }
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        });
+        return;
+      }
       void runWithStatus(`Transcribing voice for ${session}`, async () => {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
         await stopVoiceCaptureIntoSession(session);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       });
     },
     onVoiceSendTranscript: (session) => {
@@ -2364,8 +2443,16 @@ export default function AppShell() {
       <OnboardingModal
         visible={!onboardingCompleted}
         notificationsGranted={permissionStatus === "granted"}
+        microphoneGranted={voicePermissionStatus === "granted"}
         onRequestNotifications={() => {
           void requestPermission();
+        }}
+        onRequestMicrophone={() => {
+          setStatus({
+            text: "NovaRemote uses microphone access for glasses voice commands.",
+            error: false,
+          });
+          void requestVoicePermission();
         }}
         onTestConnection={async (server) => {
           const healthUrl = `${normalizeBaseUrl(server.url)}/health`;

@@ -1,6 +1,5 @@
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import CryptoJS from "crypto-js";
 
 import { STORAGE_ACTIVE_LLM_PROFILE_ID, STORAGE_LLM_PROFILES, makeId } from "../constants";
 import { LlmProfile } from "../types";
@@ -8,6 +7,17 @@ import { LlmProfile } from "../types";
 const LLM_EXPORT_PREFIX = "novaremote.llm.aes.v1.";
 const LLM_EXPORT_PREFIX_LEGACY = "novaremote.llm.enc.v1.";
 const LLM_EXPORT_PBKDF2_ITERATIONS = 120000;
+
+let cryptoJsCache: any | null = null;
+
+function getCryptoJs() {
+  if (!cryptoJsCache) {
+    // Lazy require keeps crypto-js out of the hot startup path.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    cryptoJsCache = require("crypto-js");
+  }
+  return cryptoJsCache;
+}
 
 type LlmEncryptedEnvelope = {
   version: 1;
@@ -84,7 +94,8 @@ function requirePassphrase(passphrase: string): string {
   return trimmed;
 }
 
-function deriveAesKey(passphrase: string, salt: CryptoJS.lib.WordArray, iterations: number): CryptoJS.lib.WordArray {
+function deriveAesKey(passphrase: string, salt: any, iterations: number): any {
+  const CryptoJS = getCryptoJs();
   return CryptoJS.PBKDF2(passphrase, salt, {
     keySize: 256 / 32,
     iterations,
@@ -93,6 +104,7 @@ function deriveAesKey(passphrase: string, salt: CryptoJS.lib.WordArray, iteratio
 }
 
 function encryptPayload(payload: string, passphrase: string): string {
+  const CryptoJS = getCryptoJs();
   const salt = CryptoJS.lib.WordArray.random(16);
   const iv = CryptoJS.lib.WordArray.random(16);
   const key = deriveAesKey(passphrase, salt, LLM_EXPORT_PBKDF2_ITERATIONS);
@@ -119,6 +131,7 @@ function decryptPayload(rawBlob: string, passphrase: string): string {
   const raw = rawBlob.trim();
 
   if (raw.startsWith(LLM_EXPORT_PREFIX)) {
+    const CryptoJS = getCryptoJs();
     let envelope: LlmEncryptedEnvelope;
     try {
       envelope = JSON.parse(decodeUtf8(base64ToBytes(raw.slice(LLM_EXPORT_PREFIX.length)))) as LlmEncryptedEnvelope;
@@ -161,13 +174,21 @@ function decryptPayload(rawBlob: string, passphrase: string): string {
   }
 
   if (raw.startsWith(LLM_EXPORT_PREFIX_LEGACY)) {
-    const key = encodeUtf8(passphrase);
-    const encrypted = base64ToBytes(raw.slice(LLM_EXPORT_PREFIX_LEGACY.length));
-    const decrypted = xorBytes(encrypted, key);
-    return decodeUtf8(decrypted);
+    try {
+      const key = encodeUtf8(passphrase);
+      const encrypted = base64ToBytes(raw.slice(LLM_EXPORT_PREFIX_LEGACY.length));
+      const decrypted = xorBytes(encrypted, key);
+      return decodeUtf8(decrypted);
+    } catch {
+      throw new Error(
+        "This export uses an older format. Re-export from the source device, or verify the passphrase used for that legacy export."
+      );
+    }
   }
 
-  throw new Error("Invalid encrypted LLM payload.");
+  throw new Error(
+    "Invalid encrypted LLM payload. Supported formats: novaremote.llm.aes.v1 and legacy novaremote.llm.enc.v1."
+  );
 }
 
 function normalizeImportedProfile(profile: LlmProfile): LlmProfile {

@@ -93,6 +93,7 @@ function glassesBrandPreset(brand: GlassesBrand): {
   textScale: number;
   loopCaptureMs: number;
   vadSilenceMs: number;
+  vadSensitivityDb: number;
   wakePhrase: string;
 } {
   if (brand === "halo") {
@@ -100,6 +101,7 @@ function glassesBrandPreset(brand: GlassesBrand): {
       textScale: 1.15,
       loopCaptureMs: 7600,
       vadSilenceMs: 1100,
+      vadSensitivityDb: 9,
       wakePhrase: "halo",
     };
   }
@@ -108,6 +110,7 @@ function glassesBrandPreset(brand: GlassesBrand): {
       textScale: 1,
       loopCaptureMs: 6800,
       vadSilenceMs: 900,
+      vadSensitivityDb: 8,
       wakePhrase: "nova",
     };
   }
@@ -115,6 +118,7 @@ function glassesBrandPreset(brand: GlassesBrand): {
     textScale: 1.05,
     loopCaptureMs: 6400,
     vadSilenceMs: 800,
+    vadSensitivityDb: 7,
     wakePhrase: "xreal",
   };
 }
@@ -258,6 +262,7 @@ export function TerminalsScreen() {
     onSetGlassesMinimalMode,
     onSetGlassesVadEnabled,
     onSetGlassesVadSilenceMs,
+    onSetGlassesVadSensitivityDb,
     onSetGlassesLoopCaptureMs,
     onSetGlassesHeadsetPttEnabled,
     onOpenGlassesMode,
@@ -809,6 +814,7 @@ export function TerminalsScreen() {
             onSetGlassesTextScale(preset.textScale);
             onSetGlassesLoopCaptureMs(preset.loopCaptureMs);
             onSetGlassesVadSilenceMs(preset.vadSilenceMs);
+            onSetGlassesVadSensitivityDb(preset.vadSensitivityDb);
             if (!glassesMode.wakePhraseEnabled || !glassesMode.wakePhrase.trim()) {
               onSetGlassesWakePhrase(preset.wakePhrase);
             }
@@ -902,14 +908,24 @@ export function TerminalsScreen() {
           keyboardType="number-pad"
         />
         {glassesMode.vadEnabled ? (
-          <TextInput
-            style={styles.input}
-            value={String(glassesMode.vadSilenceMs)}
-            onChangeText={(value) => onSetGlassesVadSilenceMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
-            placeholder="VAD silence ms (250-5000)"
-            placeholderTextColor="#7f7aa8"
-            keyboardType="number-pad"
-          />
+          <>
+            <TextInput
+              style={styles.input}
+              value={String(glassesMode.vadSilenceMs)}
+              onChangeText={(value) => onSetGlassesVadSilenceMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
+              placeholder="VAD silence ms (250-5000)"
+              placeholderTextColor="#7f7aa8"
+              keyboardType="number-pad"
+            />
+            <TextInput
+              style={styles.input}
+              value={String(glassesMode.vadSensitivityDb)}
+              onChangeText={(value) => onSetGlassesVadSensitivityDb(Number.parseFloat(value.replace(/[^0-9.]/g, "")) || 0)}
+              placeholder="VAD sensitivity dB above ambient (2-20)"
+              placeholderTextColor="#7f7aa8"
+              keyboardType="decimal-pad"
+            />
+          </>
         ) : null}
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>BT remote push-to-talk keys</Text>

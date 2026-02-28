@@ -206,6 +206,7 @@ export type GlassesModeSettings = {
   minimalMode: boolean;
   vadEnabled: boolean;
   vadSilenceMs: number;
+  vadSensitivityDb: number;
   loopCaptureMs: number;
   headsetPttEnabled: boolean;
 };

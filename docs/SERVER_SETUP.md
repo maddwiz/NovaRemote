@@ -328,11 +328,19 @@ Request format:
 
 - `Authorization: Bearer <TOKEN>`
 - `multipart/form-data`
-- file field: `file` (audio/m4a)
+- file field: `file` (currently uploaded as `audio/m4a`)
+- metadata field: `audio_mime_type` (`audio/m4a`)
+- metadata field: `audio_format` (`m4a-aac`)
 - optional field: `wake_phrase` (string, for example `nova`)
 - optional field: `require_wake_phrase` (`true`/`false`)
 - optional field: `vad` (`true`/`false`)
 - optional field: `vad_silence_ms` (integer, recommended `250-5000`)
+
+Server behavior recommendations:
+
+- Support `audio/m4a` for best compatibility with current app builds.
+- If unsupported, return `HTTP 415` with a plain-text or JSON error describing accepted formats (for example `audio/wav`).
+- Do not return `404` for media-type mismatch; reserve `404` for route-not-found.
 
 Recommended response format:
 
@@ -341,6 +349,25 @@ Recommended response format:
 ```
 
 Accepted text fields are: `transcript`, `text`, `command`, `output`, `message`, `result`.
+
+VAD endpoint guidance (`*/transcribe-vad`):
+
+- Honor `vad=true` and `vad_silence_ms` when supplied.
+- Optionally return metadata fields such as:
+  - `used_vad: true`
+  - `speech_ms: <number>`
+  - `detected_wake_phrase: <string|null>`
+
+Example VAD response:
+
+```json
+{
+  "transcript": "nova restart api and tail logs",
+  "used_vad": true,
+  "speech_ms": 1820,
+  "detected_wake_phrase": "nova"
+}
+```
 
 ## Quick Start (Codex Remote Reference Server)
 

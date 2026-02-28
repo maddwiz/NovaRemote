@@ -14,7 +14,9 @@ type OnboardingServer = {
 type OnboardingModalProps = {
   visible: boolean;
   notificationsGranted: boolean;
+  microphoneGranted: boolean;
   onRequestNotifications: () => void;
+  onRequestMicrophone: () => void;
   onTestConnection: (server: OnboardingServer) => Promise<void>;
   onComplete: (server: OnboardingServer, requireBiometric: boolean) => void;
 };
@@ -22,7 +24,9 @@ type OnboardingModalProps = {
 export function OnboardingModal({
   visible,
   notificationsGranted,
+  microphoneGranted,
   onRequestNotifications,
+  onRequestMicrophone,
   onTestConnection,
   onComplete,
 }: OnboardingModalProps) {
@@ -133,7 +137,13 @@ export function OnboardingModal({
               <Pressable accessibilityRole="button" style={styles.buttonGhost} onPress={onRequestNotifications}>
                 <Text style={styles.buttonGhostText}>{notificationsGranted ? "Notifications Enabled" : "Enable Notifications"}</Text>
               </Pressable>
+              <Pressable accessibilityRole="button" style={styles.buttonGhost} onPress={onRequestMicrophone}>
+                <Text style={styles.buttonGhostText}>{microphoneGranted ? "Microphone Enabled" : "Enable Microphone"}</Text>
+              </Pressable>
 
+              <Text style={styles.emptyText}>
+                Glasses mode and voice commands require microphone permission. You can change this later in iOS Settings.
+              </Text>
               <Text style={styles.emptyText}>Tip: Tap any session card to open fullscreen controls and search output.</Text>
             </>
           ) : null}

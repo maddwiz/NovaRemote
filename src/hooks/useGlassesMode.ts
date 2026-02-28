@@ -15,6 +15,7 @@ const DEFAULT_GLASSES_MODE: GlassesModeSettings = {
   minimalMode: true,
   vadEnabled: false,
   vadSilenceMs: 900,
+  vadSensitivityDb: 8,
   loopCaptureMs: 6500,
   headsetPttEnabled: true,
 };
@@ -50,6 +51,14 @@ function normalizeVadSilenceMs(value: unknown): number {
   return Math.max(250, Math.min(parsed, 5000));
 }
 
+function normalizeVadSensitivityDb(value: unknown): number {
+  const parsed = typeof value === "number" ? value : Number.parseFloat(String(value || ""));
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_GLASSES_MODE.vadSensitivityDb;
+  }
+  return Math.max(2, Math.min(parsed, 20));
+}
+
 function normalizeLoopCaptureMs(value: unknown): number {
   const parsed = typeof value === "number" ? value : Number.parseInt(String(value || ""), 10);
   if (!Number.isFinite(parsed)) {
@@ -83,6 +92,7 @@ export function useGlassesMode() {
           minimalMode: parsed.minimalMode !== undefined ? Boolean(parsed.minimalMode) : DEFAULT_GLASSES_MODE.minimalMode,
           vadEnabled: parsed.vadEnabled !== undefined ? Boolean(parsed.vadEnabled) : DEFAULT_GLASSES_MODE.vadEnabled,
           vadSilenceMs: normalizeVadSilenceMs(parsed.vadSilenceMs),
+          vadSensitivityDb: normalizeVadSensitivityDb(parsed.vadSensitivityDb),
           loopCaptureMs: normalizeLoopCaptureMs(parsed.loopCaptureMs),
           headsetPttEnabled:
             parsed.headsetPttEnabled !== undefined ? Boolean(parsed.headsetPttEnabled) : DEFAULT_GLASSES_MODE.headsetPttEnabled,
@@ -139,6 +149,10 @@ export function useGlassesMode() {
     setSettings((prev) => ({ ...prev, vadSilenceMs: normalizeVadSilenceMs(vadSilenceMs) }));
   }, []);
 
+  const setVadSensitivityDb = useCallback((vadSensitivityDb: number) => {
+    setSettings((prev) => ({ ...prev, vadSensitivityDb: normalizeVadSensitivityDb(vadSensitivityDb) }));
+  }, []);
+
   const setLoopCaptureMs = useCallback((loopCaptureMs: number) => {
     setSettings((prev) => ({ ...prev, loopCaptureMs: normalizeLoopCaptureMs(loopCaptureMs) }));
   }, []);
@@ -162,6 +176,7 @@ export function useGlassesMode() {
     setMinimalMode,
     setVadEnabled,
     setVadSilenceMs,
+    setVadSensitivityDb,
     setLoopCaptureMs,
     setHeadsetPttEnabled,
     setTextScale,

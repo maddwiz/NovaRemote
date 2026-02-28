@@ -30,6 +30,7 @@ function brandPreset(brand: GlassesBrand): {
   textScale: number;
   loopCaptureMs: number;
   vadSilenceMs: number;
+  vadSensitivityDb: number;
   wakePhrase: string;
 } {
   if (brand === "halo") {
@@ -37,6 +38,7 @@ function brandPreset(brand: GlassesBrand): {
       textScale: 1.15,
       loopCaptureMs: 7600,
       vadSilenceMs: 1100,
+      vadSensitivityDb: 9,
       wakePhrase: "halo",
     };
   }
@@ -45,6 +47,7 @@ function brandPreset(brand: GlassesBrand): {
       textScale: 1,
       loopCaptureMs: 6800,
       vadSilenceMs: 900,
+      vadSensitivityDb: 8,
       wakePhrase: "nova",
     };
   }
@@ -52,6 +55,7 @@ function brandPreset(brand: GlassesBrand): {
     textScale: 1.05,
     loopCaptureMs: 6400,
     vadSilenceMs: 800,
+    vadSensitivityDb: 7,
     wakePhrase: "xreal",
   };
 }
@@ -80,6 +84,7 @@ export function GlassesModeScreen() {
     onSetGlassesTextScale,
     onSetGlassesVadEnabled,
     onSetGlassesVadSilenceMs,
+    onSetGlassesVadSensitivityDb,
     onSetGlassesLoopCaptureMs,
     onSetGlassesHeadsetPttEnabled,
     onVoiceStartCapture,
@@ -93,6 +98,18 @@ export function GlassesModeScreen() {
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
   const localStopPendingRef = useRef<boolean>(false);
+  const voiceStopRef = useRef(onVoiceStopCapture);
+  const voiceStartRef = useRef(onVoiceStartCapture);
+  const ambientFloorDbRef = useRef<number | null>(null);
+  const dynamicThresholdDbRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    voiceStopRef.current = onVoiceStopCapture;
+  }, [onVoiceStopCapture]);
+
+  useEffect(() => {
+    voiceStartRef.current = onVoiceStartCapture;
+  }, [onVoiceStartCapture]);
 
   useEffect(() => {
     if (openSessions.length === 0) {
@@ -142,10 +159,10 @@ export function GlassesModeScreen() {
       return;
     }
     if (voiceRecording) {
-      onVoiceStopCapture(activeSession);
+      voiceStopRef.current(activeSession);
       return;
     }
-    onVoiceStartCapture();
+    voiceStartRef.current();
   };
 
   useEffect(() => {
@@ -163,7 +180,7 @@ export function GlassesModeScreen() {
       loopTimeoutRef.current = null;
     }
     loopTimeoutRef.current = setTimeout(() => {
-      onVoiceStopCapture(activeSession);
+      voiceStopRef.current(activeSession);
     }, glassesMode.loopCaptureMs);
 
     return () => {
@@ -172,20 +189,30 @@ export function GlassesModeScreen() {
         loopTimeoutRef.current = null;
       }
     };
-  }, [activeSession, glassesMode.loopCaptureMs, glassesMode.voiceLoop, onVoiceStopCapture, voiceBusy, voiceRecording]);
+  }, [activeSession, glassesMode.loopCaptureMs, glassesMode.voiceLoop, voiceBusy, voiceRecording]);
 
   useEffect(() => {
     if (!glassesMode.voiceLoop || !glassesMode.vadEnabled || !activeSession || !voiceRecording || voiceBusy) {
       silenceSinceRef.current = null;
       localStopPendingRef.current = false;
+      ambientFloorDbRef.current = null;
+      dynamicThresholdDbRef.current = null;
       return;
     }
     if (typeof voiceMeteringDb !== "number") {
       return;
     }
     const now = Date.now();
-    const silenceThresholdDb = -43;
-    if (voiceMeteringDb > silenceThresholdDb) {
+    const existingFloor = ambientFloorDbRef.current;
+    const floor = existingFloor === null ? voiceMeteringDb : existingFloor;
+    const alpha = voiceMeteringDb < floor ? 0.22 : 0.045;
+    const nextFloor = floor + (voiceMeteringDb - floor) * alpha;
+    ambientFloorDbRef.current = nextFloor;
+
+    const adaptiveThreshold = Math.max(-60, Math.min(-18, nextFloor + glassesMode.vadSensitivityDb));
+    dynamicThresholdDbRef.current = adaptiveThreshold;
+
+    if (voiceMeteringDb > adaptiveThreshold) {
       silenceSinceRef.current = null;
       localStopPendingRef.current = false;
       return;
@@ -199,14 +226,14 @@ export function GlassesModeScreen() {
     }
     if (now - silenceSinceRef.current >= glassesMode.vadSilenceMs) {
       localStopPendingRef.current = true;
-      onVoiceStopCapture(activeSession);
+      voiceStopRef.current(activeSession);
     }
   }, [
     activeSession,
     glassesMode.vadEnabled,
+    glassesMode.vadSensitivityDb,
     glassesMode.vadSilenceMs,
     glassesMode.voiceLoop,
-    onVoiceStopCapture,
     voiceBusy,
     voiceMeteringDb,
     voiceRecording,
@@ -220,6 +247,8 @@ export function GlassesModeScreen() {
       }
       silenceSinceRef.current = null;
       localStopPendingRef.current = false;
+      ambientFloorDbRef.current = null;
+      dynamicThresholdDbRef.current = null;
     };
   }, []);
 
@@ -250,6 +279,7 @@ export function GlassesModeScreen() {
             onSetGlassesTextScale(preset.textScale);
             onSetGlassesLoopCaptureMs(preset.loopCaptureMs);
             onSetGlassesVadSilenceMs(preset.vadSilenceMs);
+            onSetGlassesVadSensitivityDb(preset.vadSensitivityDb);
             if (!glassesMode.wakePhraseEnabled || !glassesMode.wakePhrase.trim()) {
               onSetGlassesWakePhrase(preset.wakePhrase);
             }
@@ -354,14 +384,24 @@ export function GlassesModeScreen() {
           />
         </View>
         {glassesMode.vadEnabled ? (
-          <TextInput
-            style={styles.input}
-            value={String(glassesMode.vadSilenceMs)}
-            onChangeText={(value) => onSetGlassesVadSilenceMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
-            placeholder="VAD silence ms (250-5000)"
-            placeholderTextColor="#7f7aa8"
-            keyboardType="number-pad"
-          />
+          <>
+            <TextInput
+              style={styles.input}
+              value={String(glassesMode.vadSilenceMs)}
+              onChangeText={(value) => onSetGlassesVadSilenceMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
+              placeholder="VAD silence ms (250-5000)"
+              placeholderTextColor="#7f7aa8"
+              keyboardType="number-pad"
+            />
+            <TextInput
+              style={styles.input}
+              value={String(glassesMode.vadSensitivityDb)}
+              onChangeText={(value) => onSetGlassesVadSensitivityDb(Number.parseFloat(value.replace(/[^0-9.]/g, "")) || 0)}
+              placeholder="VAD sensitivity dB above ambient (2-20)"
+              placeholderTextColor="#7f7aa8"
+              keyboardType="decimal-pad"
+            />
+          </>
         ) : null}
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>BT remote push-to-talk keys</Text>
@@ -385,6 +425,11 @@ export function GlassesModeScreen() {
         <Text style={styles.emptyText}>
           {`Loop ${glassesMode.loopCaptureMs}ms • VAD ${glassesMode.vadEnabled ? `${glassesMode.vadSilenceMs}ms` : "off"}`}
         </Text>
+        {glassesMode.vadEnabled && typeof dynamicThresholdDbRef.current === "number" ? (
+          <Text style={styles.emptyText}>
+            {`Adaptive threshold ${Math.round(dynamicThresholdDbRef.current)} dB (ambient ${Math.round(ambientFloorDbRef.current || 0)} dB)`}
+          </Text>
+        ) : null}
 
         {!glassesMode.minimalMode ? (
           <TextInput
@@ -434,13 +479,13 @@ export function GlassesModeScreen() {
               if (voiceRecording || !activeSession) {
                 return;
               }
-              onVoiceStartCapture();
+              voiceStartRef.current();
             }}
             onPressOut={() => {
               if (!activeSession || !voiceRecording) {
                 return;
               }
-              onVoiceStopCapture(activeSession);
+              voiceStopRef.current(activeSession);
             }}
           >
             <Text style={styles.glassesRouteButtonText}>Hold to Talk</Text>
