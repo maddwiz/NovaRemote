@@ -121,6 +121,17 @@ export type WatchRule = {
   lastMatch?: string | null;
 };
 
+export type TerminalThemePresetId = "nova" | "solarized_dark" | "monokai" | "dracula" | "nord" | "one_dark";
+
+export type TerminalFontFamily = "menlo" | "sf_mono" | "jetbrains_mono";
+
+export type TerminalThemeSettings = {
+  preset: TerminalThemePresetId;
+  fontSize: number;
+  fontFamily: TerminalFontFamily;
+  backgroundOpacity: number;
+};
+
 export type LlmProfile = {
   id: string;
   name: string;

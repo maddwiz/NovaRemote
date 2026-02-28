@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Modal, Pressable, SafeAreaView, ScrollView, Text, TextInput, View } from "react-native";
+import { Modal, Pressable, SafeAreaView, ScrollView, StyleProp, Text, TextInput, TextStyle, View, ViewStyle } from "react-native";
 
 import { styles } from "../theme/styles";
 import { TerminalSendMode } from "../types";
@@ -14,6 +14,8 @@ type FullscreenTerminalProps = {
   searchTerm: string;
   searchMatchesLabel: string;
   activeMatchIndex: number;
+  terminalViewStyle?: StyleProp<ViewStyle>;
+  terminalTextStyle?: StyleProp<TextStyle>;
   onClose: () => void;
   onToggleMode: () => void;
   onSearchChange: (value: string) => void;
@@ -35,6 +37,8 @@ export function FullscreenTerminal({
   searchTerm,
   searchMatchesLabel,
   activeMatchIndex,
+  terminalViewStyle,
+  terminalTextStyle,
   onClose,
   onToggleMode,
   onSearchChange,
@@ -66,7 +70,7 @@ export function FullscreenTerminal({
         </View>
 
         <ScrollView
-          style={styles.modalTerminalView}
+          style={[styles.modalTerminalView, terminalViewStyle]}
           ref={terminalRef}
           onContentSizeChange={() => {
             terminalRef.current?.scrollToEnd({ animated: true });
@@ -74,7 +78,7 @@ export function FullscreenTerminal({
         >
           <AnsiText
             text={output || "Waiting for output..."}
-            style={styles.terminalText}
+            style={[styles.terminalText, terminalTextStyle]}
             searchTerm={searchTerm}
             activeMatchIndex={activeMatchIndex}
           />

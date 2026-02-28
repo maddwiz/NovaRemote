@@ -7,6 +7,9 @@ import {
   ServerCapabilities,
   ServerProfile,
   SessionConnectionMeta,
+  TerminalFontFamily,
+  TerminalThemePresetId,
+  TerminalThemeSettings,
   TerminalSendMode,
   WatchRule,
 } from "../types";
@@ -48,6 +51,7 @@ export type TerminalsViewModel = {
   suggestionsBySession: Record<string, string[]>;
   suggestionBusyBySession: Record<string, boolean>;
   watchRules: Record<string, WatchRule>;
+  terminalTheme: TerminalThemeSettings;
   onShowPaywall: () => void;
   onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;
@@ -81,6 +85,10 @@ export type TerminalsViewModel = {
   onUseSuggestion: (session: string, value: string) => void;
   onToggleWatch: (session: string, enabled: boolean) => void;
   onSetWatchPattern: (session: string, pattern: string) => void;
+  onSetTerminalPreset: (preset: TerminalThemePresetId) => void;
+  onSetTerminalFontFamily: (fontFamily: TerminalFontFamily) => void;
+  onSetTerminalFontSize: (fontSize: number) => void;
+  onSetTerminalBackgroundOpacity: (opacity: number) => void;
   onRunFleet: () => void;
 };
 

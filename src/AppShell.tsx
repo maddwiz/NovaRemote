@@ -50,6 +50,7 @@ import { useSessionTags } from "./hooks/useSessionTags";
 import { useServerCapabilities } from "./hooks/useServerCapabilities";
 import { useSnippets } from "./hooks/useSnippets";
 import { useTerminalSessions } from "./hooks/useTerminalSessions";
+import { useTerminalTheme } from "./hooks/useTerminalTheme";
 import { useTutorial } from "./hooks/useTutorial";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useFilesBrowser } from "./hooks/useFilesBrowser";
@@ -61,6 +62,7 @@ import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
+import { buildTerminalAppearance } from "./theme/terminalTheme";
 import { AiEnginePreference, FleetRunResult, RouteTab, ServerProfile, Status, TerminalSendMode, TmuxTailResponse, WatchRule } from "./types";
 
 function parseCommaTags(raw: string): string[] {
@@ -240,6 +242,7 @@ export default function AppShell() {
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet } = useSnippets();
+  const { terminalTheme, setPreset: setTerminalPreset, setFontFamily: setTerminalFontFamily, setFontSize: setTerminalFontSize, setBackgroundOpacity: setTerminalBackgroundOpacity } = useTerminalTheme();
   const {
     profiles: llmProfiles,
     activeProfile,
@@ -899,6 +902,7 @@ export default function AppShell() {
   const focusedCursor = focusedSession ? searchIndex[focusedSession] ?? 0 : 0;
   const focusedMatchIndex = normalizeMatchIndex(focusedCursor, focusedMatchCount);
   const focusedSearchLabel = focusedMatchCount === 0 ? "0 matches" : `${focusedMatchIndex + 1}/${focusedMatchCount}`;
+  const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
   const terminalsViewModel: TerminalsViewModel = {
     activeServer,
     connected,
@@ -936,6 +940,7 @@ export default function AppShell() {
     suggestionsBySession,
     suggestionBusyBySession,
     watchRules,
+    terminalTheme,
     onShowPaywall: () => setPaywallVisible(true),
     onSetTagFilter: setTagFilter,
     onSetStartCwd: setStartCwd,
@@ -1172,6 +1177,10 @@ export default function AppShell() {
         };
       });
     },
+    onSetTerminalPreset: setTerminalPreset,
+    onSetTerminalFontFamily: setTerminalFontFamily,
+    onSetTerminalFontSize: setTerminalFontSize,
+    onSetTerminalBackgroundOpacity: setTerminalBackgroundOpacity,
     onRunFleet: () => {
       void runWithStatus("Running fleet command", async () => {
         const approved = await requestDangerApproval(fleetCommand, "Fleet execute");
@@ -1506,6 +1515,8 @@ export default function AppShell() {
         searchTerm={focusedSearchTerm}
         searchMatchesLabel={focusedSearchLabel}
         activeMatchIndex={focusedMatchIndex}
+        terminalViewStyle={terminalAppearance.modalTerminalViewStyle}
+        terminalTextStyle={terminalAppearance.terminalTextStyle}
         onClose={() => setFocusedSession(null)}
         onToggleMode={() => {
           if (!focusedSession) {

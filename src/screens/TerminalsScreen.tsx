@@ -5,6 +5,15 @@ import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, isLikelyAiSession } from "../constants";
 import { TerminalCard } from "../components/TerminalCard";
 import { styles } from "../theme/styles";
+import {
+  TERMINAL_BG_OPACITY_OPTIONS,
+  TERMINAL_FONT_OPTIONS,
+  TERMINAL_MAX_FONT_SIZE,
+  TERMINAL_MIN_FONT_SIZE,
+  TERMINAL_THEME_PRESETS,
+  buildTerminalAppearance,
+  getTerminalPreset,
+} from "../theme/terminalTheme";
 
 function renderSessionChips(
   allSessions: string[],
@@ -77,6 +86,7 @@ export function TerminalsScreen() {
     suggestionsBySession,
     suggestionBusyBySession,
     watchRules,
+    terminalTheme,
     onShowPaywall,
     onSetTagFilter,
     onSetStartCwd,
@@ -110,12 +120,18 @@ export function TerminalsScreen() {
     onUseSuggestion,
     onToggleWatch,
     onSetWatchPattern,
+    onSetTerminalPreset,
+    onSetTerminalFontFamily,
+    onSetTerminalFontSize,
+    onSetTerminalBackgroundOpacity,
     onRunFleet,
   } = useAppContext().terminals;
 
   const { width } = useWindowDimensions();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
+  const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
+  const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
 
   const openTerminalCards = useMemo(() => {
     return openSessions.map((session) => {
@@ -155,6 +171,8 @@ export function TerminalsScreen() {
           watchEnabled={watch.enabled}
           watchPattern={watch.pattern}
           tags={tags}
+          terminalViewStyle={terminalAppearance.terminalViewStyle}
+          terminalTextStyle={terminalAppearance.terminalTextStyle}
           historyCount={historyCount[session] || 0}
           onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
           onSetAiEngine={(nextEngine) => onSetSessionAiEngine(session, nextEngine)}
@@ -186,6 +204,7 @@ export function TerminalsScreen() {
     drafts,
     hasExternalLlm,
     historyCount,
+    terminalAppearance,
     onClearDraft,
     onFocusSession,
     onHideSession,
@@ -293,6 +312,67 @@ export function TerminalsScreen() {
         <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
         <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
         <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Terminal Theme</Text>
+        <Text style={styles.serverSubtitle}>{`${terminalPreset.label} | ${terminalTheme.fontSize}px | ${Math.round(terminalTheme.backgroundOpacity * 100)}% bg`}</Text>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {TERMINAL_THEME_PRESETS.map((preset) => (
+            <Pressable
+              key={preset.id}
+              style={[styles.chip, terminalTheme.preset === preset.id ? styles.chipActive : null]}
+              onPress={() => onSetTerminalPreset(preset.id)}
+            >
+              <Text style={[styles.chipText, terminalTheme.preset === preset.id ? styles.chipTextActive : null]}>{preset.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {TERMINAL_FONT_OPTIONS.map((option) => (
+            <Pressable
+              key={option.id}
+              style={[styles.chip, terminalTheme.fontFamily === option.id ? styles.chipActive : null]}
+              onPress={() => onSetTerminalFontFamily(option.id)}
+            >
+              <Text style={[styles.chipText, terminalTheme.fontFamily === option.id ? styles.chipTextActive : null]}>{option.label}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <View style={styles.rowInlineSpace}>
+          <Pressable
+            style={[styles.actionButton, terminalTheme.fontSize <= TERMINAL_MIN_FONT_SIZE ? styles.buttonDisabled : null]}
+            onPress={() => onSetTerminalFontSize(terminalTheme.fontSize - 1)}
+            disabled={terminalTheme.fontSize <= TERMINAL_MIN_FONT_SIZE}
+          >
+            <Text style={styles.actionButtonText}>A-</Text>
+          </Pressable>
+          <Text style={styles.serverSubtitle}>{`Font ${terminalTheme.fontSize}px`}</Text>
+          <Pressable
+            style={[styles.actionButton, terminalTheme.fontSize >= TERMINAL_MAX_FONT_SIZE ? styles.buttonDisabled : null]}
+            onPress={() => onSetTerminalFontSize(terminalTheme.fontSize + 1)}
+            disabled={terminalTheme.fontSize >= TERMINAL_MAX_FONT_SIZE}
+          >
+            <Text style={styles.actionButtonText}>A+</Text>
+          </Pressable>
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {TERMINAL_BG_OPACITY_OPTIONS.map((opacity) => (
+            <Pressable
+              key={String(opacity)}
+              style={[styles.chip, Math.abs(terminalTheme.backgroundOpacity - opacity) < 0.01 ? styles.chipActive : null]}
+              onPress={() => onSetTerminalBackgroundOpacity(opacity)}
+            >
+              <Text
+                style={[styles.chipText, Math.abs(terminalTheme.backgroundOpacity - opacity) < 0.01 ? styles.chipTextActive : null]}
+              >{`${Math.round(opacity * 100)}% Background`}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
       </View>
 
       <View style={styles.panel}>

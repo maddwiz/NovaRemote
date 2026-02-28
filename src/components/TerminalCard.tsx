@@ -1,5 +1,5 @@
 import React, { useRef } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { StyleProp, TextStyle, Pressable, ScrollView, Text, TextInput, View, ViewStyle } from "react-native";
 
 import { styles } from "../theme/styles";
 import { AiEnginePreference, ConnectionState, TerminalSendMode } from "../types";
@@ -28,6 +28,8 @@ type TerminalCardProps = {
   watchEnabled: boolean;
   watchPattern: string;
   tags: string[];
+  terminalViewStyle?: StyleProp<ViewStyle>;
+  terminalTextStyle?: StyleProp<TextStyle>;
   onSetMode: (mode: TerminalSendMode) => void;
   onSetAiEngine: (engine: AiEnginePreference) => void;
   onOpenOnMac: () => void;
@@ -72,6 +74,8 @@ export function TerminalCard({
   watchEnabled,
   watchPattern,
   tags,
+  terminalViewStyle,
+  terminalTextStyle,
   onSetMode,
   onSetAiEngine,
   onOpenOnMac,
@@ -204,10 +208,10 @@ export function TerminalCard({
 
       <ScrollView
         ref={terminalRef}
-        style={styles.terminalView}
+        style={[styles.terminalView, terminalViewStyle]}
         onContentSizeChange={() => terminalRef.current?.scrollToEnd({ animated: true })}
       >
-        <AnsiText text={output || "Waiting for output..."} style={styles.terminalText} />
+        <AnsiText text={output || "Waiting for output..."} style={[styles.terminalText, terminalTextStyle]} />
       </ScrollView>
 
       <TextInput
