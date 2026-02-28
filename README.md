@@ -1,67 +1,46 @@
-# NovaRemote (iPhone App)
+# NovaRemote
 
-NovaRemote is a separate mobile app (Expo/React Native) for controlling Codex tmux terminals on your Mac through the existing `codex_remote` API.
+NovaRemote is an Expo + React Native app for controlling remote tmux/Codex sessions through a companion server.
 
-This does **not** modify your existing `codex_remote` service behavior.
+## Current Features
 
-## Current MVP Features
+- Multi-server profile management with secure storage (`expo-secure-store`)
+- Session discovery (`GET /tmux/sessions`)
+- Live terminal streaming (`WS /tmux/stream`) with polling fallback (`GET /tmux/tail`)
+- AI mode (`POST /codex/start`, `POST /codex/message`)
+- Shell mode (`POST /tmux/session`, `POST /shell/run`, `POST /tmux/send`)
+- Session controls (`POST /tmux/ctrl`, `POST /mac/attach`)
 
-- Secure token + server URL storage (`expo-secure-store`)
-- Session discovery from `/codex/sessions`
-- Multi-session open/hide control
-- Live terminal polling from `/tmux/tail`
-- Start Codex sessions from phone (`/codex/start`)
-- Send messages to Codex (`/codex/message`)
-- Stop current run with Ctrl-C (`/codex/stop`)
-- Open same session on Mac Terminal (`/mac/attach`)
-
-## Run Locally
+## Local Run
 
 ```bash
-cd "/Users/desmondpottle/Documents/New project/NovaRemote"
+cd /path/to/NovaRemote
 npm install
 npm run start
 ```
 
-Then open on iPhone via Expo Go (same network / Tailscale reachability to your Mac host).
+Open in Expo Go on your device and add a server profile in-app:
 
-## Default Host
+- Server URL example: `https://your-server:8787`
+- Default CWD example: `/path/to/your/project`
+- Token: your companion server bearer token
 
-The app defaults to:
+## iOS/Android IDs
 
-- `http://desmonds-macbook-pro.tail9961a2.ts.net:8787`
+- iOS bundle id: `com.novaai.novaremote`
+- Android package: `com.novaai.novaremote`
 
-Change it in the app if needed.
-
-## Native iOS Wiring (Current State)
-
-Already wired:
-- iOS bundle id: `com.desmondpottle.novaremote`
-- EAS profiles in `eas.json`:
-  - `development-simulator`
-  - `preview`
-  - `production`
-- Native project scaffold generated in `ios/`
-
-Validated on this machine:
-- Xcode CLI tools are configured.
-- `pod install` runs successfully.
-- `xcodebuild` simulator build passes.
-
-For clean native regen and simulator run:
+## Native iOS Build
 
 ```bash
-cd "/Users/desmondpottle/Documents/New project/NovaRemote"
+cd /path/to/NovaRemote
 npm run prebuild:ios
 npm run ios:sim
 ```
 
-If you regenerate iOS files later, `npm run fix:ios:path-spaces` reapplies path-with-spaces Xcode script fixes.
+## App Store Prep (Checklist)
 
-## Build Toward App Store
-
-1. Run `npx eas login`.
-2. Run `npx eas build:configure`.
-3. Build preview: `npm run eas:build:ios:preview`.
-4. Build production: `npm run eas:build:ios:prod`.
-5. Add legal pages (privacy policy + terms) and final app metadata/screenshots.
+1. Configure EAS credentials and build profiles.
+2. Finalize privacy policy + terms URLs.
+3. Build preview/prod artifacts with EAS.
+4. Capture store screenshots and finalize metadata.

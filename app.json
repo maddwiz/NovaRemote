@@ -14,14 +14,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.desmondpottle.novaremote",
+      "bundleIdentifier": "com.novaai.novaremote",
       "buildNumber": "1.0.0",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
-      "package": "com.desmondpottle.novaremote",
+      "package": "com.novaai.novaremote",
       "adaptiveIcon": {
         "backgroundColor": "#060313",
         "foregroundImage": "./assets/novaai-logo-user.png",
