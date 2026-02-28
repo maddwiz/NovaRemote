@@ -28,6 +28,7 @@ type TerminalCardProps = {
   watchEnabled: boolean;
   watchPattern: string;
   tags: string[];
+  pinned: boolean;
   terminalViewStyle?: StyleProp<ViewStyle>;
   terminalTextStyle?: StyleProp<TextStyle>;
   onSetMode: (mode: TerminalSendMode) => void;
@@ -46,6 +47,7 @@ type TerminalCardProps = {
   onUseSuggestion: (value: string) => void;
   onToggleWatch: (value: boolean) => void;
   onWatchPatternChange: (value: string) => void;
+  onTogglePin: () => void;
   onSend: () => void;
   onClear: () => void;
   historyCount: number;
@@ -74,6 +76,7 @@ export function TerminalCard({
   watchEnabled,
   watchPattern,
   tags,
+  pinned,
   terminalViewStyle,
   terminalTextStyle,
   onSetMode,
@@ -92,6 +95,7 @@ export function TerminalCard({
   onUseSuggestion,
   onToggleWatch,
   onWatchPatternChange,
+  onTogglePin,
   onSend,
   onClear,
   historyCount,
@@ -196,6 +200,9 @@ export function TerminalCard({
           </Pressable>
           <Pressable style={styles.actionButton} onPress={onFullscreen}>
             <Text style={styles.actionButtonText}>Fullscreen</Text>
+          </Pressable>
+          <Pressable style={[styles.actionButton, pinned ? styles.modeButtonOn : null]} onPress={onTogglePin}>
+            <Text style={styles.actionButtonText}>{pinned ? "Unpin" : "Pin"}</Text>
           </Pressable>
           <Pressable style={[styles.actionDangerButton, !canStop ? styles.buttonDisabled : null]} onPress={onStop} disabled={!canStop}>
             <Text style={styles.actionDangerText}>Stop</Text>

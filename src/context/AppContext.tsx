@@ -41,6 +41,7 @@ export type TerminalsViewModel = {
   sessionTags: Record<string, string[]>;
   allTags: string[];
   tagFilter: string;
+  pinnedSessions: string[];
   isPro: boolean;
   fleetCommand: string;
   fleetCwd: string;
@@ -77,6 +78,7 @@ export type TerminalsViewModel = {
   onSetDraft: (session: string, value: string) => void;
   onSend: (session: string) => void;
   onClearDraft: (session: string) => void;
+  onTogglePinSession: (session: string) => void;
   onSetFleetCommand: (value: string) => void;
   onSetFleetCwd: (value: string) => void;
   onToggleFleetTarget: (serverId: string) => void;

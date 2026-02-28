@@ -15,6 +15,7 @@ export const STORAGE_LLM_PROFILES = "novaremote.llm_profiles.v1";
 export const STORAGE_ACTIVE_LLM_PROFILE_ID = "novaremote.active_llm_profile_id.v1";
 export const STORAGE_TERMINAL_THEME = "novaremote.terminal_theme.v1";
 export const STORAGE_WATCH_RULES_PREFIX = "novaremote.watch_rules.v1";
+export const STORAGE_PINNED_SESSIONS_PREFIX = "novaremote.pinned_sessions.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";

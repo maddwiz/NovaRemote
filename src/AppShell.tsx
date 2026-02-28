@@ -54,6 +54,7 @@ import { useTerminalTheme } from "./hooks/useTerminalTheme";
 import { useTutorial } from "./hooks/useTutorial";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useFilesBrowser } from "./hooks/useFilesBrowser";
+import { usePinnedSessions } from "./hooks/usePinnedSessions";
 import { useLlmProfiles } from "./hooks/useLlmProfiles";
 import { useLlmClient } from "./hooks/useLlmClient";
 import { FilesScreen } from "./screens/FilesScreen";
@@ -225,6 +226,7 @@ export default function AppShell() {
   const [llmTestOutput, setLlmTestOutput] = useState<string>("");
   const [llmTransferStatus, setLlmTransferStatus] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
+  const autoOpenedPinsServerRef = useRef<string | null>(null);
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -336,6 +338,7 @@ export default function AppShell() {
 
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(activeServerId);
   const { sessionTags, allTags, setTagsForSession, removeMissingSessions } = useSessionTags(activeServerId);
+  const { pinnedSessions, togglePinnedSession, removeMissingPins } = usePinnedSessions(activeServerId);
   const {
     currentPath,
     setCurrentPath,
@@ -786,6 +789,38 @@ export default function AppShell() {
   }, [allSessions, removeMissingSessions]);
 
   useEffect(() => {
+    void removeMissingPins(allSessions);
+  }, [allSessions, removeMissingPins]);
+
+  useEffect(() => {
+    if (!activeServerId) {
+      autoOpenedPinsServerRef.current = null;
+      return;
+    }
+
+    if (!connected || autoOpenedPinsServerRef.current === activeServerId) {
+      return;
+    }
+
+    const missingPinned = pinnedSessions.filter((session) => allSessions.includes(session) && !openSessions.includes(session));
+    if (missingPinned.length === 0) {
+      autoOpenedPinsServerRef.current = activeServerId;
+      return;
+    }
+
+    const freeSlots = isPro ? Number.POSITIVE_INFINITY : Math.max(0, FREE_SESSION_LIMIT - openSessions.length);
+    if (freeSlots <= 0) {
+      autoOpenedPinsServerRef.current = activeServerId;
+      return;
+    }
+
+    missingPinned.slice(0, freeSlots).forEach((session) => {
+      toggleSessionVisible(session);
+    });
+    autoOpenedPinsServerRef.current = activeServerId;
+  }, [activeServerId, allSessions, connected, isPro, openSessions, pinnedSessions, toggleSessionVisible]);
+
+  useEffect(() => {
     setSessionAiEngine((prev) => {
       const next: Record<string, AiEnginePreference> = {};
       allSessions.forEach((session) => {
@@ -930,6 +965,7 @@ export default function AppShell() {
     sessionTags,
     allTags,
     tagFilter,
+    pinnedSessions,
     isPro,
     fleetCommand,
     fleetCwd,
@@ -1137,6 +1173,9 @@ export default function AppShell() {
     },
     onClearDraft: (session) => {
       setDrafts((prev) => ({ ...prev, [session]: "" }));
+    },
+    onTogglePinSession: (session) => {
+      void togglePinnedSession(session);
     },
     onSetFleetCommand: setFleetCommand,
     onSetFleetCwd: setFleetCwd,

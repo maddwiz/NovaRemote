@@ -20,9 +20,11 @@ function renderSessionChips(
   openSessions: string[],
   onToggleSessionVisible: (session: string) => void,
   sessionTags: Record<string, string[]>,
-  tagFilter: string
+  tagFilter: string,
+  pinnedSessions: string[]
 ) {
   const normalizedFilter = tagFilter.trim().toLowerCase();
+  const pinnedSet = new Set(pinnedSessions);
   const visible = allSessions.filter((session) => {
     if (!normalizedFilter) {
       return true;
@@ -40,12 +42,27 @@ function renderSessionChips(
         const active = openSessions.includes(session);
         return (
           <Pressable key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleSessionVisible(session)}>
-            <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{active ? `Open - ${session}` : session}</Text>
+            <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
+              {active ? `Open - ${session}` : session}
+              {pinnedSet.has(session) ? " • PIN" : ""}
+            </Text>
           </Pressable>
         );
       })}
     </ScrollView>
   );
+}
+
+function sortSessionsPinnedFirst(sessions: string[], pinnedSessions: string[]): string[] {
+  const pinnedSet = new Set(pinnedSessions);
+  return sessions.slice().sort((a, b) => {
+    const aPinned = pinnedSet.has(a) ? 1 : 0;
+    const bPinned = pinnedSet.has(b) ? 1 : 0;
+    if (aPinned !== bPinned) {
+      return bPinned - aPinned;
+    }
+    return a.localeCompare(b);
+  });
 }
 
 export function TerminalsScreen() {
@@ -76,6 +93,7 @@ export function TerminalsScreen() {
     sessionTags,
     allTags,
     tagFilter,
+    pinnedSessions,
     isPro,
     fleetCommand,
     fleetCwd,
@@ -112,6 +130,7 @@ export function TerminalsScreen() {
     onSetDraft,
     onSend,
     onClearDraft,
+    onTogglePinSession,
     onSetFleetCommand,
     onSetFleetCwd,
     onToggleFleetTarget,
@@ -132,9 +151,11 @@ export function TerminalsScreen() {
   const splitEnabled = !wantsSplit || isPro;
   const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
+  const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
+  const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
 
   const openTerminalCards = useMemo(() => {
-    return openSessions.map((session) => {
+    return sortedOpenSessions.map((session) => {
       const output = tails[session] ?? "";
       const draft = drafts[session] ?? "";
       const isSending = Boolean(sendBusy[session]);
@@ -171,6 +192,7 @@ export function TerminalsScreen() {
           watchEnabled={watch.enabled}
           watchPattern={watch.pattern}
           tags={tags}
+          pinned={pinnedSessions.includes(session)}
           terminalViewStyle={terminalAppearance.terminalViewStyle}
           terminalTextStyle={terminalAppearance.terminalTextStyle}
           historyCount={historyCount[session] || 0}
@@ -190,6 +212,7 @@ export function TerminalsScreen() {
           onUseSuggestion={(value) => onUseSuggestion(session, value)}
           onToggleWatch={(enabled) => onToggleWatch(session, enabled)}
           onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
+          onTogglePin={() => onTogglePinSession(session)}
           onSend={() => onSend(session)}
           onClear={() => onClearDraft(session)}
         />
@@ -204,6 +227,7 @@ export function TerminalsScreen() {
     drafts,
     hasExternalLlm,
     historyCount,
+    pinnedSessions,
     terminalAppearance,
     onClearDraft,
     onFocusSession,
@@ -220,9 +244,9 @@ export function TerminalsScreen() {
     onSetWatchPattern,
     onStopSession,
     onSyncSession,
+    onTogglePinSession,
     onToggleWatch,
     onUseSuggestion,
-    openSessions,
     localAiSessions,
     sessionAiEngine,
     sendBusy,
@@ -231,6 +255,7 @@ export function TerminalsScreen() {
     suggestionsBySession,
     sessionTags,
     streamLive,
+    sortedOpenSessions,
     tails,
     watchRules,
   ]);
@@ -501,7 +526,7 @@ export function TerminalsScreen() {
         {allSessions.length === 0 ? (
           <Text style={styles.emptyText}>No sessions found yet.</Text>
         ) : (
-          renderSessionChips(allSessions, openSessions, onToggleSessionVisible, sessionTags, tagFilter)
+          renderSessionChips(sortedAllSessions, openSessions, onToggleSessionVisible, sessionTags, tagFilter, pinnedSessions)
         )}
       </View>
     </>
