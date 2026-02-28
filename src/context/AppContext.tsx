@@ -42,6 +42,7 @@ export type TerminalsViewModel = {
   sysStats: SysStats | null;
   hasExternalLlm: boolean;
   localAiSessions: string[];
+  commandHistory: Record<string, string[]>;
   historyCount: Record<string, number>;
   sessionAliases: Record<string, string>;
   sessionTags: Record<string, string[]>;

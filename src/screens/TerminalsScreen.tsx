@@ -99,6 +99,7 @@ export function TerminalsScreen() {
     sysStats,
     hasExternalLlm,
     localAiSessions,
+    commandHistory,
     historyCount,
     sessionAliases,
     sessionTags,
@@ -247,6 +248,7 @@ export function TerminalsScreen() {
           recordingActive={Boolean(recording?.active)}
           recordingChunks={recording?.chunks.length || 0}
           recordingDurationMs={recordingDuration}
+          historySuggestions={commandHistory[session] || []}
           terminalViewStyle={terminalAppearance.terminalViewStyle}
           terminalTextStyle={terminalAppearance.terminalTextStyle}
           historyCount={historyCount[session] || 0}
@@ -288,6 +290,7 @@ export function TerminalsScreen() {
     connectionMeta,
     drafts,
     hasExternalLlm,
+    commandHistory,
     historyCount,
     sessionAliases,
     errorHintsBySession,

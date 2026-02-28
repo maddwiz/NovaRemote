@@ -87,6 +87,7 @@ type TerminalCardProps = {
   recordingActive: boolean;
   recordingChunks: number;
   recordingDurationMs: number;
+  historySuggestions: string[];
   terminalViewStyle?: StyleProp<ViewStyle>;
   terminalTextStyle?: StyleProp<TextStyle>;
   onSetMode: (mode: TerminalSendMode) => void;
@@ -152,6 +153,7 @@ export function TerminalCard({
   recordingActive,
   recordingChunks,
   recordingDurationMs,
+  historySuggestions,
   terminalViewStyle,
   terminalTextStyle,
   onSetMode,
@@ -189,13 +191,35 @@ export function TerminalCard({
       return [];
     }
     const normalized = draft.trim().toLowerCase();
-    if (normalized.length < 2) {
+    if (normalized.length < 1) {
       return [];
     }
-    return SHELL_AUTOCOMPLETE_COMMANDS.filter((command) => command.toLowerCase().startsWith(normalized))
-      .filter((command) => command.toLowerCase() !== normalized)
-      .slice(0, 4);
-  }, [draft, mode]);
+    const source = [...historySuggestions.slice().reverse(), ...SHELL_AUTOCOMPLETE_COMMANDS];
+    const seen = new Set<string>();
+    const ranked = source
+      .map((command) => command.trim())
+      .filter(Boolean)
+      .filter((command) => {
+        const lower = command.toLowerCase();
+        if (!lower.includes(normalized)) {
+          return false;
+        }
+        if (seen.has(lower)) {
+          return false;
+        }
+        seen.add(lower);
+        return true;
+      })
+      .sort((a, b) => {
+        const aStarts = a.toLowerCase().startsWith(normalized) ? 0 : 1;
+        const bStarts = b.toLowerCase().startsWith(normalized) ? 0 : 1;
+        if (aStarts !== bStarts) {
+          return aStarts - bStarts;
+        }
+        return a.length - b.length;
+      });
+    return ranked.filter((command) => command.toLowerCase() !== normalized).slice(0, 6);
+  }, [draft, historySuggestions, mode]);
 
   const streamState: "live" | "reconnecting" | "polling" | "disconnected" | "local" =
     isLocalOnly

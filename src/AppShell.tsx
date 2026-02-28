@@ -1630,6 +1630,7 @@ export default function AppShell() {
     sysStats,
     hasExternalLlm: Boolean(activeProfile),
     localAiSessions,
+    commandHistory,
     historyCount,
     sessionAliases,
     sessionTags,
