@@ -67,6 +67,13 @@ function sortSessionsPinnedFirst(sessions: string[], pinnedSessions: string[]): 
   });
 }
 
+function formatNumber(value: number | undefined, decimals: number = 0): string {
+  if (typeof value !== "number" || Number.isNaN(value)) {
+    return "n/a";
+  }
+  return value.toFixed(decimals);
+}
+
 export function TerminalsScreen() {
   const {
     activeServer,
@@ -89,6 +96,7 @@ export function TerminalsScreen() {
     health,
     capabilities,
     supportedFeatures,
+    sysStats,
     hasExternalLlm,
     localAiSessions,
     historyCount,
@@ -371,6 +379,22 @@ export function TerminalsScreen() {
         <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
         <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
         <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Resource Dashboard</Text>
+        {capabilities.sysStats ? (
+          <>
+            <Text style={styles.serverSubtitle}>{`Host ${sysStats?.host || "n/a"} (${sysStats?.platform || "unknown"})`}</Text>
+            <Text style={styles.serverSubtitle}>{`CPU ${formatNumber(sysStats?.cpu_percent, 1)}%`}</Text>
+            <Text style={styles.serverSubtitle}>{`Memory ${formatNumber(sysStats?.mem_percent, 1)}%`}</Text>
+            <Text style={styles.serverSubtitle}>{`Disk ${formatNumber(sysStats?.disk_percent, 1)}%`}</Text>
+            <Text style={styles.serverSubtitle}>{`Load ${formatNumber(sysStats?.load_1m, 2)} / ${formatNumber(sysStats?.load_5m, 2)} / ${formatNumber(sysStats?.load_15m, 2)}`}</Text>
+            <Text style={styles.serverSubtitle}>{`Uptime ${formatNumber(sysStats?.uptime_seconds, 0)}s`}</Text>
+          </>
+        ) : (
+          <Text style={styles.emptyText}>This server does not expose `/sys/stats`.</Text>
+        )}
       </View>
 
       <View style={styles.panel}>

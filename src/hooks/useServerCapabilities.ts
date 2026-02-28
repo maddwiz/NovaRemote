@@ -11,6 +11,7 @@ const EMPTY_CAPABILITIES: ServerCapabilities = {
   shellRun: false,
   macAttach: false,
   stream: false,
+  sysStats: false,
 };
 
 type UseServerCapabilitiesArgs = {
@@ -176,13 +177,14 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         (readPath(manifestRoot, "features") as Record<string, unknown> | undefined) ||
         manifestRoot;
 
-      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe] = await Promise.all([
+      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe] = await Promise.all([
         endpointExists(baseUrl, token, "/tmux/sessions"),
         endpointExists(baseUrl, token, "/terminal/sessions"),
         endpointExists(baseUrl, token, "/files/list?path=%2F"),
         endpointSupportsAction(baseUrl, token, "/shell/run"),
         endpointSupportsAction(baseUrl, token, "/mac/attach"),
         endpointSupportsAction(baseUrl, token, "/codex/start"),
+        endpointExists(baseUrl, token, "/sys/stats"),
       ]);
 
       const manifestTerminal = readBool(manifest, [
@@ -206,6 +208,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         "macAttach",
       ]);
       const manifestStream = readBool(manifest, ["stream.available", "stream", "terminal.stream", "tmux.stream"]);
+      const manifestSysStats = readBool(manifest, ["sys.stats", "sysStats", "stats.system", "system.stats"]);
 
       const terminalAvailable = manifestTerminal ?? (terminalSessions || tmuxSessions);
       const next: ServerCapabilities = {
@@ -216,6 +219,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         shellRun: manifestShellRun ?? shellRunProbe,
         macAttach: manifestMacAttach ?? macAttachProbe,
         stream: manifestStream ?? terminalAvailable,
+        sysStats: manifestSysStats ?? sysStatsProbe,
       };
 
       const nextApiKind = pickTerminalApiKind(manifest, terminalSessions, tmuxSessions);
@@ -258,6 +262,9 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
     }
     if (capabilities.stream) {
       features.push("stream");
+    }
+    if (capabilities.sysStats) {
+      features.push("sys-stats");
     }
     return features.join(", ");
   }, [activeServer?.terminalBackend, capabilities, terminalApiKind]);

@@ -98,6 +98,7 @@ export type ServerCapabilities = {
   shellRun: boolean;
   macAttach: boolean;
   stream: boolean;
+  sysStats: boolean;
 };
 
 export type TerminalApiKind = "tmux" | "terminal";
@@ -138,6 +139,18 @@ export type SessionRecording = {
   startedAt: number;
   stoppedAt: number | null;
   chunks: RecordingChunk[];
+};
+
+export type SysStats = {
+  cpu_percent?: number;
+  mem_percent?: number;
+  load_1m?: number;
+  load_5m?: number;
+  load_15m?: number;
+  disk_percent?: number;
+  uptime_seconds?: number;
+  host?: string;
+  platform?: string;
 };
 
 export type TerminalThemePresetId = "nova" | "solarized_dark" | "monokai" | "dracula" | "nord" | "one_dark";

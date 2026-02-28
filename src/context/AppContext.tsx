@@ -9,6 +9,7 @@ import {
   ServerCapabilities,
   ServerProfile,
   SessionConnectionMeta,
+  SysStats,
   TerminalFontFamily,
   TerminalThemePresetId,
   TerminalThemeSettings,
@@ -37,6 +38,7 @@ export type TerminalsViewModel = {
   health: HealthMetrics;
   capabilities: ServerCapabilities;
   supportedFeatures: string;
+  sysStats: SysStats | null;
   hasExternalLlm: boolean;
   localAiSessions: string[];
   historyCount: Record<string, number>;

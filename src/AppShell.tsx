@@ -76,6 +76,7 @@ import {
   ServerProfile,
   SessionRecording,
   Status,
+  SysStats,
   TerminalSendMode,
   TmuxTailResponse,
   WatchRule,
@@ -281,6 +282,7 @@ export default function AppShell() {
   const [watchRules, setWatchRules] = useState<Record<string, WatchRule>>({});
   const [commandQueue, setCommandQueue] = useState<Record<string, QueuedCommand[]>>({});
   const [recordings, setRecordings] = useState<Record<string, SessionRecording>>({});
+  const [sysStats, setSysStats] = useState<SysStats | null>(null);
   const [playbackSession, setPlaybackSession] = useState<string | null>(null);
   const [playbackTimeMs, setPlaybackTimeMs] = useState<number>(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
@@ -1218,6 +1220,34 @@ export default function AppShell() {
     void SecureStore.setItemAsync(`${STORAGE_COMMAND_QUEUE_PREFIX}.${activeServerId}`, JSON.stringify(commandQueue));
   }, [activeServerId, commandQueue]);
 
+  useEffect(() => {
+    if (!connected || !activeServer || !capabilities.sysStats) {
+      setSysStats(null);
+      return;
+    }
+    let mounted = true;
+    const loadStats = async () => {
+      try {
+        const stats = await apiRequest<SysStats>(activeServer.baseUrl, activeServer.token, "/sys/stats");
+        if (mounted) {
+          setSysStats(stats);
+        }
+      } catch {
+        if (mounted) {
+          setSysStats(null);
+        }
+      }
+    };
+    void loadStats();
+    const id = setInterval(() => {
+      void loadStats();
+    }, 15000);
+    return () => {
+      mounted = false;
+      clearInterval(id);
+    };
+  }, [activeServer, capabilities.sysStats, connected]);
+
   const activePlaybackRecording = playbackSession ? recordings[playbackSession] || null : null;
   const playbackDuration = recordingDurationMs(activePlaybackRecording);
   const playbackOutput = useMemo(
@@ -1319,6 +1349,7 @@ export default function AppShell() {
     health,
     capabilities,
     supportedFeatures,
+    sysStats,
     hasExternalLlm: Boolean(activeProfile),
     localAiSessions,
     historyCount,
