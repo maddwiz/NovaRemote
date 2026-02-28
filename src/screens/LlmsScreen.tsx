@@ -72,6 +72,29 @@ export function LlmsScreen({
   const [importPayload, setImportPayload] = useState<string>("");
   const [exportPayload, setExportPayload] = useState<string>("");
 
+  const applyPreset = (
+    next: {
+      name: string;
+      kind: LlmProviderKind;
+      baseUrl: string;
+      model: string;
+      requestPath?: string;
+      extraHeaders?: string;
+    },
+    options?: { clearApiKey?: boolean }
+  ) => {
+    setEditingId(null);
+    setName(next.name);
+    setKind(next.kind);
+    setBaseUrl(next.baseUrl);
+    setModel(next.model);
+    setRequestPath(next.requestPath || "");
+    setExtraHeaders(next.extraHeaders || "");
+    if (options?.clearApiKey) {
+      setApiKey("");
+    }
+  };
+
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) || profiles[0] || null,
     [activeProfileId, profiles]
@@ -87,13 +110,12 @@ export function LlmsScreen({
           <Pressable
             style={styles.actionButton}
             onPress={() => {
-              setEditingId(null);
-              setName("OpenAI");
-              setKind("openai_compatible");
-              setBaseUrl("https://api.openai.com/v1");
-              setModel("gpt-5-mini");
-              setRequestPath("");
-              setExtraHeaders("");
+              applyPreset({
+                name: "OpenAI",
+                kind: "openai_compatible",
+                baseUrl: "https://api.openai.com/v1",
+                model: "gpt-5-mini",
+              });
             }}
           >
             <Text style={styles.actionButtonText}>OpenAI</Text>
@@ -101,13 +123,12 @@ export function LlmsScreen({
           <Pressable
             style={styles.actionButton}
             onPress={() => {
-              setEditingId(null);
-              setName("OpenRouter");
-              setKind("openai_compatible");
-              setBaseUrl("https://openrouter.ai/api/v1");
-              setModel("openai/gpt-5-mini");
-              setRequestPath("");
-              setExtraHeaders("");
+              applyPreset({
+                name: "OpenRouter",
+                kind: "openai_compatible",
+                baseUrl: "https://openrouter.ai/api/v1",
+                model: "openai/gpt-5-mini",
+              });
             }}
           >
             <Text style={styles.actionButtonText}>OpenRouter</Text>
@@ -115,13 +136,92 @@ export function LlmsScreen({
           <Pressable
             style={styles.actionButton}
             onPress={() => {
-              setEditingId(null);
-              setName("Gemini");
-              setKind("gemini");
-              setBaseUrl("https://generativelanguage.googleapis.com/v1beta");
-              setModel("gemini-2.5-flash");
-              setRequestPath("");
-              setExtraHeaders("");
+              applyPreset({
+                name: "Groq",
+                kind: "openai_compatible",
+                baseUrl: "https://api.groq.com/openai/v1",
+                model: "llama-3.3-70b-versatile",
+              });
+            }}
+          >
+            <Text style={styles.actionButtonText}>Groq</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              applyPreset({
+                name: "xAI",
+                kind: "openai_compatible",
+                baseUrl: "https://api.x.ai/v1",
+                model: "grok-2-latest",
+              });
+            }}
+          >
+            <Text style={styles.actionButtonText}>xAI</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              applyPreset({
+                name: "Together",
+                kind: "openai_compatible",
+                baseUrl: "https://api.together.xyz/v1",
+                model: "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo",
+              });
+            }}
+          >
+            <Text style={styles.actionButtonText}>Together</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              applyPreset({
+                name: "Mistral",
+                kind: "openai_compatible",
+                baseUrl: "https://api.mistral.ai/v1",
+                model: "mistral-small-latest",
+              });
+            }}
+          >
+            <Text style={styles.actionButtonText}>Mistral</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              applyPreset({
+                name: "DeepSeek",
+                kind: "openai_compatible",
+                baseUrl: "https://api.deepseek.com/v1",
+                model: "deepseek-chat",
+              });
+            }}
+          >
+            <Text style={styles.actionButtonText}>DeepSeek</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              applyPreset({
+                name: "Azure OpenAI",
+                kind: "openai_compatible",
+                baseUrl: "https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT",
+                model: "gpt-4o-mini",
+                requestPath: "/chat/completions?api-version=2024-10-21",
+                extraHeaders: "api-key: YOUR_AZURE_OPENAI_KEY",
+              });
+            }}
+          >
+            <Text style={styles.actionButtonText}>Azure OpenAI</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              applyPreset({
+                name: "Gemini",
+                kind: "gemini",
+                baseUrl: "https://generativelanguage.googleapis.com/v1beta",
+                model: "gemini-2.5-flash",
+              });
             }}
           >
             <Text style={styles.actionButtonText}>Gemini</Text>
@@ -129,14 +229,15 @@ export function LlmsScreen({
           <Pressable
             style={styles.actionButton}
             onPress={() => {
-              setEditingId(null);
-              setName("Ollama");
-              setKind("ollama");
-              setBaseUrl("http://localhost:11434");
-              setModel("llama3.1");
-              setApiKey("");
-              setRequestPath("");
-              setExtraHeaders("");
+              applyPreset(
+                {
+                  name: "Ollama",
+                  kind: "ollama",
+                  baseUrl: "http://localhost:11434",
+                  model: "llama3.1",
+                },
+                { clearApiKey: true }
+              );
             }}
           >
             <Text style={styles.actionButtonText}>Ollama Native</Text>
@@ -144,13 +245,12 @@ export function LlmsScreen({
           <Pressable
             style={styles.actionButton}
             onPress={() => {
-              setEditingId(null);
-              setName("Anthropic");
-              setKind("anthropic");
-              setBaseUrl("https://api.anthropic.com");
-              setModel("claude-3-5-sonnet-latest");
-              setRequestPath("");
-              setExtraHeaders("");
+              applyPreset({
+                name: "Anthropic",
+                kind: "anthropic",
+                baseUrl: "https://api.anthropic.com",
+                model: "claude-3-5-sonnet-latest",
+              });
             }}
           >
             <Text style={styles.actionButtonText}>Anthropic</Text>
