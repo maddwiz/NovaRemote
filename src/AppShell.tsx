@@ -71,6 +71,7 @@ import {
   AiEnginePreference,
   FleetRunResult,
   ProcessInfo,
+  ProcessSignal,
   QueuedCommand,
   RecordingChunk,
   RouteTab,
@@ -1994,15 +1995,35 @@ export default function AppShell() {
         await refreshProcesses();
       });
     },
-    onKillProcess: (pid) => {
-      void runWithStatus(`Killing PID ${pid}`, async () => {
+    onKillProcess: (pid, signal: ProcessSignal = "TERM") => {
+      void runWithStatus(`Sending ${signal} to PID ${pid}`, async () => {
         if (!activeServer || !connected || !capabilities.processes) {
           throw new Error("Process manager is unavailable on the active server.");
         }
         await apiRequest(activeServer.baseUrl, activeServer.token, "/proc/kill", {
           method: "POST",
-          body: JSON.stringify({ pid, signal: "TERM" }),
+          body: JSON.stringify({ pid, signal }),
         });
+        await refreshProcesses();
+      });
+    },
+    onKillProcesses: (pids, signal) => {
+      void runWithStatus(`Sending ${signal} to ${pids.length} process(es)`, async () => {
+        if (!activeServer || !connected || !capabilities.processes) {
+          throw new Error("Process manager is unavailable on the active server.");
+        }
+        const uniquePids = Array.from(new Set(pids.filter((pid) => Number.isFinite(pid) && pid > 0)));
+        if (uniquePids.length === 0) {
+          return;
+        }
+        await Promise.all(
+          uniquePids.map((pid) =>
+            apiRequest(activeServer.baseUrl, activeServer.token, "/proc/kill", {
+              method: "POST",
+              body: JSON.stringify({ pid, signal }),
+            })
+          )
+        );
         await refreshProcesses();
       });
     },

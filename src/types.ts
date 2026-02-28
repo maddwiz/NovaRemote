@@ -164,6 +164,8 @@ export type ProcessInfo = {
   command?: string;
 };
 
+export type ProcessSignal = "TERM" | "KILL" | "INT";
+
 export type TerminalThemePresetId = "nova" | "solarized_dark" | "monokai" | "dracula" | "nord" | "one_dark";
 
 export type TerminalFontFamily = "menlo" | "sf_mono" | "jetbrains_mono";

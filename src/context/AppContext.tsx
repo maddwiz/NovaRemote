@@ -5,6 +5,7 @@ import {
   FleetRunResult,
   HealthMetrics,
   ProcessInfo,
+  ProcessSignal,
   QueuedCommand,
   SessionRecording,
   ServerCapabilities,
@@ -103,7 +104,8 @@ export type TerminalsViewModel = {
   onToggleFleetTarget: (serverId: string) => void;
   onSetFleetWaitMs: (value: string) => void;
   onRefreshProcesses: () => void;
-  onKillProcess: (pid: number) => void;
+  onKillProcess: (pid: number, signal?: ProcessSignal) => void;
+  onKillProcesses: (pids: number[], signal: ProcessSignal) => void;
   onRequestSuggestions: (session: string) => void;
   onUseSuggestion: (session: string, value: string) => void;
   onExplainError: (session: string) => void;

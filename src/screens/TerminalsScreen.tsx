@@ -14,6 +14,7 @@ import {
   buildTerminalAppearance,
   getTerminalPreset,
 } from "../theme/terminalTheme";
+import { ProcessSignal } from "../types";
 
 function renderSessionChips(
   allSessions: string[],
@@ -161,6 +162,7 @@ export function TerminalsScreen() {
     onSetFleetWaitMs,
     onRefreshProcesses,
     onKillProcess,
+    onKillProcesses,
     onRequestSuggestions,
     onUseSuggestion,
     onExplainError,
@@ -185,10 +187,48 @@ export function TerminalsScreen() {
   const splitEnabled = !wantsSplit || isPro;
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
+  const [processFilter, setProcessFilter] = useState<string>("");
+  const [processSort, setProcessSort] = useState<"cpu" | "mem" | "uptime" | "name">("cpu");
+  const [processSignal, setProcessSignal] = useState<ProcessSignal>("TERM");
+  const [selectedProcessPids, setSelectedProcessPids] = useState<number[]>([]);
   const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
+
+  useEffect(() => {
+    const valid = new Set(processes.map((entry) => entry.pid));
+    setSelectedProcessPids((prev) => prev.filter((pid) => valid.has(pid)));
+  }, [processes]);
+
+  const visibleProcesses = useMemo(() => {
+    const needle = processFilter.trim().toLowerCase();
+    const filtered = processes.filter((entry) => {
+      if (!needle) {
+        return true;
+      }
+      return (
+        String(entry.pid).includes(needle) ||
+        entry.name.toLowerCase().includes(needle) ||
+        (entry.user || "").toLowerCase().includes(needle) ||
+        (entry.command || "").toLowerCase().includes(needle)
+      );
+    });
+
+    const sorted = filtered.slice().sort((a, b) => {
+      if (processSort === "name") {
+        return a.name.localeCompare(b.name);
+      }
+      if (processSort === "mem") {
+        return (b.mem_percent || 0) - (a.mem_percent || 0);
+      }
+      if (processSort === "uptime") {
+        return (b.uptime_seconds || 0) - (a.uptime_seconds || 0);
+      }
+      return (b.cpu_percent || 0) - (a.cpu_percent || 0);
+    });
+    return sorted;
+  }, [processFilter, processSort, processes]);
 
   useEffect(() => {
     if (sortedOpenSessions.length === 0) {
@@ -541,24 +581,84 @@ export function TerminalsScreen() {
         {capabilities.processes ? (
           <>
             <View style={styles.rowInlineSpace}>
-              <Text style={styles.serverSubtitle}>{`${processes.length} processes`}</Text>
+              <Text style={styles.serverSubtitle}>{`${visibleProcesses.length} / ${processes.length} processes`}</Text>
               <Pressable style={[styles.actionButton, processesBusy ? styles.buttonDisabled : null]} onPress={onRefreshProcesses} disabled={processesBusy}>
                 <Text style={styles.actionButtonText}>{processesBusy ? "Refreshing..." : "Refresh"}</Text>
               </Pressable>
             </View>
-            {processes.slice(0, 12).map((process) => (
+
+            <TextInput
+              style={styles.input}
+              value={processFilter}
+              onChangeText={setProcessFilter}
+              placeholder="Filter by pid/name/user/command"
+              placeholderTextColor="#7f7aa8"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {(["cpu", "mem", "uptime", "name"] as const).map((sortMode) => (
+                <Pressable
+                  key={`sort-${sortMode}`}
+                  style={[styles.chip, processSort === sortMode ? styles.chipActive : null]}
+                  onPress={() => setProcessSort(sortMode)}
+                >
+                  <Text style={[styles.chipText, processSort === sortMode ? styles.chipTextActive : null]}>{`Sort ${sortMode}`}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {(["TERM", "KILL", "INT"] as ProcessSignal[]).map((signal) => (
+                <Pressable
+                  key={`signal-${signal}`}
+                  style={[styles.chip, processSignal === signal ? styles.chipActive : null]}
+                  onPress={() => setProcessSignal(signal)}
+                >
+                  <Text style={[styles.chipText, processSignal === signal ? styles.chipTextActive : null]}>{signal}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+
+            <View style={styles.rowInlineSpace}>
+              <Text style={styles.serverSubtitle}>{`${selectedProcessPids.length} selected`}</Text>
+              <Pressable
+                style={[styles.actionDangerButton, selectedProcessPids.length === 0 ? styles.buttonDisabled : null]}
+                disabled={selectedProcessPids.length === 0}
+                onPress={() => {
+                  onKillProcesses(selectedProcessPids, processSignal);
+                  setSelectedProcessPids([]);
+                }}
+              >
+                <Text style={styles.actionDangerText}>{`Kill Selected (${processSignal})`}</Text>
+              </Pressable>
+            </View>
+
+            {visibleProcesses.slice(0, 20).map((process) => {
+              const selected = selectedProcessPids.includes(process.pid);
+              return (
               <View key={`proc-${process.pid}`} style={styles.serverCard}>
                 <Text style={styles.serverName}>{`${process.name} (PID ${process.pid})`}</Text>
                 <Text style={styles.serverSubtitle}>{`CPU ${formatNumber(process.cpu_percent, 1)}% · MEM ${formatNumber(process.mem_percent, 1)}% · Uptime ${formatNumber(process.uptime_seconds, 0)}s`}</Text>
                 {process.command ? <Text style={styles.emptyText}>{process.command}</Text> : null}
                 <View style={styles.actionsWrap}>
-                  <Pressable style={styles.actionDangerButton} onPress={() => onKillProcess(process.pid)}>
-                    <Text style={styles.actionDangerText}>Kill</Text>
+                  <Pressable
+                    style={[styles.actionButton, selected ? styles.modeButtonOn : null]}
+                    onPress={() =>
+                      setSelectedProcessPids((prev) => (prev.includes(process.pid) ? prev.filter((pid) => pid !== process.pid) : [...prev, process.pid]))
+                    }
+                  >
+                    <Text style={styles.actionButtonText}>{selected ? "Selected" : "Select"}</Text>
+                  </Pressable>
+                  <Pressable style={styles.actionDangerButton} onPress={() => onKillProcess(process.pid, processSignal)}>
+                    <Text style={styles.actionDangerText}>{`Kill ${processSignal}`}</Text>
                   </Pressable>
                 </View>
               </View>
-            ))}
-            {processes.length > 12 ? <Text style={styles.emptyText}>Showing top 12 by CPU.</Text> : null}
+              );
+            })}
+            {visibleProcesses.length > 20 ? <Text style={styles.emptyText}>Showing top 20 matching processes.</Text> : null}
           </>
         ) : (
           <Text style={styles.emptyText}>This server does not expose `/proc/list` and `/proc/kill`.</Text>
