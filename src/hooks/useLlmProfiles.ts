@@ -125,6 +125,8 @@ export function useLlmProfiles() {
         systemPrompt: input.systemPrompt?.trim() || undefined,
         requestPath: input.requestPath?.trim() || undefined,
         extraHeaders: input.extraHeaders?.trim() || undefined,
+        azureDeployment: input.azureDeployment?.trim() || undefined,
+        azureApiVersion: input.azureApiVersion?.trim() || undefined,
       };
 
       const nextProfiles = input.id
@@ -223,8 +225,12 @@ export function useLlmProfiles() {
           apiKey: profile.apiKey?.trim() || "",
           requestPath: profile.requestPath?.trim() || undefined,
           extraHeaders: profile.extraHeaders?.trim() || undefined,
+          azureDeployment: profile.azureDeployment?.trim() || undefined,
+          azureApiVersion: profile.azureApiVersion?.trim() || undefined,
           kind:
-            profile.kind === "anthropic"
+            profile.kind === "azure_openai"
+              ? "azure_openai"
+              : profile.kind === "anthropic"
               ? "anthropic"
               : profile.kind === "ollama"
                 ? "ollama"

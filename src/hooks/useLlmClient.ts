@@ -79,6 +79,11 @@ function parseExtraHeaders(raw: string | undefined): Record<string, string> {
   return headers;
 }
 
+function appendQueryParam(url: string, key: string, value: string): string {
+  const separator = url.includes("?") ? "&" : "?";
+  return `${url}${separator}${encodeURIComponent(key)}=${encodeURIComponent(value)}`;
+}
+
 function toText(content: unknown): string {
   if (typeof content === "string") {
     return content;
@@ -105,7 +110,7 @@ export function useLlmClient() {
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-    if (profile.apiKey.trim() && profile.kind !== "gemini") {
+    if (profile.apiKey.trim() && profile.kind !== "gemini" && profile.kind !== "azure_openai") {
       headers.Authorization = `Bearer ${profile.apiKey}`;
     }
     Object.assign(headers, parseExtraHeaders(profile.extraHeaders));
@@ -140,6 +145,102 @@ export function useLlmClient() {
         const fallback = await fetch(resolveRequestUrl(baseUrl, "/responses", "/responses"), {
           method: "POST",
           headers,
+          body: JSON.stringify(responsesBody),
+        });
+
+        if (!fallback.ok) {
+          const detail = await fallback.text();
+          throw new Error(`LLM request failed: ${fallback.status} ${detail || fallback.statusText}`);
+        }
+
+        const payload = (await fallback.json()) as OpenAiResponsesResponse;
+        const text = payload.output_text || toText(payload.output?.flatMap((entry) => entry.content || []));
+        if (!text) {
+          throw new Error("LLM response was empty.");
+        }
+        return text;
+      }
+
+      if (!response.ok) {
+        const detail = await response.text();
+        throw new Error(`LLM request failed: ${response.status} ${detail || response.statusText}`);
+      }
+
+      if (isResponsesPath) {
+        const payload = (await response.json()) as OpenAiResponsesResponse;
+        const text = payload.output_text || toText(payload.output?.flatMap((entry) => entry.content || []));
+        if (!text) {
+          throw new Error("LLM response was empty.");
+        }
+        return text;
+      }
+
+      const payload = (await response.json()) as OpenAiChatResponse;
+      const text = toText(payload.choices?.[0]?.message?.content);
+      if (!text) {
+        throw new Error("LLM response was empty.");
+      }
+      return text;
+    }
+
+    if (profile.kind === "azure_openai") {
+      if (!profile.apiKey.trim()) {
+        throw new Error("Azure OpenAI API key is required.");
+      }
+
+      const apiVersion = profile.azureApiVersion?.trim() || "2024-10-21";
+      const deployment = profile.azureDeployment?.trim() || "";
+      const azureBase = normalizeUrl(profile.baseUrl || "https://YOUR-RESOURCE.openai.azure.com");
+      const deploymentBase =
+        deployment && !/\/openai\/deployments\/[^/]+$/i.test(azureBase)
+          ? `${azureBase}/openai/deployments/${encodeURIComponent(deployment)}`
+          : azureBase;
+
+      if (!/\/openai\/deployments\/[^/]+$/i.test(deploymentBase)) {
+        throw new Error("Azure OpenAI deployment is required. Set deployment name or include it in base URL.");
+      }
+
+      const azureHeaders: Record<string, string> = {
+        ...headers,
+        "api-key": profile.apiKey,
+      };
+      delete azureHeaders.Authorization;
+
+      const isResponsesPath = Boolean(profile.requestPath?.trim() && /(^|\/)responses(\?|$)/i.test(profile.requestPath.trim()));
+      const defaultPath = isResponsesPath ? "/responses" : "/chat/completions";
+      let primaryUrl = resolveRequestUrl(deploymentBase, profile.requestPath, defaultPath);
+      if (!/[?&]api-version=/i.test(primaryUrl)) {
+        primaryUrl = appendQueryParam(primaryUrl, "api-version", apiVersion);
+      }
+
+      const chatBody = {
+        model: profile.model,
+        messages: [
+          ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
+          { role: "user", content: prompt },
+        ],
+        temperature: 0.2,
+      };
+      const responsesBody = {
+        model: profile.model,
+        instructions: profile.systemPrompt || undefined,
+        input: prompt,
+      };
+
+      const response = await fetch(primaryUrl, {
+        method: "POST",
+        headers: azureHeaders,
+        body: JSON.stringify(isResponsesPath ? responsesBody : chatBody),
+      });
+
+      if ((response.status === 404 || response.status === 405) && !isResponsesPath) {
+        let fallbackUrl = resolveRequestUrl(deploymentBase, "/responses", "/responses");
+        if (!/[?&]api-version=/i.test(fallbackUrl)) {
+          fallbackUrl = appendQueryParam(fallbackUrl, "api-version", apiVersion);
+        }
+        const fallback = await fetch(fallbackUrl, {
+          method: "POST",
+          headers: azureHeaders,
           body: JSON.stringify(responsesBody),
         });
 

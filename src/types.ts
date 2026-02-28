@@ -123,7 +123,7 @@ export type FleetRunResult = {
   error?: string;
 };
 
-export type LlmProviderKind = "openai_compatible" | "anthropic" | "ollama" | "gemini";
+export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";
 
 export type AiEnginePreference = "auto" | "server" | "external";
 
@@ -203,4 +203,6 @@ export type LlmProfile = {
   systemPrompt?: string;
   requestPath?: string;
   extraHeaders?: string;
+  azureDeployment?: string;
+  azureApiVersion?: string;
 };

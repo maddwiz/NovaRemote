@@ -33,6 +33,8 @@ export function LlmsScreen({
 }: LlmsScreenProps) {
   const defaultBaseUrl = (provider: LlmProviderKind): string => {
     switch (provider) {
+      case "azure_openai":
+        return "https://YOUR-RESOURCE.openai.azure.com";
       case "anthropic":
         return "https://api.anthropic.com";
       case "gemini":
@@ -46,6 +48,8 @@ export function LlmsScreen({
   };
   const defaultModel = (provider: LlmProviderKind): string => {
     switch (provider) {
+      case "azure_openai":
+        return "gpt-4o-mini";
       case "anthropic":
         return "claude-3-5-sonnet-latest";
       case "gemini":
@@ -67,6 +71,8 @@ export function LlmsScreen({
   const [systemPrompt, setSystemPrompt] = useState<string>("");
   const [requestPath, setRequestPath] = useState<string>("");
   const [extraHeaders, setExtraHeaders] = useState<string>("");
+  const [azureDeployment, setAzureDeployment] = useState<string>("");
+  const [azureApiVersion, setAzureApiVersion] = useState<string>("2024-10-21");
   const [testPrompt, setTestPrompt] = useState<string>("Give me a one-line terminal command to list disk usage.");
   const [transferPassphrase, setTransferPassphrase] = useState<string>("");
   const [importPayload, setImportPayload] = useState<string>("");
@@ -80,6 +86,8 @@ export function LlmsScreen({
       model: string;
       requestPath?: string;
       extraHeaders?: string;
+      azureDeployment?: string;
+      azureApiVersion?: string;
     },
     options?: { clearApiKey?: boolean }
   ) => {
@@ -90,6 +98,8 @@ export function LlmsScreen({
     setModel(next.model);
     setRequestPath(next.requestPath || "");
     setExtraHeaders(next.extraHeaders || "");
+    setAzureDeployment(next.azureDeployment || "");
+    setAzureApiVersion(next.azureApiVersion || "2024-10-21");
     if (options?.clearApiKey) {
       setApiKey("");
     }
@@ -104,7 +114,7 @@ export function LlmsScreen({
     <>
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>LLM Profiles</Text>
-        <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Anthropic, Gemini, or native Ollama.</Text>
+        <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, or native Ollama.</Text>
 
         <View style={styles.actionsWrap}>
           <Pressable
@@ -203,11 +213,11 @@ export function LlmsScreen({
             onPress={() => {
               applyPreset({
                 name: "Azure OpenAI",
-                kind: "openai_compatible",
-                baseUrl: "https://YOUR-RESOURCE.openai.azure.com/openai/deployments/YOUR-DEPLOYMENT",
+                kind: "azure_openai",
+                baseUrl: "https://YOUR-RESOURCE.openai.azure.com",
                 model: "gpt-4o-mini",
-                requestPath: "/chat/completions?api-version=2024-10-21",
-                extraHeaders: "api-key: YOUR_AZURE_OPENAI_KEY",
+                azureDeployment: "YOUR-DEPLOYMENT",
+                azureApiVersion: "2024-10-21",
               });
             }}
           >
@@ -278,6 +288,19 @@ export function LlmsScreen({
             <Text style={[styles.modeButtonText, kind === "openai_compatible" ? styles.modeButtonTextOn : null]}>OpenAI-Compatible</Text>
           </Pressable>
           <Pressable
+            style={[styles.modeButton, kind === "azure_openai" ? styles.modeButtonOn : null]}
+            onPress={() => {
+              setKind("azure_openai");
+              setBaseUrl(defaultBaseUrl("azure_openai"));
+              setModel(defaultModel("azure_openai"));
+              setAzureDeployment("");
+              setAzureApiVersion("2024-10-21");
+              setRequestPath("");
+            }}
+          >
+            <Text style={[styles.modeButtonText, kind === "azure_openai" ? styles.modeButtonTextOn : null]}>Azure OpenAI</Text>
+          </Pressable>
+          <Pressable
             style={[styles.modeButton, kind === "anthropic" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("anthropic");
@@ -320,6 +343,8 @@ export function LlmsScreen({
           placeholder={
             kind === "anthropic"
               ? "https://api.anthropic.com"
+              : kind === "azure_openai"
+                ? "https://YOUR-RESOURCE.openai.azure.com"
               : kind === "gemini"
                 ? "https://generativelanguage.googleapis.com/v1beta"
                 : kind === "ollama"
@@ -341,7 +366,30 @@ export function LlmsScreen({
           autoCorrect={false}
         />
 
-        {kind === "openai_compatible" ? (
+        {kind === "azure_openai" ? (
+          <>
+            <TextInput
+              style={styles.input}
+              value={azureDeployment}
+              onChangeText={setAzureDeployment}
+              placeholder="Azure deployment name"
+              placeholderTextColor="#7f7aa8"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TextInput
+              style={styles.input}
+              value={azureApiVersion}
+              onChangeText={setAzureApiVersion}
+              placeholder="Azure API version (e.g. 2024-10-21)"
+              placeholderTextColor="#7f7aa8"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+          </>
+        ) : null}
+
+        {kind === "openai_compatible" || kind === "azure_openai" ? (
           <TextInput
             style={styles.input}
             value={requestPath}
@@ -358,7 +406,7 @@ export function LlmsScreen({
           value={apiKey}
           onChangeText={setApiKey}
           placeholder={
-            kind === "anthropic" || kind === "gemini"
+            kind === "anthropic" || kind === "gemini" || kind === "azure_openai"
               ? "API Key (required)"
               : kind === "ollama"
                 ? "API Key (usually empty)"
@@ -397,7 +445,10 @@ export function LlmsScreen({
               if (!name.trim() || !baseUrl.trim() || !model.trim()) {
                 return;
               }
-              if ((kind === "anthropic" || kind === "gemini") && !apiKey.trim()) {
+              if ((kind === "anthropic" || kind === "gemini" || kind === "azure_openai") && !apiKey.trim()) {
+                return;
+              }
+              if (kind === "azure_openai" && !azureDeployment.trim()) {
                 return;
               }
 
@@ -409,18 +460,23 @@ export function LlmsScreen({
                 apiKey,
                 model,
                 systemPrompt,
-                requestPath,
+                requestPath: kind === "openai_compatible" || kind === "azure_openai" ? requestPath : undefined,
                 extraHeaders,
+                azureDeployment: kind === "azure_openai" ? azureDeployment : undefined,
+                azureApiVersion: kind === "azure_openai" ? azureApiVersion : undefined,
               });
 
               setEditingId(null);
               setName("");
+              setKind("openai_compatible");
               setApiKey("");
               setBaseUrl(defaultBaseUrl("openai_compatible"));
               setModel(defaultModel("openai_compatible"));
               setSystemPrompt("");
               setRequestPath("");
               setExtraHeaders("");
+              setAzureDeployment("");
+              setAzureApiVersion("2024-10-21");
             }}
           >
             <Text style={styles.buttonPrimaryText}>{editingId ? "Update Profile" : "Save Profile"}</Text>
@@ -437,6 +493,8 @@ export function LlmsScreen({
               setSystemPrompt("");
               setRequestPath("");
               setExtraHeaders("");
+              setAzureDeployment("");
+              setAzureApiVersion("2024-10-21");
             }}
           >
             <Text style={styles.buttonGhostText}>Clear</Text>
@@ -456,6 +514,8 @@ export function LlmsScreen({
                 <Text style={styles.serverName}>{profile.name}</Text>
                 <Text style={styles.serverSubtitle}>{`${profile.kind} · ${profile.model}`}</Text>
                 <Text style={styles.emptyText}>{profile.baseUrl}</Text>
+                {profile.azureDeployment ? <Text style={styles.emptyText}>{`Deployment ${profile.azureDeployment}`}</Text> : null}
+                {profile.azureApiVersion ? <Text style={styles.emptyText}>{`API ${profile.azureApiVersion}`}</Text> : null}
                 {profile.requestPath ? <Text style={styles.emptyText}>{`Path ${profile.requestPath}`}</Text> : null}
                 {profile.extraHeaders ? <Text style={styles.emptyText}>Custom headers configured</Text> : null}
                 <View style={styles.actionsWrap}>
@@ -474,6 +534,8 @@ export function LlmsScreen({
                       setSystemPrompt(profile.systemPrompt || "");
                       setRequestPath(profile.requestPath || "");
                       setExtraHeaders(profile.extraHeaders || "");
+                      setAzureDeployment(profile.azureDeployment || "");
+                      setAzureApiVersion(profile.azureApiVersion || "2024-10-21");
                     }}
                   >
                     <Text style={styles.actionButtonText}>Edit</Text>
