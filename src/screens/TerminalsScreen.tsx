@@ -55,6 +55,7 @@ type TerminalsScreenProps = {
   onSetSessionMode: (session: string, mode: TerminalSendMode) => void;
   onOpenOnMac: (session: string) => void;
   onSyncSession: (session: string) => void;
+  onExportSession: (session: string) => void;
   onFocusSession: (session: string) => void;
   onStopSession: (session: string) => void;
   onHideSession: (session: string) => void;
@@ -145,6 +146,7 @@ export function TerminalsScreen({
   onSetSessionMode,
   onOpenOnMac,
   onSyncSession,
+  onExportSession,
   onFocusSession,
   onStopSession,
   onHideSession,
@@ -191,6 +193,7 @@ export function TerminalsScreen({
           onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
           onOpenOnMac={() => onOpenOnMac(session)}
           onSync={() => onSyncSession(session)}
+          onExport={() => onExportSession(session)}
           onFullscreen={() => onFocusSession(session)}
           onStop={() => onStopSession(session)}
           onHide={() => onHideSession(session)}

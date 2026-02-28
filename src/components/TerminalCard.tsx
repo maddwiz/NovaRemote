@@ -20,6 +20,7 @@ type TerminalCardProps = {
   onSetMode: (mode: TerminalSendMode) => void;
   onOpenOnMac: () => void;
   onSync: () => void;
+  onExport: () => void;
   onFullscreen: () => void;
   onStop: () => void;
   onHide: () => void;
@@ -47,6 +48,7 @@ export function TerminalCard({
   onSetMode,
   onOpenOnMac,
   onSync,
+  onExport,
   onFullscreen,
   onStop,
   onHide,
@@ -120,6 +122,9 @@ export function TerminalCard({
           </Pressable>
           <Pressable style={styles.actionButton} onPress={onSync}>
             <Text style={styles.actionButtonText}>Sync</Text>
+          </Pressable>
+          <Pressable style={styles.actionButton} onPress={onExport}>
+            <Text style={styles.actionButtonText}>Export</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={onFullscreen}>
             <Text style={styles.actionButtonText}>Fullscreen</Text>

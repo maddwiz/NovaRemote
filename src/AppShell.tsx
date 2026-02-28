@@ -9,6 +9,7 @@ import {
   Platform,
   RefreshControl,
   SafeAreaView,
+  Share,
   ScrollView,
   Text,
   View,
@@ -226,7 +227,7 @@ export default function AppShell() {
     handleOpenOnMac,
   } = useTerminalSessions({ activeServer, connected });
 
-  const { historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(activeServerId);
+  const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(activeServerId);
   const { sessionTags, allTags, setTagsForSession, removeMissingSessions } = useSessionTags(activeServerId);
   const {
     currentPath,
@@ -773,6 +774,23 @@ export default function AppShell() {
               onSyncSession={(session) => {
                 void runWithStatus(`Syncing ${session}`, async () => {
                   await fetchTail(session, true);
+                });
+              }}
+              onExportSession={(session) => {
+                void runWithStatus(`Exporting ${session}`, async () => {
+                  const payload = {
+                    exported_at: new Date().toISOString(),
+                    server: activeServer?.name || "",
+                    session,
+                    mode: sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell"),
+                    commands: commandHistory[session] || [],
+                    output: tails[session] || "",
+                  };
+
+                  await Share.share({
+                    title: `NovaRemote ${session} export`,
+                    message: JSON.stringify(payload, null, 2),
+                  });
                 });
               }}
               onFocusSession={setFocusedSession}
