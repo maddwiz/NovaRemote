@@ -19,6 +19,7 @@ NovaRemote is an Expo + React Native app for controlling remote terminal and AI 
 - Universal terminal transport (`/tmux/*` legacy or `/terminal/*` provider-agnostic)
 - External LLM profiles (OpenAI-compatible, first-class Azure OpenAI, Anthropic, Gemini, Ollama + preset shortcuts for OpenRouter/Groq/xAI/Together/Mistral/DeepSeek)
 - Advanced OpenAI-compatible profile controls (custom request path + custom headers)
+- LLM provider test diagnostics (latency + explicit failure output)
 - Per-session AI engine routing (auto/server/external)
 - Local AI sessions powered directly by configured external LLMs
 - Encrypted LLM profile export/import with passphrase

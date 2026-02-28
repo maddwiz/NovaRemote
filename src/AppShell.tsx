@@ -628,6 +628,7 @@ export default function AppShell() {
   });
   const [llmTestBusy, setLlmTestBusy] = useState<boolean>(false);
   const [llmTestOutput, setLlmTestOutput] = useState<string>("");
+  const [llmTestSummary, setLlmTestSummary] = useState<string>("");
   const [llmTransferStatus, setLlmTransferStatus] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const autoOpenedPinsServerRef = useRef<string | null>(null);
@@ -2916,6 +2917,7 @@ export default function AppShell() {
               activeProfileId={activeProfileId}
               testBusy={llmTestBusy}
               testOutput={llmTestOutput}
+              testSummary={llmTestSummary}
               transferStatus={llmTransferStatus}
               onSetActive={(id) => {
                 void runWithStatus("Switching LLM provider", async () => {
@@ -2935,9 +2937,17 @@ export default function AppShell() {
               onTestPrompt={(profile, prompt) => {
                 void runWithStatus(`Testing ${profile.name}`, async () => {
                   setLlmTestBusy(true);
+                  const started = Date.now();
                   try {
                     const output = await sendPrompt(profile, prompt);
+                    const elapsed = Date.now() - started;
+                    setLlmTestSummary(`${profile.kind} • ${profile.model} • ${elapsed} ms`);
                     setLlmTestOutput(output);
+                  } catch (error) {
+                    const elapsed = Date.now() - started;
+                    setLlmTestSummary(`${profile.kind} • ${profile.model} • failed after ${elapsed} ms`);
+                    setLlmTestOutput(error instanceof Error ? error.message : String(error));
+                    throw error;
                   } finally {
                     setLlmTestBusy(false);
                   }

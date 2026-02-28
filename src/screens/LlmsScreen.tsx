@@ -9,6 +9,7 @@ type LlmsScreenProps = {
   activeProfileId: string | null;
   testBusy: boolean;
   testOutput: string;
+  testSummary: string;
   transferStatus: string;
   onSetActive: (id: string) => void;
   onSaveProfile: (input: Omit<LlmProfile, "id"> & { id?: string }) => void;
@@ -23,6 +24,7 @@ export function LlmsScreen({
   activeProfileId,
   testBusy,
   testOutput,
+  testSummary,
   transferStatus,
   onSetActive,
   onSaveProfile,
@@ -553,6 +555,7 @@ export function LlmsScreen({
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Test Active Provider</Text>
         <Text style={styles.serverSubtitle}>{activeProfile ? activeProfile.name : "No active provider"}</Text>
+        {testSummary ? <Text style={styles.emptyText}>{testSummary}</Text> : null}
         <TextInput
           style={[styles.input, styles.multilineInput]}
           value={testPrompt}
