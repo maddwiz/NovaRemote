@@ -36,18 +36,19 @@ import {
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
-  COLLAB_POLL_INTERVAL_MS,
   POLL_INTERVAL_MS,
-  STORAGE_COMMAND_QUEUE_PREFIX,
   STORAGE_SHELL_WAIT_MS,
   STORAGE_SHELL_WAIT_MS_PREFIX,
-  STORAGE_SESSION_COLLAB_READONLY_PREFIX,
-  STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
 } from "./constants";
+import { useAiAssist } from "./hooks/useAiAssist";
 import { useBiometricLock } from "./hooks/useBiometricLock";
 import { useCommandHistory } from "./hooks/useCommandHistory";
+import { commandQueueStatus, useCommandQueue } from "./hooks/useCommandQueue";
+import { useCollaboration } from "./hooks/useCollaboration";
 import { useConnectionHealth } from "./hooks/useConnectionHealth";
+import { useProcessManager } from "./hooks/useProcessManager";
+import { useSessionRecordings } from "./hooks/useSessionRecordings";
 import { useNotifications } from "./hooks/useNotifications";
 import { useOnboarding } from "./hooks/useOnboarding";
 import { useRevenueCat } from "./hooks/useRevenueCat";
@@ -60,6 +61,7 @@ import { useSnippets } from "./hooks/useSnippets";
 import { useTerminalSessions } from "./hooks/useTerminalSessions";
 import { useTerminalTheme } from "./hooks/useTerminalTheme";
 import { useTutorial } from "./hooks/useTutorial";
+import { useWatchAlerts } from "./hooks/useWatchAlerts";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useFilesBrowser } from "./hooks/useFilesBrowser";
 import { usePinnedSessions } from "./hooks/usePinnedSessions";
@@ -75,21 +77,16 @@ import { buildTerminalAppearance } from "./theme/terminalTheme";
 import {
   AiEnginePreference,
   FleetRunResult,
-  ProcessInfo,
   ProcessSignal,
-  QueuedCommand,
-  QueuedCommandStatus,
   RecordingChunk,
   RouteTab,
   ServerProfile,
-  SessionCollaborator,
   SessionRecording,
   Status,
   SysStats,
   TerminalBackendKind,
   TerminalSendMode,
   TmuxTailResponse,
-  WatchRule,
 } from "./types";
 
 function parseCommaTags(raw: string): string[] {
@@ -139,39 +136,6 @@ function makeFleetSessionName(): string {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const suffix = Math.random().toString(36).slice(2, 6);
   return `fleet-${stamp}-${suffix}`;
-}
-
-function makeQueueCommandId(): string {
-  return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function queueStatus(item: QueuedCommand): QueuedCommandStatus {
-  if (item.status === "sending" || item.status === "sent" || item.status === "failed") {
-    return item.status;
-  }
-  return "pending";
-}
-
-function normalizeQueuedCommand(item: unknown): QueuedCommand | null {
-  if (!item || typeof item !== "object") {
-    return null;
-  }
-  const raw = item as Record<string, unknown>;
-  const command = typeof raw.command === "string" ? raw.command.trim() : "";
-  if (!command) {
-    return null;
-  }
-  const mode = raw.mode === "ai" ? "ai" : "shell";
-  const status = raw.status === "sending" || raw.status === "sent" || raw.status === "failed" ? raw.status : "pending";
-  return {
-    id: typeof raw.id === "string" && raw.id ? raw.id : makeQueueCommandId(),
-    command,
-    mode,
-    queuedAt: typeof raw.queuedAt === "string" && raw.queuedAt ? raw.queuedAt : new Date().toISOString(),
-    status,
-    lastError: typeof raw.lastError === "string" ? raw.lastError : null,
-    sentAt: typeof raw.sentAt === "string" ? raw.sentAt : null,
-  };
 }
 
 async function endpointAvailable(baseUrl: string, token: string, path: string, init: RequestInit): Promise<boolean> {
@@ -229,72 +193,6 @@ function isDangerousShellCommand(command: string): boolean {
   }
 
   return false;
-}
-
-function parseSuggestionOutput(raw: string): string[] {
-  const trimmed = raw.trim();
-  if (!trimmed) {
-    return [];
-  }
-
-  try {
-    const parsed = JSON.parse(trimmed) as unknown;
-    if (Array.isArray(parsed)) {
-      return parsed
-        .map((item) => (typeof item === "string" ? item.trim() : ""))
-        .filter(Boolean)
-        .slice(0, 3);
-    }
-  } catch {
-    // Fall back to line parsing.
-  }
-
-  return trimmed
-    .split("\n")
-    .map((line) => line.replace(/^[\s\-*\d\.\)]*/, "").trim())
-    .filter(Boolean)
-    .slice(0, 3);
-}
-
-function detectTerminalErrorLine(output: string): string | null {
-  const lines = output
-    .split("\n")
-    .slice(-140)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  if (lines.length === 0) {
-    return null;
-  }
-
-  const patterns = [
-    /\berror\b/i,
-    /\bexception\b/i,
-    /\btraceback\b/i,
-    /\bfatal\b/i,
-    /\bpanic\b/i,
-    /\bfailed\b/i,
-    /\bcommand not found\b/i,
-    /\bpermission denied\b/i,
-    /\bsegmentation fault\b/i,
-    /\bno such file or directory\b/i,
-    /\bsyntax error\b/i,
-    /\bmodule not found\b/i,
-  ];
-
-  for (let index = lines.length - 1; index >= 0; index -= 1) {
-    const line = lines[index];
-    if (!line) {
-      continue;
-    }
-    if (/^\d+\s+errors?/.test(line.toLowerCase())) {
-      continue;
-    }
-    if (patterns.some((pattern) => pattern.test(line))) {
-      return line.slice(0, 280);
-    }
-  }
-
-  return null;
 }
 
 function buildPlaybackOutput(chunks: RecordingChunk[], atMs: number): string {
@@ -479,135 +377,6 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
   return command;
 }
 
-function normalizeProcessList(payload: unknown): ProcessInfo[] {
-  const hasPidShape = (value: unknown[]): boolean =>
-    value.some((entry) => {
-      if (!entry || typeof entry !== "object") {
-        return false;
-      }
-      const raw = entry as Record<string, unknown>;
-      return Number.isFinite(Number(raw.pid));
-    });
-
-  const source = Array.isArray(payload)
-    ? payload
-    : payload && typeof payload === "object" && Array.isArray((payload as { processes?: unknown[] }).processes)
-      ? (payload as { processes: unknown[] }).processes
-      : payload &&
-          typeof payload === "object" &&
-          Array.isArray((payload as { items?: unknown[] }).items) &&
-          hasPidShape((payload as { items: unknown[] }).items)
-        ? (payload as { items: unknown[] }).items
-        : [];
-
-  return source
-    .map((entry) => {
-      if (!entry || typeof entry !== "object") {
-        return null;
-      }
-      const raw = entry as Record<string, unknown>;
-      const pid = Number(raw.pid);
-      if (!Number.isFinite(pid) || pid <= 0) {
-        return null;
-      }
-      return {
-        pid,
-        name: typeof raw.name === "string" ? raw.name : typeof raw.command === "string" ? raw.command.split(" ")[0] || "process" : "process",
-        cpu_percent: typeof raw.cpu_percent === "number" ? raw.cpu_percent : typeof raw.cpu === "number" ? raw.cpu : undefined,
-        mem_percent: typeof raw.mem_percent === "number" ? raw.mem_percent : typeof raw.mem === "number" ? raw.mem : undefined,
-        uptime_seconds:
-          typeof raw.uptime_seconds === "number" ? raw.uptime_seconds : typeof raw.uptime === "number" ? raw.uptime : undefined,
-        user: typeof raw.user === "string" ? raw.user : undefined,
-        command: typeof raw.command === "string" ? raw.command : undefined,
-      } as ProcessInfo;
-    })
-    .filter((entry): entry is ProcessInfo => Boolean(entry))
-    .sort((a, b) => (b.cpu_percent || 0) - (a.cpu_percent || 0));
-}
-
-function toOptionalBool(value: unknown): boolean | null {
-  if (typeof value === "boolean") {
-    return value;
-  }
-  if (typeof value === "number") {
-    return value !== 0;
-  }
-  if (typeof value === "string") {
-    const normalized = value.trim().toLowerCase();
-    if (["true", "1", "yes", "on", "readonly", "read_only"].includes(normalized)) {
-      return true;
-    }
-    if (["false", "0", "no", "off", "interactive", "readwrite", "read_write"].includes(normalized)) {
-      return false;
-    }
-  }
-  return null;
-}
-
-function parsePresenceTimestamp(value: unknown): number | null {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value > 10_000_000_000 ? value : value * 1000;
-  }
-  if (typeof value === "string") {
-    const parsed = Date.parse(value);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-  return null;
-}
-
-function normalizeCollaboratorRole(value: unknown): SessionCollaborator["role"] {
-  if (typeof value !== "string") {
-    return "unknown";
-  }
-  const normalized = value.trim().toLowerCase();
-  if (normalized === "owner" || normalized === "editor" || normalized === "viewer") {
-    return normalized;
-  }
-  return "unknown";
-}
-
-function normalizeSessionPresence(payload: unknown): { collaborators: SessionCollaborator[]; readOnly: boolean | null } {
-  const root = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : null;
-  const rawList = Array.isArray(payload)
-    ? payload
-    : Array.isArray(root?.collaborators)
-      ? root?.collaborators
-      : Array.isArray(root?.viewers)
-        ? root?.viewers
-        : Array.isArray(root?.participants)
-          ? root?.participants
-          : Array.isArray(root?.users)
-            ? root?.users
-            : [];
-
-  const collaborators = rawList
-    .map((entry, index) => {
-      if (!entry || typeof entry !== "object") {
-        return null;
-      }
-      const raw = entry as Record<string, unknown>;
-      const idValue = raw.id ?? raw.user_id ?? raw.uid ?? raw.socket_id;
-      const id = typeof idValue === "string" && idValue.trim() ? idValue.trim() : `viewer-${index + 1}`;
-      const nameValue = raw.name ?? raw.username ?? raw.display_name ?? raw.handle;
-      const name = typeof nameValue === "string" && nameValue.trim() ? nameValue.trim() : id;
-      const readOnly = toOptionalBool(raw.read_only ?? raw.readonly ?? raw.readOnly) ?? false;
-      const isSelf = toOptionalBool(raw.is_self ?? raw.self ?? raw.me) ?? false;
-      return {
-        id,
-        name,
-        role: normalizeCollaboratorRole(raw.role),
-        readOnly,
-        isSelf,
-        lastSeenAt: parsePresenceTimestamp(raw.last_seen_at ?? raw.lastSeenAt ?? raw.last_seen ?? raw.updated_at ?? raw.updatedAt),
-      } satisfies SessionCollaborator;
-    })
-    .filter((entry): entry is SessionCollaborator => Boolean(entry))
-    .sort((a, b) => a.name.localeCompare(b.name));
-
-  const readOnly = toOptionalBool(root?.read_only ?? root?.readonly ?? root?.readOnly ?? root?.mode);
-  return { collaborators, readOnly };
-}
-
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -626,21 +395,7 @@ export default function AppShell() {
   const [shellRunWaitMs, setShellRunWaitMs] = useState<string>(String(DEFAULT_SHELL_WAIT_MS));
   const [startAiEngine, setStartAiEngine] = useState<AiEnginePreference>("auto");
   const [sessionAiEngine, setSessionAiEngine] = useState<Record<string, AiEnginePreference>>({});
-  const [suggestionsBySession, setSuggestionsBySession] = useState<Record<string, string[]>>({});
-  const [suggestionBusyBySession, setSuggestionBusyBySession] = useState<Record<string, boolean>>({});
-  const [errorHintsBySession, setErrorHintsBySession] = useState<Record<string, string>>({});
-  const [triageBusyBySession, setTriageBusyBySession] = useState<Record<string, boolean>>({});
-  const [triageExplanationBySession, setTriageExplanationBySession] = useState<Record<string, string>>({});
-  const [triageFixesBySession, setTriageFixesBySession] = useState<Record<string, string[]>>({});
-  const [watchRules, setWatchRules] = useState<Record<string, WatchRule>>({});
-  const [watchAlertHistoryBySession, setWatchAlertHistoryBySession] = useState<Record<string, string[]>>({});
-  const [commandQueue, setCommandQueue] = useState<Record<string, QueuedCommand[]>>({});
-  const [recordings, setRecordings] = useState<Record<string, SessionRecording>>({});
   const [sysStats, setSysStats] = useState<SysStats | null>(null);
-  const [processes, setProcesses] = useState<ProcessInfo[]>([]);
-  const [processesBusy, setProcessesBusy] = useState<boolean>(false);
-  const [sessionPresence, setSessionPresence] = useState<Record<string, SessionCollaborator[]>>({});
-  const [sessionReadOnly, setSessionReadOnly] = useState<Record<string, boolean>>({});
   const [playbackSession, setPlaybackSession] = useState<string | null>(null);
   const [playbackTimeMs, setPlaybackTimeMs] = useState<number>(0);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
@@ -656,9 +411,6 @@ export default function AppShell() {
   const [llmTransferStatus, setLlmTransferStatus] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const autoOpenedPinsServerRef = useRef<string | null>(null);
-  const recordingTailRef = useRef<Record<string, string>>({});
-  const triageHintRef = useRef<Record<string, string>>({});
-  const presenceInFlightRef = useRef<Set<string>>(new Set());
   const aliasGuessRef = useRef<Record<string, string>>({});
 
   const setReady = useCallback((text: string = "Ready") => {
@@ -987,195 +739,88 @@ export default function AppShell() {
     [activeProfile, sendPrompt, setDrafts, setTails]
   );
 
-  const requestShellSuggestions = useCallback(
-    async (session: string) => {
-      if (!activeProfile) {
-        throw new Error("Configure an external LLM profile to use shell suggestions.");
-      }
+  const {
+    suggestionsBySession,
+    suggestionBusyBySession,
+    errorHintsBySession,
+    triageBusyBySession,
+    triageExplanationBySession,
+    triageFixesBySession,
+    requestShellSuggestions,
+    explainSessionError,
+    suggestSessionErrorFixes,
+  } = useAiAssist({
+    activeProfile,
+    sendPrompt,
+    allSessions,
+    tails,
+    commandHistory,
+    drafts,
+  });
 
-      const tailLines = (tails[session] || "")
-        .split("\n")
-        .slice(-50)
-        .join("\n");
-      const recentCommands = (commandHistory[session] || []).slice(-5).join("\n");
-      const draft = (drafts[session] || "").trim();
+  const { watchRules, watchAlertHistoryBySession, setWatchEnabled, setWatchPattern, clearWatchAlerts } = useWatchAlerts({
+    activeServerId,
+    allSessions,
+    tails,
+    isPro,
+    notify,
+  });
 
-      const prompt = [
-        "You are assisting with shell command suggestions.",
-        "Return strictly JSON: an array of 3 short shell commands with no explanation.",
-        "Prioritize safe diagnostic commands first.",
-        "",
-        `Session: ${session}`,
-        draft ? `Current draft: ${draft}` : "Current draft: (empty)",
-        "Recent commands:",
-        recentCommands || "(none)",
-        "Recent terminal output:",
-        tailLines || "(none)",
-      ].join("\n");
-
-      setSuggestionBusyBySession((prev) => ({ ...prev, [session]: true }));
-      try {
-        const raw = await sendPrompt(activeProfile, prompt);
-        const parsed = parseSuggestionOutput(raw);
-        setSuggestionsBySession((prev) => ({ ...prev, [session]: parsed }));
-      } finally {
-        setSuggestionBusyBySession((prev) => ({ ...prev, [session]: false }));
-      }
+  const { recordings, toggleRecording, deleteRecording } = useSessionRecordings({
+    allSessions,
+    tails,
+    onToggle: () => {
+      void Haptics.selectionAsync();
     },
-    [activeProfile, commandHistory, drafts, sendPrompt, tails]
-  );
+  });
 
-  const explainSessionError = useCallback(
-    async (session: string) => {
-      const errorLine = errorHintsBySession[session];
-      if (!errorLine) {
-        throw new Error("No recent error detected for this session.");
-      }
-      if (!activeProfile) {
-        throw new Error("Configure an external LLM profile to analyze errors.");
-      }
+  const { processes, processesBusy, refreshProcesses } = useProcessManager({
+    activeServer,
+    connected,
+    enabled: capabilities.processes,
+  });
 
-      const tailLines = (tails[session] || "")
-        .split("\n")
-        .slice(-80)
-        .join("\n");
-      const recentCommands = (commandHistory[session] || []).slice(-6).join("\n");
-      const prompt = [
-        "You are a terminal troubleshooting assistant.",
-        "Explain the likely root cause in plain language and list exactly 3 actionable debugging steps.",
-        "Keep it concise, no markdown.",
-        "",
-        `Session: ${session}`,
-        `Detected error line: ${errorLine}`,
-        "Recent commands:",
-        recentCommands || "(none)",
-        "Recent terminal output:",
-        tailLines || "(none)",
-      ].join("\n");
+  const { sessionPresence, sessionReadOnly, refreshSessionPresence, setSessionReadOnlyValue } = useCollaboration({
+    activeServer,
+    activeServerId,
+    connected,
+    enabled: capabilities.collaboration,
+    terminalApiBasePath,
+    remoteOpenSessions,
+    focusedSession,
+    allSessions,
+    isLocalSession,
+  });
 
-      setTriageBusyBySession((prev) => ({ ...prev, [session]: true }));
-      try {
-        const response = await sendPrompt(activeProfile, prompt);
-        setTriageExplanationBySession((prev) => ({ ...prev, [session]: response.trim() }));
-      } finally {
-        setTriageBusyBySession((prev) => ({ ...prev, [session]: false }));
-      }
+  const { commandQueue, queueSessionCommand, flushSessionQueue, removeQueuedCommand } = useCommandQueue({
+    activeServerId,
+    allSessions,
+    connected,
+    sessionReadOnly,
+    isLocalSession,
+    shouldRouteToExternalAi,
+    sendViaExternalLlm,
+    sendCommand,
+    addCommand,
+    clearDraftForSession: (session) => {
+      setDrafts((prev) => ({ ...prev, [session]: "" }));
     },
-    [activeProfile, commandHistory, errorHintsBySession, sendPrompt, tails]
-  );
-
-  const suggestSessionErrorFixes = useCallback(
-    async (session: string) => {
-      const errorLine = errorHintsBySession[session];
-      if (!errorLine) {
-        throw new Error("No recent error detected for this session.");
-      }
-      if (!activeProfile) {
-        throw new Error("Configure an external LLM profile to generate fixes.");
-      }
-
-      const tailLines = (tails[session] || "")
-        .split("\n")
-        .slice(-80)
-        .join("\n");
-      const recentCommands = (commandHistory[session] || []).slice(-6).join("\n");
-      const prompt = [
-        "You are generating safe shell fixes for a terminal error.",
-        "Return strictly JSON: an array of 3 shell commands only, no explanation.",
-        "Commands must be minimally destructive and useful for diagnostics/fix.",
-        "",
-        `Session: ${session}`,
-        `Detected error line: ${errorLine}`,
-        "Recent commands:",
-        recentCommands || "(none)",
-        "Recent terminal output:",
-        tailLines || "(none)",
-      ].join("\n");
-
-      setTriageBusyBySession((prev) => ({ ...prev, [session]: true }));
-      try {
-        const response = await sendPrompt(activeProfile, prompt);
-        const fixes = parseSuggestionOutput(response).map((entry) => entry.replace(/^`+|`+$/g, "").trim()).filter(Boolean);
-        setTriageFixesBySession((prev) => ({ ...prev, [session]: fixes }));
-      } finally {
-        setTriageBusyBySession((prev) => ({ ...prev, [session]: false }));
-      }
+    onQueued: (message) => {
+      setReady(message);
     },
-    [activeProfile, commandHistory, errorHintsBySession, sendPrompt, tails]
-  );
+  });
 
-  const refreshProcesses = useCallback(async () => {
-    if (!activeServer || !connected || !capabilities.processes) {
-      setProcesses([]);
-      return;
-    }
-    setProcessesBusy(true);
-    try {
-      const payload = await apiRequest<unknown>(activeServer.baseUrl, activeServer.token, "/proc/list");
-      setProcesses(normalizeProcessList(payload));
-    } finally {
-      setProcessesBusy(false);
-    }
-  }, [activeServer, capabilities.processes, connected]);
-
-  const refreshSessionPresence = useCallback(
-    async (session: string, showErrors: boolean = false) => {
-      if (isLocalSession(session)) {
-        setSessionPresence((prev) => ({ ...prev, [session]: [] }));
+  const openPlayback = useCallback(
+    (session: string) => {
+      const recording = recordings[session];
+      if (!recording || recording.chunks.length === 0) {
         return;
       }
-      if (!activeServer || !connected || !capabilities.collaboration) {
-        return;
-      }
-      if (presenceInFlightRef.current.has(session)) {
-        return;
-      }
-      presenceInFlightRef.current.add(session);
-      try {
-        const candidates = [
-          `${terminalApiBasePath}/presence?session=${encodeURIComponent(session)}`,
-          `/collab/presence?session=${encodeURIComponent(session)}`,
-          `/presence?session=${encodeURIComponent(session)}`,
-        ];
-        let payload: unknown = null;
-        let lastError: unknown = null;
-        for (const path of candidates) {
-          try {
-            payload = await apiRequest<unknown>(activeServer.baseUrl, activeServer.token, path);
-            break;
-          } catch (error) {
-            lastError = error;
-            const message = error instanceof Error ? error.message : String(error);
-            if (message.startsWith("404") || message.startsWith("405") || message.startsWith("501")) {
-              continue;
-            }
-          }
-        }
-        if (payload === null) {
-          if (showErrors && lastError) {
-            throw lastError;
-          }
-          setSessionPresence((prev) => ({ ...prev, [session]: [] }));
-          return;
-        }
-        const normalized = normalizeSessionPresence(payload);
-        setSessionPresence((prev) => ({ ...prev, [session]: normalized.collaborators }));
-        if (normalized.readOnly !== null) {
-          setSessionReadOnly((prev) => {
-            const next = { ...prev };
-            if (normalized.readOnly) {
-              next[session] = true;
-            } else {
-              delete next[session];
-            }
-            return next;
-          });
-        }
-      } finally {
-        presenceInFlightRef.current.delete(session);
-      }
+      setPlaybackSession(session);
+      setPlaybackTimeMs(0);
+      setPlaybackPlaying(false);
     },
-    [activeServer, capabilities.collaboration, connected, isLocalSession, terminalApiBasePath]
+    [recordings]
   );
 
   const runWithStatus = useCallback(
@@ -1214,268 +859,17 @@ export default function AppShell() {
     });
   }, [requireDangerConfirm]);
 
-  const queueSessionCommand = useCallback(
-    (session: string, command: string, mode: TerminalSendMode) => {
-      const trimmed = command.trim();
-      if (!trimmed) {
-        return;
-      }
-      setCommandQueue((prev) => {
-        const existing = prev[session] || [];
-        const nextQueue = [
-          ...existing,
-          {
-            id: makeQueueCommandId(),
-            command: trimmed,
-            mode,
-            queuedAt: new Date().toISOString(),
-            status: "pending" as QueuedCommandStatus,
-            lastError: null,
-            sentAt: null,
-          },
-        ].slice(-50);
-        return {
-          ...prev,
-          [session]: nextQueue,
-        };
-      });
-      setDrafts((prev) => ({ ...prev, [session]: "" }));
-      setReady(`Queued command for ${session}. It will run when connection is restored.`);
-    },
-    [setDrafts, setReady]
-  );
-
-  const flushSessionQueue = useCallback(
-    async (session: string, options?: { includeFailed?: boolean }) => {
-      const initialQueue = commandQueue[session] || [];
-      if (initialQueue.length === 0) {
-        return 0;
-      }
-      const includeFailed = options?.includeFailed ?? true;
-      if (sessionReadOnly[session]) {
-        throw new Error(`${session} is read-only. Disable read-only to flush queued commands.`);
-      }
-
-      if (!connected && !isLocalSession(session)) {
-        throw new Error("Reconnect to flush queued commands for this session.");
-      }
-
-      const queue = initialQueue.map((item) => (item.id ? item : { ...item, id: makeQueueCommandId() }));
-      if (queue.some((item, index) => initialQueue[index]?.id !== item.id)) {
-        setCommandQueue((prev) => ({ ...prev, [session]: queue }));
-      }
-
-      const shouldFlushItem = (item: QueuedCommand): boolean => {
-        const status = queueStatus(item);
-        if (status === "pending" || status === "sending") {
-          return true;
-        }
-        return includeFailed && status === "failed";
-      };
-
-      const updatable = queue.filter(shouldFlushItem);
-      if (updatable.length === 0) {
-        return 0;
-      }
-
-      let sentCount = 0;
-      for (const item of updatable) {
-        const itemId = item.id as string;
-        setCommandQueue((prev) => ({
-          ...prev,
-          [session]: (prev[session] || []).map((entry) =>
-            entry.id === itemId ? { ...entry, status: "sending" as QueuedCommandStatus, lastError: null } : entry
-          ),
-        }));
-
-        if (item.mode === "ai" && shouldRouteToExternalAi(session)) {
-          try {
-            const sent = await sendViaExternalLlm(session, item.command);
-            if (sent) {
-              await addCommand(session, sent);
-              sentCount += 1;
-              setCommandQueue((prev) => ({
-                ...prev,
-                [session]: (prev[session] || []).map((entry) =>
-                  entry.id === itemId
-                    ? { ...entry, status: "sent" as QueuedCommandStatus, sentAt: new Date().toISOString(), lastError: null }
-                    : entry
-                ),
-              }));
-            }
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            setCommandQueue((prev) => ({
-              ...prev,
-              [session]: (prev[session] || []).map((entry) =>
-                entry.id === itemId ? { ...entry, status: "failed" as QueuedCommandStatus, lastError: message } : entry
-              ),
-            }));
-          }
-          continue;
-        }
-
-        if (item.mode === "shell" && isLocalSession(session)) {
-          setCommandQueue((prev) => ({
-            ...prev,
-            [session]: (prev[session] || []).map((entry) =>
-              entry.id === itemId
-                ? { ...entry, status: "failed" as QueuedCommandStatus, lastError: "Shell queueing is unavailable for local-only AI sessions." }
-                : entry
-            ),
-          }));
-          continue;
-        }
-
-        try {
-          await sendCommand(session, item.command, item.mode, false);
-          await addCommand(session, item.command);
-          sentCount += 1;
-          setCommandQueue((prev) => ({
-            ...prev,
-            [session]: (prev[session] || []).map((entry) =>
-              entry.id === itemId
-                ? { ...entry, status: "sent" as QueuedCommandStatus, sentAt: new Date().toISOString(), lastError: null }
-                : entry
-            ),
-          }));
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          setCommandQueue((prev) => ({
-            ...prev,
-            [session]: (prev[session] || []).map((entry) =>
-              entry.id === itemId ? { ...entry, status: "failed" as QueuedCommandStatus, lastError: message } : entry
-            ),
-          }));
-        }
-      }
-
-      setCommandQueue((prev) => {
-        const current = prev[session] || [];
-        const retained = current
-          .filter((entry) => queueStatus(entry) !== "sent")
-          .map((entry) => (queueStatus(entry) === "sending" ? { ...entry, status: "pending" as QueuedCommandStatus } : entry));
-        return { ...prev, [session]: retained };
-      });
-      return sentCount;
-    },
-    [addCommand, commandQueue, connected, isLocalSession, sendCommand, sendViaExternalLlm, sessionReadOnly, shouldRouteToExternalAi]
-  );
-
-  const toggleRecording = useCallback(
+  const deleteRecordingWithPlaybackCleanup = useCallback(
     (session: string) => {
-      const now = Date.now();
-      setRecordings((prev) => {
-        const current = prev[session];
-        if (current?.active) {
-          return {
-            ...prev,
-            [session]: {
-              ...current,
-              active: false,
-              stoppedAt: now,
-            },
-          };
-        }
-
-        recordingTailRef.current[session] = tails[session] || "";
-        return {
-          ...prev,
-          [session]: {
-            session,
-            active: true,
-            startedAt: now,
-            stoppedAt: null,
-            chunks: [],
-          },
-        };
-      });
-      void Haptics.selectionAsync();
+      deleteRecording(session);
+      if (playbackSession === session) {
+        setPlaybackSession(null);
+        setPlaybackTimeMs(0);
+        setPlaybackPlaying(false);
+      }
     },
-    [tails]
+    [deleteRecording, playbackSession]
   );
-
-  const openPlayback = useCallback((session: string) => {
-    const recording = recordings[session];
-    if (!recording || recording.chunks.length === 0) {
-      return;
-    }
-    setPlaybackSession(session);
-    setPlaybackTimeMs(0);
-    setPlaybackPlaying(false);
-  }, [recordings]);
-
-  const deleteRecording = useCallback((session: string) => {
-    setRecordings((prev) => {
-      const next = { ...prev };
-      delete next[session];
-      return next;
-    });
-    if (playbackSession === session) {
-      setPlaybackSession(null);
-      setPlaybackTimeMs(0);
-      setPlaybackPlaying(false);
-    }
-  }, [playbackSession]);
-
-  useEffect(() => {
-    if (!isPro) {
-      return;
-    }
-    const enabledRules = Object.values(watchRules).some((rule) => Boolean(rule?.enabled && rule.pattern?.trim()));
-    if (!enabledRules) {
-      return;
-    }
-
-    const matchesBySession: Record<string, string> = {};
-    for (const session of Object.keys(watchRules)) {
-      const rule = watchRules[session];
-      if (!rule?.enabled || !rule.pattern.trim()) {
-        continue;
-      }
-
-      let regex: RegExp;
-      try {
-        regex = new RegExp(rule.pattern, "i");
-      } catch {
-        continue;
-      }
-
-      const lines = (tails[session] || "").split("\n").slice(-240);
-      const matchedLine = [...lines].reverse().find((line) => regex.test(line.trim()));
-      if (matchedLine && matchedLine.trim() && matchedLine.trim() !== (rule.lastMatch || "")) {
-        matchesBySession[session] = matchedLine.trim();
-      }
-    }
-
-    const pending = Object.entries(matchesBySession);
-    if (pending.length === 0) {
-      return;
-    }
-
-    setWatchRules((prev) => {
-      const next = { ...prev };
-      pending.forEach(([session, match]) => {
-        const existing = next[session] || { enabled: false, pattern: "", lastMatch: null };
-        next[session] = { ...existing, lastMatch: match };
-      });
-      return next;
-    });
-
-    setWatchAlertHistoryBySession((prev) => {
-      const next = { ...prev };
-      pending.forEach(([session, match]) => {
-        const stamp = new Date().toLocaleTimeString();
-        const existing = next[session] || [];
-        next[session] = [`[${stamp}] ${match}`, ...existing].slice(0, 12);
-      });
-      return next;
-    });
-
-    pending.forEach(([session, match]) => {
-      void notify("Watch alert", `${session}: ${match.slice(0, 120)}`);
-    });
-  }, [isPro, notify, tails, watchRules]);
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
@@ -1573,7 +967,7 @@ export default function AppShell() {
       return;
     }
     const pendingSessions = Object.keys(commandQueue).filter((session) =>
-      (commandQueue[session] || []).some((item) => queueStatus(item) === "pending") && !sessionReadOnly[session]
+      (commandQueue[session] || []).some((item) => commandQueueStatus(item) === "pending") && !sessionReadOnly[session]
     );
     if (pendingSessions.length === 0) {
       return;
@@ -1618,28 +1012,6 @@ export default function AppShell() {
   }, [connected, fetchTail, remoteOpenSessions]);
 
   useEffect(() => {
-    if (!connected || !capabilities.collaboration || remoteOpenSessions.length === 0) {
-      return;
-    }
-    const targetSession = focusedSession && remoteOpenSessions.includes(focusedSession) ? focusedSession : remoteOpenSessions[0];
-    if (!targetSession) {
-      return;
-    }
-    void refreshSessionPresence(targetSession, false);
-    const id = setInterval(() => {
-      void refreshSessionPresence(targetSession, false);
-    }, COLLAB_POLL_INTERVAL_MS);
-    return () => clearInterval(id);
-  }, [capabilities.collaboration, connected, focusedSession, refreshSessionPresence, remoteOpenSessions]);
-
-  useEffect(() => {
-    if (connected && capabilities.collaboration) {
-      return;
-    }
-    setSessionPresence({});
-  }, [capabilities.collaboration, connected]);
-
-  useEffect(() => {
     void removeMissingSessions(allSessions);
   }, [allSessions, removeMissingSessions]);
 
@@ -1650,105 +1022,6 @@ export default function AppShell() {
   useEffect(() => {
     void removeMissingPins(allSessions);
   }, [allSessions, removeMissingPins]);
-
-  useEffect(() => {
-    setErrorHintsBySession((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      allSessions.forEach((session) => {
-        const hint = detectTerminalErrorLine(tails[session] || "");
-        if (!hint) {
-          if (next[session]) {
-            delete next[session];
-            changed = true;
-          }
-          return;
-        }
-        if (next[session] !== hint) {
-          next[session] = hint;
-          changed = true;
-        }
-      });
-      return changed ? next : prev;
-    });
-  }, [allSessions, tails]);
-
-  useEffect(() => {
-    const changedSessions: string[] = [];
-    const nextFingerprint: Record<string, string> = {};
-    allSessions.forEach((session) => {
-      const hint = errorHintsBySession[session] || "";
-      nextFingerprint[session] = hint;
-      if ((triageHintRef.current[session] || "") !== hint) {
-        changedSessions.push(session);
-      }
-    });
-    triageHintRef.current = nextFingerprint;
-
-    if (changedSessions.length === 0) {
-      return;
-    }
-
-    setTriageExplanationBySession((prev) => {
-      const next = { ...prev };
-      changedSessions.forEach((session) => {
-        delete next[session];
-      });
-      return next;
-    });
-    setTriageFixesBySession((prev) => {
-      const next = { ...prev };
-      changedSessions.forEach((session) => {
-        delete next[session];
-      });
-      return next;
-    });
-  }, [allSessions, errorHintsBySession]);
-
-  useEffect(() => {
-    const available = new Set(allSessions);
-    Object.keys(recordingTailRef.current).forEach((session) => {
-      if (!available.has(session)) {
-        delete recordingTailRef.current[session];
-      }
-    });
-  }, [allSessions]);
-
-  useEffect(() => {
-    setRecordings((prev) => {
-      let changed = false;
-      const next = { ...prev };
-
-      allSessions.forEach((session) => {
-        const latestTail = tails[session] || "";
-        const priorTail = recordingTailRef.current[session] ?? "";
-        if (latestTail === priorTail) {
-          return;
-        }
-
-        const recording = next[session];
-        if (recording?.active) {
-          const delta = latestTail.startsWith(priorTail) ? latestTail.slice(priorTail.length) : latestTail;
-          if (delta) {
-            next[session] = {
-              ...recording,
-              chunks: [
-                ...recording.chunks,
-                {
-                  atMs: Math.max(0, Date.now() - recording.startedAt),
-                  text: delta,
-                },
-              ],
-            };
-            changed = true;
-          }
-        }
-        recordingTailRef.current[session] = latestTail;
-      });
-
-      return changed ? next : prev;
-    });
-  }, [allSessions, tails]);
 
   useEffect(() => {
     if (!activeServerId) {
@@ -1816,113 +1089,6 @@ export default function AppShell() {
   }, [allSessions, commandHistory, sessionAliases, setAliasForSession, tails]);
 
   useEffect(() => {
-    setSuggestionsBySession((prev) => {
-      const next: Record<string, string[]> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setSuggestionBusyBySession((prev) => {
-      const next: Record<string, boolean> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setErrorHintsBySession((prev) => {
-      const next: Record<string, string> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setTriageBusyBySession((prev) => {
-      const next: Record<string, boolean> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setTriageExplanationBySession((prev) => {
-      const next: Record<string, string> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setTriageFixesBySession((prev) => {
-      const next: Record<string, string[]> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setWatchRules((prev) => {
-      const next: Record<string, WatchRule> = {};
-      allSessions.forEach((session) => {
-        next[session] = prev[session] || { enabled: false, pattern: "", lastMatch: null };
-      });
-      return next;
-    });
-    setWatchAlertHistoryBySession((prev) => {
-      const next: Record<string, string[]> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setCommandQueue((prev) => {
-      const next: Record<string, QueuedCommand[]> = {};
-      allSessions.forEach((session) => {
-        next[session] = prev[session] || [];
-      });
-      return next;
-    });
-    setSessionPresence((prev) => {
-      const next: Record<string, SessionCollaborator[]> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-    setSessionReadOnly((prev) => {
-      const next: Record<string, boolean> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = true;
-        }
-      });
-      return next;
-    });
-    setRecordings((prev) => {
-      const next: Record<string, SessionRecording> = {};
-      allSessions.forEach((session) => {
-        if (prev[session]) {
-          next[session] = prev[session];
-        }
-      });
-      return next;
-    });
-  }, [allSessions]);
-
-  useEffect(() => {
     let mounted = true;
     async function loadShellRunWait() {
       if (!activeServerId) {
@@ -1964,147 +1130,6 @@ export default function AppShell() {
   }, [activeServerId, parsedShellRunWaitMs]);
 
   useEffect(() => {
-    let mounted = true;
-    async function loadWatchRules() {
-      if (!activeServerId) {
-        if (mounted) {
-          setWatchRules({});
-        }
-        return;
-      }
-
-      const raw = await SecureStore.getItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${activeServerId}`);
-      if (!mounted) {
-        return;
-      }
-
-      if (!raw) {
-        setWatchRules({});
-        return;
-      }
-
-      try {
-        const parsed = JSON.parse(raw) as Record<string, WatchRule>;
-        setWatchRules(parsed && typeof parsed === "object" ? parsed : {});
-      } catch {
-        setWatchRules({});
-      }
-    }
-
-    void loadWatchRules();
-    return () => {
-      mounted = false;
-    };
-  }, [activeServerId]);
-
-  useEffect(() => {
-    if (!activeServerId) {
-      return;
-    }
-    void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${activeServerId}`, JSON.stringify(watchRules));
-  }, [activeServerId, watchRules]);
-
-  useEffect(() => {
-    let mounted = true;
-    async function loadCollabReadOnly() {
-      if (!activeServerId) {
-        if (mounted) {
-          setSessionReadOnly({});
-        }
-        return;
-      }
-      const raw = await SecureStore.getItemAsync(`${STORAGE_SESSION_COLLAB_READONLY_PREFIX}.${activeServerId}`);
-      if (!mounted) {
-        return;
-      }
-      if (!raw) {
-        setSessionReadOnly({});
-        return;
-      }
-      try {
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        if (!parsed || typeof parsed !== "object") {
-          setSessionReadOnly({});
-          return;
-        }
-        const next: Record<string, boolean> = {};
-        Object.entries(parsed).forEach(([session, value]) => {
-          const bool = toOptionalBool(value);
-          if (bool !== null) {
-            next[session] = bool;
-          }
-        });
-        setSessionReadOnly(next);
-      } catch {
-        setSessionReadOnly({});
-      }
-    }
-    void loadCollabReadOnly();
-    return () => {
-      mounted = false;
-    };
-  }, [activeServerId]);
-
-  useEffect(() => {
-    if (!activeServerId) {
-      return;
-    }
-    void SecureStore.setItemAsync(`${STORAGE_SESSION_COLLAB_READONLY_PREFIX}.${activeServerId}`, JSON.stringify(sessionReadOnly));
-  }, [activeServerId, sessionReadOnly]);
-
-  useEffect(() => {
-    let mounted = true;
-    async function loadQueuedCommands() {
-      if (!activeServerId) {
-        if (mounted) {
-          setCommandQueue({});
-        }
-        return;
-      }
-
-      const raw = await SecureStore.getItemAsync(`${STORAGE_COMMAND_QUEUE_PREFIX}.${activeServerId}`);
-      if (!mounted) {
-        return;
-      }
-      if (!raw) {
-        setCommandQueue({});
-        return;
-      }
-      try {
-        const parsed = JSON.parse(raw) as Record<string, unknown>;
-        if (!parsed || typeof parsed !== "object") {
-          setCommandQueue({});
-          return;
-        }
-        const next: Record<string, QueuedCommand[]> = {};
-        Object.entries(parsed).forEach(([session, value]) => {
-          if (!Array.isArray(value)) {
-            return;
-          }
-          next[session] = value
-            .map((entry) => normalizeQueuedCommand(entry))
-            .filter((entry): entry is QueuedCommand => Boolean(entry))
-            .slice(-50);
-        });
-        setCommandQueue(next);
-      } catch {
-        setCommandQueue({});
-      }
-    }
-    void loadQueuedCommands();
-    return () => {
-      mounted = false;
-    };
-  }, [activeServerId]);
-
-  useEffect(() => {
-    if (!activeServerId) {
-      return;
-    }
-    void SecureStore.setItemAsync(`${STORAGE_COMMAND_QUEUE_PREFIX}.${activeServerId}`, JSON.stringify(commandQueue));
-  }, [activeServerId, commandQueue]);
-
-  useEffect(() => {
     if (!connected || !activeServer || !capabilities.sysStats) {
       setSysStats(null);
       return;
@@ -2131,18 +1156,6 @@ export default function AppShell() {
       clearInterval(id);
     };
   }, [activeServer, capabilities.sysStats, connected]);
-
-  useEffect(() => {
-    if (!connected || !capabilities.processes) {
-      setProcesses([]);
-      return;
-    }
-    void refreshProcesses();
-    const id = setInterval(() => {
-      void refreshProcesses();
-    }, 5000);
-    return () => clearInterval(id);
-  }, [capabilities.processes, connected, refreshProcesses]);
 
   const activePlaybackRecording = playbackSession ? recordings[playbackSession] || null : null;
   const playbackDuration = recordingDurationMs(activePlaybackRecording);
@@ -2573,15 +1586,7 @@ export default function AppShell() {
       });
     },
     onSetSessionReadOnly: (session, value) => {
-      setSessionReadOnly((prev) => {
-        const next = { ...prev };
-        if (value) {
-          next[session] = true;
-        } else {
-          delete next[session];
-        }
-        return next;
-      });
+      setSessionReadOnlyValue(session, value);
     },
     onRequestSuggestions: (session) => {
       void runWithStatus(`Generating suggestions for ${session}`, async () => {
@@ -2602,41 +1607,13 @@ export default function AppShell() {
       });
     },
     onToggleWatch: (session, enabled) => {
-      setWatchRules((prev) => {
-        const existing = prev[session] || { enabled: false, pattern: "", lastMatch: null };
-        return {
-          ...prev,
-          [session]: {
-            ...existing,
-            enabled,
-          },
-        };
-      });
+      setWatchEnabled(session, enabled);
     },
     onSetWatchPattern: (session, pattern) => {
-      setWatchRules((prev) => {
-        const existing = prev[session] || { enabled: true, pattern: "", lastMatch: null };
-        return {
-          ...prev,
-          [session]: {
-            ...existing,
-            pattern,
-            lastMatch: null,
-          },
-        };
-      });
-      setWatchAlertHistoryBySession((prev) => {
-        const next = { ...prev };
-        delete next[session];
-        return next;
-      });
+      setWatchPattern(session, pattern);
     },
     onClearWatchAlerts: (session) => {
-      setWatchAlertHistoryBySession((prev) => {
-        const next = { ...prev };
-        delete next[session];
-        return next;
-      });
+      clearWatchAlerts(session);
     },
     onSetTerminalPreset: setTerminalPreset,
     onSetTerminalFontFamily: setTerminalFontFamily,
@@ -2648,20 +1625,11 @@ export default function AppShell() {
       });
     },
     onRemoveQueuedCommand: (session, index) => {
-      setCommandQueue((prev) => {
-        const current = prev[session] || [];
-        if (index < 0 || index >= current.length) {
-          return prev;
-        }
-        return {
-          ...prev,
-          [session]: current.filter((_, itemIndex) => itemIndex !== index),
-        };
-      });
+      removeQueuedCommand(session, index);
     },
     onToggleRecording: toggleRecording,
     onOpenPlayback: openPlayback,
-    onDeleteRecording: deleteRecording,
+    onDeleteRecording: deleteRecordingWithPlaybackCleanup,
     onRunFleet: () => {
       void runWithStatus("Running fleet command", async () => {
         const approved = await requestDangerApproval(fleetCommand, "Fleet execute");
