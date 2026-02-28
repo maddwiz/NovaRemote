@@ -16,6 +16,16 @@ const EMPTY_CAPABILITIES: ServerCapabilities = {
   collaboration: false,
 };
 
+const CAPABILITY_CACHE_TTL_MS = 45000;
+
+type CachedCapabilities = {
+  capabilities: ServerCapabilities;
+  terminalApiKind: TerminalApiKind;
+  expiresAt: number;
+};
+
+const capabilityCache = new Map<string, CachedCapabilities>();
+
 type UseServerCapabilitiesArgs = {
   activeServer: ServerProfile | null;
   connected: boolean;
@@ -123,24 +133,37 @@ async function readManifest(baseUrl: string, token: string): Promise<CapabilityM
   return {};
 }
 
-function pickTerminalApiKind(
-  manifest: Record<string, unknown>,
-  terminalSessions: boolean,
-  tmuxSessions: boolean
-): TerminalApiKind {
+function readTerminalApiHint(manifest: Record<string, unknown>): TerminalApiKind | null {
   const apiHint =
     (readPath(manifest, "terminal.api_kind") as string | undefined) ||
     (readPath(manifest, "terminal_api") as string | undefined) ||
     (readPath(manifest, "capabilities.terminal.api_kind") as string | undefined);
 
-  if (typeof apiHint === "string") {
-    const normalized = apiHint.trim().toLowerCase();
-    if (normalized === "terminal") {
-      return "terminal";
-    }
-    if (normalized === "tmux") {
-      return "tmux";
-    }
+  if (typeof apiHint !== "string") {
+    return null;
+  }
+  const normalized = apiHint.trim().toLowerCase();
+  if (normalized === "terminal") {
+    return "terminal";
+  }
+  if (normalized === "tmux") {
+    return "tmux";
+  }
+  return null;
+}
+
+function capabilityCacheKey(baseUrl: string, token: string): string {
+  return `${normalizeBaseUrl(baseUrl)}::${token}`;
+}
+
+function pickTerminalApiKind(
+  manifest: Record<string, unknown>,
+  terminalSessions: boolean,
+  tmuxSessions: boolean
+): TerminalApiKind {
+  const apiHint = readTerminalApiHint(manifest);
+  if (apiHint) {
+    return apiHint;
   }
 
   if (terminalSessions) {
@@ -172,24 +195,19 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
     try {
       const baseUrl = activeServer.baseUrl;
       const token = activeServer.token;
+      const cacheKey = capabilityCacheKey(baseUrl, token);
+      const cached = capabilityCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) {
+        setCapabilities(cached.capabilities);
+        setTerminalApiKind(cached.terminalApiKind);
+        return cached.capabilities;
+      }
 
       const manifestRoot = await readManifest(baseUrl, token);
       const manifest =
         (readPath(manifestRoot, "capabilities") as Record<string, unknown> | undefined) ||
         (readPath(manifestRoot, "features") as Record<string, unknown> | undefined) ||
         manifestRoot;
-
-      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe, procListProbe, collabProbe] = await Promise.all([
-        endpointExists(baseUrl, token, "/tmux/sessions"),
-        endpointExists(baseUrl, token, "/terminal/sessions"),
-        endpointExists(baseUrl, token, "/files/list?path=%2F"),
-        endpointSupportsAction(baseUrl, token, "/shell/run"),
-        endpointSupportsAction(baseUrl, token, "/mac/attach"),
-        endpointSupportsAction(baseUrl, token, "/codex/start"),
-        endpointExists(baseUrl, token, "/sys/stats"),
-        endpointExists(baseUrl, token, "/proc/list"),
-        endpointSupportsAction(baseUrl, token, "/collab/presence"),
-      ]);
 
       const manifestTerminal = readBool(manifest, [
         "terminal.available",
@@ -223,8 +241,23 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         "presence.available",
         "multiplayer",
       ]);
+      const apiHint = readTerminalApiHint(manifest);
 
-      const terminalAvailable = manifestTerminal ?? (terminalSessions || tmuxSessions);
+      const probeTmuxSessions = manifestTmux === null || (manifestTerminal === null && apiHint === null);
+      const probeTerminalSessions = manifestTerminal === null && apiHint === null;
+      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe, procListProbe, collabProbe] = await Promise.all([
+        probeTmuxSessions ? endpointExists(baseUrl, token, "/tmux/sessions") : Promise.resolve(false),
+        probeTerminalSessions ? endpointExists(baseUrl, token, "/terminal/sessions") : Promise.resolve(false),
+        manifestFiles === null ? endpointExists(baseUrl, token, "/files/list?path=%2F") : Promise.resolve(false),
+        manifestShellRun === null ? endpointSupportsAction(baseUrl, token, "/shell/run") : Promise.resolve(false),
+        manifestMacAttach === null ? endpointSupportsAction(baseUrl, token, "/mac/attach") : Promise.resolve(false),
+        manifestCodex === null ? endpointSupportsAction(baseUrl, token, "/codex/start") : Promise.resolve(false),
+        manifestSysStats === null ? endpointExists(baseUrl, token, "/sys/stats") : Promise.resolve(false),
+        manifestProcesses === null ? endpointExists(baseUrl, token, "/proc/list") : Promise.resolve(false),
+        manifestCollaboration === null ? endpointSupportsAction(baseUrl, token, "/collab/presence") : Promise.resolve(false),
+      ]);
+
+      const terminalAvailable = manifestTerminal ?? (terminalSessions || tmuxSessions || manifestTmux === true);
       const next: ServerCapabilities = {
         terminal: terminalAvailable,
         tmux: manifestTmux ?? tmuxSessions,
@@ -238,11 +271,24 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         collaboration: manifestCollaboration ?? collabProbe,
       };
 
-      const nextApiKind = pickTerminalApiKind(manifest, terminalSessions, tmuxSessions);
+      const nextApiKind = apiHint || pickTerminalApiKind(manifest, terminalSessions, tmuxSessions);
       setCapabilities(next);
       setTerminalApiKind(nextApiKind);
+      capabilityCache.set(cacheKey, {
+        capabilities: next,
+        terminalApiKind: nextApiKind,
+        expiresAt: Date.now() + CAPABILITY_CACHE_TTL_MS,
+      });
       return next;
     } catch (error) {
+      const cacheKey = capabilityCacheKey(activeServer.baseUrl, activeServer.token);
+      const stale = capabilityCache.get(cacheKey);
+      if (stale) {
+        setCapabilities(stale.capabilities);
+        setTerminalApiKind(stale.terminalApiKind);
+        setLastError(error instanceof Error ? error.message : String(error));
+        return stale.capabilities;
+      }
       setCapabilities(EMPTY_CAPABILITIES);
       setTerminalApiKind("tmux");
       setLastError(error instanceof Error ? error.message : String(error));

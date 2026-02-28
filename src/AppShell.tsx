@@ -40,6 +40,7 @@ import {
   POLL_INTERVAL_MS,
   STORAGE_COMMAND_QUEUE_PREFIX,
   STORAGE_SHELL_WAIT_MS,
+  STORAGE_SHELL_WAIT_MS_PREFIX,
   STORAGE_SESSION_COLLAB_READONLY_PREFIX,
   STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
@@ -1879,7 +1880,21 @@ export default function AppShell() {
   useEffect(() => {
     let mounted = true;
     async function loadShellRunWait() {
-      const raw = await SecureStore.getItemAsync(STORAGE_SHELL_WAIT_MS);
+      if (!activeServerId) {
+        setShellRunWaitMs(String(DEFAULT_SHELL_WAIT_MS));
+        return;
+      }
+
+      setShellRunWaitMs(String(DEFAULT_SHELL_WAIT_MS));
+      const scopedKey = `${STORAGE_SHELL_WAIT_MS_PREFIX}.${activeServerId}`;
+      let raw = await SecureStore.getItemAsync(scopedKey);
+      if (!raw) {
+        raw = await SecureStore.getItemAsync(STORAGE_SHELL_WAIT_MS);
+        if (raw) {
+          await SecureStore.setItemAsync(scopedKey, raw);
+        }
+      }
+
       if (!mounted || !raw) {
         return;
       }
@@ -1894,11 +1909,14 @@ export default function AppShell() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [activeServerId]);
 
   useEffect(() => {
-    void SecureStore.setItemAsync(STORAGE_SHELL_WAIT_MS, String(parsedShellRunWaitMs));
-  }, [parsedShellRunWaitMs]);
+    if (!activeServerId) {
+      return;
+    }
+    void SecureStore.setItemAsync(`${STORAGE_SHELL_WAIT_MS_PREFIX}.${activeServerId}`, String(parsedShellRunWaitMs));
+  }, [activeServerId, parsedShellRunWaitMs]);
 
   useEffect(() => {
     let mounted = true;

@@ -25,7 +25,7 @@ NovaRemote is an Expo + React Native app for controlling remote terminal and AI 
 - Watch mode with regex-based alert notifications
 - Fleet mode (run one shell command across selected servers)
 - Configurable fleet wait timeout
-- Configurable shell-run wait timeout for per-session command sends
+- Per-server configurable shell-run wait timeout for command sends
 - Biometric app unlock (Face ID / Touch ID)
 - Optional dangerous-command confirmation guardrail
 - Session export (shareable JSON with command history + output)

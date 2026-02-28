@@ -233,7 +233,7 @@ Request:
 }
 ```
 
-`wait_ms` is user-configurable in NovaRemote (Shell Wait Timeout panel). The app clamps values to `400-120000`.
+`wait_ms` is user-configurable per server in NovaRemote (Shell Wait Timeout panel). The app clamps values to `400-120000`.
 
 Response:
 
