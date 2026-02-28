@@ -1,4 +1,4 @@
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View, useWindowDimensions } from "react-native";
 
 import { useAppContext } from "../context/AppContext";
@@ -168,10 +168,24 @@ export function TerminalsScreen() {
   const { width } = useWindowDimensions();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
+  const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
+  const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
   const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
+
+  useEffect(() => {
+    if (sortedOpenSessions.length === 0) {
+      if (activeTabSession !== null) {
+        setActiveTabSession(null);
+      }
+      return;
+    }
+    if (!activeTabSession || !sortedOpenSessions.includes(activeTabSession)) {
+      setActiveTabSession(sortedOpenSessions[0]);
+    }
+  }, [activeTabSession, sortedOpenSessions]);
 
   const openTerminalCards = useMemo(() => {
     return sortedOpenSessions.map((session) => {
@@ -302,6 +316,75 @@ export function TerminalsScreen() {
     watchRules,
   ]);
 
+  const tabActiveIndex = activeTabSession ? sortedOpenSessions.indexOf(activeTabSession) : -1;
+  const tabCard = tabActiveIndex >= 0 ? openTerminalCards[tabActiveIndex] : null;
+  const renderOpenTerminals = () => {
+    if (openTerminalCards.length === 0) {
+      return <Text style={styles.emptyText}>Tap a session above to open it.</Text>;
+    }
+
+    if (layoutMode === "tabs") {
+      return (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {sortedOpenSessions.map((session) => (
+              <Pressable
+                key={`tab-${session}`}
+                style={[styles.chip, activeTabSession === session ? styles.chipActive : null]}
+                onPress={() => setActiveTabSession(session)}
+              >
+                <Text style={[styles.chipText, activeTabSession === session ? styles.chipTextActive : null]}>
+                  {sessionAliases[session]?.trim() || session}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+          {tabCard}
+        </>
+      );
+    }
+
+    if (layoutMode === "grid") {
+      const gridColumns = wantsSplit ? 2 : 1;
+      return (
+        <View style={styles.actionsWrap}>
+          {openTerminalCards.map((card, index) => (
+            <View
+              key={`grid-${sortedOpenSessions[index]}`}
+              style={{
+                width: gridColumns === 2 ? "49%" : "100%",
+              }}
+            >
+              {card}
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    if (layoutMode === "split") {
+      if (openTerminalCards.length === 1) {
+        return openTerminalCards[0];
+      }
+      return (
+        <View style={styles.actionsWrap}>
+          {openTerminalCards.slice(0, 2).map((card, index) => (
+            <View
+              key={`split-${sortedOpenSessions[index]}`}
+              style={{
+                width: wantsSplit ? "49%" : "100%",
+              }}
+            >
+              {card}
+            </View>
+          ))}
+        </View>
+      );
+    }
+
+    return openTerminalCards;
+  };
+
   const fleetPanel = (
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Fleet Execute</Text>
@@ -379,6 +462,24 @@ export function TerminalsScreen() {
         <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
         <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
         <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Terminal Layout</Text>
+        <View style={styles.actionsWrap}>
+          <Pressable style={[styles.chip, layoutMode === "stack" ? styles.chipActive : null]} onPress={() => setLayoutMode("stack")}>
+            <Text style={[styles.chipText, layoutMode === "stack" ? styles.chipTextActive : null]}>Stack</Text>
+          </Pressable>
+          <Pressable style={[styles.chip, layoutMode === "tabs" ? styles.chipActive : null]} onPress={() => setLayoutMode("tabs")}>
+            <Text style={[styles.chipText, layoutMode === "tabs" ? styles.chipTextActive : null]}>Tabs</Text>
+          </Pressable>
+          <Pressable style={[styles.chip, layoutMode === "grid" ? styles.chipActive : null]} onPress={() => setLayoutMode("grid")}>
+            <Text style={[styles.chipText, layoutMode === "grid" ? styles.chipTextActive : null]}>Grid</Text>
+          </Pressable>
+          <Pressable style={[styles.chip, layoutMode === "split" ? styles.chipActive : null]} onPress={() => setLayoutMode("split")}>
+            <Text style={[styles.chipText, layoutMode === "split" ? styles.chipTextActive : null]}>Split</Text>
+          </Pressable>
+        </View>
       </View>
 
       <View style={styles.panel}>
@@ -603,7 +704,7 @@ export function TerminalsScreen() {
         {topPanels}
         <View style={styles.panel}>
           <Text style={styles.panelLabel}>Open Terminals</Text>
-          {openTerminalCards.length === 0 ? <Text style={styles.emptyText}>Tap a session above to open it.</Text> : openTerminalCards}
+          {renderOpenTerminals()}
         </View>
       </>
     );
@@ -616,7 +717,7 @@ export function TerminalsScreen() {
         <View style={styles.splitRight}>
           <View style={styles.panel}>
             <Text style={styles.panelLabel}>Open Terminals</Text>
-            {openTerminalCards.length === 0 ? <Text style={styles.emptyText}>Tap a session above to open it.</Text> : openTerminalCards}
+            {renderOpenTerminals()}
           </View>
         </View>
       </View>
@@ -628,7 +729,7 @@ export function TerminalsScreen() {
       {topPanels}
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Open Terminals</Text>
-        {openTerminalCards.length === 0 ? <Text style={styles.emptyText}>Tap a session above to open it.</Text> : openTerminalCards}
+        {renderOpenTerminals()}
       </View>
     </>
   );
