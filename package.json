@@ -20,6 +20,7 @@
     "anser": "^2.3.5",
     "crypto-js": "^4.2.0",
     "expo": "~55.0.4",
+    "expo-av": "^16.0.8",
     "expo-haptics": "^55.0.8",
     "expo-linking": "^55.0.7",
     "expo-local-authentication": "^55.0.8",

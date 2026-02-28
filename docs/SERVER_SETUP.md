@@ -309,6 +309,31 @@ Response:
 }
 ```
 
+## Optional Endpoints (Voice Input for Glasses Mode)
+
+NovaRemote can capture microphone audio on-device and post it to the companion server for transcription.
+
+The app will try these endpoints in order until one succeeds:
+
+- `POST /voice/transcribe`
+- `POST /speech/transcribe`
+- `POST /ai/transcribe`
+- `POST /llm/transcribe`
+
+Request format:
+
+- `Authorization: Bearer <TOKEN>`
+- `multipart/form-data`
+- file field: `file` (audio/m4a)
+
+Recommended response format:
+
+```json
+{ "transcript": "restart api server and tail logs" }
+```
+
+Accepted text fields are: `transcript`, `text`, `output`, `message`, `result`.
+
 ## Quick Start (Codex Remote Reference Server)
 
 If you are using the included `codex_remote` server from the parent workspace:

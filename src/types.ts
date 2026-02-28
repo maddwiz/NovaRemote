@@ -193,6 +193,15 @@ export type TerminalThemeSettings = {
   backgroundOpacity: number;
 };
 
+export type GlassesBrand = "xreal_x1" | "halo" | "custom";
+
+export type GlassesModeSettings = {
+  enabled: boolean;
+  brand: GlassesBrand;
+  textScale: number;
+  voiceAutoSend: boolean;
+};
+
 export type LlmProfile = {
   id: string;
   name: string;

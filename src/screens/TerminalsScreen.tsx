@@ -4,6 +4,7 @@ import { NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, T
 
 import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
+import { AnsiText } from "../components/AnsiText";
 import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
 import { styles } from "../theme/styles";
@@ -16,7 +17,7 @@ import {
   buildTerminalAppearance,
   getTerminalPreset,
 } from "../theme/terminalTheme";
-import { ProcessSignal } from "../types";
+import { GlassesBrand, ProcessSignal } from "../types";
 
 function renderSessionChips(
   allSessions: string[],
@@ -75,6 +76,16 @@ function formatNumber(value: number | undefined, decimals: number = 0): string {
     return "n/a";
   }
   return value.toFixed(decimals);
+}
+
+function glassesBrandLabel(brand: GlassesBrand): string {
+  if (brand === "xreal_x1") {
+    return "XREAL X1";
+  }
+  if (brand === "halo") {
+    return "Halo";
+  }
+  return "Custom";
 }
 
 type ProcessSortMode = "cpu" | "mem" | "uptime" | "name";
@@ -144,6 +155,11 @@ export function TerminalsScreen() {
     terminalTheme,
     commandQueue,
     recordings,
+    glassesMode,
+    voiceRecording,
+    voiceBusy,
+    voiceTranscript,
+    voiceError,
     onShowPaywall,
     onSetTagFilter,
     onSetStartCwd,
@@ -200,6 +216,13 @@ export function TerminalsScreen() {
     onToggleRecording,
     onOpenPlayback,
     onDeleteRecording,
+    onSetGlassesEnabled,
+    onSetGlassesBrand,
+    onSetGlassesTextScale,
+    onSetGlassesVoiceAutoSend,
+    onVoiceStartCapture,
+    onVoiceStopCapture,
+    onVoiceSendTranscript,
     onRunFleet,
   } = useAppContext().terminals;
 
@@ -209,12 +232,26 @@ export function TerminalsScreen() {
   const activeBackend = activeServer?.terminalBackend;
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
+  const [glassesSession, setGlassesSession] = useState<string | null>(null);
   const [processFilter, setProcessFilter] = useState<string>("");
   const [processSorts, setProcessSorts] = useState<ProcessSortMode[]>(["cpu"]);
   const [processSignal, setProcessSignal] = useState<ProcessSignal>("TERM");
   const [selectedProcessPids, setSelectedProcessPids] = useState<number[]>([]);
   const [pendingProcessKill, setPendingProcessKill] = useState<{ pids: number[]; signal: ProcessSignal } | null>(null);
   const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
+  const glassesTerminalTextStyle = useMemo(
+    () =>
+      glassesMode.enabled
+        ? [
+            terminalAppearance.terminalTextStyle,
+            {
+              fontSize: Math.max(13, Math.round(13 * glassesMode.textScale)),
+              lineHeight: Math.max(18, Math.round(18 * glassesMode.textScale)),
+            },
+          ]
+        : terminalAppearance.terminalTextStyle,
+    [glassesMode.enabled, glassesMode.textScale, terminalAppearance.terminalTextStyle]
+  );
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
@@ -339,6 +376,18 @@ export function TerminalsScreen() {
     }
   }, [activeTabSession, sortedOpenSessions]);
 
+  useEffect(() => {
+    if (sortedOpenSessions.length === 0) {
+      if (glassesSession !== null) {
+        setGlassesSession(null);
+      }
+      return;
+    }
+    if (!glassesSession || !sortedOpenSessions.includes(glassesSession)) {
+      setGlassesSession(sortedOpenSessions[0]);
+    }
+  }, [glassesSession, sortedOpenSessions]);
+
   const openTerminalCards = useMemo(() => {
     return sortedOpenSessions.map((session) => {
       const output = tails[session] ?? "";
@@ -398,7 +447,7 @@ export function TerminalsScreen() {
           historySuggestions={commandHistory[session] || []}
           terminalBackend={activeBackend}
           terminalViewStyle={terminalAppearance.terminalViewStyle}
-          terminalTextStyle={terminalAppearance.terminalTextStyle}
+          terminalTextStyle={glassesTerminalTextStyle}
           historyCount={historyCount[session] || 0}
           onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
           onSetAiEngine={(nextEngine) => onSetSessionAiEngine(session, nextEngine)}
@@ -458,6 +507,7 @@ export function TerminalsScreen() {
     commandQueue,
     recordings,
     terminalAppearance,
+    glassesTerminalTextStyle,
     onClearDraft,
     onFocusSession,
     onHideSession,
@@ -506,6 +556,22 @@ export function TerminalsScreen() {
 
   const tabActiveIndex = activeTabSession ? sortedOpenSessions.indexOf(activeTabSession) : -1;
   const tabCard = tabActiveIndex >= 0 ? openTerminalCards[tabActiveIndex] : null;
+  const glassesActiveSession = glassesSession && sortedOpenSessions.includes(glassesSession)
+    ? glassesSession
+    : sortedOpenSessions[0] || null;
+  const glassesOutput = glassesActiveSession ? tails[glassesActiveSession] || "" : "";
+  const glassesDraft = glassesActiveSession ? drafts[glassesActiveSession] || "" : "";
+  const glassesSessionLabel = glassesActiveSession ? sessionAliases[glassesActiveSession]?.trim() || glassesActiveSession : "No session";
+  const glassesTextStyle = useMemo(
+    () => [
+      terminalAppearance.terminalTextStyle,
+      {
+        fontSize: Math.max(13, Math.round(14 * glassesMode.textScale)),
+        lineHeight: Math.max(18, Math.round(20 * glassesMode.textScale)),
+      },
+    ],
+    [glassesMode.textScale, terminalAppearance.terminalTextStyle]
+  );
   const renderOpenTerminals = () => {
     if (openTerminalCards.length === 0) {
       return <Text style={styles.emptyText}>Tap a session above to open it.</Text>;
@@ -659,6 +725,145 @@ export function TerminalsScreen() {
         <Text style={styles.serverSubtitle}>{`Latency ${health.latencyMs !== null ? `${health.latencyMs} ms` : "n/a"}`}</Text>
         <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
         <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>On-the-Go Glasses Mode</Text>
+        <Text style={styles.serverSubtitle}>Profiled for XREAL X1 and Halo mirrored displays with voice-to-AI control.</Text>
+
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Enable HUD</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.enabled ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.enabled}
+            onValueChange={onSetGlassesEnabled}
+          />
+        </View>
+
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {(["xreal_x1", "halo", "custom"] as GlassesBrand[]).map((brand) => (
+            <Pressable
+              accessibilityRole="button"
+              key={`glasses-brand-${brand}`}
+              style={[styles.chip, glassesMode.brand === brand ? styles.chipActive : null]}
+              onPress={() => onSetGlassesBrand(brand)}
+            >
+              <Text style={[styles.chipText, glassesMode.brand === brand ? styles.chipTextActive : null]}>{glassesBrandLabel(brand)}</Text>
+            </Pressable>
+          ))}
+        </ScrollView>
+
+        <View style={styles.rowInlineSpace}>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.actionButton, glassesMode.textScale <= 0.85 ? styles.buttonDisabled : null]}
+            disabled={glassesMode.textScale <= 0.85}
+            onPress={() => onSetGlassesTextScale(glassesMode.textScale - 0.05)}
+          >
+            <Text style={styles.actionButtonText}>Text -</Text>
+          </Pressable>
+          <Text style={styles.serverSubtitle}>{`${glassesBrandLabel(glassesMode.brand)} • ${Math.round(glassesMode.textScale * 100)}% text`}</Text>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.actionButton, glassesMode.textScale >= 1.6 ? styles.buttonDisabled : null]}
+            disabled={glassesMode.textScale >= 1.6}
+            onPress={() => onSetGlassesTextScale(glassesMode.textScale + 0.05)}
+          >
+            <Text style={styles.actionButtonText}>Text +</Text>
+          </Pressable>
+        </View>
+
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Auto-send voice transcript</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.voiceAutoSend ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.voiceAutoSend}
+            onValueChange={onSetGlassesVoiceAutoSend}
+          />
+        </View>
+
+        {glassesMode.enabled ? (
+          <>
+            <Text style={styles.serverSubtitle}>{`Target session: ${glassesSessionLabel}`}</Text>
+            {sortedOpenSessions.length > 0 ? (
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                {sortedOpenSessions.map((session) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    key={`glasses-session-${session}`}
+                    style={[styles.chip, glassesActiveSession === session ? styles.chipActive : null]}
+                    onPress={() => setGlassesSession(session)}
+                  >
+                    <Text style={[styles.chipText, glassesActiveSession === session ? styles.chipTextActive : null]}>
+                      {sessionAliases[session]?.trim() || session}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            ) : (
+              <Text style={styles.emptyText}>Open a terminal session to use glasses mode.</Text>
+            )}
+
+            <View style={styles.actionsWrap}>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.actionButton, voiceRecording || voiceBusy ? styles.buttonDisabled : null]}
+                disabled={voiceRecording || voiceBusy}
+                onPress={onVoiceStartCapture}
+              >
+                <Text style={styles.actionButtonText}>Start Voice</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.actionButton, !voiceRecording || voiceBusy || !glassesActiveSession ? styles.buttonDisabled : null]}
+                disabled={!voiceRecording || voiceBusy || !glassesActiveSession}
+                onPress={() => {
+                  if (glassesActiveSession) {
+                    onVoiceStopCapture(glassesActiveSession);
+                  }
+                }}
+              >
+                <Text style={styles.actionButtonText}>{voiceBusy ? "Transcribing..." : "Stop + Transcribe"}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.actionButton, !voiceTranscript.trim() || voiceBusy || !glassesActiveSession ? styles.buttonDisabled : null]}
+                disabled={!voiceTranscript.trim() || voiceBusy || !glassesActiveSession}
+                onPress={() => {
+                  if (glassesActiveSession) {
+                    onVoiceSendTranscript(glassesActiveSession);
+                  }
+                }}
+              >
+                <Text style={styles.actionButtonText}>Send Transcript</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.emptyText}>
+              {voiceRecording
+                ? "Listening... speak your command clearly."
+                : voiceBusy
+                ? "Processing voice input..."
+                : "Mirror this screen to your glasses for a compact terminal HUD."}
+            </Text>
+            {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}
+            {voiceTranscript.trim() ? <Text style={styles.serverSubtitle}>{`Transcript: ${voiceTranscript}`}</Text> : null}
+
+            <View style={[styles.terminalView, { minHeight: 120, maxHeight: 220 }]}>
+              <AnsiText
+                text={glassesOutput || "Waiting for terminal output..."}
+                style={glassesTextStyle}
+              />
+            </View>
+            {glassesDraft.trim() ? <Text style={styles.emptyText}>{`Draft: ${glassesDraft}`}</Text> : null}
+          </>
+        ) : (
+          <Text style={styles.emptyText}>
+            Enable HUD mode for a glasses-optimized terminal view with voice input.
+          </Text>
+        )}
       </View>
 
       <View style={styles.panel}>

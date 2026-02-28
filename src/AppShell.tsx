@@ -63,7 +63,9 @@ import { useFilesBrowser } from "./hooks/useFilesBrowser";
 import { usePinnedSessions } from "./hooks/usePinnedSessions";
 import { useLlmProfiles } from "./hooks/useLlmProfiles";
 import { useLlmClient } from "./hooks/useLlmClient";
+import { useGlassesMode } from "./hooks/useGlassesMode";
 import { useShellRunWait } from "./hooks/useShellRunWait";
+import { useVoiceCapture } from "./hooks/useVoiceCapture";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -480,6 +482,16 @@ export default function AppShell() {
     refresh: refreshCapabilities,
   } = useServerCapabilities({ activeServer, connected });
   const { shellRunWaitMs, parsedShellRunWaitMs, setShellRunWaitMsInput } = useShellRunWait(activeServerId);
+  const { settings: glassesMode, setEnabled: setGlassesEnabled, setBrand: setGlassesBrand, setTextScale: setGlassesTextScale, setVoiceAutoSend: setGlassesVoiceAutoSend } = useGlassesMode();
+  const {
+    recording: voiceRecording,
+    busy: voiceBusy,
+    lastTranscript: voiceTranscript,
+    lastError: voiceError,
+    startCapture: startVoiceCapture,
+    stopAndTranscribe: stopVoiceCaptureAndTranscribe,
+    setLastTranscript: setVoiceTranscript,
+  } = useVoiceCapture({ activeServer, connected });
 
   const {
     allSessions,
@@ -802,6 +814,64 @@ export default function AppShell() {
       setReady(message);
     },
   });
+
+  const sendTextToSession = useCallback(
+    async (session: string, text: string, mode: TerminalSendMode) => {
+      const trimmed = text.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      if (sessionReadOnly[session]) {
+        throw new Error(`${session} is read-only. Disable read-only to send commands.`);
+      }
+
+      if (mode === "ai" && shouldRouteToExternalAi(session)) {
+        const sent = await sendViaExternalLlm(session, trimmed);
+        if (sent) {
+          await addCommand(session, sent);
+        }
+        return;
+      }
+
+      if (!connected && !isLocalSession(session)) {
+        queueSessionCommand(session, trimmed, mode);
+        return;
+      }
+
+      await sendCommand(session, trimmed, mode, false);
+      await addCommand(session, trimmed);
+    },
+    [addCommand, connected, isLocalSession, queueSessionCommand, sendCommand, sendViaExternalLlm, sessionReadOnly, shouldRouteToExternalAi]
+  );
+
+  const stopVoiceCaptureIntoSession = useCallback(
+    async (session: string) => {
+      const transcript = (await stopVoiceCaptureAndTranscribe()).trim();
+      if (!transcript) {
+        throw new Error("No transcript detected. Try speaking closer to the microphone.");
+      }
+      setDrafts((prev) => ({ ...prev, [session]: transcript }));
+      if (!glassesMode.voiceAutoSend) {
+        return;
+      }
+      setSessionMode(session, "ai");
+      await sendTextToSession(session, transcript, "ai");
+    },
+    [glassesMode.voiceAutoSend, sendTextToSession, setDrafts, setSessionMode, stopVoiceCaptureAndTranscribe]
+  );
+
+  const sendVoiceTranscriptToSession = useCallback(
+    async (session: string) => {
+      const transcript = voiceTranscript.trim();
+      if (!transcript) {
+        throw new Error("No voice transcript is available yet.");
+      }
+      setSessionMode(session, "ai");
+      await sendTextToSession(session, transcript, "ai");
+    },
+    [sendTextToSession, setSessionMode, voiceTranscript]
+  );
 
   const openPlayback = useCallback(
     (session: string) => {
@@ -1244,6 +1314,11 @@ export default function AppShell() {
     terminalTheme,
     commandQueue,
     recordings,
+    glassesMode,
+    voiceRecording,
+    voiceBusy,
+    voiceTranscript,
+    voiceError,
     onShowPaywall: () => setPaywallVisible(true),
     onSetTagFilter: setTagFilter,
     onSetStartCwd: setStartCwd,
@@ -1582,6 +1657,25 @@ export default function AppShell() {
     onToggleRecording: toggleRecording,
     onOpenPlayback: openPlayback,
     onDeleteRecording: deleteRecordingWithPlaybackCleanup,
+    onSetGlassesEnabled: setGlassesEnabled,
+    onSetGlassesBrand: setGlassesBrand,
+    onSetGlassesTextScale: setGlassesTextScale,
+    onSetGlassesVoiceAutoSend: setGlassesVoiceAutoSend,
+    onVoiceStartCapture: () => {
+      void runWithStatus("Starting voice capture", async () => {
+        await startVoiceCapture();
+      });
+    },
+    onVoiceStopCapture: (session) => {
+      void runWithStatus(`Transcribing voice for ${session}`, async () => {
+        await stopVoiceCaptureIntoSession(session);
+      });
+    },
+    onVoiceSendTranscript: (session) => {
+      void runWithStatus(`Sending transcript to ${session}`, async () => {
+        await sendVoiceTranscriptToSession(session);
+      });
+    },
     onRunFleet: () => {
       void runWithStatus("Running fleet command", async () => {
         const approved = await requestDangerApproval(fleetCommand, "Fleet execute");

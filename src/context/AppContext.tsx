@@ -3,6 +3,8 @@ import React, { createContext, useContext } from "react";
 import {
   AiEnginePreference,
   FleetRunResult,
+  GlassesBrand,
+  GlassesModeSettings,
   HealthMetrics,
   ProcessInfo,
   ProcessSignal,
@@ -75,6 +77,11 @@ export type TerminalsViewModel = {
   terminalTheme: TerminalThemeSettings;
   commandQueue: Record<string, QueuedCommand[]>;
   recordings: Record<string, SessionRecording>;
+  glassesMode: GlassesModeSettings;
+  voiceRecording: boolean;
+  voiceBusy: boolean;
+  voiceTranscript: string;
+  voiceError: string | null;
   onShowPaywall: () => void;
   onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;
@@ -131,6 +138,13 @@ export type TerminalsViewModel = {
   onToggleRecording: (session: string) => void;
   onOpenPlayback: (session: string) => void;
   onDeleteRecording: (session: string) => void;
+  onSetGlassesEnabled: (enabled: boolean) => void;
+  onSetGlassesBrand: (brand: GlassesBrand) => void;
+  onSetGlassesTextScale: (textScale: number) => void;
+  onSetGlassesVoiceAutoSend: (voiceAutoSend: boolean) => void;
+  onVoiceStartCapture: () => void;
+  onVoiceStopCapture: (session: string) => void;
+  onVoiceSendTranscript: (session: string) => void;
   onRunFleet: () => void;
 };
 
