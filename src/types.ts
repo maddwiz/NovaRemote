@@ -127,6 +127,19 @@ export type QueuedCommand = {
   queuedAt: string;
 };
 
+export type RecordingChunk = {
+  atMs: number;
+  text: string;
+};
+
+export type SessionRecording = {
+  session: string;
+  active: boolean;
+  startedAt: number;
+  stoppedAt: number | null;
+  chunks: RecordingChunk[];
+};
+
 export type TerminalThemePresetId = "nova" | "solarized_dark" | "monokai" | "dracula" | "nord" | "one_dark";
 
 export type TerminalFontFamily = "menlo" | "sf_mono" | "jetbrains_mono";

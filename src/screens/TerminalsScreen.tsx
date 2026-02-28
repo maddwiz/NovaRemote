@@ -106,6 +106,7 @@ export function TerminalsScreen() {
     watchRules,
     terminalTheme,
     commandQueue,
+    recordings,
     onShowPaywall,
     onSetTagFilter,
     onSetStartCwd,
@@ -145,6 +146,9 @@ export function TerminalsScreen() {
     onSetTerminalFontSize,
     onSetTerminalBackgroundOpacity,
     onFlushQueue,
+    onToggleRecording,
+    onOpenPlayback,
+    onDeleteRecording,
     onRunFleet,
   } = useAppContext().terminals;
 
@@ -168,6 +172,8 @@ export function TerminalsScreen() {
       const isLocalOnly = localAiSessions.includes(session);
       const aiEngine = sessionAiEngine[session] || (isLocalOnly ? "external" : "auto");
       const watch = watchRules[session] || { enabled: false, pattern: "", lastMatch: null };
+      const recording = recordings[session];
+      const recordingDuration = recording?.chunks.length ? recording.chunks[recording.chunks.length - 1]?.atMs || 0 : 0;
 
       return (
         <TerminalCard
@@ -196,6 +202,9 @@ export function TerminalsScreen() {
           tags={tags}
           pinned={pinnedSessions.includes(session)}
           queuedCount={(commandQueue[session] || []).length}
+          recordingActive={Boolean(recording?.active)}
+          recordingChunks={recording?.chunks.length || 0}
+          recordingDurationMs={recordingDuration}
           terminalViewStyle={terminalAppearance.terminalViewStyle}
           terminalTextStyle={terminalAppearance.terminalTextStyle}
           historyCount={historyCount[session] || 0}
@@ -217,6 +226,9 @@ export function TerminalsScreen() {
           onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
           onTogglePin={() => onTogglePinSession(session)}
           onFlushQueue={() => onFlushQueue(session)}
+          onToggleRecording={() => onToggleRecording(session)}
+          onOpenPlayback={() => onOpenPlayback(session)}
+          onDeleteRecording={() => onDeleteRecording(session)}
           onSend={() => onSend(session)}
           onClear={() => onClearDraft(session)}
         />
@@ -233,6 +245,7 @@ export function TerminalsScreen() {
     historyCount,
     pinnedSessions,
     commandQueue,
+    recordings,
     terminalAppearance,
     onClearDraft,
     onFocusSession,
@@ -252,6 +265,9 @@ export function TerminalsScreen() {
     onTogglePinSession,
     onToggleWatch,
     onFlushQueue,
+    onToggleRecording,
+    onOpenPlayback,
+    onDeleteRecording,
     onUseSuggestion,
     localAiSessions,
     sessionAiEngine,

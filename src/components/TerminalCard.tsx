@@ -68,6 +68,9 @@ type TerminalCardProps = {
   tags: string[];
   pinned: boolean;
   queuedCount: number;
+  recordingActive: boolean;
+  recordingChunks: number;
+  recordingDurationMs: number;
   terminalViewStyle?: StyleProp<ViewStyle>;
   terminalTextStyle?: StyleProp<TextStyle>;
   onSetMode: (mode: TerminalSendMode) => void;
@@ -88,6 +91,9 @@ type TerminalCardProps = {
   onWatchPatternChange: (value: string) => void;
   onTogglePin: () => void;
   onFlushQueue: () => void;
+  onToggleRecording: () => void;
+  onOpenPlayback: () => void;
+  onDeleteRecording: () => void;
   onSend: () => void;
   onClear: () => void;
   historyCount: number;
@@ -118,6 +124,9 @@ export function TerminalCard({
   tags,
   pinned,
   queuedCount,
+  recordingActive,
+  recordingChunks,
+  recordingDurationMs,
   terminalViewStyle,
   terminalTextStyle,
   onSetMode,
@@ -138,6 +147,9 @@ export function TerminalCard({
   onWatchPatternChange,
   onTogglePin,
   onFlushQueue,
+  onToggleRecording,
+  onOpenPlayback,
+  onDeleteRecording,
   onSend,
   onClear,
   historyCount,
@@ -258,6 +270,16 @@ export function TerminalCard({
           <Pressable style={[styles.actionButton, pinned ? styles.modeButtonOn : null]} onPress={onTogglePin}>
             <Text style={styles.actionButtonText}>{pinned ? "Unpin" : "Pin"}</Text>
           </Pressable>
+          <Pressable style={[styles.actionButton, recordingActive ? styles.livePillOff : null]} onPress={onToggleRecording}>
+            <Text style={styles.actionButtonText}>{recordingActive ? "Stop Rec" : "Record"}</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.actionButton, recordingChunks === 0 ? styles.buttonDisabled : null]}
+            onPress={onOpenPlayback}
+            disabled={recordingChunks === 0}
+          >
+            <Text style={styles.actionButtonText}>Playback</Text>
+          </Pressable>
           <Pressable style={[styles.actionDangerButton, !canStop ? styles.buttonDisabled : null]} onPress={onStop} disabled={!canStop}>
             <Text style={styles.actionDangerText}>Stop</Text>
           </Pressable>
@@ -339,6 +361,15 @@ export function TerminalCard({
           <Text style={styles.emptyText}>{`${queuedCount} queued command${queuedCount === 1 ? "" : "s"}`}</Text>
           <Pressable style={styles.actionButton} onPress={onFlushQueue}>
             <Text style={styles.actionButtonText}>Flush Queue</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {recordingChunks > 0 ? (
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.emptyText}>{`${recordingChunks} rec chunks · ${(recordingDurationMs / 1000).toFixed(1)}s`}</Text>
+          <Pressable style={styles.actionDangerButton} onPress={onDeleteRecording}>
+            <Text style={styles.actionDangerText}>Delete Rec</Text>
           </Pressable>
         </View>
       ) : null}

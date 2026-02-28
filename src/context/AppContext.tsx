@@ -5,6 +5,7 @@ import {
   FleetRunResult,
   HealthMetrics,
   QueuedCommand,
+  SessionRecording,
   ServerCapabilities,
   ServerProfile,
   SessionConnectionMeta,
@@ -55,6 +56,7 @@ export type TerminalsViewModel = {
   watchRules: Record<string, WatchRule>;
   terminalTheme: TerminalThemeSettings;
   commandQueue: Record<string, QueuedCommand[]>;
+  recordings: Record<string, SessionRecording>;
   onShowPaywall: () => void;
   onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;
@@ -94,6 +96,9 @@ export type TerminalsViewModel = {
   onSetTerminalFontSize: (fontSize: number) => void;
   onSetTerminalBackgroundOpacity: (opacity: number) => void;
   onFlushQueue: (session: string) => void;
+  onToggleRecording: (session: string) => void;
+  onOpenPlayback: (session: string) => void;
+  onDeleteRecording: (session: string) => void;
   onRunFleet: () => void;
 };
 

@@ -22,6 +22,7 @@ import { LockScreen } from "./components/LockScreen";
 import { DangerConfirmModal } from "./components/DangerConfirmModal";
 import { OnboardingModal } from "./components/OnboardingModal";
 import { PaywallModal } from "./components/PaywallModal";
+import { SessionPlaybackModal } from "./components/SessionPlaybackModal";
 import { ShareServerModal } from "./components/ShareServerModal";
 import { StatusPill } from "./components/StatusPill";
 import { TabBar } from "./components/TabBar";
@@ -65,7 +66,19 @@ import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
-import { AiEnginePreference, FleetRunResult, QueuedCommand, RouteTab, ServerProfile, Status, TerminalSendMode, TmuxTailResponse, WatchRule } from "./types";
+import {
+  AiEnginePreference,
+  FleetRunResult,
+  QueuedCommand,
+  RecordingChunk,
+  RouteTab,
+  ServerProfile,
+  SessionRecording,
+  Status,
+  TerminalSendMode,
+  TmuxTailResponse,
+  WatchRule,
+} from "./types";
 
 function parseCommaTags(raw: string): string[] {
   return Array.from(
@@ -198,6 +211,20 @@ function parseSuggestionOutput(raw: string): string[] {
     .slice(0, 3);
 }
 
+function buildPlaybackOutput(chunks: RecordingChunk[], atMs: number): string {
+  return chunks
+    .filter((chunk) => chunk.atMs <= atMs)
+    .map((chunk) => chunk.text)
+    .join("");
+}
+
+function recordingDurationMs(recording: SessionRecording | null): number {
+  if (!recording || recording.chunks.length === 0) {
+    return 0;
+  }
+  return recording.chunks[recording.chunks.length - 1]?.atMs || 0;
+}
+
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -219,6 +246,11 @@ export default function AppShell() {
   const [suggestionBusyBySession, setSuggestionBusyBySession] = useState<Record<string, boolean>>({});
   const [watchRules, setWatchRules] = useState<Record<string, WatchRule>>({});
   const [commandQueue, setCommandQueue] = useState<Record<string, QueuedCommand[]>>({});
+  const [recordings, setRecordings] = useState<Record<string, SessionRecording>>({});
+  const [playbackSession, setPlaybackSession] = useState<string | null>(null);
+  const [playbackTimeMs, setPlaybackTimeMs] = useState<number>(0);
+  const [playbackSpeed, setPlaybackSpeed] = useState<number>(1);
+  const [playbackPlaying, setPlaybackPlaying] = useState<boolean>(false);
   const [dangerPrompt, setDangerPrompt] = useState<{ visible: boolean; command: string; context: string }>({
     visible: false,
     command: "",
@@ -229,6 +261,7 @@ export default function AppShell() {
   const [llmTransferStatus, setLlmTransferStatus] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const autoOpenedPinsServerRef = useRef<string | null>(null);
+  const recordingTailRef = useRef<Record<string, string>>({});
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -675,6 +708,62 @@ export default function AppShell() {
     [addCommand, commandQueue, connected, isLocalSession, sendCommand, sendViaExternalLlm, shouldRouteToExternalAi]
   );
 
+  const toggleRecording = useCallback(
+    (session: string) => {
+      const now = Date.now();
+      setRecordings((prev) => {
+        const current = prev[session];
+        if (current?.active) {
+          return {
+            ...prev,
+            [session]: {
+              ...current,
+              active: false,
+              stoppedAt: now,
+            },
+          };
+        }
+
+        recordingTailRef.current[session] = tails[session] || "";
+        return {
+          ...prev,
+          [session]: {
+            session,
+            active: true,
+            startedAt: now,
+            stoppedAt: null,
+            chunks: [],
+          },
+        };
+      });
+      void Haptics.selectionAsync();
+    },
+    [tails]
+  );
+
+  const openPlayback = useCallback((session: string) => {
+    const recording = recordings[session];
+    if (!recording || recording.chunks.length === 0) {
+      return;
+    }
+    setPlaybackSession(session);
+    setPlaybackTimeMs(0);
+    setPlaybackPlaying(false);
+  }, [recordings]);
+
+  const deleteRecording = useCallback((session: string) => {
+    setRecordings((prev) => {
+      const next = { ...prev };
+      delete next[session];
+      return next;
+    });
+    if (playbackSession === session) {
+      setPlaybackSession(null);
+      setPlaybackTimeMs(0);
+      setPlaybackPlaying(false);
+    }
+  }, [playbackSession]);
+
   useEffect(() => {
     if (!isPro) {
       return;
@@ -870,6 +959,51 @@ export default function AppShell() {
   }, [allSessions, removeMissingPins]);
 
   useEffect(() => {
+    const available = new Set(allSessions);
+    Object.keys(recordingTailRef.current).forEach((session) => {
+      if (!available.has(session)) {
+        delete recordingTailRef.current[session];
+      }
+    });
+  }, [allSessions]);
+
+  useEffect(() => {
+    setRecordings((prev) => {
+      let changed = false;
+      const next = { ...prev };
+
+      allSessions.forEach((session) => {
+        const latestTail = tails[session] || "";
+        const priorTail = recordingTailRef.current[session] ?? "";
+        if (latestTail === priorTail) {
+          return;
+        }
+
+        const recording = next[session];
+        if (recording?.active) {
+          const delta = latestTail.startsWith(priorTail) ? latestTail.slice(priorTail.length) : latestTail;
+          if (delta) {
+            next[session] = {
+              ...recording,
+              chunks: [
+                ...recording.chunks,
+                {
+                  atMs: Math.max(0, Date.now() - recording.startedAt),
+                  text: delta,
+                },
+              ],
+            };
+            changed = true;
+          }
+        }
+        recordingTailRef.current[session] = latestTail;
+      });
+
+      return changed ? next : prev;
+    });
+  }, [allSessions, tails]);
+
+  useEffect(() => {
     if (!activeServerId) {
       autoOpenedPinsServerRef.current = null;
       return;
@@ -941,6 +1075,15 @@ export default function AppShell() {
       const next: Record<string, QueuedCommand[]> = {};
       allSessions.forEach((session) => {
         next[session] = prev[session] || [];
+      });
+      return next;
+    });
+    setRecordings((prev) => {
+      const next: Record<string, SessionRecording> = {};
+      allSessions.forEach((session) => {
+        if (prev[session]) {
+          next[session] = prev[session];
+        }
       });
       return next;
     });
@@ -1025,6 +1168,51 @@ export default function AppShell() {
     void SecureStore.setItemAsync(`${STORAGE_COMMAND_QUEUE_PREFIX}.${activeServerId}`, JSON.stringify(commandQueue));
   }, [activeServerId, commandQueue]);
 
+  const activePlaybackRecording = playbackSession ? recordings[playbackSession] || null : null;
+  const playbackDuration = recordingDurationMs(activePlaybackRecording);
+  const playbackOutput = useMemo(
+    () => buildPlaybackOutput(activePlaybackRecording?.chunks || [], playbackTimeMs),
+    [activePlaybackRecording?.chunks, playbackTimeMs]
+  );
+  const playbackLabel = `${(playbackTimeMs / 1000).toFixed(1)}s / ${(playbackDuration / 1000).toFixed(1)}s · ${
+    activePlaybackRecording?.chunks.length || 0
+  } chunks`;
+
+  useEffect(() => {
+    if (!playbackSession) {
+      return;
+    }
+    if (!activePlaybackRecording) {
+      setPlaybackSession(null);
+      setPlaybackTimeMs(0);
+      setPlaybackPlaying(false);
+      return;
+    }
+    if (playbackTimeMs > playbackDuration) {
+      setPlaybackTimeMs(playbackDuration);
+    }
+  }, [activePlaybackRecording, playbackDuration, playbackSession, playbackTimeMs]);
+
+  useEffect(() => {
+    if (!playbackPlaying || !activePlaybackRecording) {
+      return;
+    }
+    const tickMs = 160;
+    const id = setInterval(() => {
+      setPlaybackTimeMs((prev) => {
+        const next = prev + Math.round(tickMs * playbackSpeed);
+        if (next >= playbackDuration) {
+          setPlaybackPlaying(false);
+          return playbackDuration;
+        }
+        return next;
+      });
+    }, tickMs);
+    return () => {
+      clearInterval(id);
+    };
+  }, [activePlaybackRecording, playbackDuration, playbackPlaying, playbackSpeed]);
+
   useEffect(() => {
     if (route !== "files" || !connected || !capabilities.files) {
       return;
@@ -1100,6 +1288,7 @@ export default function AppShell() {
     watchRules,
     terminalTheme,
     commandQueue,
+    recordings,
     onShowPaywall: () => setPaywallVisible(true),
     onSetTagFilter: setTagFilter,
     onSetStartCwd: setStartCwd,
@@ -1223,6 +1412,14 @@ export default function AppShell() {
           mode: sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell"),
           commands: commandHistory[session] || [],
           output: tails[session] || "",
+          recording: recordings[session]
+            ? {
+                active: recordings[session].active,
+                started_at_ms: recordings[session].startedAt,
+                stopped_at_ms: recordings[session].stoppedAt,
+                chunks: recordings[session].chunks,
+              }
+            : null,
         };
 
         await Share.share({
@@ -1356,6 +1553,9 @@ export default function AppShell() {
         }
       });
     },
+    onToggleRecording: toggleRecording,
+    onOpenPlayback: openPlayback,
+    onDeleteRecording: deleteRecording,
     onRunFleet: () => {
       void runWithStatus("Running fleet command", async () => {
         const approved = await requestDangerApproval(fleetCommand, "Fleet execute");
@@ -1805,6 +2005,64 @@ export default function AppShell() {
               throw new Error("Local LLM sessions do not support Ctrl-C.");
             }
             await handleStop(focusedSession);
+          });
+        }}
+      />
+
+      <SessionPlaybackModal
+        visible={Boolean(playbackSession && activePlaybackRecording)}
+        session={playbackSession}
+        output={playbackOutput}
+        positionLabel={playbackLabel}
+        speed={playbackSpeed}
+        isPlaying={playbackPlaying}
+        onClose={() => {
+          setPlaybackPlaying(false);
+          setPlaybackSession(null);
+          setPlaybackTimeMs(0);
+        }}
+        onPlayPause={() => {
+          if (!activePlaybackRecording) {
+            return;
+          }
+          if (playbackDuration <= 0) {
+            return;
+          }
+          setPlaybackPlaying((prev) => !prev);
+        }}
+        onRestart={() => {
+          setPlaybackTimeMs(0);
+          setPlaybackPlaying(false);
+        }}
+        onBack={() => {
+          setPlaybackTimeMs((prev) => Math.max(0, prev - 2000));
+        }}
+        onForward={() => {
+          setPlaybackTimeMs((prev) => Math.min(playbackDuration, prev + 2000));
+        }}
+        onSetSpeed={setPlaybackSpeed}
+        onExport={() => {
+          if (!activePlaybackRecording) {
+            return;
+          }
+          void runWithStatus(`Exporting recording ${activePlaybackRecording.session}`, async () => {
+            const header = {
+              version: 2,
+              width: 80,
+              height: 24,
+              timestamp: Math.floor(activePlaybackRecording.startedAt / 1000),
+              env: {
+                TERM: "xterm-256color",
+              },
+            };
+            const eventLines = activePlaybackRecording.chunks.map((chunk) =>
+              JSON.stringify([Number((chunk.atMs / 1000).toFixed(3)), "o", chunk.text])
+            );
+            const cast = [JSON.stringify(header), ...eventLines].join("\n");
+            await Share.share({
+              title: `${activePlaybackRecording.session}.cast`,
+              message: cast,
+            });
           });
         }}
       />
