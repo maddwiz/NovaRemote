@@ -1,0 +1,293 @@
+import React, { useMemo, useState } from "react";
+import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+
+import { styles } from "../theme/styles";
+import { LlmProfile, LlmProviderKind } from "../types";
+
+type LlmsScreenProps = {
+  profiles: LlmProfile[];
+  activeProfileId: string | null;
+  testBusy: boolean;
+  testOutput: string;
+  onSetActive: (id: string) => void;
+  onSaveProfile: (input: Omit<LlmProfile, "id"> & { id?: string }) => void;
+  onDeleteProfile: (id: string) => void;
+  onTestPrompt: (profile: LlmProfile, prompt: string) => void;
+};
+
+export function LlmsScreen({
+  profiles,
+  activeProfileId,
+  testBusy,
+  testOutput,
+  onSetActive,
+  onSaveProfile,
+  onDeleteProfile,
+  onTestPrompt,
+}: LlmsScreenProps) {
+  const defaultBaseUrl = (provider: LlmProviderKind): string =>
+    provider === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
+  const defaultModel = (provider: LlmProviderKind): string =>
+    provider === "anthropic" ? "claude-3-5-sonnet-latest" : "gpt-5-mini";
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState<string>("");
+  const [kind, setKind] = useState<LlmProviderKind>("openai_compatible");
+  const [baseUrl, setBaseUrl] = useState<string>(defaultBaseUrl("openai_compatible"));
+  const [apiKey, setApiKey] = useState<string>("");
+  const [model, setModel] = useState<string>(defaultModel("openai_compatible"));
+  const [systemPrompt, setSystemPrompt] = useState<string>("");
+  const [testPrompt, setTestPrompt] = useState<string>("Give me a one-line terminal command to list disk usage.");
+
+  const activeProfile = useMemo(
+    () => profiles.find((profile) => profile.id === activeProfileId) || profiles[0] || null,
+    [activeProfileId, profiles]
+  );
+
+  return (
+    <>
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>LLM Profiles</Text>
+        <Text style={styles.serverSubtitle}>Configure providers to support any OpenAI-compatible endpoint or Anthropic.</Text>
+
+        <View style={styles.actionsWrap}>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              setEditingId(null);
+              setName("OpenAI");
+              setKind("openai_compatible");
+              setBaseUrl("https://api.openai.com/v1");
+              setModel("gpt-5-mini");
+            }}
+          >
+            <Text style={styles.actionButtonText}>OpenAI</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              setEditingId(null);
+              setName("OpenRouter");
+              setKind("openai_compatible");
+              setBaseUrl("https://openrouter.ai/api/v1");
+              setModel("openai/gpt-5-mini");
+            }}
+          >
+            <Text style={styles.actionButtonText}>OpenRouter</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              setEditingId(null);
+              setName("Ollama");
+              setKind("openai_compatible");
+              setBaseUrl("http://localhost:11434/v1");
+              setModel("llama3.1");
+              setApiKey("");
+            }}
+          >
+            <Text style={styles.actionButtonText}>Ollama</Text>
+          </Pressable>
+          <Pressable
+            style={styles.actionButton}
+            onPress={() => {
+              setEditingId(null);
+              setName("Anthropic");
+              setKind("anthropic");
+              setBaseUrl("https://api.anthropic.com");
+              setModel("claude-3-5-sonnet-latest");
+            }}
+          >
+            <Text style={styles.actionButtonText}>Anthropic</Text>
+          </Pressable>
+        </View>
+
+        <TextInput
+          style={styles.input}
+          value={name}
+          onChangeText={setName}
+          placeholder="Provider name"
+          placeholderTextColor="#7f7aa8"
+        />
+
+        <View style={styles.modeRow}>
+          <Pressable
+            style={[styles.modeButton, kind === "openai_compatible" ? styles.modeButtonOn : null]}
+            onPress={() => {
+              setKind("openai_compatible");
+              setBaseUrl(defaultBaseUrl("openai_compatible"));
+              setModel(defaultModel("openai_compatible"));
+            }}
+          >
+            <Text style={[styles.modeButtonText, kind === "openai_compatible" ? styles.modeButtonTextOn : null]}>OpenAI-Compatible</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.modeButton, kind === "anthropic" ? styles.modeButtonOn : null]}
+            onPress={() => {
+              setKind("anthropic");
+              setBaseUrl(defaultBaseUrl("anthropic"));
+              setModel(defaultModel("anthropic"));
+            }}
+          >
+            <Text style={[styles.modeButtonText, kind === "anthropic" ? styles.modeButtonTextOn : null]}>Anthropic</Text>
+          </Pressable>
+        </View>
+
+        <TextInput
+          style={styles.input}
+          value={baseUrl}
+          onChangeText={setBaseUrl}
+          placeholder={kind === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1"}
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <TextInput
+          style={styles.input}
+          value={model}
+          onChangeText={setModel}
+          placeholder="Model"
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <TextInput
+          style={styles.input}
+          value={apiKey}
+          onChangeText={setApiKey}
+          placeholder={kind === "anthropic" ? "API Key (required)" : "API Key (optional)"}
+          placeholderTextColor="#7f7aa8"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        <TextInput
+          style={[styles.input, styles.multilineInput]}
+          value={systemPrompt}
+          onChangeText={setSystemPrompt}
+          placeholder="Optional system prompt"
+          placeholderTextColor="#7f7aa8"
+          multiline
+        />
+
+        <View style={styles.rowInlineSpace}>
+          <Pressable
+            style={[styles.buttonPrimary, styles.flexButton]}
+            onPress={() => {
+              if (!name.trim() || !baseUrl.trim() || !model.trim()) {
+                return;
+              }
+              if (kind === "anthropic" && !apiKey.trim()) {
+                return;
+              }
+
+              onSaveProfile({
+                id: editingId || undefined,
+                name,
+                kind,
+                baseUrl,
+                apiKey,
+                model,
+                systemPrompt,
+              });
+
+              setEditingId(null);
+              setName("");
+              setApiKey("");
+              setBaseUrl(defaultBaseUrl("openai_compatible"));
+              setModel(defaultModel("openai_compatible"));
+              setSystemPrompt("");
+            }}
+          >
+            <Text style={styles.buttonPrimaryText}>{editingId ? "Update Profile" : "Save Profile"}</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.buttonGhost, styles.flexButton]}
+            onPress={() => {
+              setEditingId(null);
+              setName("");
+              setKind("openai_compatible");
+              setBaseUrl(defaultBaseUrl("openai_compatible"));
+              setApiKey("");
+              setModel(defaultModel("openai_compatible"));
+              setSystemPrompt("");
+            }}
+          >
+            <Text style={styles.buttonGhostText}>Clear</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Saved Providers</Text>
+        {profiles.length === 0 ? (
+          <Text style={styles.emptyText}>No providers configured yet.</Text>
+        ) : (
+          profiles.map((profile) => {
+            const isActive = profile.id === activeProfileId;
+            return (
+              <View key={profile.id} style={[styles.serverCard, isActive ? styles.serverCardActive : null]}>
+                <Text style={styles.serverName}>{profile.name}</Text>
+                <Text style={styles.serverSubtitle}>{`${profile.kind} · ${profile.model}`}</Text>
+                <Text style={styles.emptyText}>{profile.baseUrl}</Text>
+                <View style={styles.actionsWrap}>
+                  <Pressable style={styles.actionButton} onPress={() => onSetActive(profile.id)}>
+                    <Text style={styles.actionButtonText}>{isActive ? "Active" : "Use"}</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.actionButton}
+                    onPress={() => {
+                      setEditingId(profile.id);
+                      setName(profile.name);
+                      setKind(profile.kind);
+                      setBaseUrl(profile.baseUrl);
+                      setApiKey(profile.apiKey);
+                      setModel(profile.model);
+                      setSystemPrompt(profile.systemPrompt || "");
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Edit</Text>
+                  </Pressable>
+                  <Pressable style={styles.actionDangerButton} onPress={() => onDeleteProfile(profile.id)}>
+                    <Text style={styles.actionDangerText}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })
+        )}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Test Active Provider</Text>
+        <Text style={styles.serverSubtitle}>{activeProfile ? activeProfile.name : "No active provider"}</Text>
+        <TextInput
+          style={[styles.input, styles.multilineInput]}
+          value={testPrompt}
+          onChangeText={setTestPrompt}
+          placeholder="Prompt"
+          placeholderTextColor="#7f7aa8"
+          multiline
+        />
+        <Pressable
+          style={[styles.buttonPrimary, testBusy ? styles.buttonDisabled : null]}
+          disabled={!activeProfile || testBusy}
+          onPress={() => {
+            if (activeProfile) {
+              onTestPrompt(activeProfile, testPrompt);
+            }
+          }}
+        >
+          <Text style={styles.buttonPrimaryText}>{testBusy ? "Testing..." : "Run Test Prompt"}</Text>
+        </Pressable>
+
+        <ScrollView style={styles.modalTerminalView}>
+          <Text style={styles.terminalText}>{testOutput || "Provider output will appear here."}</Text>
+        </ScrollView>
+      </View>
+    </>
+  );
+}

@@ -36,6 +36,12 @@ export function TabBar({ route, onChange }: TabBarProps) {
       >
         <Text style={[styles.tabButtonText, route === "files" ? styles.tabButtonTextOn : null]}>Files</Text>
       </Pressable>
+      <Pressable
+        style={[styles.tabButton, route === "llms" ? styles.tabButtonOn : null]}
+        onPress={() => onChange("llms")}
+      >
+        <Text style={[styles.tabButtonText, route === "llms" ? styles.tabButtonTextOn : null]}>LLMs</Text>
+      </Pressable>
     </View>
   );
 }

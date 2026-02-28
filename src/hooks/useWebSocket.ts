@@ -7,6 +7,7 @@ import { ServerProfile, SessionConnectionMeta, TmuxStreamMessage, TmuxTailRespon
 type UseWebSocketArgs = {
   activeServer: ServerProfile | null;
   connected: boolean;
+  terminalApiBasePath: "/tmux" | "/terminal";
   openSessions: string[];
   setTails: React.Dispatch<React.SetStateAction<Record<string, string>>>;
   onError: (error: unknown) => void;
@@ -25,6 +26,7 @@ const ReactNativeWebSocket = WebSocket as unknown as ReactNativeWebSocketCtor;
 export function useWebSocket({
   activeServer,
   connected,
+  terminalApiBasePath,
   openSessions,
   setTails,
   onError,
@@ -116,7 +118,7 @@ export function useWebSocket({
         const data = await apiRequest<TmuxTailResponse>(
           activeServer.baseUrl,
           activeServer.token,
-          `/tmux/tail?session=${encodeURIComponent(session)}&lines=600`
+          `${terminalApiBasePath}/tail?session=${encodeURIComponent(session)}&lines=600`
         );
         const output = data.output ?? "";
         setTails((prev) => (prev[session] === output ? prev : { ...prev, [session]: output }));
@@ -128,7 +130,7 @@ export function useWebSocket({
         pollInFlight.current.delete(session);
       }
     },
-    [activeServer, connected, onError, setTails]
+    [activeServer, connected, onError, setTails, terminalApiBasePath]
   );
 
   const connectStream = useCallback(
@@ -148,7 +150,10 @@ export function useWebSocket({
         streamRetryRefs.current[session] = null;
       }
 
-      const ws = new ReactNativeWebSocket(websocketUrl(activeServer.baseUrl, session), undefined, {
+      const ws = new ReactNativeWebSocket(
+        websocketUrl(activeServer.baseUrl, session, `${terminalApiBasePath}/stream`),
+        undefined,
+        {
         headers: {
           Authorization: `Bearer ${activeServer.token}`,
         },
@@ -278,7 +283,7 @@ export function useWebSocket({
         // Let onclose trigger retries.
       };
     },
-    [activeServer, closeStream, connected, onError, setTails]
+    [activeServer, closeStream, connected, onError, setTails, terminalApiBasePath]
   );
 
   return {

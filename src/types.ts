@@ -49,7 +49,7 @@ export type ServerProfile = {
 
 export type TerminalSendMode = "ai" | "shell";
 
-export type RouteTab = "terminals" | "servers" | "snippets" | "files";
+export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms";
 
 export type Status = {
   text: string;
@@ -88,6 +88,7 @@ export type RemoteFileEntry = {
 };
 
 export type ServerCapabilities = {
+  terminal: boolean;
   tmux: boolean;
   codex: boolean;
   files: boolean;
@@ -96,6 +97,8 @@ export type ServerCapabilities = {
   stream: boolean;
 };
 
+export type TerminalApiKind = "tmux" | "terminal";
+
 export type FleetRunResult = {
   serverId: string;
   serverName: string;
@@ -103,4 +106,16 @@ export type FleetRunResult = {
   ok: boolean;
   output: string;
   error?: string;
+};
+
+export type LlmProviderKind = "openai_compatible" | "anthropic";
+
+export type LlmProfile = {
+  id: string;
+  name: string;
+  kind: LlmProviderKind;
+  baseUrl: string;
+  apiKey: string;
+  model: string;
+  systemPrompt?: string;
 };

@@ -48,12 +48,15 @@ import { useTerminalSessions } from "./hooks/useTerminalSessions";
 import { useTutorial } from "./hooks/useTutorial";
 import { useWebSocket } from "./hooks/useWebSocket";
 import { useFilesBrowser } from "./hooks/useFilesBrowser";
+import { useLlmProfiles } from "./hooks/useLlmProfiles";
+import { useLlmClient } from "./hooks/useLlmClient";
 import { FilesScreen } from "./screens/FilesScreen";
+import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
-import { FleetRunResult, RouteTab, ServerProfile, Status, TerminalSendMode } from "./types";
+import { FleetRunResult, RouteTab, ServerProfile, Status, TerminalSendMode, TmuxTailResponse } from "./types";
 
 function parseCommaTags(raw: string): string[] {
   return Array.from(
@@ -103,6 +106,26 @@ function makeFleetSessionName(): string {
   return `fleet-${stamp}-${suffix}`;
 }
 
+async function endpointAvailable(baseUrl: string, token: string, path: string, init: RequestInit): Promise<boolean> {
+  try {
+    const response = await fetch(`${normalizeBaseUrl(baseUrl)}${path}`, {
+      ...init,
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(init.headers || {}),
+      },
+    });
+    return response.status !== 404;
+  } catch {
+    return false;
+  }
+}
+
+async function detectTerminalApiBasePath(server: ServerProfile): Promise<"/tmux" | "/terminal"> {
+  const supportsTerminalApi = await endpointAvailable(server.baseUrl, server.token, "/terminal/sessions", { method: "GET" });
+  return supportsTerminalApi ? "/terminal" : "/tmux";
+}
+
 function isDangerousShellCommand(command: string): boolean {
   const normalized = command.trim().toLowerCase();
   if (!normalized) {
@@ -143,6 +166,8 @@ export default function AppShell() {
     command: "",
     context: "",
   });
+  const [llmTestBusy, setLlmTestBusy] = useState<boolean>(false);
+  const [llmTestOutput, setLlmTestOutput] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
 
   const setReady = useCallback((text: string = "Ready") => {
@@ -161,6 +186,8 @@ export default function AppShell() {
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet } = useSnippets();
+  const { profiles: llmProfiles, activeProfile, activeProfileId, saveProfile, deleteProfile, setActive } = useLlmProfiles();
+  const { sendPrompt } = useLlmClient();
 
   const {
     servers,
@@ -194,10 +221,11 @@ export default function AppShell() {
     return Boolean(normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
   }, [activeServer]);
 
-  const { capabilities, supportedFeatures } = useServerCapabilities({ activeServer, connected });
+  const { capabilities, terminalApiBasePath, supportedFeatures } = useServerCapabilities({ activeServer, connected });
 
   const {
     allSessions,
+    localAiSessions,
     openSessions,
     tails,
     drafts,
@@ -220,12 +248,23 @@ export default function AppShell() {
     toggleSessionVisible,
     removeOpenSession,
     setSessionMode,
+    createLocalAiSession,
     handleStartSession,
     handleSend,
     sendCommand,
     handleStop,
     handleOpenOnMac,
-  } = useTerminalSessions({ activeServer, connected });
+  } = useTerminalSessions({
+    activeServer,
+    connected,
+    terminalApiBasePath,
+    supportsShellRun: capabilities.shellRun,
+  });
+
+  const remoteOpenSessions = useMemo(
+    () => openSessions.filter((session) => !localAiSessions.includes(session)),
+    [localAiSessions, openSessions]
+  );
 
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(activeServerId);
   const { sessionTags, allTags, setTagsForSession, removeMissingSessions } = useSessionTags(activeServerId);
@@ -249,7 +288,8 @@ export default function AppShell() {
   const { streamLive, connectionMeta, fetchTail, connectStream, closeStream, closeAllStreams, closeStreamsNotIn } = useWebSocket({
     activeServer,
     connected,
-    openSessions,
+    terminalApiBasePath,
+    openSessions: remoteOpenSessions,
     setTails,
     onError: setError,
     onSessionClosed: (session) => {
@@ -269,7 +309,7 @@ export default function AppShell() {
     activeServer,
     connected,
     streamLive,
-    openSessions,
+    openSessions: remoteOpenSessions,
   });
 
   const filteredSnippets = useMemo(() => {
@@ -300,6 +340,8 @@ export default function AppShell() {
     });
   }, [activeServerId, servers]);
 
+  const isLocalSession = useCallback((session: string) => localAiSessions.includes(session), [localAiSessions]);
+
   const runFleetCommand = useCallback(async () => {
     const command = fleetCommand.trim();
     if (!command) {
@@ -318,22 +360,45 @@ export default function AppShell() {
           const cwd = fleetCwd.trim() || server.defaultCwd || DEFAULT_CWD;
           const session = makeFleetSessionName();
           try {
-            await apiRequest(server.baseUrl, server.token, "/tmux/session", {
+            const terminalBasePath = await detectTerminalApiBasePath(server);
+
+            await apiRequest(server.baseUrl, server.token, `${terminalBasePath}/session`, {
               method: "POST",
               body: JSON.stringify({ session, cwd }),
             });
 
-            const data = await apiRequest<{ output?: string }>(server.baseUrl, server.token, "/shell/run", {
-              method: "POST",
-              body: JSON.stringify({ session, command, wait_ms: 1200, tail_lines: 280 }),
-            });
+            let output = "";
+            try {
+              const data = await apiRequest<{ output?: string }>(server.baseUrl, server.token, "/shell/run", {
+                method: "POST",
+                body: JSON.stringify({ session, command, wait_ms: 1200, tail_lines: 280 }),
+              });
+              output = data.output || "";
+            } catch (shellError) {
+              const shellMessage = shellError instanceof Error ? shellError.message : String(shellError);
+              if (!shellMessage.startsWith("404")) {
+                throw shellError;
+              }
+
+              await apiRequest(server.baseUrl, server.token, `${terminalBasePath}/send`, {
+                method: "POST",
+                body: JSON.stringify({ session, text: command, enter: true }),
+              });
+
+              const tail = await apiRequest<TmuxTailResponse>(
+                server.baseUrl,
+                server.token,
+                `${terminalBasePath}/tail?session=${encodeURIComponent(session)}&lines=280`
+              );
+              output = tail.output || "";
+            }
 
             return {
               serverId: server.id,
               serverName: server.name,
               session,
               ok: true,
-              output: data.output || "",
+              output,
             };
           } catch (error) {
             return {
@@ -353,6 +418,26 @@ export default function AppShell() {
       setFleetBusy(false);
     }
   }, [fleetCommand, fleetCwd, fleetTargets, servers]);
+
+  const sendViaExternalLlm = useCallback(
+    async (session: string, prompt: string) => {
+      const cleanPrompt = prompt.trim();
+      if (!cleanPrompt) {
+        return "";
+      }
+
+      if (!activeProfile) {
+        throw new Error("No active LLM profile selected. Configure one in the LLMs tab.");
+      }
+
+      setDrafts((prev) => ({ ...prev, [session]: "" }));
+      const reply = await sendPrompt(activeProfile, cleanPrompt);
+      const nextBlock = `\\n\\n[LLM Prompt]\\n${cleanPrompt}\\n\\n[LLM Reply]\\n${reply}\\n`;
+      setTails((prev) => ({ ...prev, [session]: `${prev[session] || ""}${nextBlock}` }));
+      return cleanPrompt;
+    },
+    [activeProfile, sendPrompt, setDrafts, setTails]
+  );
 
   const runWithStatus = useCallback(
     async (label: string, fn: () => Promise<void>) => {
@@ -472,11 +557,11 @@ export default function AppShell() {
       return;
     }
 
-    closeStreamsNotIn(openSessions);
-    openSessions.forEach((session) => {
+    closeStreamsNotIn(remoteOpenSessions);
+    remoteOpenSessions.forEach((session) => {
       connectStream(session);
     });
-  }, [closeAllStreams, closeStreamsNotIn, connectStream, connected, openSessions]);
+  }, [closeAllStreams, closeStreamsNotIn, connectStream, connected, remoteOpenSessions]);
 
   useEffect(() => {
     return () => {
@@ -485,12 +570,12 @@ export default function AppShell() {
   }, [closeAllStreams]);
 
   useEffect(() => {
-    if (!connected || openSessions.length === 0) {
+    if (!connected || remoteOpenSessions.length === 0) {
       return;
     }
 
     const id = setInterval(() => {
-      openSessions.forEach((session) => {
+      remoteOpenSessions.forEach((session) => {
         if (!streamLive[session]) {
           void fetchTail(session, false);
         }
@@ -498,17 +583,17 @@ export default function AppShell() {
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(id);
-  }, [connected, fetchTail, openSessions, streamLive]);
+  }, [connected, fetchTail, remoteOpenSessions, streamLive]);
 
   useEffect(() => {
-    if (!connected || openSessions.length === 0) {
+    if (!connected || remoteOpenSessions.length === 0) {
       return;
     }
 
-    openSessions.forEach((session) => {
+    remoteOpenSessions.forEach((session) => {
       void fetchTail(session, false);
     });
-  }, [connected, fetchTail, openSessions]);
+  }, [connected, fetchTail, remoteOpenSessions]);
 
   useEffect(() => {
     void removeMissingSessions(allSessions);
@@ -696,6 +781,8 @@ export default function AppShell() {
               health={health}
               capabilities={capabilities}
               supportedFeatures={supportedFeatures}
+              hasExternalLlm={Boolean(activeProfile)}
+              localAiSessions={localAiSessions}
               historyCount={historyCount}
               sessionTags={sessionTags}
               allTags={allTags}
@@ -726,11 +813,17 @@ export default function AppShell() {
                   }
 
                   if (startKind === "ai" && !capabilities.codex) {
-                    throw new Error("Active server does not support Codex sessions.");
+                    const localSession = createLocalAiSession(startPrompt.trim());
+                    if (startPrompt.trim()) {
+                      await sendViaExternalLlm(localSession, startPrompt);
+                      setStartPrompt("");
+                    }
+                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    return;
                   }
 
-                  if (startKind === "shell" && !capabilities.shellRun) {
-                    throw new Error("Active server does not support shell execution.");
+                  if (startKind === "shell" && !capabilities.terminal) {
+                    throw new Error("Active server does not support terminal shell sessions.");
                   }
 
                   if (startKind === "shell" && startPrompt.trim()) {
@@ -753,18 +846,25 @@ export default function AppShell() {
                 toggleSessionVisible(session);
               }}
               onSetSessionMode={(session, mode) => {
-                if (mode === "ai" && !capabilities.codex) {
-                  setStatus({ text: "Active server does not support AI mode.", error: true });
+                if (mode === "ai" && !capabilities.codex && !activeProfile) {
+                  setStatus({ text: "No server AI or external LLM is configured.", error: true });
                   return;
                 }
-                if (mode === "shell" && !capabilities.shellRun) {
-                  setStatus({ text: "Active server does not support shell mode.", error: true });
+                if (mode === "shell" && isLocalSession(session)) {
+                  setStatus({ text: "Local LLM sessions only support AI mode.", error: true });
+                  return;
+                }
+                if (mode === "shell" && !capabilities.terminal) {
+                  setStatus({ text: "Active server does not support terminal shell mode.", error: true });
                   return;
                 }
                 setSessionMode(session, mode);
               }}
               onOpenOnMac={(session) => {
                 void runWithStatus(`Opening ${session} on Mac`, async () => {
+                  if (isLocalSession(session)) {
+                    throw new Error("Local LLM sessions are not attached to a server terminal.");
+                  }
                   if (!capabilities.macAttach) {
                     throw new Error("Active server does not support mac attach.");
                   }
@@ -773,6 +873,9 @@ export default function AppShell() {
               }}
               onSyncSession={(session) => {
                 void runWithStatus(`Syncing ${session}`, async () => {
+                  if (isLocalSession(session)) {
+                    throw new Error("Local LLM sessions are already in sync.");
+                  }
                   await fetchTail(session, true);
                 });
               }}
@@ -797,6 +900,9 @@ export default function AppShell() {
               onStopSession={(session) => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
                 void runWithStatus(`Stopping ${session}`, async () => {
+                  if (isLocalSession(session)) {
+                    throw new Error("Local LLM sessions do not support Ctrl-C.");
+                  }
                   await handleStop(session);
                 });
               }}
@@ -830,6 +936,13 @@ export default function AppShell() {
                 void runWithStatus(`Sending to ${session}`, async () => {
                   const draft = (drafts[session] || "").trim();
                   const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+                  if (isLocalSession(session) || (mode === "ai" && !capabilities.codex)) {
+                    const sent = await sendViaExternalLlm(session, draft);
+                    if (sent) {
+                      await addCommand(session, sent);
+                    }
+                    return;
+                  }
                   if (mode === "shell") {
                     const approved = await requestDangerApproval(draft, `Send to ${session}`);
                     if (!approved) {
@@ -893,6 +1006,16 @@ export default function AppShell() {
               onRunSnippet={(session, command, mode) => {
                 void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
                 void runWithStatus(`Running snippet in ${session}`, async () => {
+                  if (isLocalSession(session) && mode === "shell") {
+                    throw new Error("Shell snippets are not available for local LLM sessions.");
+                  }
+                  if (isLocalSession(session) || (mode === "ai" && !capabilities.codex)) {
+                    const sent = await sendViaExternalLlm(session, command);
+                    if (sent) {
+                      await addCommand(session, sent);
+                    }
+                    return;
+                  }
                   if (mode === "shell") {
                     const approved = await requestDangerApproval(command, `Snippet in ${session}`);
                     if (!approved) {
@@ -960,6 +1083,9 @@ export default function AppShell() {
                 }}
                 onSendPathCommand={(session, path) => {
                   void runWithStatus(`Running cat in ${session}`, async () => {
+                    if (isLocalSession(session)) {
+                      throw new Error("Local LLM sessions cannot execute file shell commands.");
+                    }
                     const command = `cat ${shellQuote(path)}`;
                     const approved = await requestDangerApproval(command, `File command in ${session}`);
                     if (!approved) {
@@ -976,6 +1102,41 @@ export default function AppShell() {
                 <Text style={styles.serverSubtitle}>This server does not expose `/files/*` endpoints.</Text>
               </View>
             )
+          ) : null}
+
+          {route === "llms" ? (
+            <LlmsScreen
+              profiles={llmProfiles}
+              activeProfileId={activeProfileId}
+              testBusy={llmTestBusy}
+              testOutput={llmTestOutput}
+              onSetActive={(id) => {
+                void runWithStatus("Switching LLM provider", async () => {
+                  await setActive(id);
+                });
+              }}
+              onSaveProfile={(input) => {
+                void runWithStatus(input.id ? "Updating LLM profile" : "Saving LLM profile", async () => {
+                  await saveProfile(input);
+                });
+              }}
+              onDeleteProfile={(id) => {
+                void runWithStatus("Deleting LLM profile", async () => {
+                  await deleteProfile(id);
+                });
+              }}
+              onTestPrompt={(profile, prompt) => {
+                void runWithStatus(`Testing ${profile.name}`, async () => {
+                  setLlmTestBusy(true);
+                  try {
+                    const output = await sendPrompt(profile, prompt);
+                    setLlmTestOutput(output);
+                  } finally {
+                    setLlmTestBusy(false);
+                  }
+                });
+              }}
+            />
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
@@ -996,12 +1157,16 @@ export default function AppShell() {
           }
           void Haptics.selectionAsync();
           const nextMode: TerminalSendMode = focusedMode === "ai" ? "shell" : "ai";
-          if (nextMode === "ai" && !capabilities.codex) {
-            setStatus({ text: "Active server does not support AI mode.", error: true });
+          if (nextMode === "ai" && !capabilities.codex && !activeProfile) {
+            setStatus({ text: "No server AI or external LLM is configured.", error: true });
             return;
           }
-          if (nextMode === "shell" && !capabilities.shellRun) {
-            setStatus({ text: "Active server does not support shell mode.", error: true });
+          if (nextMode === "shell" && isLocalSession(focusedSession)) {
+            setStatus({ text: "Local LLM sessions only support AI mode.", error: true });
+            return;
+          }
+          if (nextMode === "shell" && !capabilities.terminal) {
+            setStatus({ text: "Active server does not support terminal shell mode.", error: true });
             return;
           }
           setSessionMode(focusedSession, nextMode);
@@ -1061,6 +1226,13 @@ export default function AppShell() {
           }
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           void runWithStatus(`Sending to ${focusedSession}`, async () => {
+            if (isLocalSession(focusedSession) || (focusedMode === "ai" && !capabilities.codex)) {
+              const sent = await sendViaExternalLlm(focusedSession, focusedDraft);
+              if (sent) {
+                await addCommand(focusedSession, sent);
+              }
+              return;
+            }
             if (focusedMode === "shell") {
               const approved = await requestDangerApproval(focusedDraft, `Send to ${focusedSession}`);
               if (!approved) {
@@ -1079,6 +1251,9 @@ export default function AppShell() {
           }
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
           void runWithStatus(`Stopping ${focusedSession}`, async () => {
+            if (isLocalSession(focusedSession)) {
+              throw new Error("Local LLM sessions do not support Ctrl-C.");
+            }
             await handleStop(focusedSession);
           });
         }}

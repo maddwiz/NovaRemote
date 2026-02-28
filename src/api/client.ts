@@ -2,10 +2,11 @@ export function normalizeBaseUrl(raw: string): string {
   return raw.trim().replace(/\/+$/, "");
 }
 
-export function websocketUrl(baseUrl: string, session: string): string {
+export function websocketUrl(baseUrl: string, session: string, streamPath: string = "/tmux/stream"): string {
   const safeBase = normalizeBaseUrl(baseUrl);
   const wsBase = safeBase.replace(/^http:\/\//i, "ws://").replace(/^https:\/\//i, "wss://");
-  return `${wsBase}/tmux/stream?session=${encodeURIComponent(session)}`;
+  const normalizedPath = streamPath.startsWith("/") ? streamPath : `/${streamPath}`;
+  return `${wsBase}${normalizedPath}?session=${encodeURIComponent(session)}`;
 }
 
 export async function apiRequest<T>(

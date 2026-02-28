@@ -13,9 +13,13 @@ type TerminalCardProps = {
   isLive: boolean;
   isServerConnected: boolean;
   connectionState: ConnectionState;
+  isLocalOnly: boolean;
   mode: TerminalSendMode;
   aiAvailable: boolean;
+  shellAvailable: boolean;
   canOpenOnMac: boolean;
+  canSync: boolean;
+  canStop: boolean;
   tags: string[];
   onSetMode: (mode: TerminalSendMode) => void;
   onOpenOnMac: () => void;
@@ -41,9 +45,13 @@ export function TerminalCard({
   isLive,
   isServerConnected,
   connectionState,
+  isLocalOnly,
   mode,
   aiAvailable,
+  shellAvailable,
   canOpenOnMac,
+  canSync,
+  canStop,
   tags,
   onSetMode,
   onOpenOnMac,
@@ -62,8 +70,10 @@ export function TerminalCard({
 }: TerminalCardProps) {
   const terminalRef = useRef<ScrollView | null>(null);
 
-  const streamState: "live" | "reconnecting" | "polling" | "disconnected" =
-    connectionState === "connected"
+  const streamState: "live" | "reconnecting" | "polling" | "disconnected" | "local" =
+    isLocalOnly
+      ? "local"
+      : connectionState === "connected"
       ? "live"
       : connectionState === "reconnecting"
         ? "reconnecting"
@@ -71,8 +81,15 @@ export function TerminalCard({
           ? "polling"
           : "disconnected";
 
-  const liveLabel =
-    streamState === "live" ? "LIVE" : streamState === "reconnecting" ? "RETRY" : streamState === "polling" ? "POLL" : "OFF";
+  const liveLabel = streamState === "local"
+    ? "LOCAL"
+    : streamState === "live"
+      ? "LIVE"
+      : streamState === "reconnecting"
+        ? "RETRY"
+        : streamState === "polling"
+          ? "POLL"
+          : "OFF";
 
   return (
     <View style={styles.terminalCard}>
@@ -109,8 +126,9 @@ export function TerminalCard({
             <Text style={[styles.modeButtonText, mode === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
           </Pressable>
           <Pressable
-            style={[styles.modeButton, mode === "shell" ? styles.modeButtonOn : null]}
+            style={[styles.modeButton, mode === "shell" ? styles.modeButtonOn : null, !shellAvailable ? styles.buttonDisabled : null]}
             onPress={() => onSetMode("shell")}
+            disabled={!shellAvailable}
           >
             <Text style={[styles.modeButtonText, mode === "shell" ? styles.modeButtonTextOn : null]}>Shell</Text>
           </Pressable>
@@ -120,7 +138,7 @@ export function TerminalCard({
           <Pressable style={[styles.actionButton, !canOpenOnMac ? styles.buttonDisabled : null]} onPress={onOpenOnMac} disabled={!canOpenOnMac}>
             <Text style={styles.actionButtonText}>Open on Mac</Text>
           </Pressable>
-          <Pressable style={styles.actionButton} onPress={onSync}>
+          <Pressable style={[styles.actionButton, !canSync ? styles.buttonDisabled : null]} onPress={onSync} disabled={!canSync}>
             <Text style={styles.actionButtonText}>Sync</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={onExport}>
@@ -129,7 +147,7 @@ export function TerminalCard({
           <Pressable style={styles.actionButton} onPress={onFullscreen}>
             <Text style={styles.actionButtonText}>Fullscreen</Text>
           </Pressable>
-          <Pressable style={styles.actionDangerButton} onPress={onStop}>
+          <Pressable style={[styles.actionDangerButton, !canStop ? styles.buttonDisabled : null]} onPress={onStop} disabled={!canStop}>
             <Text style={styles.actionDangerText}>Stop</Text>
           </Pressable>
           <Pressable style={styles.actionButton} onPress={onHide}>

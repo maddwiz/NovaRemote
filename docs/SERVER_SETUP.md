@@ -1,10 +1,10 @@
 # NovaRemote Companion Server Setup
 
-NovaRemote is a client. It requires a companion API server that manages tmux sessions and Codex/shell execution.
+NovaRemote is a client. It requires a companion API server that manages terminal sessions plus Codex/shell execution.
 
 ## Requirements
 
-- `tmux` installed on the host running the companion server
+- A terminal session provider on the host (for example `tmux`, `screen`, `zellij`, Windows ConPTY/PowerShell, or another PTY manager behind the API)
 - A bearer token configured on the server
 - Network path from your phone/device to the server (`https://...` preferred; `http://...` for trusted LAN/Tailscale)
 
@@ -12,13 +12,18 @@ Optional for AI mode:
 
 - Codex CLI (or equivalent backend command) installed on the server host
 
+Optional for universal external AI mode (no server Codex required):
+
+- Configure one or more providers in NovaRemote's `LLMs` tab
+- Supported profile types: OpenAI-compatible endpoints and Anthropic
+
 ## Auth Model
 
 NovaRemote uses bearer token auth for HTTP requests:
 
 - `Authorization: Bearer <TOKEN>`
 
-For WebSocket streaming (`/tmux/stream`), NovaRemote now does both:
+For WebSocket streaming (`/tmux/stream` or `/terminal/stream`), NovaRemote now does both:
 
 1. Sends `Authorization: Bearer <TOKEN>` during WS handshake (header)
 2. Sends a first message after connect:
@@ -30,13 +35,33 @@ For WebSocket streaming (`/tmux/stream`), NovaRemote now does both:
 Compatibility note:
 
 - Legacy servers that only accept `token` as a URL query parameter for WS auth may reject live streams.
-- HTTP endpoints (including polling fallback with `/tmux/tail`) continue to work.
+- HTTP endpoints (including polling fallback with `/tmux/tail` or `/terminal/tail`) continue to work.
+
+## Terminal API Families
+
+NovaRemote supports either API family:
+
+- Legacy tmux family: `/tmux/*`
+- Universal terminal family: `/terminal/*` (recommended for cross-OS providers)
+
+If both families are present, NovaRemote prefers `/terminal/*`.
+
+Endpoint mapping:
+
+| Legacy | Universal |
+| --- | --- |
+| `GET /tmux/sessions` | `GET /terminal/sessions` |
+| `GET /tmux/tail` | `GET /terminal/tail` |
+| `WS /tmux/stream` | `WS /terminal/stream` |
+| `POST /tmux/session` | `POST /terminal/session` |
+| `POST /tmux/send` | `POST /terminal/send` |
+| `POST /tmux/ctrl` | `POST /terminal/ctrl` |
 
 ## Required Endpoints
 
-### `GET /tmux/sessions`
+### `GET /tmux/sessions` or `GET /terminal/sessions`
 
-Purpose: list tmux sessions.
+Purpose: list terminal sessions.
 
 Response:
 
@@ -53,7 +78,7 @@ Response:
 }
 ```
 
-### `GET /tmux/tail?session=<name>&lines=<n>`
+### `GET /tmux/tail?session=<name>&lines=<n>` or `GET /terminal/tail?session=<name>&lines=<n>`
 
 Purpose: fetch recent output for a session.
 
@@ -66,7 +91,7 @@ Response:
 }
 ```
 
-### `WS /tmux/stream?session=<name>`
+### `WS /tmux/stream?session=<name>` or `WS /terminal/stream?session=<name>`
 
 Purpose: live stream session output.
 
@@ -88,7 +113,7 @@ Server messages:
 { "type": "error", "session": "...", "data": "error detail" }
 ```
 
-### `POST /tmux/session`
+### `POST /tmux/session` or `POST /terminal/session`
 
 Purpose: create a shell session.
 
@@ -104,7 +129,7 @@ Response:
 { "ok": true, "session": "term-20260228-abcd" }
 ```
 
-### `POST /tmux/send`
+### `POST /tmux/send` or `POST /terminal/send`
 
 Purpose: send text/keystrokes to a session.
 
@@ -120,7 +145,7 @@ Response:
 { "ok": true, "session": "term-20260228-abcd" }
 ```
 
-### `POST /tmux/ctrl`
+### `POST /tmux/ctrl` or `POST /terminal/ctrl`
 
 Purpose: send control keys (`Ctrl-C`, etc.).
 
@@ -181,9 +206,14 @@ Response:
 { "ok": true, "session": "codexchat-20260228-abc123", "tail": "..." }
 ```
 
-### `POST /shell/run`
+### `POST /shell/run` (Optional but recommended)
 
 Purpose: run one shell command in a session and return output tail.
+
+If this endpoint is missing, NovaRemote falls back to:
+
+1. `POST /tmux/send` or `/terminal/send` with `enter: true`
+2. `GET /tmux/tail` or `/terminal/tail`
 
 Request:
 

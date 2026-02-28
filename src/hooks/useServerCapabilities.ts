@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { normalizeBaseUrl } from "../api/client";
-import { ServerCapabilities, ServerProfile } from "../types";
+import { ServerCapabilities, ServerProfile, TerminalApiKind } from "../types";
 
 const EMPTY_CAPABILITIES: ServerCapabilities = {
+  terminal: false,
   tmux: false,
   codex: false,
   files: false,
@@ -35,12 +36,14 @@ async function endpointExists(baseUrl: string, token: string, path: string, init
 
 export function useServerCapabilities({ activeServer, connected }: UseServerCapabilitiesArgs) {
   const [capabilities, setCapabilities] = useState<ServerCapabilities>(EMPTY_CAPABILITIES);
+  const [terminalApiKind, setTerminalApiKind] = useState<TerminalApiKind>("tmux");
   const [loading, setLoading] = useState<boolean>(false);
   const [lastError, setLastError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     if (!activeServer || !connected) {
       setCapabilities(EMPTY_CAPABILITIES);
+      setTerminalApiKind("tmux");
       setLastError(null);
       return EMPTY_CAPABILITIES;
     }
@@ -75,8 +78,9 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         // Health probe is optional; endpoint probes below are authoritative fallback.
       }
 
-      const [tmuxSessions, filesList, shellRun, macAttach, codexStart] = await Promise.all([
+      const [tmuxSessions, terminalSessions, filesList, shellRun, macAttach, codexStart] = await Promise.all([
         endpointExists(baseUrl, token, "/tmux/sessions", { method: "GET" }),
+        endpointExists(baseUrl, token, "/terminal/sessions", { method: "GET" }),
         endpointExists(baseUrl, token, "/files/list?path=%2F", { method: "GET" }),
         endpointExists(baseUrl, token, "/shell/run", {
           method: "POST",
@@ -95,19 +99,24 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         }),
       ]);
 
+      const terminalAvailable = tmuxSessions || terminalSessions;
+      const nextTerminalApiKind: TerminalApiKind = terminalSessions ? "terminal" : "tmux";
       const next: ServerCapabilities = {
+        terminal: terminalAvailable,
         tmux: Boolean(tmuxSessions && (healthTmux !== false)),
-        codex: Boolean(codexStart && healthCodex === true),
+        codex: Boolean(codexStart && healthCodex !== false),
         files: filesList,
         shellRun,
         macAttach,
-        stream: tmuxSessions,
+        stream: terminalAvailable,
       };
 
       setCapabilities(next);
+      setTerminalApiKind(nextTerminalApiKind);
       return next;
     } catch (error) {
       setCapabilities(EMPTY_CAPABILITIES);
+      setTerminalApiKind("tmux");
       setLastError(error instanceof Error ? error.message : String(error));
       return EMPTY_CAPABILITIES;
     } finally {
@@ -120,14 +129,37 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
   }, [refresh]);
 
   const supportedFeatures = useMemo(() => {
-    return Object.entries(capabilities)
-      .filter(([, enabled]) => enabled)
-      .map(([name]) => name)
-      .join(", ");
-  }, [capabilities]);
+    const features: string[] = [];
+    if (capabilities.terminal) {
+      features.push(`terminal:${terminalApiKind}`);
+    }
+    if (capabilities.codex) {
+      features.push("codex");
+    }
+    if (capabilities.files) {
+      features.push("files");
+    }
+    if (capabilities.shellRun) {
+      features.push("shell-run");
+    }
+    if (capabilities.macAttach) {
+      features.push("mac-attach");
+    }
+    if (capabilities.stream) {
+      features.push("stream");
+    }
+    if (capabilities.tmux && terminalApiKind !== "tmux") {
+      features.push("tmux-compat");
+    }
+    return features.join(", ");
+  }, [capabilities, terminalApiKind]);
+
+  const terminalApiBasePath: "/terminal" | "/tmux" = terminalApiKind === "terminal" ? "/terminal" : "/tmux";
 
   return {
     capabilities,
+    terminalApiKind,
+    terminalApiBasePath,
     loading,
     lastError,
     supportedFeatures,

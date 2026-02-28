@@ -32,6 +32,8 @@ type TerminalsScreenProps = {
   health: HealthMetrics;
   capabilities: ServerCapabilities;
   supportedFeatures: string;
+  hasExternalLlm: boolean;
+  localAiSessions: string[];
   historyCount: Record<string, number>;
   sessionTags: Record<string, string[]>;
   allTags: string[];
@@ -123,6 +125,8 @@ export function TerminalsScreen({
   health,
   capabilities,
   supportedFeatures,
+  hasExternalLlm,
+  localAiSessions,
   historyCount,
   sessionTags,
   allTags,
@@ -174,6 +178,7 @@ export function TerminalsScreen({
       const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
       const tags = sessionTags[session] || [];
       const meta = connectionMeta[session];
+      const isLocalOnly = localAiSessions.includes(session);
 
       return (
         <TerminalCard
@@ -183,11 +188,15 @@ export function TerminalsScreen({
           draft={draft}
           isSending={isSending}
           isLive={isLive}
-          isServerConnected={connected}
-          connectionState={meta?.state ?? "disconnected"}
+          isServerConnected={!isLocalOnly && connected}
+          connectionState={isLocalOnly ? "disconnected" : meta?.state ?? "disconnected"}
+          isLocalOnly={isLocalOnly}
           mode={mode}
-          aiAvailable={capabilities.codex}
-          canOpenOnMac={capabilities.macAttach}
+          aiAvailable={capabilities.codex || hasExternalLlm}
+          shellAvailable={!isLocalOnly && capabilities.terminal}
+          canOpenOnMac={!isLocalOnly && capabilities.macAttach}
+          canSync={!isLocalOnly}
+          canStop={!isLocalOnly}
           tags={tags}
           historyCount={historyCount[session] || 0}
           onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
@@ -208,10 +217,12 @@ export function TerminalsScreen({
     });
   }, [
     capabilities.codex,
+    capabilities.terminal,
     capabilities.macAttach,
     connected,
     connectionMeta,
     drafts,
+    hasExternalLlm,
     historyCount,
     onClearDraft,
     onFocusSession,
@@ -226,6 +237,7 @@ export function TerminalsScreen({
     onStopSession,
     onSyncSession,
     openSessions,
+    localAiSessions,
     sendBusy,
     sendModes,
     sessionTags,
@@ -270,12 +282,12 @@ export function TerminalsScreen({
       <Pressable
         style={[styles.buttonPrimary, fleetBusy ? styles.buttonDisabled : null]}
         onPress={onRunFleet}
-        disabled={fleetBusy || !capabilities.shellRun}
+        disabled={fleetBusy || !capabilities.terminal}
       >
         <Text style={styles.buttonPrimaryText}>{fleetBusy ? "Running Fleet Command..." : "Run Across Fleet"}</Text>
       </Pressable>
 
-      {!capabilities.shellRun ? <Text style={styles.emptyText}>Current server does not advertise shell-run support.</Text> : null}
+      {!capabilities.terminal ? <Text style={styles.emptyText}>Current server does not advertise terminal session support.</Text> : null}
 
       {fleetResults.length > 0 ? (
         <View style={styles.serverListWrap}>
@@ -310,7 +322,7 @@ export function TerminalsScreen({
         <Text style={styles.serverSubtitle}>{activeServer?.baseUrl || "Go to Servers tab to add one"}</Text>
 
         <View style={styles.rowInlineSpace}>
-          <Pressable style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefreshSessions} disabled={!connected || !capabilities.tmux}>
+          <Pressable style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefreshSessions} disabled={!connected || !capabilities.terminal}>
             <Text style={styles.buttonPrimaryText}>Refresh Sessions</Text>
           </Pressable>
           <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onOpenServers}>
@@ -323,16 +335,20 @@ export function TerminalsScreen({
         <Text style={styles.panelLabel}>Start New Session</Text>
         <View style={styles.modeRow}>
           <Pressable
-            style={[styles.modeButton, startKind === "ai" ? styles.modeButtonOn : null, !capabilities.codex ? styles.buttonDisabled : null]}
+            style={[
+              styles.modeButton,
+              startKind === "ai" ? styles.modeButtonOn : null,
+              !(capabilities.codex || hasExternalLlm) ? styles.buttonDisabled : null,
+            ]}
             onPress={() => onSetStartKind("ai")}
-            disabled={!capabilities.codex}
+            disabled={!(capabilities.codex || hasExternalLlm)}
           >
             <Text style={[styles.modeButtonText, startKind === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
           </Pressable>
           <Pressable
-            style={[styles.modeButton, startKind === "shell" ? styles.modeButtonOn : null, !capabilities.shellRun ? styles.buttonDisabled : null]}
+            style={[styles.modeButton, startKind === "shell" ? styles.modeButtonOn : null, !capabilities.terminal ? styles.buttonDisabled : null]}
             onPress={() => onSetStartKind("shell")}
-            disabled={!capabilities.shellRun}
+            disabled={!capabilities.terminal}
           >
             <Text style={[styles.modeButtonText, startKind === "shell" ? styles.modeButtonTextOn : null]}>Shell</Text>
           </Pressable>
@@ -356,7 +372,7 @@ export function TerminalsScreen({
           onChangeText={onSetStartPrompt}
         />
 
-        {startKind === "ai" ? (
+        {startKind === "ai" && capabilities.codex ? (
           <View style={styles.rowInlineSpace}>
             <Text style={styles.switchLabel}>Open session on Mac Terminal</Text>
             <Switch
@@ -366,6 +382,10 @@ export function TerminalsScreen({
               onValueChange={onSetStartOpenOnMac}
             />
           </View>
+        ) : null}
+
+        {startKind === "ai" && !capabilities.codex && hasExternalLlm ? (
+          <Text style={styles.emptyText}>This will create a local AI session powered by your active external LLM profile.</Text>
         ) : null}
 
         <Pressable style={[styles.buttonPrimary, !connected ? styles.buttonDisabled : null]} onPress={onStartSession} disabled={!connected}>

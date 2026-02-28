@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from "react";
 
 import { apiRequest } from "../api/client";
-import { DEFAULT_CWD, isLikelyAiSession, makeShellSessionName, sortByCreatedAt } from "../constants";
+import { DEFAULT_CWD, isLikelyAiSession, makeLocalLlmSessionName, makeShellSessionName, sortByCreatedAt } from "../constants";
 import {
   CodexMessageResponse,
   CodexStartResponse,
@@ -15,10 +15,13 @@ import {
 type UseTerminalSessionsArgs = {
   activeServer: ServerProfile | null;
   connected: boolean;
+  terminalApiBasePath: "/tmux" | "/terminal";
+  supportsShellRun: boolean;
 };
 
-export function useTerminalSessions({ activeServer, connected }: UseTerminalSessionsArgs) {
+export function useTerminalSessions({ activeServer, connected, terminalApiBasePath, supportsShellRun }: UseTerminalSessionsArgs) {
   const [allSessions, setAllSessions] = useState<string[]>([]);
+  const [localAiSessions, setLocalAiSessions] = useState<string[]>([]);
   const [openSessions, setOpenSessions] = useState<string[]>([]);
   const [tails, setTails] = useState<Record<string, string>>({});
   const [drafts, setDrafts] = useState<Record<string, string>>({});
@@ -36,6 +39,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
 
   const resetTerminalState = useCallback(() => {
     setAllSessions([]);
+    setLocalAiSessions([]);
     setOpenSessions([]);
     setTails({});
     setDrafts({});
@@ -52,21 +56,22 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     const data = await apiRequest<{ sessions: SessionMeta[] }>(
       activeServer.baseUrl,
       activeServer.token,
-      "/tmux/sessions"
+      `${terminalApiBasePath}/sessions`
     );
 
     const names = sortByCreatedAt(data.sessions || []).map((entry) => entry.name);
-    setAllSessions(names);
+    const mergedNames = [...names, ...localAiSessions.filter((session) => !names.includes(session))];
+    setAllSessions(mergedNames);
 
     setSendModes((prev) => {
       const next = { ...prev };
-      names.forEach((session) => {
+      mergedNames.forEach((session) => {
         if (!next[session]) {
           next[session] = isLikelyAiSession(session) ? "ai" : "shell";
         }
       });
       Object.keys(next).forEach((session) => {
-        if (!names.includes(session)) {
+        if (!mergedNames.includes(session)) {
           delete next[session];
         }
       });
@@ -74,16 +79,16 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     });
 
     setOpenSessions((prev) => {
-      const existing = prev.filter((name) => names.includes(name));
+      const existing = prev.filter((name) => mergedNames.includes(name));
       if (existing.length > 0) {
         return existing;
       }
-      if (names.length > 0) {
-        return [names[0]];
+      if (mergedNames.length > 0) {
+        return [mergedNames[0]];
       }
       return [];
     });
-  }, [activeServer, connected]);
+  }, [activeServer, connected, localAiSessions, terminalApiBasePath]);
 
   const toggleSessionVisible = useCallback((session: string) => {
     setOpenSessions((prev) => {
@@ -99,9 +104,32 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     setFocusedSession((prev) => (prev === session ? null : prev));
   }, []);
 
-  const setSessionMode = useCallback((session: string, mode: TerminalSendMode) => {
-    setSendModes((prev) => ({ ...prev, [session]: mode }));
-  }, []);
+  const setSessionMode = useCallback(
+    (session: string, mode: TerminalSendMode) => {
+      if (mode === "shell" && localAiSessions.includes(session)) {
+        return;
+      }
+      setSendModes((prev) => ({ ...prev, [session]: mode }));
+    },
+    [localAiSessions]
+  );
+
+  const createLocalAiSession = useCallback(
+    (initialPrompt: string = "") => {
+      const session = makeLocalLlmSessionName();
+
+      setLocalAiSessions((prev) => [session, ...prev]);
+      setAllSessions((prev) => [session, ...prev]);
+      setOpenSessions((prev) => [session, ...prev]);
+      setSendModes((prev) => ({ ...prev, [session]: "ai" }));
+      if (initialPrompt.trim()) {
+        setDrafts((prev) => ({ ...prev, [session]: initialPrompt.trim() }));
+      }
+
+      return session;
+    },
+    []
+  );
 
   const handleStartSession = useCallback(async () => {
     if (!activeServer || !connected) {
@@ -142,14 +170,14 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     }
 
     const session = makeShellSessionName();
-    await apiRequest(activeServer.baseUrl, activeServer.token, "/tmux/session", {
+    await apiRequest(activeServer.baseUrl, activeServer.token, `${terminalApiBasePath}/session`, {
       method: "POST",
       body: JSON.stringify({ session, cwd }),
     });
 
     const initialCommand = startPrompt.trim();
     if (initialCommand) {
-      await apiRequest(activeServer.baseUrl, activeServer.token, "/tmux/send", {
+      await apiRequest(activeServer.baseUrl, activeServer.token, `${terminalApiBasePath}/send`, {
         method: "POST",
         body: JSON.stringify({ session, text: initialCommand, enter: true }),
       });
@@ -159,7 +187,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     const tail = await apiRequest<TmuxTailResponse>(
       activeServer.baseUrl,
       activeServer.token,
-      `/tmux/tail?session=${encodeURIComponent(session)}&lines=380`
+      `${terminalApiBasePath}/tail?session=${encodeURIComponent(session)}&lines=380`
     );
 
     setAllSessions((prev) => (prev.includes(session) ? prev : [session, ...prev]));
@@ -168,7 +196,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     setTails((prev) => ({ ...prev, [session]: tail.output || "" }));
 
     return session;
-  }, [activeServer, connected, startCwd, startKind, startOpenOnMac, startPrompt]);
+  }, [activeServer, connected, startCwd, startKind, startOpenOnMac, startPrompt, terminalApiBasePath]);
 
   const sendCommand = useCallback(
     async (session: string, command: string, mode: TerminalSendMode, clearDraft: boolean = false) => {
@@ -202,13 +230,29 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
             setTails((prev) => ({ ...prev, [session]: data.tail || "" }));
           }
         } else {
-          const data = await apiRequest<ShellRunResponse>(activeServer.baseUrl, activeServer.token, "/shell/run", {
-            method: "POST",
-            body: JSON.stringify({ session, command: currentDraft, wait_ms: 400, tail_lines: 380 }),
-          });
+          if (supportsShellRun) {
+            const data = await apiRequest<ShellRunResponse>(activeServer.baseUrl, activeServer.token, "/shell/run", {
+              method: "POST",
+              body: JSON.stringify({ session, command: currentDraft, wait_ms: 400, tail_lines: 380 }),
+            });
 
-          if (data.output) {
-            setTails((prev) => ({ ...prev, [session]: data.output || "" }));
+            if (data.output) {
+              setTails((prev) => ({ ...prev, [session]: data.output || "" }));
+            }
+          } else {
+            await apiRequest(activeServer.baseUrl, activeServer.token, `${terminalApiBasePath}/send`, {
+              method: "POST",
+              body: JSON.stringify({ session, text: currentDraft, enter: true }),
+            });
+
+            const tail = await apiRequest<TmuxTailResponse>(
+              activeServer.baseUrl,
+              activeServer.token,
+              `${terminalApiBasePath}/tail?session=${encodeURIComponent(session)}&lines=380`
+            );
+            if (tail.output !== undefined) {
+              setTails((prev) => ({ ...prev, [session]: tail.output || "" }));
+            }
           }
         }
       } catch (error) {
@@ -221,7 +265,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
         setSendBusy((prev) => ({ ...prev, [session]: false }));
       }
     },
-    [activeServer, connected]
+    [activeServer, connected, supportsShellRun, terminalApiBasePath]
   );
 
   const handleSend = useCallback(
@@ -248,12 +292,12 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
         throw new Error("Connect to a server first.");
       }
 
-      await apiRequest(activeServer.baseUrl, activeServer.token, "/tmux/ctrl", {
+      await apiRequest(activeServer.baseUrl, activeServer.token, `${terminalApiBasePath}/ctrl`, {
         method: "POST",
         body: JSON.stringify({ session, key: "C-c" }),
       });
     },
-    [activeServer, connected]
+    [activeServer, connected, terminalApiBasePath]
   );
 
   const handleOpenOnMac = useCallback(
@@ -272,6 +316,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
 
   return {
     allSessions,
+    localAiSessions,
     openSessions,
     tails,
     drafts,
@@ -295,6 +340,7 @@ export function useTerminalSessions({ activeServer, connected }: UseTerminalSess
     toggleSessionVisible,
     removeOpenSession,
     setSessionMode,
+    createLocalAiSession,
     handleStartSession,
     handleSend,
     sendCommand,
