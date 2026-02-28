@@ -68,6 +68,7 @@ export function GlassesModeScreen() {
     voiceBusy,
     voiceTranscript,
     voiceError,
+    voiceMeteringDb,
     onSetDraft,
     onSend,
     onClearDraft,
@@ -90,6 +91,8 @@ export function GlassesModeScreen() {
   const [activeSession, setActiveSession] = useState<string | null>(null);
   const outputRef = useRef<ScrollView | null>(null);
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const silenceSinceRef = useRef<number | null>(null);
+  const localStopPendingRef = useRef<boolean>(false);
 
   useEffect(() => {
     if (openSessions.length === 0) {
@@ -151,6 +154,8 @@ export function GlassesModeScreen() {
         clearTimeout(loopTimeoutRef.current);
         loopTimeoutRef.current = null;
       }
+      silenceSinceRef.current = null;
+      localStopPendingRef.current = false;
       return;
     }
     if (loopTimeoutRef.current) {
@@ -170,11 +175,51 @@ export function GlassesModeScreen() {
   }, [activeSession, glassesMode.loopCaptureMs, glassesMode.voiceLoop, onVoiceStopCapture, voiceBusy, voiceRecording]);
 
   useEffect(() => {
+    if (!glassesMode.voiceLoop || !glassesMode.vadEnabled || !activeSession || !voiceRecording || voiceBusy) {
+      silenceSinceRef.current = null;
+      localStopPendingRef.current = false;
+      return;
+    }
+    if (typeof voiceMeteringDb !== "number") {
+      return;
+    }
+    const now = Date.now();
+    const silenceThresholdDb = -43;
+    if (voiceMeteringDb > silenceThresholdDb) {
+      silenceSinceRef.current = null;
+      localStopPendingRef.current = false;
+      return;
+    }
+    if (silenceSinceRef.current === null) {
+      silenceSinceRef.current = now;
+      return;
+    }
+    if (localStopPendingRef.current) {
+      return;
+    }
+    if (now - silenceSinceRef.current >= glassesMode.vadSilenceMs) {
+      localStopPendingRef.current = true;
+      onVoiceStopCapture(activeSession);
+    }
+  }, [
+    activeSession,
+    glassesMode.vadEnabled,
+    glassesMode.vadSilenceMs,
+    glassesMode.voiceLoop,
+    onVoiceStopCapture,
+    voiceBusy,
+    voiceMeteringDb,
+    voiceRecording,
+  ]);
+
+  useEffect(() => {
     return () => {
       if (loopTimeoutRef.current) {
         clearTimeout(loopTimeoutRef.current);
         loopTimeoutRef.current = null;
       }
+      silenceSinceRef.current = null;
+      localStopPendingRef.current = false;
     };
   }, []);
 
@@ -249,6 +294,9 @@ export function GlassesModeScreen() {
         </Text>
         {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}
         {transcriptReady ? <Text style={styles.serverSubtitle}>{`Transcript: ${voiceTranscript}`}</Text> : null}
+        {voiceRecording && typeof voiceMeteringDb === "number" ? (
+          <Text style={styles.emptyText}>{`Mic level ${Math.round(voiceMeteringDb)} dB`}</Text>
+        ) : null}
 
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Auto-send transcript</Text>
@@ -377,6 +425,25 @@ export function GlassesModeScreen() {
             }}
           >
             <Text style={styles.glassesRouteButtonText}>{voiceBusy ? "Transcribing..." : "Stop + Transcribe"}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            style={[styles.glassesRouteButton, voiceBusy || !activeSession ? styles.buttonDisabled : null]}
+            disabled={voiceBusy || !activeSession}
+            onPressIn={() => {
+              if (voiceRecording || !activeSession) {
+                return;
+              }
+              onVoiceStartCapture();
+            }}
+            onPressOut={() => {
+              if (!activeSession || !voiceRecording) {
+                return;
+              }
+              onVoiceStopCapture(activeSession);
+            }}
+          >
+            <Text style={styles.glassesRouteButtonText}>Hold to Talk</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"

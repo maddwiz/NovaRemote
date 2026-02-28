@@ -191,6 +191,7 @@ export function TerminalsScreen() {
     voiceBusy,
     voiceTranscript,
     voiceError,
+    voiceMeteringDb,
     onShowPaywall,
     onSetTagFilter,
     onSetStartCwd,
@@ -1004,6 +1005,9 @@ export function TerminalsScreen() {
             </Text>
             {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}
             {voiceTranscript.trim() ? <Text style={styles.serverSubtitle}>{`Transcript: ${voiceTranscript}`}</Text> : null}
+            {voiceRecording && typeof voiceMeteringDb === "number" ? (
+              <Text style={styles.emptyText}>{`Mic level ${Math.round(voiceMeteringDb)} dB`}</Text>
+            ) : null}
 
             <View style={[styles.terminalView, { minHeight: 120, maxHeight: 220 }]}>
               <AnsiText

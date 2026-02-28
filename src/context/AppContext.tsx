@@ -82,6 +82,7 @@ export type TerminalsViewModel = {
   voiceBusy: boolean;
   voiceTranscript: string;
   voiceError: string | null;
+  voiceMeteringDb: number | null;
   onShowPaywall: () => void;
   onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;

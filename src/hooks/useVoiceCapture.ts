@@ -66,6 +66,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
   const [busy, setBusy] = useState<boolean>(false);
   const [lastTranscript, setLastTranscript] = useState<string>("");
   const [lastError, setLastError] = useState<string | null>(null);
+  const [meteringDb, setMeteringDb] = useState<number | null>(null);
 
   const startCapture = useCallback(async () => {
     if (recording || busy) {
@@ -79,6 +80,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
 
     setLastError(null);
     setLastTranscript("");
+    setMeteringDb(null);
 
     await Audio.setAudioModeAsync({
       allowsRecordingIOS: true,
@@ -89,7 +91,17 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     });
 
     const recorder = new Audio.Recording();
-    await recorder.prepareToRecordAsync(Audio.RecordingOptionsPresets.HIGH_QUALITY);
+    recorder.setProgressUpdateInterval(120);
+    recorder.setOnRecordingStatusUpdate((status) => {
+      const level = (status as { metering?: unknown }).metering;
+      if (typeof level === "number" && Number.isFinite(level)) {
+        setMeteringDb(level);
+      }
+    });
+    await recorder.prepareToRecordAsync({
+      ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
+      isMeteringEnabled: true,
+    } as Audio.RecordingOptions);
     await recorder.startAsync();
 
     recordingRef.current = recorder;
@@ -105,6 +117,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     setBusy(true);
     setRecording(false);
     setLastError(null);
+    setMeteringDb(null);
 
     try {
       await recorder.stopAndUnloadAsync();
@@ -218,6 +231,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     busy,
     lastTranscript,
     lastError,
+    meteringDb,
     startCapture,
     stopAndTranscribe,
     setLastTranscript,
