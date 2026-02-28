@@ -9,6 +9,10 @@ const DEFAULT_GLASSES_MODE: GlassesModeSettings = {
   brand: "xreal_x1",
   textScale: 1,
   voiceAutoSend: true,
+  voiceLoop: false,
+  wakePhraseEnabled: false,
+  wakePhrase: "nova",
+  minimalMode: true,
 };
 
 function normalizeBrand(value: unknown): GlassesBrand {
@@ -24,6 +28,14 @@ function normalizeTextScale(value: unknown): number {
     return DEFAULT_GLASSES_MODE.textScale;
   }
   return Math.max(0.85, Math.min(parsed, 1.6));
+}
+
+function normalizeWakePhrase(value: unknown): string {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (!normalized) {
+    return DEFAULT_GLASSES_MODE.wakePhrase;
+  }
+  return normalized.slice(0, 32);
 }
 
 export function useGlassesMode() {
@@ -44,6 +56,11 @@ export function useGlassesMode() {
           brand: normalizeBrand(parsed.brand),
           textScale: normalizeTextScale(parsed.textScale),
           voiceAutoSend: parsed.voiceAutoSend !== undefined ? Boolean(parsed.voiceAutoSend) : DEFAULT_GLASSES_MODE.voiceAutoSend,
+          voiceLoop: parsed.voiceLoop !== undefined ? Boolean(parsed.voiceLoop) : DEFAULT_GLASSES_MODE.voiceLoop,
+          wakePhraseEnabled:
+            parsed.wakePhraseEnabled !== undefined ? Boolean(parsed.wakePhraseEnabled) : DEFAULT_GLASSES_MODE.wakePhraseEnabled,
+          wakePhrase: normalizeWakePhrase(parsed.wakePhrase),
+          minimalMode: parsed.minimalMode !== undefined ? Boolean(parsed.minimalMode) : DEFAULT_GLASSES_MODE.minimalMode,
         });
       } catch {
         setSettings(DEFAULT_GLASSES_MODE);
@@ -73,6 +90,22 @@ export function useGlassesMode() {
     setSettings((prev) => ({ ...prev, voiceAutoSend }));
   }, []);
 
+  const setVoiceLoop = useCallback((voiceLoop: boolean) => {
+    setSettings((prev) => ({ ...prev, voiceLoop }));
+  }, []);
+
+  const setWakePhraseEnabled = useCallback((wakePhraseEnabled: boolean) => {
+    setSettings((prev) => ({ ...prev, wakePhraseEnabled }));
+  }, []);
+
+  const setWakePhrase = useCallback((wakePhrase: string) => {
+    setSettings((prev) => ({ ...prev, wakePhrase: normalizeWakePhrase(wakePhrase) }));
+  }, []);
+
+  const setMinimalMode = useCallback((minimalMode: boolean) => {
+    setSettings((prev) => ({ ...prev, minimalMode }));
+  }, []);
+
   const setTextScale = useCallback((textScale: number) => {
     setSettings((prev) => ({ ...prev, textScale: normalizeTextScale(textScale) }));
   }, []);
@@ -82,6 +115,10 @@ export function useGlassesMode() {
     setEnabled,
     setBrand,
     setVoiceAutoSend,
+    setVoiceLoop,
+    setWakePhraseEnabled,
+    setWakePhrase,
+    setMinimalMode,
     setTextScale,
   };
 }

@@ -325,6 +325,8 @@ Request format:
 - `Authorization: Bearer <TOKEN>`
 - `multipart/form-data`
 - file field: `file` (audio/m4a)
+- optional field: `wake_phrase` (string, for example `nova`)
+- optional field: `require_wake_phrase` (`true`/`false`)
 
 Recommended response format:
 
@@ -332,7 +334,7 @@ Recommended response format:
 { "transcript": "restart api server and tail logs" }
 ```
 
-Accepted text fields are: `transcript`, `text`, `output`, `message`, `result`.
+Accepted text fields are: `transcript`, `text`, `command`, `output`, `message`, `result`.
 
 ## Quick Start (Codex Remote Reference Server)
 

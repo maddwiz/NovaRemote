@@ -70,6 +70,7 @@ import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
+import { GlassesModeScreen } from "./screens/GlassesModeScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
@@ -239,6 +240,32 @@ function inferSessionAlias(session: string, output: string, commands: string[]):
     return "Logs";
   }
   return "";
+}
+
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function stripWakePrefix(value: string): string {
+  return value.replace(/^[\s,.:;!?'"-]+/, "").trim();
+}
+
+function extractWakePhraseCommand(transcript: string, wakePhrase: string): string {
+  const phrase = wakePhrase.trim();
+  if (!phrase) {
+    return transcript.trim();
+  }
+  const matcher = new RegExp(`\\b${escapeRegex(phrase)}\\b`, "i");
+  const match = matcher.exec(transcript);
+  if (!match) {
+    return "";
+  }
+  const start = match.index + match[0].length;
+  const after = stripWakePrefix(transcript.slice(start));
+  if (after) {
+    return after;
+  }
+  return transcript.slice(0, match.index).trim();
 }
 
 function adaptCommandForBackend(command: string, backend: TerminalBackendKind | undefined): string {
@@ -482,7 +509,17 @@ export default function AppShell() {
     refresh: refreshCapabilities,
   } = useServerCapabilities({ activeServer, connected });
   const { shellRunWaitMs, parsedShellRunWaitMs, setShellRunWaitMsInput } = useShellRunWait(activeServerId);
-  const { settings: glassesMode, setEnabled: setGlassesEnabled, setBrand: setGlassesBrand, setTextScale: setGlassesTextScale, setVoiceAutoSend: setGlassesVoiceAutoSend } = useGlassesMode();
+  const {
+    settings: glassesMode,
+    setEnabled: setGlassesEnabled,
+    setBrand: setGlassesBrand,
+    setTextScale: setGlassesTextScale,
+    setVoiceAutoSend: setGlassesVoiceAutoSend,
+    setVoiceLoop: setGlassesVoiceLoop,
+    setWakePhraseEnabled: setGlassesWakePhraseEnabled,
+    setWakePhrase: setGlassesWakePhrase,
+    setMinimalMode: setGlassesMinimalMode,
+  } = useGlassesMode();
   const {
     recording: voiceRecording,
     busy: voiceBusy,
@@ -847,18 +884,51 @@ export default function AppShell() {
 
   const stopVoiceCaptureIntoSession = useCallback(
     async (session: string) => {
-      const transcript = (await stopVoiceCaptureAndTranscribe()).trim();
-      if (!transcript) {
+      const rawTranscript = (
+        await stopVoiceCaptureAndTranscribe({
+          wakePhrase: glassesMode.wakePhrase,
+          requireWakePhrase: glassesMode.wakePhraseEnabled,
+        })
+      ).trim();
+      if (!rawTranscript) {
         throw new Error("No transcript detected. Try speaking closer to the microphone.");
       }
-      setDrafts((prev) => ({ ...prev, [session]: transcript }));
+      const commandTranscript = glassesMode.wakePhraseEnabled
+        ? extractWakePhraseCommand(rawTranscript, glassesMode.wakePhrase)
+        : rawTranscript;
+      if (!commandTranscript) {
+        throw new Error(`Wake phrase "${glassesMode.wakePhrase}" was not detected.`);
+      }
+
+      if (commandTranscript !== rawTranscript) {
+        setVoiceTranscript(commandTranscript);
+      }
+
+      setDrafts((prev) => ({ ...prev, [session]: commandTranscript }));
       if (!glassesMode.voiceAutoSend) {
+        if (glassesMode.voiceLoop) {
+          await startVoiceCapture();
+        }
         return;
       }
       setSessionMode(session, "ai");
-      await sendTextToSession(session, transcript, "ai");
+      await sendTextToSession(session, commandTranscript, "ai");
+      if (glassesMode.voiceLoop) {
+        await startVoiceCapture();
+      }
     },
-    [glassesMode.voiceAutoSend, sendTextToSession, setDrafts, setSessionMode, stopVoiceCaptureAndTranscribe]
+    [
+      glassesMode.voiceAutoSend,
+      glassesMode.voiceLoop,
+      glassesMode.wakePhrase,
+      glassesMode.wakePhraseEnabled,
+      sendTextToSession,
+      setDrafts,
+      setSessionMode,
+      setVoiceTranscript,
+      startVoiceCapture,
+      stopVoiceCaptureAndTranscribe,
+    ]
   );
 
   const sendVoiceTranscriptToSession = useCallback(
@@ -945,6 +1015,12 @@ export default function AppShell() {
       sub.remove();
     };
   }, [lock]);
+
+  useEffect(() => {
+    if (route === "glasses" && !glassesMode.enabled) {
+      setRoute("terminals");
+    }
+  }, [glassesMode.enabled, route]);
 
   useEffect(() => {
     async function handleLink(url: string | null) {
@@ -1661,6 +1737,19 @@ export default function AppShell() {
     onSetGlassesBrand: setGlassesBrand,
     onSetGlassesTextScale: setGlassesTextScale,
     onSetGlassesVoiceAutoSend: setGlassesVoiceAutoSend,
+    onSetGlassesVoiceLoop: setGlassesVoiceLoop,
+    onSetGlassesWakePhraseEnabled: setGlassesWakePhraseEnabled,
+    onSetGlassesWakePhrase: setGlassesWakePhrase,
+    onSetGlassesMinimalMode: setGlassesMinimalMode,
+    onOpenGlassesMode: () => {
+      if (!glassesMode.enabled) {
+        setGlassesEnabled(true);
+      }
+      setRoute("glasses");
+    },
+    onCloseGlassesMode: () => {
+      setRoute("terminals");
+    },
     onVoiceStartCapture: () => {
       void runWithStatus("Starting voice capture", async () => {
         await startVoiceCapture();
@@ -1725,33 +1814,37 @@ export default function AppShell() {
             route === "terminals" ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#27d9ff" /> : undefined
           }
         >
-          <View style={styles.panelHeader}>
-            <Image source={BRAND_LOGO} style={styles.brandLogo} resizeMode="cover" />
-            <View style={styles.headerTextBlock}>
-              <Text style={styles.title}>NovaRemote</Text>
-              <Text style={styles.subtitle}>Universal AI + Terminal Remote Control</Text>
+          {route !== "glasses" ? (
+            <View style={styles.panelHeader}>
+              <Image source={BRAND_LOGO} style={styles.brandLogo} resizeMode="cover" />
+              <View style={styles.headerTextBlock}>
+                <Text style={styles.title}>NovaRemote</Text>
+                <Text style={styles.subtitle}>Universal AI + Terminal Remote Control</Text>
+              </View>
+              <View style={styles.headerRowWrap}>
+                <Text style={styles.serverBadge}>{activeServerName}</Text>
+                <StatusPill status={status} />
+              </View>
             </View>
-            <View style={styles.headerRowWrap}>
-              <Text style={styles.serverBadge}>{activeServerName}</Text>
-              <StatusPill status={status} />
-            </View>
-          </View>
+          ) : null}
 
-          <TabBar
-            route={route}
-            onChange={(next) => {
-              void Haptics.selectionAsync();
-              if (next === "snippets" && !isPro) {
-                setPaywallVisible(true);
-                return;
-              }
-              if (next === "files" && !capabilities.files) {
-                setStatus({ text: "Active server does not support file APIs.", error: true });
-                return;
-              }
-              setRoute(next);
-            }}
-          />
+          {route !== "glasses" ? (
+            <TabBar
+              route={route}
+              onChange={(next) => {
+                void Haptics.selectionAsync();
+                if (next === "snippets" && !isPro) {
+                  setPaywallVisible(true);
+                  return;
+                }
+                if (next === "files" && !capabilities.files) {
+                  setStatus({ text: "Active server does not support file APIs.", error: true });
+                  return;
+                }
+                setRoute(next);
+              }}
+            />
+          ) : null}
 
           {route === "servers" ? (
             <ServersScreen
@@ -1819,6 +1912,12 @@ export default function AppShell() {
           {route === "terminals" ? (
             <AppProvider value={{ terminals: terminalsViewModel }}>
               <TerminalsScreen />
+            </AppProvider>
+          ) : null}
+
+          {route === "glasses" ? (
+            <AppProvider value={{ terminals: terminalsViewModel }}>
+              <GlassesModeScreen />
             </AppProvider>
           ) : null}
 

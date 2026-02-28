@@ -11,6 +11,11 @@ type UseVoiceCaptureArgs = {
   connected: boolean;
 };
 
+type VoiceTranscribeOptions = {
+  wakePhrase?: string;
+  requireWakePhrase?: boolean;
+};
+
 function readTranscript(payload: unknown): string {
   if (typeof payload === "string") {
     return payload.trim();
@@ -23,6 +28,7 @@ function readTranscript(payload: unknown): string {
   const candidates = [
     raw.transcript,
     raw.text,
+    raw.command,
     raw.output,
     raw.message,
     raw.result,
@@ -87,7 +93,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     setRecording(true);
   }, [busy, recording]);
 
-  const stopAndTranscribe = useCallback(async (): Promise<string> => {
+  const stopAndTranscribe = useCallback(async (options: VoiceTranscribeOptions = {}): Promise<string> => {
     const recorder = recordingRef.current;
     if (!recorder) {
       throw new Error("Voice capture has not started.");
@@ -126,6 +132,13 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
           type: "audio/m4a",
           name: "voice-input.m4a",
         } as unknown as Blob);
+        const wakePhrase = String(options.wakePhrase || "").trim();
+        if (wakePhrase) {
+          form.append("wake_phrase", wakePhrase);
+        }
+        if (typeof options.requireWakePhrase === "boolean") {
+          form.append("require_wake_phrase", options.requireWakePhrase ? "true" : "false");
+        }
 
         try {
           const response = await fetch(`${baseUrl}${endpoint}`, {

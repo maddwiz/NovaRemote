@@ -221,6 +221,11 @@ export function TerminalsScreen() {
     onSetGlassesBrand,
     onSetGlassesTextScale,
     onSetGlassesVoiceAutoSend,
+    onSetGlassesVoiceLoop,
+    onSetGlassesWakePhraseEnabled,
+    onSetGlassesWakePhrase,
+    onSetGlassesMinimalMode,
+    onOpenGlassesMode,
     onVoiceStartCapture,
     onVoiceStopCapture,
     onVoiceSendTranscript,
@@ -791,6 +796,44 @@ export function TerminalsScreen() {
             onValueChange={onSetGlassesVoiceAutoSend}
           />
         </View>
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Continuous voice loop</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.voiceLoop ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.voiceLoop}
+            onValueChange={onSetGlassesVoiceLoop}
+          />
+        </View>
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Require wake phrase</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.wakePhraseEnabled ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.wakePhraseEnabled}
+            onValueChange={onSetGlassesWakePhraseEnabled}
+          />
+        </View>
+        {glassesMode.wakePhraseEnabled ? (
+          <TextInput
+            style={styles.input}
+            value={glassesMode.wakePhrase}
+            onChangeText={onSetGlassesWakePhrase}
+            placeholder="Wake phrase (example: nova)"
+            placeholderTextColor="#7f7aa8"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        ) : null}
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Minimal on-the-go layout</Text>
+          <Switch
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.minimalMode ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.minimalMode}
+            onValueChange={onSetGlassesMinimalMode}
+          />
+        </View>
 
         {glassesMode.enabled ? (
           <>
@@ -855,6 +898,14 @@ export function TerminalsScreen() {
               >
                 <Text style={styles.buttonPrimaryText}>Open HUD</Text>
               </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                style={[styles.buttonGhost, !glassesActiveSession ? styles.buttonDisabled : null]}
+                disabled={!glassesActiveSession}
+                onPress={onOpenGlassesMode}
+              >
+                <Text style={styles.buttonGhostText}>On-the-Go Route</Text>
+              </Pressable>
             </View>
 
             <Text style={styles.emptyText}>
@@ -862,6 +913,8 @@ export function TerminalsScreen() {
                 ? "Listening... speak your command clearly."
                 : voiceBusy
                 ? "Processing voice input..."
+                : glassesMode.voiceLoop
+                ? "Voice loop is enabled. Stop + Transcribe will auto re-arm capture."
                 : "Mirror this screen to your glasses for a compact terminal HUD."}
             </Text>
             {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}

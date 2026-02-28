@@ -61,7 +61,7 @@ export type TerminalBackendKind = "auto" | "tmux" | "screen" | "zellij" | "power
 
 export type TerminalSendMode = "ai" | "shell";
 
-export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms";
+export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms" | "glasses";
 
 export type Status = {
   text: string;
@@ -200,6 +200,10 @@ export type GlassesModeSettings = {
   brand: GlassesBrand;
   textScale: number;
   voiceAutoSend: boolean;
+  voiceLoop: boolean;
+  wakePhraseEnabled: boolean;
+  wakePhrase: string;
+  minimalMode: boolean;
 };
 
 export type LlmProfile = {
