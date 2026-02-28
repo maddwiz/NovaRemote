@@ -1,0 +1,31 @@
+{
+  "name": "novaremote",
+  "version": "1.0.0",
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "web": "expo start --web",
+    "fix:ios:path-spaces": "node scripts/fix-ios-space-paths.mjs",
+    "pods:install:ios": "cd ios && pod install",
+    "prebuild:ios": "expo prebuild --platform ios --clean --no-install && npm run fix:ios:path-spaces && npm run pods:install:ios && npm run fix:ios:path-spaces",
+    "ios:run": "npm run fix:ios:path-spaces && expo run:ios",
+    "ios:sim": "open -a Simulator && npm run ios:run",
+    "eas:build:ios:sim": "eas build --platform ios --profile development-simulator",
+    "eas:build:ios:preview": "eas build --platform ios --profile preview",
+    "eas:build:ios:prod": "eas build --platform ios --profile production"
+  },
+  "dependencies": {
+    "expo": "~55.0.4",
+    "expo-secure-store": "^55.0.8",
+    "expo-status-bar": "~55.0.4",
+    "react": "19.2.0",
+    "react-native": "0.83.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.2.2",
+    "typescript": "~5.9.2"
+  },
+  "private": true
+}

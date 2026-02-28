@@ -1,0 +1,37 @@
+{
+  "expo": {
+    "name": "NovaRemote",
+    "slug": "novaremote",
+    "version": "1.0.0",
+    "scheme": "novaremote",
+    "orientation": "portrait",
+    "icon": "./assets/novaai-logo-user.png",
+    "userInterfaceStyle": "dark",
+    "splash": {
+      "image": "./assets/novaai-logo-user.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#060313"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.desmondpottle.novaremote",
+      "buildNumber": "1.0.0",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "package": "com.desmondpottle.novaremote",
+      "adaptiveIcon": {
+        "backgroundColor": "#060313",
+        "foregroundImage": "./assets/novaai-logo-user.png",
+        "backgroundImage": "./assets/novaai-logo-user.png",
+        "monochromeImage": "./assets/novaai-logo-user.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/novaai-logo-user.png"
+    }
+  }
+}
