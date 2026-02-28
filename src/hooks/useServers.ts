@@ -7,6 +7,7 @@ import {
   DEFAULT_BASE_URL,
   DEFAULT_CWD,
   DEFAULT_SERVER_NAME,
+  DEFAULT_TERMINAL_BACKEND,
   STORAGE_ACTIVE_SERVER_ID,
   STORAGE_LEGACY_BASE_URL,
   STORAGE_LEGACY_TOKEN,
@@ -29,6 +30,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
   const [serverUrlInput, setServerUrlInput] = useState<string>(DEFAULT_BASE_URL);
   const [serverTokenInput, setServerTokenInput] = useState<string>("");
   const [serverCwdInput, setServerCwdInput] = useState<string>(DEFAULT_CWD);
+  const [serverBackendInput, setServerBackendInput] = useState<ServerProfile["terminalBackend"]>(DEFAULT_TERMINAL_BACKEND);
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [tokenMasked, setTokenMasked] = useState<boolean>(true);
 
@@ -52,6 +54,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerUrlInput(DEFAULT_BASE_URL);
     setServerTokenInput("");
     setServerCwdInput(DEFAULT_CWD);
+    setServerBackendInput(DEFAULT_TERMINAL_BACKEND);
   }, []);
 
   const beginEditServer = useCallback((server: ServerProfile) => {
@@ -60,14 +63,25 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerUrlInput(server.baseUrl);
     setServerTokenInput(server.token);
     setServerCwdInput(server.defaultCwd);
+    setServerBackendInput(server.terminalBackend || DEFAULT_TERMINAL_BACKEND);
   }, []);
 
-  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string }) => {
+  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string; backend?: string }) => {
     setEditingServerId(null);
     setServerNameInput(config.name?.trim() || DEFAULT_SERVER_NAME);
     setServerUrlInput(normalizeBaseUrl(config.url || ""));
     setServerTokenInput("");
     setServerCwdInput(config.cwd?.trim() || DEFAULT_CWD);
+    setServerBackendInput(
+      config.backend === "tmux" ||
+        config.backend === "screen" ||
+        config.backend === "zellij" ||
+        config.backend === "powershell" ||
+        config.backend === "cmd" ||
+        config.backend === "pty"
+        ? config.backend
+        : DEFAULT_TERMINAL_BACKEND
+    );
   }, []);
 
   const saveServer = useCallback(async () => {
@@ -96,6 +110,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
               baseUrl: cleanedBaseUrl,
               token: cleanedToken,
               defaultCwd: cleanedCwd,
+              terminalBackend: serverBackendInput || DEFAULT_TERMINAL_BACKEND,
             }
           : server
       );
@@ -107,6 +122,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         baseUrl: cleanedBaseUrl,
         token: cleanedToken,
         defaultCwd: cleanedCwd,
+        terminalBackend: serverBackendInput || DEFAULT_TERMINAL_BACKEND,
       };
       nextServers = [newServer, ...servers];
       nextActiveId = newServer.id;
@@ -125,11 +141,12 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverNameInput,
     serverTokenInput,
     serverUrlInput,
+    serverBackendInput,
     servers,
   ]);
 
   const addServerDirect = useCallback(
-    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string }) => {
+    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string; terminalBackend?: ServerProfile["terminalBackend"] }) => {
       const cleanedBaseUrl = normalizeBaseUrl(server.baseUrl);
       const cleanedToken = server.token.trim();
       if (!cleanedBaseUrl || !cleanedToken) {
@@ -142,6 +159,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         baseUrl: cleanedBaseUrl,
         token: cleanedToken,
         defaultCwd: server.defaultCwd.trim(),
+        terminalBackend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
       };
 
       const nextServers = [newServer, ...servers];
@@ -206,7 +224,12 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         if (savedServersRaw) {
           try {
             const parsed = JSON.parse(savedServersRaw) as ServerProfile[];
-            parsedServers = Array.isArray(parsed) ? parsed : [];
+            parsedServers = Array.isArray(parsed)
+              ? parsed.map((entry) => ({
+                  ...entry,
+                  terminalBackend: entry.terminalBackend || DEFAULT_TERMINAL_BACKEND,
+                }))
+              : [];
           } catch {
             parsedServers = [];
           }
@@ -220,6 +243,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
           if (legacyToken) {
             fallback.token = legacyToken;
           }
+          fallback.terminalBackend = DEFAULT_TERMINAL_BACKEND;
           parsedServers = [fallback];
         }
 
@@ -255,12 +279,14 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverUrlInput,
     serverTokenInput,
     serverCwdInput,
+    serverBackendInput,
     editingServerId,
     tokenMasked,
     setServerNameInput,
     setServerUrlInput,
     setServerTokenInput,
     setServerCwdInput,
+    setServerBackendInput,
     setTokenMasked,
     beginCreateServer,
     beginEditServer,

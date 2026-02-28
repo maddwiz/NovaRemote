@@ -9,10 +9,13 @@ type LlmsScreenProps = {
   activeProfileId: string | null;
   testBusy: boolean;
   testOutput: string;
+  transferStatus: string;
   onSetActive: (id: string) => void;
   onSaveProfile: (input: Omit<LlmProfile, "id"> & { id?: string }) => void;
   onDeleteProfile: (id: string) => void;
   onTestPrompt: (profile: LlmProfile, prompt: string) => void;
+  onExportEncrypted: (passphrase: string) => string;
+  onImportEncrypted: (payload: string, passphrase: string) => void;
 };
 
 export function LlmsScreen({
@@ -20,10 +23,13 @@ export function LlmsScreen({
   activeProfileId,
   testBusy,
   testOutput,
+  transferStatus,
   onSetActive,
   onSaveProfile,
   onDeleteProfile,
   onTestPrompt,
+  onExportEncrypted,
+  onImportEncrypted,
 }: LlmsScreenProps) {
   const defaultBaseUrl = (provider: LlmProviderKind): string =>
     provider === "anthropic" ? "https://api.anthropic.com" : "https://api.openai.com/v1";
@@ -38,6 +44,9 @@ export function LlmsScreen({
   const [model, setModel] = useState<string>(defaultModel("openai_compatible"));
   const [systemPrompt, setSystemPrompt] = useState<string>("");
   const [testPrompt, setTestPrompt] = useState<string>("Give me a one-line terminal command to list disk usage.");
+  const [transferPassphrase, setTransferPassphrase] = useState<string>("");
+  const [importPayload, setImportPayload] = useState<string>("");
+  const [exportPayload, setExportPayload] = useState<string>("");
 
   const activeProfile = useMemo(
     () => profiles.find((profile) => profile.id === activeProfileId) || profiles[0] || null,
@@ -286,6 +295,56 @@ export function LlmsScreen({
 
         <ScrollView style={styles.modalTerminalView}>
           <Text style={styles.terminalText}>{testOutput || "Provider output will appear here."}</Text>
+        </ScrollView>
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Encrypted Profile Transfer</Text>
+        <Text style={styles.serverSubtitle}>Use a passphrase to export/import encrypted LLM profiles between devices.</Text>
+        <TextInput
+          style={styles.input}
+          value={transferPassphrase}
+          onChangeText={setTransferPassphrase}
+          placeholder="Transfer passphrase"
+          placeholderTextColor="#7f7aa8"
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <View style={styles.rowInlineSpace}>
+          <Pressable
+            style={[styles.buttonPrimary, styles.flexButton, !transferPassphrase.trim() ? styles.buttonDisabled : null]}
+            disabled={!transferPassphrase.trim()}
+            onPress={() => {
+              const blob = onExportEncrypted(transferPassphrase);
+              setExportPayload(blob);
+            }}
+          >
+            <Text style={styles.buttonPrimaryText}>Generate Encrypted Export</Text>
+          </Pressable>
+          <Pressable
+            style={[styles.buttonGhost, styles.flexButton, !transferPassphrase.trim() || !importPayload.trim() ? styles.buttonDisabled : null]}
+            disabled={!transferPassphrase.trim() || !importPayload.trim()}
+            onPress={() => {
+              onImportEncrypted(importPayload, transferPassphrase);
+              setImportPayload("");
+            }}
+          >
+            <Text style={styles.buttonGhostText}>Import Encrypted</Text>
+          </Pressable>
+        </View>
+        <TextInput
+          style={[styles.input, styles.multilineInput]}
+          value={importPayload}
+          onChangeText={setImportPayload}
+          placeholder="Paste encrypted payload here"
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
+        />
+        <ScrollView style={styles.modalTerminalView}>
+          <Text style={styles.terminalText}>{exportPayload || transferStatus || "Encrypted export payload appears here."}</Text>
         </ScrollView>
       </View>
     </>

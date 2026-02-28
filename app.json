@@ -14,6 +14,7 @@
     },
     "ios": {
       "supportsTablet": true,
+      "requireFullScreen": false,
       "bundleIdentifier": "com.novaai.novaremote",
       "buildNumber": "1.1.0",
       "infoPlist": {

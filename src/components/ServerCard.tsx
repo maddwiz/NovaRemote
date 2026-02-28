@@ -19,6 +19,7 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare 
       <View style={styles.serverCardHeader}>
         <Text style={styles.serverName}>{server.name}</Text>
         <Text style={styles.serverUrl}>{server.baseUrl}</Text>
+        <Text style={styles.emptyText}>{`Backend: ${server.terminalBackend || "auto"}`}</Text>
       </View>
       <View style={styles.actionsWrap}>
         <Pressable style={styles.actionButton} onPress={() => onUse(server.id)}>

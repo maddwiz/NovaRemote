@@ -3,7 +3,7 @@ import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
-import { ServerProfile } from "../types";
+import { ServerProfile, TerminalBackendKind } from "../types";
 import { ServerCard } from "../components/ServerCard";
 
 type ServersScreenProps = {
@@ -13,6 +13,7 @@ type ServersScreenProps = {
   serverUrlInput: string;
   serverTokenInput: string;
   serverCwdInput: string;
+  serverBackendInput: TerminalBackendKind;
   editingServerId: string | null;
   tokenMasked: boolean;
   requireBiometric: boolean;
@@ -25,6 +26,7 @@ type ServersScreenProps = {
   onSetServerUrl: (value: string) => void;
   onSetServerToken: (value: string) => void;
   onSetServerCwd: (value: string) => void;
+  onSetServerBackend: (value: TerminalBackendKind) => void;
   onSetRequireBiometric: (value: boolean) => void;
   onSetRequireDangerConfirm: (value: boolean) => void;
   onToggleTokenMask: () => void;
@@ -40,6 +42,7 @@ export function ServersScreen({
   serverUrlInput,
   serverTokenInput,
   serverCwdInput,
+  serverBackendInput,
   editingServerId,
   tokenMasked,
   requireBiometric,
@@ -52,6 +55,7 @@ export function ServersScreen({
   onSetServerUrl,
   onSetServerToken,
   onSetServerCwd,
+  onSetServerBackend,
   onSetRequireBiometric,
   onSetRequireDangerConfirm,
   onToggleTokenMask,
@@ -117,6 +121,24 @@ export function ServersScreen({
         placeholderTextColor="#7f7aa8"
         onChangeText={onSetServerCwd}
       />
+
+      <View style={styles.serverCard}>
+        <Text style={styles.panelLabel}>Terminal Backend</Text>
+        <Text style={styles.serverSubtitle}>Metadata hint for server runtime and future orchestration defaults.</Text>
+        <View style={styles.actionsWrap}>
+          {(["auto", "tmux", "screen", "zellij", "powershell", "cmd", "pty"] as TerminalBackendKind[]).map((backend) => (
+            <Pressable
+              key={backend}
+              style={[styles.modeButton, serverBackendInput === backend ? styles.modeButtonOn : null]}
+              onPress={() => onSetServerBackend(backend)}
+            >
+              <Text style={[styles.modeButtonText, serverBackendInput === backend ? styles.modeButtonTextOn : null]}>
+                {backend}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
 
       <View style={styles.rowInlineSpace}>
         <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onToggleTokenMask}>

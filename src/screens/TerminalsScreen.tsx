@@ -5,12 +5,14 @@ import { CWD_PLACEHOLDER, isLikelyAiSession } from "../constants";
 import { TerminalCard } from "../components/TerminalCard";
 import { styles } from "../theme/styles";
 import {
+  AiEnginePreference,
   FleetRunResult,
   HealthMetrics,
   ServerCapabilities,
   ServerProfile,
   SessionConnectionMeta,
   TerminalSendMode,
+  WatchRule,
 } from "../types";
 
 type TerminalsScreenProps = {
@@ -25,10 +27,12 @@ type TerminalsScreenProps = {
   streamLive: Record<string, boolean>;
   connectionMeta: Record<string, SessionConnectionMeta>;
   sendModes: Record<string, TerminalSendMode>;
+  sessionAiEngine: Record<string, AiEnginePreference>;
   startCwd: string;
   startPrompt: string;
   startOpenOnMac: boolean;
   startKind: TerminalSendMode;
+  startAiEngine: AiEnginePreference;
   health: HealthMetrics;
   capabilities: ServerCapabilities;
   supportedFeatures: string;
@@ -43,18 +47,24 @@ type TerminalsScreenProps = {
   fleetCwd: string;
   fleetTargets: string[];
   fleetBusy: boolean;
+  fleetWaitMs: string;
   fleetResults: FleetRunResult[];
+  suggestionsBySession: Record<string, string[]>;
+  suggestionBusyBySession: Record<string, boolean>;
+  watchRules: Record<string, WatchRule>;
   onShowPaywall: () => void;
   onSetTagFilter: (value: string) => void;
   onSetStartCwd: (value: string) => void;
   onSetStartPrompt: (value: string) => void;
   onSetStartOpenOnMac: (value: boolean) => void;
   onSetStartKind: (value: TerminalSendMode) => void;
+  onSetStartAiEngine: (value: AiEnginePreference) => void;
   onRefreshSessions: () => void;
   onOpenServers: () => void;
   onStartSession: () => void;
   onToggleSessionVisible: (session: string) => void;
   onSetSessionMode: (session: string, mode: TerminalSendMode) => void;
+  onSetSessionAiEngine: (session: string, engine: AiEnginePreference) => void;
   onOpenOnMac: (session: string) => void;
   onSyncSession: (session: string) => void;
   onExportSession: (session: string) => void;
@@ -70,6 +80,11 @@ type TerminalsScreenProps = {
   onSetFleetCommand: (value: string) => void;
   onSetFleetCwd: (value: string) => void;
   onToggleFleetTarget: (serverId: string) => void;
+  onSetFleetWaitMs: (value: string) => void;
+  onRequestSuggestions: (session: string) => void;
+  onUseSuggestion: (session: string, value: string) => void;
+  onToggleWatch: (session: string, enabled: boolean) => void;
+  onSetWatchPattern: (session: string, pattern: string) => void;
   onRunFleet: () => void;
 };
 
@@ -118,10 +133,12 @@ export function TerminalsScreen({
   streamLive,
   connectionMeta,
   sendModes,
+  sessionAiEngine,
   startCwd,
   startPrompt,
   startOpenOnMac,
   startKind,
+  startAiEngine,
   health,
   capabilities,
   supportedFeatures,
@@ -136,18 +153,24 @@ export function TerminalsScreen({
   fleetCwd,
   fleetTargets,
   fleetBusy,
+  fleetWaitMs,
   fleetResults,
+  suggestionsBySession,
+  suggestionBusyBySession,
+  watchRules,
   onShowPaywall,
   onSetTagFilter,
   onSetStartCwd,
   onSetStartPrompt,
   onSetStartOpenOnMac,
   onSetStartKind,
+  onSetStartAiEngine,
   onRefreshSessions,
   onOpenServers,
   onStartSession,
   onToggleSessionVisible,
   onSetSessionMode,
+  onSetSessionAiEngine,
   onOpenOnMac,
   onSyncSession,
   onExportSession,
@@ -163,6 +186,11 @@ export function TerminalsScreen({
   onSetFleetCommand,
   onSetFleetCwd,
   onToggleFleetTarget,
+  onSetFleetWaitMs,
+  onRequestSuggestions,
+  onUseSuggestion,
+  onToggleWatch,
+  onSetWatchPattern,
   onRunFleet,
 }: TerminalsScreenProps) {
   const { width } = useWindowDimensions();
@@ -179,6 +207,8 @@ export function TerminalsScreen({
       const tags = sessionTags[session] || [];
       const meta = connectionMeta[session];
       const isLocalOnly = localAiSessions.includes(session);
+      const aiEngine = sessionAiEngine[session] || (isLocalOnly ? "external" : "auto");
+      const watch = watchRules[session] || { enabled: false, pattern: "", lastMatch: null };
 
       return (
         <TerminalCard
@@ -197,9 +227,17 @@ export function TerminalsScreen({
           canOpenOnMac={!isLocalOnly && capabilities.macAttach}
           canSync={!isLocalOnly}
           canStop={!isLocalOnly}
+          aiEngine={aiEngine}
+          canUseServerAi={!isLocalOnly && capabilities.codex}
+          canUseExternalAi={hasExternalLlm}
+          suggestions={suggestionsBySession[session] || []}
+          suggestionsBusy={Boolean(suggestionBusyBySession[session])}
+          watchEnabled={watch.enabled}
+          watchPattern={watch.pattern}
           tags={tags}
           historyCount={historyCount[session] || 0}
           onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
+          onSetAiEngine={(nextEngine) => onSetSessionAiEngine(session, nextEngine)}
           onOpenOnMac={() => onOpenOnMac(session)}
           onSync={() => onSyncSession(session)}
           onExport={() => onExportSession(session)}
@@ -210,6 +248,10 @@ export function TerminalsScreen({
           onHistoryNext={() => onHistoryNext(session)}
           onTagsChange={(raw) => onSetTags(session, raw)}
           onDraftChange={(value) => onSetDraft(session, value)}
+          onRequestSuggestions={() => onRequestSuggestions(session)}
+          onUseSuggestion={(value) => onUseSuggestion(session, value)}
+          onToggleWatch={(enabled) => onToggleWatch(session, enabled)}
+          onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
           onSend={() => onSend(session)}
           onClear={() => onClearDraft(session)}
         />
@@ -230,19 +272,28 @@ export function TerminalsScreen({
     onHistoryNext,
     onHistoryPrev,
     onOpenOnMac,
+    onRequestSuggestions,
     onSend,
     onSetDraft,
     onSetSessionMode,
+    onSetSessionAiEngine,
     onSetTags,
+    onSetWatchPattern,
     onStopSession,
     onSyncSession,
+    onToggleWatch,
+    onUseSuggestion,
     openSessions,
     localAiSessions,
+    sessionAiEngine,
     sendBusy,
     sendModes,
+    suggestionBusyBySession,
+    suggestionsBySession,
     sessionTags,
     streamLive,
     tails,
+    watchRules,
   ]);
 
   const fleetPanel = (
@@ -266,6 +317,14 @@ export function TerminalsScreen({
         placeholderTextColor="#7f7aa8"
         autoCapitalize="none"
         autoCorrect={false}
+      />
+      <TextInput
+        style={styles.input}
+        value={fleetWaitMs}
+        onChangeText={(value) => onSetFleetWaitMs(value.replace(/[^0-9]/g, ""))}
+        placeholder="Wait ms (default 5000)"
+        placeholderTextColor="#7f7aa8"
+        keyboardType="number-pad"
       />
 
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -354,6 +413,28 @@ export function TerminalsScreen({
           </Pressable>
         </View>
 
+        {startKind === "ai" ? (
+          <View style={styles.modeRow}>
+            <Pressable style={[styles.modeButton, startAiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetStartAiEngine("auto")}>
+              <Text style={[styles.modeButtonText, startAiEngine === "auto" ? styles.modeButtonTextOn : null]}>AI Auto</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeButton, startAiEngine === "server" ? styles.modeButtonOn : null, !capabilities.codex ? styles.buttonDisabled : null]}
+              onPress={() => onSetStartAiEngine("server")}
+              disabled={!capabilities.codex}
+            >
+              <Text style={[styles.modeButtonText, startAiEngine === "server" ? styles.modeButtonTextOn : null]}>Server AI</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeButton, startAiEngine === "external" ? styles.modeButtonOn : null, !hasExternalLlm ? styles.buttonDisabled : null]}
+              onPress={() => onSetStartAiEngine("external")}
+              disabled={!hasExternalLlm}
+            >
+              <Text style={[styles.modeButtonText, startAiEngine === "external" ? styles.modeButtonTextOn : null]}>External AI</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <TextInput
           style={styles.input}
           value={startCwd}
@@ -384,7 +465,7 @@ export function TerminalsScreen({
           </View>
         ) : null}
 
-        {startKind === "ai" && !capabilities.codex && hasExternalLlm ? (
+        {startKind === "ai" && (startAiEngine === "external" || (startAiEngine === "auto" && !capabilities.codex)) ? (
           <Text style={styles.emptyText}>This will create a local AI session powered by your active external LLM profile.</Text>
         ) : null}
 

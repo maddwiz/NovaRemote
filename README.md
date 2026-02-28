@@ -14,10 +14,16 @@ NovaRemote is an Expo + React Native app for controlling remote terminal and AI 
 - Snippets/macros (Pro)
 - Remote file explorer (list/read/tail and path-to-terminal actions)
 - Capability detection per server (terminal API family, codex/files/shell/mac-attach)
+- Server backend metadata per profile (auto/tmux/screen/zellij/powershell/cmd/pty)
 - Universal terminal transport (`/tmux/*` legacy or `/terminal/*` provider-agnostic)
 - External LLM profiles (OpenAI-compatible, Anthropic, OpenRouter, Ollama presets)
+- Per-session AI engine routing (auto/server/external)
 - Local AI sessions powered directly by configured external LLMs
+- Encrypted LLM profile export/import with passphrase
+- AI shell command suggestions based on output + history context
+- Watch mode with regex-based alert notifications
 - Fleet mode (run one shell command across selected servers)
+- Configurable fleet wait timeout
 - Biometric app unlock (Face ID / Touch ID)
 - Optional dangerous-command confirmation guardrail
 - Session export (shareable JSON with command history + output)
@@ -27,6 +33,7 @@ NovaRemote is an Expo + React Native app for controlling remote terminal and AI 
 - iPad split-view layout (Pro)
 - RevenueCat paywall scaffolding (free tier: 1 server, 2 sessions)
 - Onboarding wizard with connection test
+- App-level React error boundary with recovery UI
 
 ## Requirements
 

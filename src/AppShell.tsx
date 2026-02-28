@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
+import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
@@ -28,9 +29,12 @@ import { TutorialModal } from "./components/TutorialModal";
 import {
   BRAND_LOGO,
   DEFAULT_CWD,
+  DEFAULT_FLEET_WAIT_MS,
+  DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
   POLL_INTERVAL_MS,
+  STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
 } from "./constants";
 import { useBiometricLock } from "./hooks/useBiometricLock";
@@ -56,7 +60,7 @@ import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
-import { FleetRunResult, RouteTab, ServerProfile, Status, TerminalSendMode, TmuxTailResponse } from "./types";
+import { AiEnginePreference, FleetRunResult, RouteTab, ServerProfile, Status, TerminalSendMode, TmuxTailResponse, WatchRule } from "./types";
 
 function parseCommaTags(raw: string): string[] {
   return Array.from(
@@ -92,6 +96,7 @@ function toServerShareLink(server: ServerProfile): string {
       name: server.name,
       url: server.baseUrl,
       cwd: server.defaultCwd,
+      backend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
     },
   });
 }
@@ -127,24 +132,65 @@ async function detectTerminalApiBasePath(server: ServerProfile): Promise<"/tmux"
 }
 
 function isDangerousShellCommand(command: string): boolean {
-  const normalized = command.trim().toLowerCase();
+  const normalized = command.trim().toLowerCase().replace(/\s+/g, " ");
   if (!normalized) {
     return false;
   }
 
+  const stripped = normalized.replace(/\bsudo\s+/g, "");
   const patterns = [
-    /\brm\s+-rf\b/,
+    /\brm\s+-[^\n;|&]*[rf][^\n;|&]*\b/,
     /\bmkfs(\.| )/,
-    /\bdd\s+if=/,
+    /\bdd\s+if=.*\bof=\/dev\//,
     /\bshutdown\b/,
     /\breboot\b/,
     /\bpoweroff\b/,
     /:\(\)\s*\{\s*:\|:\s*&\s*\};:/,
     /\bchmod\s+-r\s+0\b/,
+    /\bchmod\s+000\b/,
     /\bchown\s+-r\s+root\b/,
+    /\b(?:fdisk|parted|diskutil)\b.*\b(erase|mklabel|partition|format)\b/,
+    /\bmv\s+\/\s+\/dev\/null\b/,
+    /\btruncate\s+-s\s+0\s+\/etc\//,
+    />\s*\/dev\/(sd[a-z]\d*|disk\d+|nvme\d+n\d+(p\d+)?)/,
+    /\|\s*(sudo\s+)?rm\b/,
+    /&&\s*(sudo\s+)?rm\s+-/,
   ];
 
-  return patterns.some((pattern) => pattern.test(normalized));
+  if (patterns.some((pattern) => pattern.test(normalized))) {
+    return true;
+  }
+
+  if (/\brm\b/.test(stripped) && (/\|\s*.*\brm\b/.test(stripped) || /;\s*.*\brm\b/.test(stripped))) {
+    return true;
+  }
+
+  return false;
+}
+
+function parseSuggestionOutput(raw: string): string[] {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return [];
+  }
+
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => (typeof item === "string" ? item.trim() : ""))
+        .filter(Boolean)
+        .slice(0, 3);
+    }
+  } catch {
+    // Fall back to line parsing.
+  }
+
+  return trimmed
+    .split("\n")
+    .map((line) => line.replace(/^[\s\-*\d\.\)]*/, "").trim())
+    .filter(Boolean)
+    .slice(0, 3);
 }
 
 export default function AppShell() {
@@ -161,6 +207,12 @@ export default function AppShell() {
   const [fleetTargets, setFleetTargets] = useState<string[]>([]);
   const [fleetBusy, setFleetBusy] = useState<boolean>(false);
   const [fleetResults, setFleetResults] = useState<FleetRunResult[]>([]);
+  const [fleetWaitMs, setFleetWaitMs] = useState<string>(String(DEFAULT_FLEET_WAIT_MS));
+  const [startAiEngine, setStartAiEngine] = useState<AiEnginePreference>("auto");
+  const [sessionAiEngine, setSessionAiEngine] = useState<Record<string, AiEnginePreference>>({});
+  const [suggestionsBySession, setSuggestionsBySession] = useState<Record<string, string[]>>({});
+  const [suggestionBusyBySession, setSuggestionBusyBySession] = useState<Record<string, boolean>>({});
+  const [watchRules, setWatchRules] = useState<Record<string, WatchRule>>({});
   const [dangerPrompt, setDangerPrompt] = useState<{ visible: boolean; command: string; context: string }>({
     visible: false,
     command: "",
@@ -168,6 +220,7 @@ export default function AppShell() {
   });
   const [llmTestBusy, setLlmTestBusy] = useState<boolean>(false);
   const [llmTestOutput, setLlmTestOutput] = useState<string>("");
+  const [llmTransferStatus, setLlmTransferStatus] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
 
   const setReady = useCallback((text: string = "Ready") => {
@@ -186,7 +239,16 @@ export default function AppShell() {
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet } = useSnippets();
-  const { profiles: llmProfiles, activeProfile, activeProfileId, saveProfile, deleteProfile, setActive } = useLlmProfiles();
+  const {
+    profiles: llmProfiles,
+    activeProfile,
+    activeProfileId,
+    saveProfile,
+    deleteProfile,
+    setActive,
+    exportEncrypted,
+    importEncrypted,
+  } = useLlmProfiles();
   const { sendPrompt } = useLlmClient();
 
   const {
@@ -198,12 +260,14 @@ export default function AppShell() {
     serverUrlInput,
     serverTokenInput,
     serverCwdInput,
+    serverBackendInput,
     editingServerId,
     tokenMasked,
     setServerNameInput,
     setServerUrlInput,
     setServerTokenInput,
     setServerCwdInput,
+    setServerBackendInput,
     setTokenMasked,
     beginCreateServer,
     beginEditServer,
@@ -342,6 +406,36 @@ export default function AppShell() {
 
   const isLocalSession = useCallback((session: string) => localAiSessions.includes(session), [localAiSessions]);
 
+  const resolveAiEngine = useCallback(
+    (session: string): AiEnginePreference => {
+      if (isLocalSession(session)) {
+        return "external";
+      }
+      return sessionAiEngine[session] || "auto";
+    },
+    [isLocalSession, sessionAiEngine]
+  );
+
+  const shouldRouteToExternalAi = useCallback(
+    (session: string): boolean => {
+      const engine = resolveAiEngine(session);
+      if (engine === "external") {
+        if (!activeProfile) {
+          throw new Error("No active external LLM profile selected.");
+        }
+        return true;
+      }
+      if (engine === "server") {
+        if (!capabilities.codex) {
+          throw new Error("Server AI is not available for this session.");
+        }
+        return false;
+      }
+      return !capabilities.codex;
+    },
+    [activeProfile, capabilities.codex, resolveAiEngine]
+  );
+
   const runFleetCommand = useCallback(async () => {
     const command = fleetCommand.trim();
     if (!command) {
@@ -352,6 +446,8 @@ export default function AppShell() {
     if (selectedServers.length === 0) {
       throw new Error("Select at least one target server.");
     }
+
+    const waitMs = Math.max(400, Math.min(Number.parseInt(fleetWaitMs, 10) || DEFAULT_FLEET_WAIT_MS, 120000));
 
     setFleetBusy(true);
     try {
@@ -371,7 +467,7 @@ export default function AppShell() {
             try {
               const data = await apiRequest<{ output?: string }>(server.baseUrl, server.token, "/shell/run", {
                 method: "POST",
-                body: JSON.stringify({ session, command, wait_ms: 1200, tail_lines: 280 }),
+                body: JSON.stringify({ session, command, wait_ms: waitMs, tail_lines: 280 }),
               });
               output = data.output || "";
             } catch (shellError) {
@@ -417,7 +513,7 @@ export default function AppShell() {
     } finally {
       setFleetBusy(false);
     }
-  }, [fleetCommand, fleetCwd, fleetTargets, servers]);
+  }, [fleetCommand, fleetCwd, fleetTargets, fleetWaitMs, servers]);
 
   const sendViaExternalLlm = useCallback(
     async (session: string, prompt: string) => {
@@ -437,6 +533,44 @@ export default function AppShell() {
       return cleanPrompt;
     },
     [activeProfile, sendPrompt, setDrafts, setTails]
+  );
+
+  const requestShellSuggestions = useCallback(
+    async (session: string) => {
+      if (!activeProfile) {
+        throw new Error("Configure an external LLM profile to use shell suggestions.");
+      }
+
+      const tailLines = (tails[session] || "")
+        .split("\n")
+        .slice(-50)
+        .join("\n");
+      const recentCommands = (commandHistory[session] || []).slice(-5).join("\n");
+      const draft = (drafts[session] || "").trim();
+
+      const prompt = [
+        "You are assisting with shell command suggestions.",
+        "Return strictly JSON: an array of 3 short shell commands with no explanation.",
+        "Prioritize safe diagnostic commands first.",
+        "",
+        `Session: ${session}`,
+        draft ? `Current draft: ${draft}` : "Current draft: (empty)",
+        "Recent commands:",
+        recentCommands || "(none)",
+        "Recent terminal output:",
+        tailLines || "(none)",
+      ].join("\n");
+
+      setSuggestionBusyBySession((prev) => ({ ...prev, [session]: true }));
+      try {
+        const raw = await sendPrompt(activeProfile, prompt);
+        const parsed = parseSuggestionOutput(raw);
+        setSuggestionsBySession((prev) => ({ ...prev, [session]: parsed }));
+      } finally {
+        setSuggestionBusyBySession((prev) => ({ ...prev, [session]: false }));
+      }
+    },
+    [activeProfile, commandHistory, drafts, sendPrompt, tails]
   );
 
   const runWithStatus = useCallback(
@@ -476,6 +610,51 @@ export default function AppShell() {
   }, [requireDangerConfirm]);
 
   useEffect(() => {
+    if (!isPro) {
+      return;
+    }
+
+    const matchesBySession: Record<string, string> = {};
+    for (const session of Object.keys(watchRules)) {
+      const rule = watchRules[session];
+      if (!rule?.enabled || !rule.pattern.trim()) {
+        continue;
+      }
+
+      let regex: RegExp;
+      try {
+        regex = new RegExp(rule.pattern, "i");
+      } catch {
+        continue;
+      }
+
+      const lines = (tails[session] || "").split("\n").slice(-240);
+      const matchedLine = [...lines].reverse().find((line) => regex.test(line.trim()));
+      if (matchedLine && matchedLine.trim() && matchedLine.trim() !== (rule.lastMatch || "")) {
+        matchesBySession[session] = matchedLine.trim();
+      }
+    }
+
+    const pending = Object.entries(matchesBySession);
+    if (pending.length === 0) {
+      return;
+    }
+
+    setWatchRules((prev) => {
+      const next = { ...prev };
+      pending.forEach(([session, match]) => {
+        const existing = next[session] || { enabled: false, pattern: "", lastMatch: null };
+        next[session] = { ...existing, lastMatch: match };
+      });
+      return next;
+    });
+
+    pending.forEach(([session, match]) => {
+      void notify("Watch alert", `${session}: ${match.slice(0, 120)}`);
+    });
+  }, [isPro, notify, tails, watchRules]);
+
+  useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") {
         lock();
@@ -501,7 +680,8 @@ export default function AppShell() {
       const name = typeof parsed.queryParams?.name === "string" ? parsed.queryParams.name : "";
       const baseUrl = typeof parsed.queryParams?.url === "string" ? parsed.queryParams.url : "";
       const cwd = typeof parsed.queryParams?.cwd === "string" ? parsed.queryParams.cwd : "";
-      importServerConfig({ name, url: baseUrl, cwd });
+      const backend = typeof parsed.queryParams?.backend === "string" ? parsed.queryParams.backend : "";
+      importServerConfig({ name, url: baseUrl, cwd, backend });
       setRoute("servers");
       setReady("Imported server config. Add your token and save.");
     }
@@ -526,22 +706,24 @@ export default function AppShell() {
   }, [loadingSettings, setReady]);
 
   useEffect(() => {
-    if (!activeServer) {
+    if (!activeServerId) {
       return;
     }
 
-    setStartCwd(activeServer.defaultCwd || DEFAULT_CWD);
+    const serverNameForSync = activeServer?.name || "server";
+    setStartCwd(activeServer?.defaultCwd || DEFAULT_CWD);
     resetTerminalState();
     closeAllStreams();
 
     if (!loadingSettings && connected) {
-      void runWithStatus(`Syncing ${activeServer.name}`, async () => {
+      void runWithStatus(`Syncing ${serverNameForSync}`, async () => {
         await refreshSessions();
       });
     }
   }, [
-    activeServer,
     activeServerId,
+    activeServer?.defaultCwd,
+    activeServer?.name,
     closeAllStreams,
     connected,
     loadingSettings,
@@ -598,6 +780,89 @@ export default function AppShell() {
   useEffect(() => {
     void removeMissingSessions(allSessions);
   }, [allSessions, removeMissingSessions]);
+
+  useEffect(() => {
+    setSessionAiEngine((prev) => {
+      const next: Record<string, AiEnginePreference> = {};
+      allSessions.forEach((session) => {
+        if (prev[session]) {
+          next[session] = prev[session];
+          return;
+        }
+        next[session] = localAiSessions.includes(session) ? "external" : "auto";
+      });
+      return next;
+    });
+  }, [allSessions, localAiSessions]);
+
+  useEffect(() => {
+    setSuggestionsBySession((prev) => {
+      const next: Record<string, string[]> = {};
+      allSessions.forEach((session) => {
+        if (prev[session]) {
+          next[session] = prev[session];
+        }
+      });
+      return next;
+    });
+    setSuggestionBusyBySession((prev) => {
+      const next: Record<string, boolean> = {};
+      allSessions.forEach((session) => {
+        if (prev[session]) {
+          next[session] = prev[session];
+        }
+      });
+      return next;
+    });
+    setWatchRules((prev) => {
+      const next: Record<string, WatchRule> = {};
+      allSessions.forEach((session) => {
+        next[session] = prev[session] || { enabled: false, pattern: "", lastMatch: null };
+      });
+      return next;
+    });
+  }, [allSessions]);
+
+  useEffect(() => {
+    let mounted = true;
+    async function loadWatchRules() {
+      if (!activeServerId) {
+        if (mounted) {
+          setWatchRules({});
+        }
+        return;
+      }
+
+      const raw = await SecureStore.getItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${activeServerId}`);
+      if (!mounted) {
+        return;
+      }
+
+      if (!raw) {
+        setWatchRules({});
+        return;
+      }
+
+      try {
+        const parsed = JSON.parse(raw) as Record<string, WatchRule>;
+        setWatchRules(parsed && typeof parsed === "object" ? parsed : {});
+      } catch {
+        setWatchRules({});
+      }
+    }
+
+    void loadWatchRules();
+    return () => {
+      mounted = false;
+    };
+  }, [activeServerId]);
+
+  useEffect(() => {
+    if (!activeServerId) {
+      return;
+    }
+    void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${activeServerId}`, JSON.stringify(watchRules));
+  }, [activeServerId, watchRules]);
 
   useEffect(() => {
     if (route !== "files" || !connected || !capabilities.files) {
@@ -708,6 +973,7 @@ export default function AppShell() {
               serverUrlInput={serverUrlInput}
               serverTokenInput={serverTokenInput}
               serverCwdInput={serverCwdInput}
+              serverBackendInput={serverBackendInput || DEFAULT_TERMINAL_BACKEND}
               editingServerId={editingServerId}
               tokenMasked={tokenMasked}
               requireBiometric={requireBiometric}
@@ -735,6 +1001,7 @@ export default function AppShell() {
               onSetServerUrl={setServerUrlInput}
               onSetServerToken={setServerTokenInput}
               onSetServerCwd={setServerCwdInput}
+              onSetServerBackend={setServerBackendInput}
               onSetRequireBiometric={(value) => {
                 void runWithStatus("Updating lock setting", async () => {
                   await setRequireBiometric(value);
@@ -774,10 +1041,12 @@ export default function AppShell() {
               streamLive={streamLive}
               connectionMeta={connectionMeta}
               sendModes={sendModes}
+              sessionAiEngine={sessionAiEngine}
               startCwd={startCwd}
               startPrompt={startPrompt}
               startOpenOnMac={startOpenOnMac}
               startKind={startKind}
+              startAiEngine={startAiEngine}
               health={health}
               capabilities={capabilities}
               supportedFeatures={supportedFeatures}
@@ -792,13 +1061,18 @@ export default function AppShell() {
               fleetCwd={fleetCwd}
               fleetTargets={fleetTargets}
               fleetBusy={fleetBusy}
+              fleetWaitMs={fleetWaitMs}
               fleetResults={fleetResults}
+              suggestionsBySession={suggestionsBySession}
+              suggestionBusyBySession={suggestionBusyBySession}
+              watchRules={watchRules}
               onShowPaywall={() => setPaywallVisible(true)}
               onSetTagFilter={setTagFilter}
               onSetStartCwd={setStartCwd}
               onSetStartPrompt={setStartPrompt}
               onSetStartOpenOnMac={setStartOpenOnMac}
               onSetStartKind={setStartKind}
+              onSetStartAiEngine={setStartAiEngine}
               onRefreshSessions={() => {
                 void runWithStatus("Refreshing sessions", async () => {
                   await refreshSessions();
@@ -812,14 +1086,24 @@ export default function AppShell() {
                     return;
                   }
 
-                  if (startKind === "ai" && !capabilities.codex) {
-                    const localSession = createLocalAiSession(startPrompt.trim());
-                    if (startPrompt.trim()) {
-                      await sendViaExternalLlm(localSession, startPrompt);
-                      setStartPrompt("");
+                  if (startKind === "ai") {
+                    if (startAiEngine === "server" && !capabilities.codex) {
+                      throw new Error("Server AI engine is not available on the active server.");
                     }
-                    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                    return;
+                    const shouldStartExternal = startAiEngine === "external" || (startAiEngine === "auto" && !capabilities.codex);
+                    if (shouldStartExternal) {
+                      if (!activeProfile) {
+                        throw new Error("No active external LLM profile selected.");
+                      }
+                      const localSession = createLocalAiSession(startPrompt.trim());
+                      setSessionAiEngine((prev) => ({ ...prev, [localSession]: "external" }));
+                      if (startPrompt.trim()) {
+                        await sendViaExternalLlm(localSession, startPrompt);
+                        setStartPrompt("");
+                      }
+                      void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                      return;
+                    }
                   }
 
                   if (startKind === "shell" && !capabilities.terminal) {
@@ -833,7 +1117,13 @@ export default function AppShell() {
                     }
                   }
 
-                  await handleStartSession();
+                  const session = await handleStartSession();
+                  if (startKind === "ai") {
+                    setSessionAiEngine((prev) => ({
+                      ...prev,
+                      [session]: startAiEngine === "server" ? "server" : "auto",
+                    }));
+                  }
                   void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
                 });
               }}
@@ -859,6 +1149,17 @@ export default function AppShell() {
                   return;
                 }
                 setSessionMode(session, mode);
+              }}
+              onSetSessionAiEngine={(session, engine) => {
+                if (engine === "server" && !capabilities.codex) {
+                  setStatus({ text: "Server AI is unavailable for this server.", error: true });
+                  return;
+                }
+                if (engine === "external" && !activeProfile) {
+                  setStatus({ text: "No external LLM profile is configured.", error: true });
+                  return;
+                }
+                setSessionAiEngine((prev) => ({ ...prev, [session]: engine }));
               }}
               onOpenOnMac={(session) => {
                 void runWithStatus(`Opening ${session} on Mac`, async () => {
@@ -936,7 +1237,7 @@ export default function AppShell() {
                 void runWithStatus(`Sending to ${session}`, async () => {
                   const draft = (drafts[session] || "").trim();
                   const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
-                  if (isLocalSession(session) || (mode === "ai" && !capabilities.codex)) {
+                  if (mode === "ai" && shouldRouteToExternalAi(session)) {
                     const sent = await sendViaExternalLlm(session, draft);
                     if (sent) {
                       await addCommand(session, sent);
@@ -954,7 +1255,7 @@ export default function AppShell() {
                   if (sent) {
                     await addCommand(session, sent);
                     if (isPro) {
-                      await notify("Command completed", `${session}: ${sent.slice(0, 80)}`);
+                      await notify("Command sent", `${session}: ${sent.slice(0, 80)}`);
                     }
                   }
                 });
@@ -966,6 +1267,40 @@ export default function AppShell() {
               onSetFleetCwd={setFleetCwd}
               onToggleFleetTarget={(serverId) => {
                 setFleetTargets((prev) => (prev.includes(serverId) ? prev.filter((id) => id !== serverId) : [...prev, serverId]));
+              }}
+              onSetFleetWaitMs={setFleetWaitMs}
+              onRequestSuggestions={(session) => {
+                void runWithStatus(`Generating suggestions for ${session}`, async () => {
+                  await requestShellSuggestions(session);
+                });
+              }}
+              onUseSuggestion={(session, value) => {
+                setDrafts((prev) => ({ ...prev, [session]: value }));
+              }}
+              onToggleWatch={(session, enabled) => {
+                setWatchRules((prev) => {
+                  const existing = prev[session] || { enabled: false, pattern: "", lastMatch: null };
+                  return {
+                    ...prev,
+                    [session]: {
+                      ...existing,
+                      enabled,
+                    },
+                  };
+                });
+              }}
+              onSetWatchPattern={(session, pattern) => {
+                setWatchRules((prev) => {
+                  const existing = prev[session] || { enabled: true, pattern: "", lastMatch: null };
+                  return {
+                    ...prev,
+                    [session]: {
+                      ...existing,
+                      pattern,
+                      lastMatch: null,
+                    },
+                  };
+                });
               }}
               onRunFleet={() => {
                 void runWithStatus("Running fleet command", async () => {
@@ -1009,7 +1344,7 @@ export default function AppShell() {
                   if (isLocalSession(session) && mode === "shell") {
                     throw new Error("Shell snippets are not available for local LLM sessions.");
                   }
-                  if (isLocalSession(session) || (mode === "ai" && !capabilities.codex)) {
+                  if (mode === "ai" && shouldRouteToExternalAi(session)) {
                     const sent = await sendViaExternalLlm(session, command);
                     if (sent) {
                       await addCommand(session, sent);
@@ -1025,7 +1360,7 @@ export default function AppShell() {
                   await sendCommand(session, command, mode, false);
                   await addCommand(session, command);
                   if (isPro) {
-                    await notify("Snippet completed", `${session}: ${command.slice(0, 80)}`);
+                    await notify("Snippet sent", `${session}: ${command.slice(0, 80)}`);
                   }
                 });
               }}
@@ -1110,6 +1445,7 @@ export default function AppShell() {
               activeProfileId={activeProfileId}
               testBusy={llmTestBusy}
               testOutput={llmTestOutput}
+              transferStatus={llmTransferStatus}
               onSetActive={(id) => {
                 void runWithStatus("Switching LLM provider", async () => {
                   await setActive(id);
@@ -1134,6 +1470,22 @@ export default function AppShell() {
                   } finally {
                     setLlmTestBusy(false);
                   }
+                });
+              }}
+              onExportEncrypted={(passphrase) => {
+                try {
+                  const payload = exportEncrypted(passphrase);
+                  setLlmTransferStatus(`Export generated at ${new Date().toLocaleTimeString()}`);
+                  return payload;
+                } catch (error) {
+                  setLlmTransferStatus(error instanceof Error ? error.message : String(error));
+                  return "";
+                }
+              }}
+              onImportEncrypted={(payload, passphrase) => {
+                void runWithStatus("Importing encrypted LLM profiles", async () => {
+                  const summary = await importEncrypted(payload, passphrase);
+                  setLlmTransferStatus(`Imported ${summary.imported} profile(s). Total configured: ${summary.total}.`);
                 });
               }}
             />
@@ -1226,7 +1578,7 @@ export default function AppShell() {
           }
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
           void runWithStatus(`Sending to ${focusedSession}`, async () => {
-            if (isLocalSession(focusedSession) || (focusedMode === "ai" && !capabilities.codex)) {
+            if (focusedMode === "ai" && shouldRouteToExternalAi(focusedSession)) {
               const sent = await sendViaExternalLlm(focusedSession, focusedDraft);
               if (sent) {
                 await addCommand(focusedSession, sent);
@@ -1314,6 +1666,7 @@ export default function AppShell() {
               baseUrl: server.url,
               token: server.token,
               defaultCwd: server.cwd,
+              terminalBackend: DEFAULT_TERMINAL_BACKEND,
             });
             await setRequireBiometric(biometric);
             await completeOnboarding();

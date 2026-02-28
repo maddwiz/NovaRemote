@@ -1,4 +1,4 @@
-import { ServerProfile } from "./types";
+import { ServerProfile, TerminalBackendKind } from "./types";
 
 export const STORAGE_SERVERS = "novaremote.servers.v1";
 export const STORAGE_ACTIVE_SERVER_ID = "novaremote.active_server_id.v1";
@@ -13,10 +13,14 @@ export const STORAGE_TUTORIAL_DONE = "novaremote.tutorial_done.v1";
 export const STORAGE_REQUIRE_DANGER_CONFIRM = "novaremote.require_danger_confirm.v1";
 export const STORAGE_LLM_PROFILES = "novaremote.llm_profiles.v1";
 export const STORAGE_ACTIVE_LLM_PROFILE_ID = "novaremote.active_llm_profile_id.v1";
+export const STORAGE_TERMINAL_THEME = "novaremote.terminal_theme.v1";
+export const STORAGE_WATCH_RULES_PREFIX = "novaremote.watch_rules.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
 export const DEFAULT_SERVER_NAME = "My Server";
+export const DEFAULT_TERMINAL_BACKEND: TerminalBackendKind = "auto";
+export const DEFAULT_FLEET_WAIT_MS = 5000;
 
 export const SERVER_URL_PLACEHOLDER = "https://your-server:8787";
 export const CWD_PLACEHOLDER = "/path/to/your/project";
@@ -45,6 +49,7 @@ export function buildDefaultServer(): ServerProfile {
     baseUrl: DEFAULT_BASE_URL,
     token: "",
     defaultCwd: DEFAULT_CWD,
+    terminalBackend: DEFAULT_TERMINAL_BACKEND,
   };
 }
 

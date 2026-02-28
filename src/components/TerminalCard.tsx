@@ -2,7 +2,7 @@ import React, { useRef } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { styles } from "../theme/styles";
-import { ConnectionState, TerminalSendMode } from "../types";
+import { AiEnginePreference, ConnectionState, TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
 
 type TerminalCardProps = {
@@ -20,8 +20,16 @@ type TerminalCardProps = {
   canOpenOnMac: boolean;
   canSync: boolean;
   canStop: boolean;
+  aiEngine: AiEnginePreference;
+  canUseServerAi: boolean;
+  canUseExternalAi: boolean;
+  suggestions: string[];
+  suggestionsBusy: boolean;
+  watchEnabled: boolean;
+  watchPattern: string;
   tags: string[];
   onSetMode: (mode: TerminalSendMode) => void;
+  onSetAiEngine: (engine: AiEnginePreference) => void;
   onOpenOnMac: () => void;
   onSync: () => void;
   onExport: () => void;
@@ -32,6 +40,10 @@ type TerminalCardProps = {
   onHistoryNext: () => void;
   onTagsChange: (raw: string) => void;
   onDraftChange: (value: string) => void;
+  onRequestSuggestions: () => void;
+  onUseSuggestion: (value: string) => void;
+  onToggleWatch: (value: boolean) => void;
+  onWatchPatternChange: (value: string) => void;
   onSend: () => void;
   onClear: () => void;
   historyCount: number;
@@ -52,8 +64,16 @@ export function TerminalCard({
   canOpenOnMac,
   canSync,
   canStop,
+  aiEngine,
+  canUseServerAi,
+  canUseExternalAi,
+  suggestions,
+  suggestionsBusy,
+  watchEnabled,
+  watchPattern,
   tags,
   onSetMode,
+  onSetAiEngine,
   onOpenOnMac,
   onSync,
   onExport,
@@ -64,6 +84,10 @@ export function TerminalCard({
   onHistoryNext,
   onTagsChange,
   onDraftChange,
+  onRequestSuggestions,
+  onUseSuggestion,
+  onToggleWatch,
+  onWatchPatternChange,
   onSend,
   onClear,
   historyCount,
@@ -134,6 +158,28 @@ export function TerminalCard({
           </Pressable>
         </View>
 
+        {mode === "ai" ? (
+          <View style={styles.modeRow}>
+            <Pressable style={[styles.modeButton, aiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetAiEngine("auto")}>
+              <Text style={[styles.modeButtonText, aiEngine === "auto" ? styles.modeButtonTextOn : null]}>AI Auto</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeButton, aiEngine === "server" ? styles.modeButtonOn : null, !canUseServerAi ? styles.buttonDisabled : null]}
+              onPress={() => onSetAiEngine("server")}
+              disabled={!canUseServerAi}
+            >
+              <Text style={[styles.modeButtonText, aiEngine === "server" ? styles.modeButtonTextOn : null]}>Server</Text>
+            </Pressable>
+            <Pressable
+              style={[styles.modeButton, aiEngine === "external" ? styles.modeButtonOn : null, !canUseExternalAi ? styles.buttonDisabled : null]}
+              onPress={() => onSetAiEngine("external")}
+              disabled={!canUseExternalAi}
+            >
+              <Text style={[styles.modeButtonText, aiEngine === "external" ? styles.modeButtonTextOn : null]}>External</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         <View style={styles.actionsWrap}>
           <Pressable style={[styles.actionButton, !canOpenOnMac ? styles.buttonDisabled : null]} onPress={onOpenOnMac} disabled={!canOpenOnMac}>
             <Text style={styles.actionButtonText}>Open on Mac</Text>
@@ -173,6 +219,45 @@ export function TerminalCard({
         placeholderTextColor="#7f7aa8"
         onChangeText={onDraftChange}
       />
+
+      {mode === "shell" ? (
+        <View style={styles.serverListWrap}>
+          <Pressable
+            style={[styles.actionButton, suggestionsBusy ? styles.buttonDisabled : null]}
+            onPress={onRequestSuggestions}
+            disabled={suggestionsBusy}
+          >
+            <Text style={styles.actionButtonText}>{suggestionsBusy ? "Thinking..." : "AI Suggestions"}</Text>
+          </Pressable>
+          {suggestions.length > 0 ? (
+            <View style={styles.actionsWrap}>
+              {suggestions.map((suggestion) => (
+                <Pressable key={`${session}-${suggestion}`} style={styles.chip} onPress={() => onUseSuggestion(suggestion)}>
+                  <Text style={styles.chipText}>{suggestion}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
+      <View style={styles.rowInlineSpace}>
+        <Text style={styles.switchLabel}>Watch Mode</Text>
+        <Pressable style={[styles.actionButton, watchEnabled ? styles.modeButtonOn : null]} onPress={() => onToggleWatch(!watchEnabled)}>
+          <Text style={styles.actionButtonText}>{watchEnabled ? "Enabled" : "Disabled"}</Text>
+        </Pressable>
+      </View>
+      {watchEnabled ? (
+        <TextInput
+          style={styles.input}
+          value={watchPattern}
+          onChangeText={onWatchPatternChange}
+          placeholder="Regex alert pattern (e.g. ERROR|FAILED)"
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+      ) : null}
 
       <View style={styles.rowInlineSpace}>
         <Pressable style={styles.actionButton} onPress={onHistoryPrev}>

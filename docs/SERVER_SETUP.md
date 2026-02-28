@@ -46,6 +46,13 @@ NovaRemote supports either API family:
 
 If both families are present, NovaRemote prefers `/terminal/*`.
 
+For best results, expose a manifest endpoint:
+
+- `GET /capabilities` (recommended) or include equivalent fields in `GET /health`
+- Return booleans for `terminal`, `codex`, `files`, `shellRun`, `macAttach`, `stream`
+
+NovaRemote consumes this manifest first and only falls back to lightweight `GET`/`OPTIONS` probing when the manifest is missing.
+
 Endpoint mapping:
 
 | Legacy | Universal |

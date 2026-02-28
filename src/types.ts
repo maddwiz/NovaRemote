@@ -45,7 +45,10 @@ export type ServerProfile = {
   baseUrl: string;
   token: string;
   defaultCwd: string;
+  terminalBackend?: TerminalBackendKind;
 };
+
+export type TerminalBackendKind = "auto" | "tmux" | "screen" | "zellij" | "powershell" | "cmd" | "pty";
 
 export type TerminalSendMode = "ai" | "shell";
 
@@ -109,6 +112,14 @@ export type FleetRunResult = {
 };
 
 export type LlmProviderKind = "openai_compatible" | "anthropic";
+
+export type AiEnginePreference = "auto" | "server" | "external";
+
+export type WatchRule = {
+  enabled: boolean;
+  pattern: string;
+  lastMatch?: string | null;
+};
 
 export type LlmProfile = {
   id: string;
