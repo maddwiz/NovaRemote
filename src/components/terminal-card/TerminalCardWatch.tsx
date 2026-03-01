@@ -26,7 +26,7 @@ export function TerminalCardWatch({
     <>
       <View style={styles.rowInlineSpace}>
         <Text style={styles.switchLabel}>Watch Mode</Text>
-        <Pressable accessibilityRole="button" style={[styles.actionButton, watchEnabled ? styles.modeButtonOn : null]} onPress={() => onToggleWatch(!watchEnabled)}>
+        <Pressable accessibilityRole="button" accessibilityLabel={watchEnabled ? `Disable watch mode for ${session}` : `Enable watch mode for ${session}`} style={[styles.actionButton, watchEnabled ? styles.modeButtonOn : null]} onPress={() => onToggleWatch(!watchEnabled)}>
           <Text style={styles.actionButtonText}>{watchEnabled ? "Enabled" : "Disabled"}</Text>
         </Pressable>
       </View>
@@ -46,7 +46,7 @@ export function TerminalCardWatch({
         <View style={styles.serverCard}>
           <View style={styles.rowInlineSpace}>
             <Text style={styles.panelLabel}>Watch Alerts</Text>
-            <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onClearWatchAlerts}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Clear watch alerts for ${session}`} style={styles.actionButton} onPress={onClearWatchAlerts}>
               <Text style={styles.actionButtonText}>Clear Alerts</Text>
             </Pressable>
           </View>

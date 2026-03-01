@@ -257,7 +257,7 @@ export function GlassesModeScreen() {
       <View style={[styles.glassesRouteHeader, { borderColor: accent }]}>
         <View style={styles.rowInlineSpace}>
           <Text style={[styles.glassesRouteTitle, { color: accent }]}>{`${glassesBrandLabel(glassesMode.brand)} On-the-Go`}</Text>
-          <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.glassesRouteExit]} onPress={onCloseGlassesMode}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Exit on-the-go glasses mode" style={[styles.buttonGhost, styles.glassesRouteExit]} onPress={onCloseGlassesMode}>
             <Text style={styles.buttonGhostText}>Exit</Text>
           </Pressable>
         </View>
@@ -265,6 +265,7 @@ export function GlassesModeScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Minimal HUD layout</Text>
           <Switch
+            accessibilityLabel="Toggle minimal HUD layout"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.minimalMode ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.minimalMode}
@@ -296,6 +297,7 @@ export function GlassesModeScreen() {
           {openSessions.map((session) => (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={`Select session ${sessionAliases[session]?.trim() || session}`}
               key={`glasses-route-${session}`}
               style={[styles.chip, session === activeSession ? styles.chipActive : null]}
               onPress={() => setActiveSession(session)}
@@ -333,6 +335,7 @@ export function GlassesModeScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Auto-send transcript</Text>
           <Switch
+            accessibilityLabel="Toggle auto send transcript"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.voiceAutoSend ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.voiceAutoSend}
@@ -342,6 +345,7 @@ export function GlassesModeScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Continuous voice loop</Text>
           <Switch
+            accessibilityLabel="Toggle continuous voice loop"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.voiceLoop ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.voiceLoop}
@@ -359,6 +363,7 @@ export function GlassesModeScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Require wake phrase</Text>
           <Switch
+            accessibilityLabel="Toggle wake phrase requirement"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.wakePhraseEnabled ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.wakePhraseEnabled}
@@ -379,6 +384,7 @@ export function GlassesModeScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Server VAD assist</Text>
           <Switch
+            accessibilityLabel="Toggle server VAD assist"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.vadEnabled ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.vadEnabled}
@@ -408,6 +414,7 @@ export function GlassesModeScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>BT remote push-to-talk keys</Text>
           <Switch
+            accessibilityLabel="Toggle Bluetooth push to talk keys"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.headsetPttEnabled ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.headsetPttEnabled}

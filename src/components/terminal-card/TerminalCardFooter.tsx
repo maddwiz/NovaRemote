@@ -41,17 +41,17 @@ export function TerminalCardFooter({
       {recordingChunks > 0 ? (
         <View style={styles.rowInlineSpace}>
           <Text style={styles.emptyText}>{`${recordingChunks} rec chunks · ${(recordingDurationMs / 1000).toFixed(1)}s`}</Text>
-          <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={onDeleteRecording}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Delete current recording" style={styles.actionDangerButton} onPress={onDeleteRecording}>
             <Text style={styles.actionDangerText}>Delete Rec</Text>
           </Pressable>
         </View>
       ) : null}
 
       <View style={styles.rowInlineSpace}>
-        <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryPrev}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Previous command history" style={styles.actionButton} onPress={onHistoryPrev}>
           <Text style={styles.actionButtonText}>↑</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onHistoryNext}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Next command history" style={styles.actionButton} onPress={onHistoryNext}>
           <Text style={styles.actionButtonText}>↓</Text>
         </Pressable>
         <Text style={styles.emptyText}>{`History ${historyCount}`}</Text>
@@ -79,13 +79,14 @@ export function TerminalCardFooter({
       <View style={styles.rowInlineSpace}>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel={isSending ? "Sending command" : readOnly ? "Session is read only" : "Send draft command"}
           style={[styles.buttonPrimary, styles.flexButton, isSending || readOnly ? styles.buttonDisabled : null]}
           disabled={isSending || readOnly}
           onPress={onSend}
         >
           <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : readOnly ? "Read-Only" : "Send"}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onClear}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Clear draft input" style={[styles.buttonGhost, styles.flexButton]} onPress={onClear}>
           <Text style={styles.buttonGhostText}>Clear</Text>
         </Pressable>
       </View>

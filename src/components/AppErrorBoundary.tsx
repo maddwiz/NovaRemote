@@ -43,6 +43,9 @@ export class AppErrorBoundary extends React.Component<AppErrorBoundaryProps, App
             <Text style={styles.serverTitle}>NovaRemote hit an unexpected error.</Text>
             <Text style={styles.emptyText}>{this.state.message}</Text>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Try app recovery"
+              accessibilityHint="Clears the error boundary state and retries rendering the app."
               style={styles.buttonPrimary}
               onPress={() => {
                 this.setState({ hasError: false, message: "" });

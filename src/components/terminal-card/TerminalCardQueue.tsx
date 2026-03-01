@@ -39,7 +39,7 @@ export function TerminalCardQueue({ session, queuedItems, onFlushQueue, onRemove
           {queuedFailed > 0 ? `, ${queuedFailed} failed` : ""}
           {")"}
         </Text>
-        <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onFlushQueue}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Flush queued commands for ${session}`} style={styles.actionButton} onPress={onFlushQueue}>
           <Text style={styles.actionButtonText}>Flush Queue</Text>
         </Pressable>
       </View>
@@ -54,7 +54,7 @@ export function TerminalCardQueue({ session, queuedItems, onFlushQueue, onRemove
             {status === "failed" && entry.lastError ? <Text style={styles.emptyText}>{entry.lastError}</Text> : null}
             <View style={styles.rowInlineSpace}>
               <Text style={styles.emptyText}>{new Date(entry.queuedAt).toLocaleTimeString()}</Text>
-              <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`Remove queued command ${index + 1}`} style={styles.actionDangerButton} onPress={() => onRemoveQueuedCommand(index)}>
                 <Text style={styles.actionDangerText}>Remove</Text>
               </Pressable>
             </View>

@@ -103,6 +103,7 @@ export function FilesScreen({
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Show Hidden Files</Text>
           <Switch
+            accessibilityLabel="Show hidden files"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={includeHidden ? "#d4fdff" : "#d3dee5"}
             value={includeHidden}
@@ -189,7 +190,13 @@ export function FilesScreen({
             {openSessions.map((session) => {
               const active = effectiveSession === session;
               return (
-                <Pressable accessibilityRole="button" key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => setTargetSession(session)}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select file action session ${session}`}
+                  key={session}
+                  style={[styles.chip, active ? styles.chipActive : null]}
+                  onPress={() => setTargetSession(session)}
+                >
                   <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{session}</Text>
                 </Pressable>
               );

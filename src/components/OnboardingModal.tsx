@@ -107,6 +107,8 @@ export function OnboardingModal({
               />
 
               <Pressable accessibilityRole="button"
+                accessibilityLabel="Test server connection"
+                accessibilityHint="Checks the provided server URL and token."
                 style={[styles.buttonGhost, busy ? styles.buttonDisabled : null]}
                 disabled={busy}
                 onPress={() => {
@@ -127,6 +129,7 @@ export function OnboardingModal({
               <View style={styles.rowInlineSpace}>
                 <Text style={styles.switchLabel}>Require Face ID / Touch ID</Text>
                 <Switch
+                  accessibilityLabel="Require Face ID or Touch ID"
                   trackColor={{ false: "#33596c", true: "#0ea8c8" }}
                   thumbColor={requireBiometric ? "#d4fdff" : "#d3dee5"}
                   value={requireBiometric}
@@ -134,10 +137,10 @@ export function OnboardingModal({
                 />
               </View>
 
-              <Pressable accessibilityRole="button" style={styles.buttonGhost} onPress={onRequestNotifications}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Request notification permission" style={styles.buttonGhost} onPress={onRequestNotifications}>
                 <Text style={styles.buttonGhostText}>{notificationsGranted ? "Notifications Enabled" : "Enable Notifications"}</Text>
               </Pressable>
-              <Pressable accessibilityRole="button" style={styles.buttonGhost} onPress={onRequestMicrophone}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Request microphone permission" style={styles.buttonGhost} onPress={onRequestMicrophone}>
                 <Text style={styles.buttonGhostText}>{microphoneGranted ? "Microphone Enabled" : "Enable Microphone"}</Text>
               </Pressable>
 
@@ -150,12 +153,13 @@ export function OnboardingModal({
 
           <View style={styles.rowInlineSpace}>
             {step > 0 ? (
-              <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={() => setStep((prev) => prev - 1)}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Previous onboarding step" style={[styles.buttonGhost, styles.flexButton]} onPress={() => setStep((prev) => prev - 1)}>
                 <Text style={styles.buttonGhostText}>Back</Text>
               </Pressable>
             ) : null}
             {step < 2 ? (
               <Pressable accessibilityRole="button"
+                accessibilityLabel="Next onboarding step"
                 style={[styles.buttonPrimary, styles.flexButton, !canContinue ? styles.buttonDisabled : null]}
                 disabled={!canContinue}
                 onPress={() => setStep((prev) => prev + 1)}
@@ -164,6 +168,7 @@ export function OnboardingModal({
               </Pressable>
             ) : (
               <Pressable accessibilityRole="button"
+                accessibilityLabel="Finish onboarding setup"
                 style={styles.buttonPrimary}
                 onPress={() => {
                   onComplete(server, requireBiometric);

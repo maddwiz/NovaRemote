@@ -41,19 +41,20 @@ export function TerminalCardShellAssist({
       {autocomplete.length > 0 ? (
         <View style={styles.actionsWrap}>
           {autocomplete.map((command) => (
-            <Pressable accessibilityRole="button" key={`${session}-auto-${command}`} style={styles.chip} onPress={() => onDraftChange(command)}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Use autocomplete command ${command}`} key={`${session}-auto-${command}`} style={styles.chip} onPress={() => onDraftChange(command)}>
               <Text style={styles.chipText}>{command}</Text>
             </Pressable>
           ))}
         </View>
       ) : null}
 
-      <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onAdaptDraftForBackend}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Adapt draft command for terminal backend" style={styles.actionButton} onPress={onAdaptDraftForBackend}>
         <Text style={styles.actionButtonText}>Adapt for Backend</Text>
       </Pressable>
 
       <Pressable
         accessibilityRole="button"
+        accessibilityLabel="Request AI command suggestions"
         style={[styles.actionButton, suggestionsBusy ? styles.buttonDisabled : null]}
         onPress={onRequestSuggestions}
         disabled={suggestionsBusy}
@@ -63,7 +64,7 @@ export function TerminalCardShellAssist({
       {suggestions.length > 0 ? (
         <View style={styles.actionsWrap}>
           {suggestions.map((suggestion) => (
-            <Pressable accessibilityRole="button" key={`${session}-${suggestion}`} style={styles.chip} onPress={() => onUseSuggestion(suggestion)}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`Use suggested command ${suggestion}`} key={`${session}-${suggestion}`} style={styles.chip} onPress={() => onUseSuggestion(suggestion)}>
               <Text style={styles.chipText}>{suggestion}</Text>
             </Pressable>
           ))}
@@ -75,11 +76,12 @@ export function TerminalCardShellAssist({
           <Text style={styles.panelLabel}>Error Triage</Text>
           <Text style={styles.emptyText}>{errorHint}</Text>
           <View style={styles.actionsWrap}>
-            <Pressable accessibilityRole="button" style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]} onPress={onExplainError} disabled={triageBusy}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Explain latest terminal error" style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]} onPress={onExplainError} disabled={triageBusy}>
               <Text style={styles.actionButtonText}>{triageBusy ? "Analyzing..." : "Explain Error"}</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Generate fix commands for latest error"
               style={[styles.actionButton, triageBusy ? styles.buttonDisabled : null]}
               onPress={onSuggestErrorFixes}
               disabled={triageBusy}
@@ -91,7 +93,7 @@ export function TerminalCardShellAssist({
           {triageFixes.length > 0 ? (
             <View style={styles.actionsWrap}>
               {triageFixes.map((command) => (
-                <Pressable accessibilityRole="button" key={`${session}-triage-${command}`} style={styles.chip} onPress={() => onUseSuggestion(command)}>
+                <Pressable accessibilityRole="button" accessibilityLabel={`Use fix command ${command}`} key={`${session}-triage-${command}`} style={styles.chip} onPress={() => onUseSuggestion(command)}>
                   <Text style={styles.chipText}>{command}</Text>
                 </Pressable>
               ))}

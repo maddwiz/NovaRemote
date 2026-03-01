@@ -57,6 +57,8 @@ export function ProcessKillConfirmModal({ visible, pids, signal, onCancel, onCon
           <Text style={styles.emptyText}>PIDs: {pids.join(", ")}</Text>
           <Text style={styles.emptyText}>{`Type ${phrase} to confirm`}</Text>
           <TextInput
+            accessibilityLabel="Process kill confirmation phrase"
+            accessibilityHint={`Type ${phrase} to enable the confirm button.`}
             style={styles.input}
             value={typed}
             onChangeText={setTyped}
@@ -66,10 +68,18 @@ export function ProcessKillConfirmModal({ visible, pids, signal, onCancel, onCon
             placeholderTextColor="#7f7aa8"
           />
           <View style={styles.rowInlineSpace}>
-            <Pressable style={[styles.buttonGhost, styles.flexButton]} onPress={onCancel}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel process signal"
+              style={[styles.buttonGhost, styles.flexButton]}
+              onPress={onCancel}
+            >
               <Text style={styles.buttonGhostText}>Cancel</Text>
             </Pressable>
             <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Send ${signal} to ${pids.length} process${pids.length === 1 ? "" : "es"}`}
+              accessibilityHint="Sends the selected signal to the listed process IDs."
               style={[styles.actionDangerButton, styles.flexButton, !canConfirm ? styles.buttonDisabled : null]}
               disabled={!canConfirm}
               onPress={onConfirm}

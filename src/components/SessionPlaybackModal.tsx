@@ -46,28 +46,34 @@ export function SessionPlaybackModal({
           <Text style={styles.modalTitle}>{session ? `Playback · ${session}` : "Playback"}</Text>
           <Text style={styles.serverSubtitle}>{positionLabel}</Text>
           <View style={styles.actionsWrap}>
-            <Pressable style={styles.actionButton} onPress={onPlayPause}>
+            <Pressable accessibilityRole="button" accessibilityLabel={isPlaying ? "Pause playback" : "Start playback"} style={styles.actionButton} onPress={onPlayPause}>
               <Text style={styles.actionButtonText}>{isPlaying ? "Pause" : "Play"}</Text>
             </Pressable>
-            <Pressable style={styles.actionButton} onPress={onRestart}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Restart playback from beginning" style={styles.actionButton} onPress={onRestart}>
               <Text style={styles.actionButtonText}>Restart</Text>
             </Pressable>
-            <Pressable style={styles.actionButton} onPress={onBack}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Seek playback backward two seconds" style={styles.actionButton} onPress={onBack}>
               <Text style={styles.actionButtonText}>-2s</Text>
             </Pressable>
-            <Pressable style={styles.actionButton} onPress={onForward}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Seek playback forward two seconds" style={styles.actionButton} onPress={onForward}>
               <Text style={styles.actionButtonText}>+2s</Text>
             </Pressable>
-            <Pressable style={styles.actionButton} onPress={onExport}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Export recording as cast" style={styles.actionButton} onPress={onExport}>
               <Text style={styles.actionButtonText}>Export Cast</Text>
             </Pressable>
-            <Pressable style={styles.actionButton} onPress={onClose}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close playback modal" style={styles.actionButton} onPress={onClose}>
               <Text style={styles.actionButtonText}>Close</Text>
             </Pressable>
           </View>
           <View style={styles.actionsWrap}>
             {SPEED_OPTIONS.map((entry) => (
-              <Pressable key={entry} style={[styles.chip, speed === entry ? styles.chipActive : null]} onPress={() => onSetSpeed(entry)}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Set playback speed to ${entry}x`}
+                key={entry}
+                style={[styles.chip, speed === entry ? styles.chipActive : null]}
+                onPress={() => onSetSpeed(entry)}
+              >
                 <Text style={[styles.chipText, speed === entry ? styles.chipTextActive : null]}>{`${entry}x`}</Text>
               </Pressable>
             ))}

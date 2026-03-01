@@ -127,7 +127,9 @@ export function ServersScreen({
         <Text style={styles.serverSubtitle}>Metadata hint for server runtime and future orchestration defaults.</Text>
         <View style={styles.actionsWrap}>
           {(["auto", "tmux", "screen", "zellij", "powershell", "cmd", "pty"] as TerminalBackendKind[]).map((backend) => (
-            <Pressable accessibilityRole="button"
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Set terminal backend to ${backend}`}
               key={backend}
               style={[styles.modeButton, serverBackendInput === backend ? styles.modeButtonOn : null]}
               onPress={() => onSetServerBackend(backend)}
@@ -141,10 +143,10 @@ export function ServersScreen({
       </View>
 
       <View style={styles.rowInlineSpace}>
-        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onToggleTokenMask}>
+        <Pressable accessibilityRole="button" accessibilityLabel={tokenMasked ? "Show server token" : "Hide server token"} style={[styles.buttonGhost, styles.flexButton]} onPress={onToggleTokenMask}>
           <Text style={styles.buttonGhostText}>{tokenMasked ? "Show Token" : "Hide Token"}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onClearForm}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Clear server form" style={[styles.buttonGhost, styles.flexButton]} onPress={onClearForm}>
           <Text style={styles.buttonGhostText}>Clear Form</Text>
         </Pressable>
       </View>
@@ -152,6 +154,7 @@ export function ServersScreen({
       <View style={styles.rowInlineSpace}>
         <Text style={styles.switchLabel}>Require Face ID / Touch ID</Text>
         <Switch
+          accessibilityLabel="Require Face ID or Touch ID"
           trackColor={{ false: "#33596c", true: "#0ea8c8" }}
           thumbColor={requireBiometric ? "#d4fdff" : "#d3dee5"}
           value={requireBiometric}
@@ -162,6 +165,7 @@ export function ServersScreen({
       <View style={styles.rowInlineSpace}>
         <Text style={styles.switchLabel}>Confirm Dangerous Commands</Text>
         <Switch
+          accessibilityLabel="Require dangerous command confirmation"
           trackColor={{ false: "#33596c", true: "#0ea8c8" }}
           thumbColor={requireDangerConfirm ? "#d4fdff" : "#d3dee5"}
           value={requireDangerConfirm}
@@ -170,10 +174,10 @@ export function ServersScreen({
       </View>
 
       <View style={styles.rowInlineSpace}>
-        <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton]} onPress={onSaveServer}>
+        <Pressable accessibilityRole="button" accessibilityLabel={editingServerId ? "Update server profile" : "Save server profile"} style={[styles.buttonPrimary, styles.flexButton]} onPress={onSaveServer}>
           <Text style={styles.buttonPrimaryText}>{editingServerId ? "Update Server" : "Save Server"}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onBackToTerminals}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to terminals screen" style={[styles.buttonGhost, styles.flexButton]} onPress={onBackToTerminals}>
           <Text style={styles.buttonGhostText}>Back to Terminal</Text>
         </Pressable>
       </View>

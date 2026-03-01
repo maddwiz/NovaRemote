@@ -31,10 +31,15 @@ export function TerminalCardCollaboration({
       <View style={styles.rowInlineSpace}>
         <Text style={styles.panelLabel}>Collaboration</Text>
         <View style={styles.actionsWrap}>
-          <Pressable accessibilityRole="button" style={styles.actionButton} onPress={onRefreshPresence}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Refresh collaborator presence" style={styles.actionButton} onPress={onRefreshPresence}>
             <Text style={styles.actionButtonText}>Refresh Viewers</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.actionButton, readOnly ? styles.modeButtonOn : null]} onPress={() => onSetReadOnly(!readOnly)}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={readOnly ? "Disable read-only mode for this session" : "Enable read-only mode for this session"}
+            style={[styles.actionButton, readOnly ? styles.modeButtonOn : null]}
+            onPress={() => onSetReadOnly(!readOnly)}
+          >
             <Text style={styles.actionButtonText}>{readOnly ? "Read-Only" : "Interactive"}</Text>
           </Pressable>
         </View>

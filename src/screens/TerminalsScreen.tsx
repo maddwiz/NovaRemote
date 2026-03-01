@@ -48,7 +48,13 @@ function renderSessionChips(
         const active = openSessions.includes(session);
         const label = sessionAliases[session]?.trim() || session;
         return (
-          <Pressable accessibilityRole="button" key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleSessionVisible(session)}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${active ? "Hide" : "Show"} session ${label}`}
+            key={session}
+            style={[styles.chip, active ? styles.chipActive : null]}
+            onPress={() => onToggleSessionVisible(session)}
+          >
             <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
               {active ? `Open - ${label}` : label}
               {pinnedSet.has(session) ? " • PIN" : ""}
@@ -636,6 +642,7 @@ export function TerminalsScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {sortedOpenSessions.map((session) => (
               <Pressable accessibilityRole="button"
+                accessibilityLabel={`Select open session ${sessionAliases[session]?.trim() || session}`}
                 key={`tab-${session}`}
                 style={[styles.chip, activeTabSession === session ? styles.chipActive : null]}
                 onPress={() => setActiveTabSession(session)}
@@ -727,7 +734,7 @@ export function TerminalsScreen() {
         {servers.map((server) => {
           const active = fleetTargets.includes(server.id);
           return (
-            <Pressable accessibilityRole="button" key={server.id} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleFleetTarget(server.id)}>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${active ? "Remove" : "Add"} ${server.name} as fleet target`} key={server.id} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => onToggleFleetTarget(server.id)}>
               <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{server.name}</Text>
             </Pressable>
           );
@@ -735,6 +742,7 @@ export function TerminalsScreen() {
       </ScrollView>
 
       <Pressable accessibilityRole="button"
+        accessibilityLabel="Run command across selected servers"
         style={[styles.buttonPrimary, fleetBusy ? styles.buttonDisabled : null]}
         onPress={onRunFleet}
         disabled={fleetBusy || !capabilities.terminal}
@@ -768,6 +776,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.serverSubtitle}>{`Streams ${health.activeStreams}/${health.openSessions}`}</Text>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Recheck server capabilities"
             style={[styles.actionButton, !connected || capabilitiesLoading ? styles.buttonDisabled : null]}
             onPress={onRefreshCapabilities}
             disabled={!connected || capabilitiesLoading}
@@ -787,6 +796,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Enable HUD</Text>
           <Switch
+            accessibilityLabel="Enable glasses HUD mode"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.enabled ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.enabled}
@@ -798,6 +808,7 @@ export function TerminalsScreen() {
           {(["xreal_x1", "halo", "custom"] as GlassesBrand[]).map((brand) => (
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={`Set glasses brand to ${glassesBrandLabel(brand)}`}
               key={`glasses-brand-${brand}`}
               style={[styles.chip, glassesMode.brand === brand ? styles.chipActive : null]}
               onPress={() => onSetGlassesBrand(brand)}
@@ -828,6 +839,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Decrease glasses text scale"
             style={[styles.actionButton, glassesMode.textScale <= 0.85 ? styles.buttonDisabled : null]}
             disabled={glassesMode.textScale <= 0.85}
             onPress={() => onSetGlassesTextScale(glassesMode.textScale - 0.05)}
@@ -837,6 +849,7 @@ export function TerminalsScreen() {
           <Text style={styles.serverSubtitle}>{`${glassesBrandLabel(glassesMode.brand)} • ${Math.round(glassesMode.textScale * 100)}% text`}</Text>
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel="Increase glasses text scale"
             style={[styles.actionButton, glassesMode.textScale >= 1.6 ? styles.buttonDisabled : null]}
             disabled={glassesMode.textScale >= 1.6}
             onPress={() => onSetGlassesTextScale(glassesMode.textScale + 0.05)}
@@ -848,6 +861,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Auto-send voice transcript</Text>
           <Switch
+            accessibilityLabel="Toggle auto send voice transcript"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.voiceAutoSend ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.voiceAutoSend}
@@ -857,6 +871,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Continuous voice loop</Text>
           <Switch
+            accessibilityLabel="Toggle continuous voice loop"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.voiceLoop ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.voiceLoop}
@@ -866,6 +881,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Require wake phrase</Text>
           <Switch
+            accessibilityLabel="Toggle wake phrase requirement"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.wakePhraseEnabled ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.wakePhraseEnabled}
@@ -895,6 +911,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Server VAD assist</Text>
           <Switch
+            accessibilityLabel="Toggle server VAD assist"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.vadEnabled ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.vadEnabled}
@@ -932,6 +949,7 @@ export function TerminalsScreen() {
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>BT remote push-to-talk keys</Text>
           <Switch
+            accessibilityLabel="Toggle Bluetooth push to talk keys"
             trackColor={{ false: "#33596c", true: "#0ea8c8" }}
             thumbColor={glassesMode.headsetPttEnabled ? "#d4fdff" : "#d3dee5"}
             value={glassesMode.headsetPttEnabled}
@@ -947,6 +965,7 @@ export function TerminalsScreen() {
                 {sortedOpenSessions.map((session) => (
                   <Pressable
                     accessibilityRole="button"
+                    accessibilityLabel={`Select glasses target session ${sessionAliases[session]?.trim() || session}`}
                     key={`glasses-session-${session}`}
                     style={[styles.chip, glassesActiveSession === session ? styles.chipActive : null]}
                     onPress={() => setGlassesSession(session)}
@@ -964,6 +983,7 @@ export function TerminalsScreen() {
             <View style={styles.actionsWrap}>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Start glasses voice capture"
                 style={[styles.actionButton, voiceRecording || voiceBusy ? styles.buttonDisabled : null]}
                 disabled={voiceRecording || voiceBusy}
                 onPress={onVoiceStartCapture}
@@ -972,6 +992,7 @@ export function TerminalsScreen() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Stop glasses voice capture and transcribe"
                 style={[styles.actionButton, !voiceRecording || voiceBusy || !glassesActiveSession ? styles.buttonDisabled : null]}
                 disabled={!voiceRecording || voiceBusy || !glassesActiveSession}
                 onPress={() => {
@@ -984,6 +1005,7 @@ export function TerminalsScreen() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
+                accessibilityLabel="Send glasses transcript"
                 style={[styles.actionButton, !voiceTranscript.trim() || voiceBusy || !glassesActiveSession ? styles.buttonDisabled : null]}
                 disabled={!voiceTranscript.trim() || voiceBusy || !glassesActiveSession}
                 onPress={() => {
@@ -1063,16 +1085,16 @@ export function TerminalsScreen() {
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Terminal Layout</Text>
         <View style={styles.actionsWrap}>
-          <Pressable accessibilityRole="button" style={[styles.chip, layoutMode === "stack" ? styles.chipActive : null]} onPress={() => setLayoutMode("stack")}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Set terminal layout to stack" style={[styles.chip, layoutMode === "stack" ? styles.chipActive : null]} onPress={() => setLayoutMode("stack")}>
             <Text style={[styles.chipText, layoutMode === "stack" ? styles.chipTextActive : null]}>Stack</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.chip, layoutMode === "tabs" ? styles.chipActive : null]} onPress={() => setLayoutMode("tabs")}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Set terminal layout to tabs" style={[styles.chip, layoutMode === "tabs" ? styles.chipActive : null]} onPress={() => setLayoutMode("tabs")}>
             <Text style={[styles.chipText, layoutMode === "tabs" ? styles.chipTextActive : null]}>Tabs</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.chip, layoutMode === "grid" ? styles.chipActive : null]} onPress={() => setLayoutMode("grid")}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Set terminal layout to grid" style={[styles.chip, layoutMode === "grid" ? styles.chipActive : null]} onPress={() => setLayoutMode("grid")}>
             <Text style={[styles.chipText, layoutMode === "grid" ? styles.chipTextActive : null]}>Grid</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.chip, layoutMode === "split" ? styles.chipActive : null]} onPress={() => setLayoutMode("split")}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Set terminal layout to split" style={[styles.chip, layoutMode === "split" ? styles.chipActive : null]} onPress={() => setLayoutMode("split")}>
             <Text style={[styles.chipText, layoutMode === "split" ? styles.chipTextActive : null]}>Split</Text>
           </Pressable>
         </View>
@@ -1100,7 +1122,7 @@ export function TerminalsScreen() {
           <>
             <View style={styles.rowInlineSpace}>
               <Text style={styles.serverSubtitle}>{`${visibleProcesses.length} / ${processes.length} processes`}</Text>
-              <Pressable accessibilityRole="button" style={[styles.actionButton, processesBusy ? styles.buttonDisabled : null]} onPress={onRefreshProcesses} disabled={processesBusy}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Refresh process list" style={[styles.actionButton, processesBusy ? styles.buttonDisabled : null]} onPress={onRefreshProcesses} disabled={processesBusy}>
                 <Text style={styles.actionButtonText}>{processesBusy ? "Refreshing..." : "Refresh"}</Text>
               </Pressable>
             </View>
@@ -1122,6 +1144,7 @@ export function TerminalsScreen() {
                 const active = index >= 0;
                 return (
                   <Pressable accessibilityRole="button"
+                    accessibilityLabel={`Prioritize process sort by ${sortMode}`}
                     key={`sort-${sortMode}`}
                     style={[styles.chip, active ? styles.chipActive : null]}
                     onPress={() => setProcessSorts((prev) => [sortMode, ...prev.filter((entry) => entry !== sortMode)])}
@@ -1218,6 +1241,7 @@ export function TerminalsScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
           {TERMINAL_THEME_PRESETS.map((preset) => (
             <Pressable accessibilityRole="button"
+              accessibilityLabel={`Use ${preset.label} terminal theme`}
               key={preset.id}
               style={[styles.chip, terminalTheme.preset === preset.id ? styles.chipActive : null]}
               onPress={() => onSetTerminalPreset(preset.id)}
@@ -1230,6 +1254,7 @@ export function TerminalsScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
           {TERMINAL_FONT_OPTIONS.map((option) => (
             <Pressable accessibilityRole="button"
+              accessibilityLabel={`Use ${option.label} terminal font`}
               key={option.id}
               style={[styles.chip, terminalTheme.fontFamily === option.id ? styles.chipActive : null]}
               onPress={() => onSetTerminalFontFamily(option.id)}
@@ -1241,6 +1266,7 @@ export function TerminalsScreen() {
 
         <View style={styles.rowInlineSpace}>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Decrease terminal font size"
             style={[styles.actionButton, terminalTheme.fontSize <= TERMINAL_MIN_FONT_SIZE ? styles.buttonDisabled : null]}
             onPress={() => onSetTerminalFontSize(terminalTheme.fontSize - 1)}
             disabled={terminalTheme.fontSize <= TERMINAL_MIN_FONT_SIZE}
@@ -1249,6 +1275,7 @@ export function TerminalsScreen() {
           </Pressable>
           <Text style={styles.serverSubtitle}>{`Font ${terminalTheme.fontSize}px`}</Text>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Increase terminal font size"
             style={[styles.actionButton, terminalTheme.fontSize >= TERMINAL_MAX_FONT_SIZE ? styles.buttonDisabled : null]}
             onPress={() => onSetTerminalFontSize(terminalTheme.fontSize + 1)}
             disabled={terminalTheme.fontSize >= TERMINAL_MAX_FONT_SIZE}
@@ -1260,6 +1287,7 @@ export function TerminalsScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
           {TERMINAL_BG_OPACITY_OPTIONS.map((opacity) => (
             <Pressable accessibilityRole="button"
+              accessibilityLabel={`Set terminal background opacity to ${Math.round(opacity * 100)} percent`}
               key={String(opacity)}
               style={[styles.chip, Math.abs(terminalTheme.backgroundOpacity - opacity) < 0.01 ? styles.chipActive : null]}
               onPress={() => onSetTerminalBackgroundOpacity(opacity)}
@@ -1278,10 +1306,10 @@ export function TerminalsScreen() {
         <Text style={styles.serverSubtitle}>{activeServer?.baseUrl || "Go to Servers tab to add one"}</Text>
 
         <View style={styles.rowInlineSpace}>
-          <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefreshSessions} disabled={!connected || !capabilities.terminal}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Refresh terminal sessions" style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefreshSessions} disabled={!connected || !capabilities.terminal}>
             <Text style={styles.buttonPrimaryText}>Refresh Sessions</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onOpenServers}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open server management" style={[styles.buttonGhost, styles.flexButton]} onPress={onOpenServers}>
             <Text style={styles.buttonGhostText}>Manage Servers</Text>
           </Pressable>
         </View>
@@ -1291,6 +1319,7 @@ export function TerminalsScreen() {
         <Text style={styles.panelLabel}>Start New Session</Text>
         <View style={styles.modeRow}>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Set new session type to AI"
             style={[
               styles.modeButton,
               startKind === "ai" ? styles.modeButtonOn : null,
@@ -1302,6 +1331,7 @@ export function TerminalsScreen() {
             <Text style={[styles.modeButtonText, startKind === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Set new session type to shell"
             style={[styles.modeButton, startKind === "shell" ? styles.modeButtonOn : null, !capabilities.terminal ? styles.buttonDisabled : null]}
             onPress={() => onSetStartKind("shell")}
             disabled={!capabilities.terminal}
@@ -1312,10 +1342,11 @@ export function TerminalsScreen() {
 
         {startKind === "ai" ? (
           <View style={styles.modeRow}>
-            <Pressable accessibilityRole="button" style={[styles.modeButton, startAiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetStartAiEngine("auto")}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Set AI engine to auto" style={[styles.modeButton, startAiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetStartAiEngine("auto")}>
               <Text style={[styles.modeButtonText, startAiEngine === "auto" ? styles.modeButtonTextOn : null]}>AI Auto</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
+              accessibilityLabel="Set AI engine to server AI"
               style={[styles.modeButton, startAiEngine === "server" ? styles.modeButtonOn : null, !capabilities.codex ? styles.buttonDisabled : null]}
               onPress={() => onSetStartAiEngine("server")}
               disabled={!capabilities.codex}
@@ -1323,6 +1354,7 @@ export function TerminalsScreen() {
               <Text style={[styles.modeButtonText, startAiEngine === "server" ? styles.modeButtonTextOn : null]}>Server AI</Text>
             </Pressable>
             <Pressable accessibilityRole="button"
+              accessibilityLabel="Set AI engine to external LLM"
               style={[styles.modeButton, startAiEngine === "external" ? styles.modeButtonOn : null, !hasExternalLlm ? styles.buttonDisabled : null]}
               onPress={() => onSetStartAiEngine("external")}
               disabled={!hasExternalLlm}
@@ -1355,6 +1387,7 @@ export function TerminalsScreen() {
           <View style={styles.rowInlineSpace}>
             <Text style={styles.switchLabel}>Open session on Mac Terminal</Text>
             <Switch
+              accessibilityLabel="Open new AI session on Mac Terminal"
               trackColor={{ false: "#33596c", true: "#0ea8c8" }}
               thumbColor={startOpenOnMac ? "#d4fdff" : "#d3dee5"}
               value={startOpenOnMac}
@@ -1367,7 +1400,7 @@ export function TerminalsScreen() {
           <Text style={styles.emptyText}>This will create a local AI session powered by your active external LLM profile.</Text>
         ) : null}
 
-        <Pressable accessibilityRole="button" style={[styles.buttonPrimary, !connected ? styles.buttonDisabled : null]} onPress={onStartSession} disabled={!connected}>
+        <Pressable accessibilityRole="button" accessibilityLabel={`Start ${startKind === "ai" ? "AI" : "shell"} session`} style={[styles.buttonPrimary, !connected ? styles.buttonDisabled : null]} onPress={onStartSession} disabled={!connected}>
           <Text style={styles.buttonPrimaryText}>Start {startKind === "ai" ? "AI" : "Shell"} Session</Text>
         </Pressable>
       </View>
@@ -1389,7 +1422,7 @@ export function TerminalsScreen() {
         {allTags.length > 0 ? (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {allTags.map((tag) => (
-              <Pressable accessibilityRole="button" key={tag} style={[styles.chip, tagFilter === tag ? styles.chipActive : null]} onPress={() => onSetTagFilter(tagFilter === tag ? "" : tag)}>
+              <Pressable accessibilityRole="button" accessibilityLabel={`${tagFilter === tag ? "Clear" : "Apply"} tag filter ${tag}`} key={tag} style={[styles.chip, tagFilter === tag ? styles.chipActive : null]} onPress={() => onSetTagFilter(tagFilter === tag ? "" : tag)}>
                 <Text style={[styles.chipText, tagFilter === tag ? styles.chipTextActive : null]}>{tag}</Text>
               </Pressable>
             ))}
@@ -1484,7 +1517,7 @@ export function TerminalsScreen() {
         <View style={styles.panel}>
           <Text style={styles.panelLabel}>iPad Split View</Text>
           <Text style={styles.serverSubtitle}>Split layout is a Pro feature.</Text>
-          <Pressable accessibilityRole="button" style={styles.buttonPrimary} onPress={onShowPaywall}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Open Pro upgrade paywall" style={styles.buttonPrimary} onPress={onShowPaywall}>
             <Text style={styles.buttonPrimaryText}>Upgrade to Pro</Text>
           </Pressable>
         </View>

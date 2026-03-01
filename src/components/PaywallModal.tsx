@@ -21,15 +21,26 @@ export function PaywallModal({ visible, priceLabel, onClose, onUpgrade, onRestor
           <Text style={styles.serverTitle}>{priceLabel ? `Pro ${priceLabel}` : "Pro subscription"}</Text>
 
           <View style={styles.rowInlineSpace}>
-            <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton]} onPress={onUpgrade}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Upgrade to NovaRemote Pro"
+              accessibilityHint="Starts the in-app purchase flow."
+              style={[styles.buttonPrimary, styles.flexButton]}
+              onPress={onUpgrade}
+            >
               <Text style={styles.buttonPrimaryText}>Upgrade</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onRestore}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Restore Pro purchases"
+              style={[styles.buttonGhost, styles.flexButton]}
+              onPress={onRestore}
+            >
               <Text style={styles.buttonGhostText}>Restore</Text>
             </Pressable>
           </View>
 
-          <Pressable accessibilityRole="button" style={styles.buttonGhost} onPress={onClose}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close paywall" style={styles.buttonGhost} onPress={onClose}>
             <Text style={styles.buttonGhostText}>Maybe Later</Text>
           </Pressable>
         </View>

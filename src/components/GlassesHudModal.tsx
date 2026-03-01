@@ -99,7 +99,7 @@ export function GlassesHudModal({
         <View style={[styles.glassesHudHeader, { borderColor: accent }]}> 
           <View style={styles.rowInlineSpace}>
             <Text style={[styles.glassesHudTitle, { color: accent }]}>{brandTitle(brand)}</Text>
-            <Pressable accessibilityRole="button" style={[styles.actionButton, { borderColor: accent }]} onPress={onClose}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Close glasses HUD" style={[styles.actionButton, { borderColor: accent }]} onPress={onClose}>
               <Text style={styles.actionButtonText}>Exit HUD</Text>
             </Pressable>
           </View>
@@ -109,6 +109,7 @@ export function GlassesHudModal({
               {sessions.map((entry) => (
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel={`Select HUD session ${entry.label}`}
                   key={`hud-session-${entry.id}`}
                   style={[styles.chip, session === entry.id ? styles.chipActive : null]}
                   onPress={() => onSelectSession(entry.id)}
@@ -151,6 +152,7 @@ export function GlassesHudModal({
           <View style={styles.actionsWrap}>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Start HUD voice capture"
               style={[styles.actionButton, (voiceRecording || voiceBusy || !session) ? styles.buttonDisabled : null]}
               disabled={voiceRecording || voiceBusy || !session}
               onPress={onVoiceStart}
@@ -159,6 +161,7 @@ export function GlassesHudModal({
             </Pressable>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Stop HUD voice capture and transcribe"
               style={[styles.actionButton, (!voiceRecording || voiceBusy || !session) ? styles.buttonDisabled : null]}
               disabled={!voiceRecording || voiceBusy || !session}
               onPress={onVoiceStop}
@@ -167,6 +170,7 @@ export function GlassesHudModal({
             </Pressable>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel="Send HUD transcript"
               style={[styles.actionButton, (!transcriptReady || voiceBusy || !session) ? styles.buttonDisabled : null]}
               disabled={!transcriptReady || voiceBusy || !session}
               onPress={onVoiceSendTranscript}
@@ -175,13 +179,14 @@ export function GlassesHudModal({
             </Pressable>
             <Pressable
               accessibilityRole="button"
+              accessibilityLabel={isSending ? "Sending HUD draft" : "Send HUD draft"}
               style={[styles.buttonPrimary, (!session || isSending) ? styles.buttonDisabled : null]}
               disabled={!session || isSending}
               onPress={onSend}
             >
               <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : "Send"}</Text>
             </Pressable>
-            <Pressable accessibilityRole="button" style={styles.buttonGhost} onPress={onClearDraft}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Clear HUD draft" style={styles.buttonGhost} onPress={onClearDraft}>
               <Text style={styles.buttonGhostText}>Clear</Text>
             </Pressable>
           </View>

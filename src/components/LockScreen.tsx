@@ -14,7 +14,13 @@ export function LockScreen({ onUnlock }: LockScreenProps) {
         <View style={styles.panel}>
           <Text style={styles.title}>NovaRemote Locked</Text>
           <Text style={styles.serverSubtitle}>Use Face ID / Touch ID to unlock server credentials and sessions.</Text>
-          <Pressable style={styles.buttonPrimary} onPress={onUnlock}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Unlock NovaRemote"
+            accessibilityHint="Requests Face ID or Touch ID authentication."
+            style={styles.buttonPrimary}
+            onPress={onUnlock}
+          >
             <Text style={styles.buttonPrimaryText}>Unlock</Text>
           </Pressable>
         </View>

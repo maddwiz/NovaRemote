@@ -31,6 +31,8 @@ export function ShareServerModal({ visible, value, title, onClose }: ShareServer
           )}
 
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Share server link"
+            accessibilityHint="Opens the system share sheet for this server configuration link."
             style={[styles.buttonGhost, !safeValue ? styles.buttonDisabled : null]}
             disabled={!safeValue}
             onPress={() => {
@@ -40,7 +42,7 @@ export function ShareServerModal({ visible, value, title, onClose }: ShareServer
             <Text style={styles.buttonGhostText}>Share Link</Text>
           </Pressable>
 
-          <Pressable accessibilityRole="button" style={styles.buttonPrimary} onPress={onClose}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Close share modal" style={styles.buttonPrimary} onPress={onClose}>
             <Text style={styles.buttonPrimaryText}>Done</Text>
           </Pressable>
         </View>

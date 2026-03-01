@@ -68,13 +68,14 @@ export function SnippetsScreen({
         />
 
         <View style={styles.modeRow}>
-          <Pressable accessibilityRole="button" style={[styles.modeButton, mode === "ai" ? styles.modeButtonOn : null]} onPress={() => setMode("ai")}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Set snippet mode to AI" style={[styles.modeButton, mode === "ai" ? styles.modeButtonOn : null]} onPress={() => setMode("ai")}>
             <Text style={[styles.modeButtonText, mode === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.modeButton, mode === "shell" ? styles.modeButtonOn : null]} onPress={() => setMode("shell")}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Set snippet mode to shell" style={[styles.modeButton, mode === "shell" ? styles.modeButtonOn : null]} onPress={() => setMode("shell")}>
             <Text style={[styles.modeButtonText, mode === "shell" ? styles.modeButtonTextOn : null]}>Shell</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Toggle snippet scope to this server"
             style={[styles.modeButton, scopeCurrentServer ? styles.modeButtonOn : null]}
             onPress={() => setScopeCurrentServer((prev) => !prev)}
           >
@@ -83,6 +84,8 @@ export function SnippetsScreen({
         </View>
 
         <Pressable accessibilityRole="button"
+          accessibilityLabel={editingId ? "Update snippet" : "Save snippet"}
+          accessibilityHint="Stores the snippet for reuse."
           style={styles.buttonPrimary}
           onPress={() => {
             if (!isPro) {
@@ -121,7 +124,13 @@ export function SnippetsScreen({
             {openSessions.map((session) => {
               const active = (targetSession || openSessions[0]) === session;
               return (
-                <Pressable accessibilityRole="button" key={session} style={[styles.chip, active ? styles.chipActive : null]} onPress={() => setTargetSession(session)}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Select target session ${session}`}
+                  key={session}
+                  style={[styles.chip, active ? styles.chipActive : null]}
+                  onPress={() => setTargetSession(session)}
+                >
                   <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{session}</Text>
                 </Pressable>
               );
@@ -148,6 +157,7 @@ export function SnippetsScreen({
                 <Text style={styles.serverSubtitle}>{snippet.command}</Text>
                 <View style={styles.actionsWrap}>
                   <Pressable accessibilityRole="button"
+                    accessibilityLabel={`Insert snippet ${snippet.name}`}
                     style={styles.actionButton}
                     disabled={!session}
                     onPress={() => {
@@ -159,6 +169,7 @@ export function SnippetsScreen({
                     <Text style={styles.actionButtonText}>Insert</Text>
                   </Pressable>
                   <Pressable accessibilityRole="button"
+                    accessibilityLabel={`Run snippet ${snippet.name}`}
                     style={styles.actionButton}
                     disabled={!session}
                     onPress={() => {
@@ -170,6 +181,7 @@ export function SnippetsScreen({
                     <Text style={styles.actionButtonText}>Run</Text>
                   </Pressable>
                   <Pressable accessibilityRole="button"
+                    accessibilityLabel={`Edit snippet ${snippet.name}`}
                     style={styles.actionButton}
                     onPress={() => {
                       setEditingId(snippet.id);
@@ -181,7 +193,7 @@ export function SnippetsScreen({
                   >
                     <Text style={styles.actionButtonText}>Edit</Text>
                   </Pressable>
-                  <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={() => onDeleteSnippet(snippet.id)}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Delete snippet ${snippet.name}`} style={styles.actionDangerButton} onPress={() => onDeleteSnippet(snippet.id)}>
                     <Text style={styles.actionDangerText}>Delete</Text>
                   </Pressable>
                 </View>

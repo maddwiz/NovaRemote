@@ -305,6 +305,7 @@ export function LlmsScreen({
 
         <View style={styles.modeRow}>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Set provider type to OpenAI-compatible"
             style={[styles.modeButton, kind === "openai_compatible" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("openai_compatible");
@@ -316,6 +317,7 @@ export function LlmsScreen({
             <Text style={[styles.modeButtonText, kind === "openai_compatible" ? styles.modeButtonTextOn : null]}>OpenAI-Compatible</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Set provider type to Azure OpenAI"
             style={[styles.modeButton, kind === "azure_openai" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("azure_openai");
@@ -329,6 +331,7 @@ export function LlmsScreen({
             <Text style={[styles.modeButtonText, kind === "azure_openai" ? styles.modeButtonTextOn : null]}>Azure OpenAI</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Set provider type to Anthropic"
             style={[styles.modeButton, kind === "anthropic" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("anthropic");
@@ -340,6 +343,7 @@ export function LlmsScreen({
             <Text style={[styles.modeButtonText, kind === "anthropic" ? styles.modeButtonTextOn : null]}>Anthropic</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Set provider type to Gemini"
             style={[styles.modeButton, kind === "gemini" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("gemini");
@@ -351,6 +355,7 @@ export function LlmsScreen({
             <Text style={[styles.modeButtonText, kind === "gemini" ? styles.modeButtonTextOn : null]}>Gemini</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Set provider type to Ollama"
             style={[styles.modeButton, kind === "ollama" ? styles.modeButtonOn : null]}
             onPress={() => {
               setKind("ollama");
