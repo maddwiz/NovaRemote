@@ -24,6 +24,11 @@ export const STORAGE_SHELL_WAIT_MS = "novaremote.shell_wait_ms.v1";
 export const STORAGE_SHELL_WAIT_MS_PREFIX = "novaremote.shell_wait_ms.v2";
 export const STORAGE_CAPABILITIES_CACHE_PREFIX = "novaremote.capabilities_cache.v1";
 export const STORAGE_GLASSES_MODE = "novaremote.glasses_mode.v1";
+export const STORAGE_ANALYTICS_ENABLED = "novaremote.analytics_enabled.v1";
+export const STORAGE_ANALYTICS_ANON_ID = "novaremote.analytics_anon_id.v1";
+export const STORAGE_REFERRAL_CODE = "novaremote.referral_code.v1";
+export const STORAGE_REFERRAL_CLAIMED_CODE = "novaremote.referral_claimed.v1";
+export const STORAGE_SHARED_SERVER_TEMPLATES = "novaremote.shared_server_templates.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";

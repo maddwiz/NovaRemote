@@ -248,3 +248,15 @@ export type LlmSendResult = {
   usedVision: boolean;
   usedTools: boolean;
 };
+
+export type SharedServerTemplate = {
+  id: string;
+  name: string;
+  baseUrl: string;
+  defaultCwd: string;
+  terminalBackend?: TerminalBackendKind;
+  sshHost?: string;
+  sshUser?: string;
+  sshPort?: number;
+  importedAt: string;
+};

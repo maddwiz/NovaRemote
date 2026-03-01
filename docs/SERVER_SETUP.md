@@ -399,6 +399,39 @@ Example VAD response:
 }
 ```
 
+## Optional Endpoints (Monetization / Scale)
+
+### `POST /analytics/event`
+
+Purpose: receive anonymous in-app events for product analytics.
+
+Request:
+
+```json
+{
+  "event": "session_started",
+  "at": "2026-03-01T21:10:00.000Z",
+  "anon_id": "anon-abc123",
+  "platform": "ios",
+  "props": {
+    "kind": "ai",
+    "engine": "external"
+  }
+}
+```
+
+Response:
+
+```json
+{ "ok": true }
+```
+
+Guidelines:
+
+- Treat events as anonymous telemetry only.
+- Do not require PII fields.
+- Return fast (202/200) and process async if needed.
+
 ## Quick Start (Codex Remote Reference Server)
 
 If you are using the included `codex_remote` server from the parent workspace:

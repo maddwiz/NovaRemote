@@ -63,6 +63,9 @@ Use `docs/media/README.md` as the canonical media file map.
 - Shareable server config links/QR (token excluded)
 - Direct SSH fallback launcher via `ssh://` (optional per-server host/user/port)
 - Snippet/macros JSON export/import for manual cloud sync
+- Anonymous analytics telemetry (opt-in toggle)
+- Referral program scaffold (share + claim code links)
+- Pro team shared profile templates (export/import/apply, token-free)
 - iPad split-view layout (Pro)
 - RevenueCat paywall scaffolding (free tier: 1 server, 2 sessions)
 - Onboarding wizard with connection test
@@ -130,7 +133,12 @@ See `docs/SERVER_SETUP.md` for endpoint contracts and auth requirements.
 Cross-platform ecosystem/install guide:
 
 - `docs/ECOSYSTEM.md`
+- `docs/MONETIZATION_SCALE.md`
 
 ## App Store / Launch Checklist
 
 See `docs/APP_STORE_PREP.md`.
+
+Google Play checklist:
+
+- `docs/PLAY_STORE_PREP.md`

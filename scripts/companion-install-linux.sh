@@ -95,17 +95,17 @@ export CODEXREMOTE_AUDIT_LOG="${CONFIG_DIR}/audit.log"
 CFG
 chmod 600 "${CONFIG_FILE}"
 
-cat > "${START_SCRIPT}" <<'SCRIPT'
+cat > "${START_SCRIPT}" <<SCRIPT
 #!/usr/bin/env bash
 set -euo pipefail
-ROOT_DIR="${HOME}/codex_remote"
-CONFIG_FILE="${HOME}/.codexremote/config.env"
-if [[ -f "${CONFIG_FILE}" ]]; then
+ROOT_DIR="${TARGET_DIR}"
+CONFIG_FILE="\${HOME}/.codexremote/config.env"
+if [[ -f "\${CONFIG_FILE}" ]]; then
   # shellcheck disable=SC1090
-  source "${CONFIG_FILE}"
+  source "\${CONFIG_FILE}"
 fi
-cd "${ROOT_DIR}"
-exec "${ROOT_DIR}/.venv/bin/python" -m uvicorn app.server:app --host "${CODEXREMOTE_BIND_HOST:-0.0.0.0}" --port "${CODEXREMOTE_BIND_PORT:-8787}"
+cd "\${ROOT_DIR}"
+exec "\${ROOT_DIR}/.venv/bin/python" -m uvicorn app.server:app --host "\${CODEXREMOTE_BIND_HOST:-0.0.0.0}" --port "\${CODEXREMOTE_BIND_PORT:-8787}"
 SCRIPT
 chmod 755 "${START_SCRIPT}"
 

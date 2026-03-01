@@ -66,6 +66,9 @@ import { useLlmClient } from "./hooks/useLlmClient";
 import { useGlassesMode } from "./hooks/useGlassesMode";
 import { useShellRunWait } from "./hooks/useShellRunWait";
 import { useVoiceCapture } from "./hooks/useVoiceCapture";
+import { useAnalytics } from "./hooks/useAnalytics";
+import { useReferrals } from "./hooks/useReferrals";
+import { useSharedProfiles } from "./hooks/useSharedProfiles";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -83,6 +86,7 @@ import {
   ServerProfile,
   SessionRecording,
   Status,
+  SharedServerTemplate,
   SysStats,
   TerminalBackendKind,
   TerminalSendMode,
@@ -478,11 +482,16 @@ export default function AppShell() {
   const [llmTestSummary, setLlmTestSummary] = useState<string>("");
   const [llmTransferStatus, setLlmTransferStatus] = useState<string>("");
   const [snippetSyncStatus, setSnippetSyncStatus] = useState<string>("");
+  const [referralCodeInput, setReferralCodeInput] = useState<string>("");
+  const [growthStatus, setGrowthStatus] = useState<string>("");
+  const [sharedTemplatesPayload, setSharedTemplatesPayload] = useState<string>("");
+  const [sharedTemplatesStatus, setSharedTemplatesStatus] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const autoOpenedPinsServerRef = useRef<string | null>(null);
   const aliasGuessRef = useRef<Record<string, string>>({});
   const voiceLoopRetryCountRef = useRef<Record<string, number>>({});
   const voiceLoopRestartTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+  const appOpenTrackedRef = useRef<boolean>(false);
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -553,6 +562,13 @@ export default function AppShell() {
     }
     return Boolean(normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
   }, [activeServer]);
+
+  const { analyticsEnabled, analyticsAnonId, setAnalyticsEnabled, track } = useAnalytics({
+    activeServer,
+    connected,
+  });
+  const { myReferralCode, claimedReferralCode, buildReferralLink, claimReferralCode, extractReferralCodeFromUrl } = useReferrals();
+  const { sharedTemplates, exportTemplatesFromServers, importTemplates, deleteTemplate } = useSharedProfiles();
 
   const {
     capabilities,
@@ -1225,6 +1241,15 @@ export default function AppShell() {
         return;
       }
 
+      const incomingReferralCode = extractReferralCodeFromUrl(url);
+      if (incomingReferralCode) {
+        setReferralCodeInput(incomingReferralCode);
+        setRoute("servers");
+        setGrowthStatus(`Referral code detected: ${incomingReferralCode}. Claim it in the Growth panel.`);
+        track("referral_link_opened", { has_claimed: Boolean(claimedReferralCode) });
+        return;
+      }
+
       const parsed = Linking.parse(url);
       if (parsed.path !== "add-server") {
         return;
@@ -1255,6 +1280,7 @@ export default function AppShell() {
       importServerConfig({ name, url: baseUrl, cwd, backend, sshHost, sshUser, sshPort });
       setRoute("servers");
       setReady("Imported server config. Add your token and save.");
+      track("server_config_imported", { via: "deep_link" });
     }
 
     void Linking.getInitialURL().then((url) => {
@@ -1268,13 +1294,24 @@ export default function AppShell() {
     return () => {
       sub.remove();
     };
-  }, [importServerConfig, setReady]);
+  }, [claimedReferralCode, extractReferralCodeFromUrl, importServerConfig, setReady, track]);
 
   useEffect(() => {
     if (!loadingSettings) {
       setReady("Profiles loaded");
     }
   }, [loadingSettings, setReady]);
+
+  useEffect(() => {
+    if (!unlocked || appOpenTrackedRef.current) {
+      return;
+    }
+    appOpenTrackedRef.current = true;
+    track("app_open", {
+      analytics_enabled: analyticsEnabled,
+      anon_id_present: Boolean(analyticsAnonId),
+    });
+  }, [analyticsAnonId, analyticsEnabled, track, unlocked]);
 
   useEffect(() => {
     if (!activeServerId) {
@@ -1662,6 +1699,7 @@ export default function AppShell() {
               await sendViaExternalLlm(localSession, startPrompt);
               setStartPrompt("");
             }
+            track("session_started", { kind: "ai", engine: "external", local: true });
             void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
             return;
           }
@@ -1685,6 +1723,11 @@ export default function AppShell() {
             [session]: startAiEngine === "server" ? "server" : "auto",
           }));
         }
+        track("session_started", {
+          kind: startKind,
+          engine: startKind === "ai" ? startAiEngine : "shell",
+          local: false,
+        });
         void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       });
     },
@@ -1857,6 +1900,7 @@ export default function AppShell() {
         const sent = await handleSend(session);
         if (sent) {
           await addCommand(session, sent);
+          track("command_sent", { mode, session_kind: isLocalSession(session) ? "local" : "remote" });
         }
       });
     },
@@ -2025,6 +2069,7 @@ export default function AppShell() {
           return;
         }
         await runFleetCommand();
+        track("fleet_run", { target_count: fleetTargets.length });
       });
     },
   };
@@ -2113,6 +2158,16 @@ export default function AppShell() {
               serverSshPortInput={serverSshPortInput}
               editingServerId={editingServerId}
               tokenMasked={tokenMasked}
+              isPro={isPro}
+              analyticsEnabled={analyticsEnabled}
+              analyticsAnonId={analyticsAnonId}
+              myReferralCode={myReferralCode}
+              claimedReferralCode={claimedReferralCode}
+              referralCodeInput={referralCodeInput}
+              growthStatus={growthStatus}
+              sharedTemplatesPayload={sharedTemplatesPayload}
+              sharedTemplatesStatus={sharedTemplatesStatus}
+              sharedTemplates={sharedTemplates}
               requireBiometric={requireBiometric}
               requireDangerConfirm={requireDangerConfirm}
               onUseServer={(serverId) => {
@@ -2147,6 +2202,80 @@ export default function AppShell() {
               onSetServerSshHost={setServerSshHostInput}
               onSetServerSshUser={setServerSshUserInput}
               onSetServerSshPort={setServerSshPortInput}
+              onSetAnalyticsEnabled={(value) => {
+                void runWithStatus("Updating analytics setting", async () => {
+                  await setAnalyticsEnabled(value);
+                  setGrowthStatus(value ? "Anonymous analytics enabled." : "Anonymous analytics disabled.");
+                  track("analytics_toggled", { enabled: value });
+                });
+              }}
+              onShareReferral={() => {
+                void runWithStatus("Sharing referral link", async () => {
+                  const link = buildReferralLink();
+                  if (!link) {
+                    throw new Error("Referral system is still initializing.");
+                  }
+                  await Share.share({
+                    title: "Join NovaRemote Pro",
+                    message: `Use my NovaRemote referral code ${myReferralCode}: ${link}`,
+                  });
+                  setGrowthStatus("Referral link shared.");
+                  track("referral_shared", { has_claimed: Boolean(claimedReferralCode) });
+                });
+              }}
+              onSetReferralCodeInput={setReferralCodeInput}
+              onClaimReferralCode={() => {
+                void runWithStatus("Claiming referral code", async () => {
+                  const claimed = await claimReferralCode(referralCodeInput);
+                  setGrowthStatus(`Referral code ${claimed} claimed.`);
+                  track("referral_claimed", { code_present: Boolean(claimed) });
+                });
+              }}
+              onSetSharedTemplatesPayload={setSharedTemplatesPayload}
+              onExportSharedTemplates={() => {
+                if (!isPro) {
+                  setPaywallVisible(true);
+                  return;
+                }
+                const payload = exportTemplatesFromServers(servers);
+                setSharedTemplatesPayload(payload);
+                setSharedTemplatesStatus(
+                  `Exported ${servers.length} template(s) from current profiles at ${new Date().toLocaleTimeString()}.`
+                );
+                track("shared_templates_exported", { template_count: servers.length });
+              }}
+              onImportSharedTemplates={() => {
+                if (!isPro) {
+                  setPaywallVisible(true);
+                  return;
+                }
+                void runWithStatus("Importing shared templates", async () => {
+                  const summary = await importTemplates(sharedTemplatesPayload);
+                  setSharedTemplatesStatus(
+                    `Imported ${summary.imported} template(s), skipped ${summary.skipped}. Total templates: ${summary.total}.`
+                  );
+                  track("shared_templates_imported", { imported: summary.imported, skipped: summary.skipped });
+                });
+              }}
+              onApplySharedTemplate={(template: SharedServerTemplate) => {
+                importServerConfig({
+                  name: template.name,
+                  url: template.baseUrl,
+                  cwd: template.defaultCwd,
+                  backend: template.terminalBackend,
+                  sshHost: template.sshHost,
+                  sshUser: template.sshUser,
+                  sshPort: template.sshPort,
+                });
+                setGrowthStatus(`Applied shared template ${template.name}. Add token then save.`);
+                track("shared_template_applied", { has_ssh: Boolean(template.sshHost) });
+              }}
+              onDeleteSharedTemplate={(templateId) => {
+                void runWithStatus("Deleting shared template", async () => {
+                  await deleteTemplate(templateId);
+                });
+              }}
+              onShowPaywall={() => setPaywallVisible(true)}
               onSetRequireBiometric={(value) => {
                 void runWithStatus("Updating lock setting", async () => {
                   await setRequireBiometric(value);
@@ -2166,6 +2295,7 @@ export default function AppShell() {
                     return;
                   }
                   await saveServer();
+                  track("server_saved", { editing: Boolean(editingServerId), server_count: servers.length });
                   setRoute("terminals");
                 });
               }}
@@ -2538,6 +2668,10 @@ export default function AppShell() {
             const sent = await handleSend(focusedSession);
             if (sent) {
               await addCommand(focusedSession, sent);
+              track("command_sent", {
+                mode: focusedMode,
+                session_kind: isLocalSession(focusedSession) ? "local" : "remote",
+              });
             }
           });
         }}
@@ -2622,22 +2756,26 @@ export default function AppShell() {
         onClose={() => setPaywallVisible(false)}
         onUpgrade={() => {
           void runWithStatus("Purchasing Pro", async () => {
+            track("purchase_attempt", { flow: "upgrade" });
             if (!rcAvailable) {
               throw new Error("RevenueCat keys are not configured yet.");
             }
             const pro = await purchasePro();
             if (pro) {
+              track("purchase_success", { flow: "upgrade" });
               setPaywallVisible(false);
             }
           });
         }}
         onRestore={() => {
           void runWithStatus("Restoring purchases", async () => {
+            track("purchase_attempt", { flow: "restore" });
             if (!rcAvailable) {
               throw new Error("RevenueCat keys are not configured yet.");
             }
             const pro = await restore();
             if (pro) {
+              track("purchase_success", { flow: "restore" });
               setPaywallVisible(false);
             }
           });

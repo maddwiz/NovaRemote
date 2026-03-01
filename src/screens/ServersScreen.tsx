@@ -3,7 +3,7 @@ import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER, SSH_HOST_PLACEHOLDER, SSH_USER_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
-import { ServerProfile, TerminalBackendKind } from "../types";
+import { ServerProfile, SharedServerTemplate, TerminalBackendKind } from "../types";
 import { ServerCard } from "../components/ServerCard";
 
 type ServersScreenProps = {
@@ -19,6 +19,16 @@ type ServersScreenProps = {
   serverSshPortInput: string;
   editingServerId: string | null;
   tokenMasked: boolean;
+  isPro: boolean;
+  analyticsEnabled: boolean;
+  analyticsAnonId: string;
+  myReferralCode: string;
+  claimedReferralCode: string;
+  referralCodeInput: string;
+  growthStatus: string;
+  sharedTemplatesPayload: string;
+  sharedTemplatesStatus: string;
+  sharedTemplates: SharedServerTemplate[];
   requireBiometric: boolean;
   requireDangerConfirm: boolean;
   onUseServer: (serverId: string) => void;
@@ -34,6 +44,16 @@ type ServersScreenProps = {
   onSetServerSshHost: (value: string) => void;
   onSetServerSshUser: (value: string) => void;
   onSetServerSshPort: (value: string) => void;
+  onSetAnalyticsEnabled: (value: boolean) => void;
+  onShareReferral: () => void;
+  onSetReferralCodeInput: (value: string) => void;
+  onClaimReferralCode: () => void;
+  onSetSharedTemplatesPayload: (value: string) => void;
+  onExportSharedTemplates: () => void;
+  onImportSharedTemplates: () => void;
+  onApplySharedTemplate: (template: SharedServerTemplate) => void;
+  onDeleteSharedTemplate: (templateId: string) => void;
+  onShowPaywall: () => void;
   onSetRequireBiometric: (value: boolean) => void;
   onSetRequireDangerConfirm: (value: boolean) => void;
   onToggleTokenMask: () => void;
@@ -55,6 +75,16 @@ export function ServersScreen({
   serverSshPortInput,
   editingServerId,
   tokenMasked,
+  isPro,
+  analyticsEnabled,
+  analyticsAnonId,
+  myReferralCode,
+  claimedReferralCode,
+  referralCodeInput,
+  growthStatus,
+  sharedTemplatesPayload,
+  sharedTemplatesStatus,
+  sharedTemplates,
   requireBiometric,
   requireDangerConfirm,
   onUseServer,
@@ -70,6 +100,16 @@ export function ServersScreen({
   onSetServerSshHost,
   onSetServerSshUser,
   onSetServerSshPort,
+  onSetAnalyticsEnabled,
+  onShareReferral,
+  onSetReferralCodeInput,
+  onClaimReferralCode,
+  onSetSharedTemplatesPayload,
+  onExportSharedTemplates,
+  onImportSharedTemplates,
+  onApplySharedTemplate,
+  onDeleteSharedTemplate,
+  onShowPaywall,
   onSetRequireBiometric,
   onSetRequireDangerConfirm,
   onToggleTokenMask,
@@ -219,6 +259,95 @@ export function ServersScreen({
           value={requireDangerConfirm}
           onValueChange={onSetRequireDangerConfirm}
         />
+      </View>
+
+      <View style={styles.serverCard}>
+        <Text style={styles.panelLabel}>Growth / Monetization</Text>
+        <Text style={styles.serverSubtitle}>Anonymous analytics + referrals + Pro shared team templates.</Text>
+
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Anonymous Analytics</Text>
+          <Switch
+            accessibilityLabel="Enable anonymous analytics"
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={analyticsEnabled ? "#d4fdff" : "#d3dee5"}
+            value={analyticsEnabled}
+            onValueChange={onSetAnalyticsEnabled}
+          />
+        </View>
+        <Text style={styles.emptyText}>{`Anon ID: ${analyticsAnonId || "initializing..."}`}</Text>
+
+        <Text style={styles.panelLabel}>Referral Program</Text>
+        <Text style={styles.emptyText}>{`Your code: ${myReferralCode || "..."}`}</Text>
+        {claimedReferralCode ? <Text style={styles.emptyText}>{`Claimed code: ${claimedReferralCode}`}</Text> : null}
+        <View style={styles.rowInlineSpace}>
+          <Pressable accessibilityRole="button" accessibilityLabel="Share referral link" style={[styles.buttonGhost, styles.flexButton]} onPress={onShareReferral}>
+            <Text style={styles.buttonGhostText}>Share Referral Link</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Claim referral code" style={[styles.buttonPrimary, styles.flexButton]} onPress={onClaimReferralCode}>
+            <Text style={styles.buttonPrimaryText}>Claim Code</Text>
+          </Pressable>
+        </View>
+        <TextInput
+          style={styles.input}
+          value={referralCodeInput}
+          onChangeText={onSetReferralCodeInput}
+          autoCapitalize="characters"
+          autoCorrect={false}
+          placeholder="Enter referral code"
+          placeholderTextColor="#7f7aa8"
+        />
+
+        <Text style={styles.panelLabel}>Team Shared Profiles (Pro)</Text>
+        {!isPro ? (
+          <View style={styles.rowInlineSpace}>
+            <Text style={styles.emptyText}>Upgrade to Pro to unlock team profile sharing.</Text>
+            <Pressable accessibilityRole="button" accessibilityLabel="Upgrade to Pro" style={styles.actionButton} onPress={onShowPaywall}>
+              <Text style={styles.actionButtonText}>Upgrade</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <>
+            <View style={styles.rowInlineSpace}>
+              <Pressable accessibilityRole="button" accessibilityLabel="Export current servers as shared templates" style={[styles.buttonGhost, styles.flexButton]} onPress={onExportSharedTemplates}>
+                <Text style={styles.buttonGhostText}>Export Team Templates</Text>
+              </Pressable>
+              <Pressable accessibilityRole="button" accessibilityLabel="Import shared templates from payload" style={[styles.buttonPrimary, styles.flexButton]} onPress={onImportSharedTemplates}>
+                <Text style={styles.buttonPrimaryText}>Import Templates</Text>
+              </Pressable>
+            </View>
+            <TextInput
+              style={[styles.input, styles.multilineInput]}
+              value={sharedTemplatesPayload}
+              onChangeText={onSetSharedTemplatesPayload}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="Paste shared templates payload JSON"
+              placeholderTextColor="#7f7aa8"
+              multiline
+            />
+
+            {sharedTemplates.length === 0 ? <Text style={styles.emptyText}>No shared templates imported yet.</Text> : null}
+            {sharedTemplates.map((template) => (
+              <View key={template.id} style={styles.serverCard}>
+                <Text style={styles.serverName}>{template.name}</Text>
+                <Text style={styles.serverSubtitle}>{template.baseUrl}</Text>
+                <Text style={styles.emptyText}>{template.defaultCwd || "(no default cwd)"}</Text>
+                <View style={styles.actionsWrap}>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Apply shared template ${template.name}`} style={styles.actionButton} onPress={() => onApplySharedTemplate(template)}>
+                    <Text style={styles.actionButtonText}>Apply Template</Text>
+                  </Pressable>
+                  <Pressable accessibilityRole="button" accessibilityLabel={`Delete shared template ${template.name}`} style={styles.actionDangerButton} onPress={() => onDeleteSharedTemplate(template.id)}>
+                    <Text style={styles.actionDangerText}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+          </>
+        )}
+
+        {growthStatus ? <Text style={styles.emptyText}>{growthStatus}</Text> : null}
+        {sharedTemplatesStatus ? <Text style={styles.emptyText}>{sharedTemplatesStatus}</Text> : null}
       </View>
 
       <View style={styles.rowInlineSpace}>
