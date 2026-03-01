@@ -21,13 +21,13 @@
     "ios:sim": "open -a Simulator && npm run ios:run",
     "companion:install:linux": "bash ./scripts/companion-install-linux.sh",
     "companion:install:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/companion-install-windows.ps1",
-    "eas:build:android:preview": "eas build --platform android --profile preview",
-    "eas:build:android:prod": "eas build --platform android --profile production",
-    "eas:submit:android": "eas submit --platform android --profile production",
-    "eas:submit:ios": "eas submit --platform ios --profile production",
-    "eas:build:ios:sim": "eas build --platform ios --profile development-simulator",
-    "eas:build:ios:preview": "eas build --platform ios --profile preview",
-    "eas:build:ios:prod": "eas build --platform ios --profile production"
+    "eas:build:android:preview": "npx --yes eas-cli build --platform android --profile preview",
+    "eas:build:android:prod": "npx --yes eas-cli build --platform android --profile production",
+    "eas:submit:android": "npx --yes eas-cli submit --platform android --profile production",
+    "eas:submit:ios": "npx --yes eas-cli submit --platform ios --profile production",
+    "eas:build:ios:sim": "npx --yes eas-cli build --platform ios --profile development-simulator",
+    "eas:build:ios:preview": "npx --yes eas-cli build --platform ios --profile preview",
+    "eas:build:ios:prod": "npx --yes eas-cli build --platform ios --profile production"
   },
   "dependencies": {
     "anser": "^2.3.5",
