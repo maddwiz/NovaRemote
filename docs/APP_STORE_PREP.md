@@ -36,6 +36,23 @@ Before submission, publish and link:
   - iPhone 15 Pro Max
   - iPad Pro
 
+### Screenshot Storyboard (Recommended)
+
+1. Multi-server terminal dashboard with live statuses
+2. AI suggestion + error triage inside a shell session
+3. Fleet command run with grouped results
+4. File browser + terminal path insertion
+5. Glasses mode HUD/voice controls
+6. iPad split-view terminals + controls
+
+Store source captures in `docs/media/` before exporting App Store crops.
+
+### Demo Video Clips (for launch marketing)
+
+- Clip 1 (20-40s): live terminal streaming + ANSI + search
+- Clip 2 (20-40s): AI suggestion + fleet execute + watch alerts
+- Publish one primary share link for Product Hunt/X/Reddit posts
+
 ## Final QA
 
 - Validate onboarding flow

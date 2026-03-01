@@ -42,6 +42,20 @@ EXPOSE 8787
 CMD ["npm", "run", "start"]
 ```
 
+## Docker One-Liner (Publish Target)
+
+Once the reference server image is public, keep this one-liner in the README:
+
+```bash
+docker run --rm -p 8787:8787 -e NOVA_TOKEN=change-me ghcr.io/maddwiz/codex-remote:latest
+```
+
+For local source testing (before publishing image):
+
+```bash
+docker build -t codex-remote . && docker run --rm -p 8787:8787 -e NOVA_TOKEN=change-me codex-remote
+```
+
 ## Compatibility Contract
 
 When updating the server, keep these endpoints stable:

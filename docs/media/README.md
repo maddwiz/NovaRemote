@@ -12,3 +12,9 @@ Recommended files:
 - `demo-fleet.gif`
 
 Keep tokens/URLs private in all captures.
+
+Recommended video files:
+
+- `demo-terminal.mp4`
+- `demo-ai-fleet.mp4`
+- `demo-glasses-mode.mp4` (optional)

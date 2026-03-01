@@ -10,13 +10,23 @@ NovaRemote is an Expo + React Native app for controlling remote terminal and AI 
 
 ## Demo / Screens
 
-- Add App Store screenshots and short GIFs under `docs/media/`
-- Recommended clips:
-  - Terminal streaming + ANSI colors
-  - AI suggestions + error triage
-  - Fleet execution across multiple servers
-  - Glasses mode voice controls
-- Keep a single public demo video link in this section for product discovery
+Drop screenshots/GIFs into `docs/media/` and wire them here:
+
+![Terminal Streaming](docs/media/terminal-live.png)
+![AI Suggestions](docs/media/ai-suggestions.png)
+![Fleet Execute](docs/media/fleet-run.png)
+![Glasses Mode](docs/media/glasses-mode.png)
+
+![Terminal Demo GIF](docs/media/demo-terminal.gif)
+![Fleet Demo GIF](docs/media/demo-fleet.gif)
+
+Use `docs/media/README.md` as the canonical media file map.
+
+## Demo Videos
+
+- `Demo 1 (20-40s)`: terminal streaming + ANSI + search
+- `Demo 2 (20-40s)`: AI suggestion/error triage + fleet execute
+- Keep one public launch link (YouTube/X) in this section once recorded
 
 ## Features
 
@@ -62,6 +72,12 @@ NovaRemote requires a companion backend. API contracts and auth are documented i
 For adoption/migration guidance (including a Docker-first path for a reference server), see:
 
 - `docs/REFERENCE_SERVER.md`
+
+Target public one-liner once the reference server image is published:
+
+```bash
+docker run --rm -p 8787:8787 -e NOVA_TOKEN=change-me ghcr.io/maddwiz/codex-remote:latest
+```
 
 ## Requirements
 
