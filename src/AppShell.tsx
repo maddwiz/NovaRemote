@@ -2363,6 +2363,7 @@ export default function AppShell() {
                   await openSshFallback(server);
                 });
               }}
+              onImportServerConfig={importServerConfig}
               onSetServerName={setServerNameInput}
               onSetServerUrl={setServerUrlInput}
               onSetServerToken={setServerTokenInput}

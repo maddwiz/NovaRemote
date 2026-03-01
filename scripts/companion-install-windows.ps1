@@ -110,3 +110,27 @@ Write-Host "Start server: powershell -ExecutionPolicy Bypass -File $startScript"
 Write-Host "Health: http://127.0.0.1:8787/health"
 Write-Host ""
 Write-Host "Use token in NovaRemote server profile bearer token field."
+
+$port = "8787"
+$lanIp = $null
+try {
+  $lanIp = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+    Where-Object { $_.IPAddress -and $_.IPAddress -ne "127.0.0.1" -and $_.IPAddress -notlike "169.254.*" } |
+    Select-Object -First 1).IPAddress
+} catch {
+  $lanIp = $null
+}
+if (-not $lanIp) {
+  $lanIp = "127.0.0.1"
+}
+
+$encodedName = [uri]::EscapeDataString($env:COMPUTERNAME)
+$encodedUrl = [uri]::EscapeDataString("http://${lanIp}:${port}")
+$encodedToken = [uri]::EscapeDataString($token)
+$deepLink = "novaremote://add-server?name=${encodedName}&url=${encodedUrl}&token=${encodedToken}"
+
+Write-Host ""
+Write-Host "Open this link on your phone to connect NovaRemote:"
+Write-Host $deepLink
+Write-Host ""
+Write-Host "Or paste this URL into any QR code generator and scan with NovaRemote."

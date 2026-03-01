@@ -1,10 +1,12 @@
-import React from "react";
+import React, { useState } from "react";
 import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER, SSH_HOST_PLACEHOLDER, SSH_USER_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
 import { ServerProfile, SharedServerTemplate, TerminalBackendKind } from "../types";
 import { ServerCard } from "../components/ServerCard";
+import { useQrSetup } from "../hooks/useQrSetup";
+import { QrScannerModal } from "../components/QrScannerModal";
 
 type ServersScreenProps = {
   servers: ServerProfile[];
@@ -39,6 +41,16 @@ type ServersScreenProps = {
   onDeleteServer: (serverId: string) => void;
   onShareServer: (server: ServerProfile) => void;
   onOpenServerSsh: (server: ServerProfile) => void;
+  onImportServerConfig: (config: {
+    name?: string;
+    url?: string;
+    token?: string;
+    cwd?: string;
+    backend?: string;
+    sshHost?: string;
+    sshUser?: string;
+    sshPort?: string | number;
+  }) => void;
   onSetServerName: (value: string) => void;
   onSetServerUrl: (value: string) => void;
   onSetServerToken: (value: string) => void;
@@ -101,6 +113,7 @@ export function ServersScreen({
   onDeleteServer,
   onShareServer,
   onOpenServerSsh,
+  onImportServerConfig,
   onSetServerName,
   onSetServerUrl,
   onSetServerToken,
@@ -129,6 +142,10 @@ export function ServersScreen({
   onSaveServer,
   onBackToTerminals,
 }: ServersScreenProps) {
+  const [showQrScanner, setShowQrScanner] = useState<boolean>(false);
+  const [qrError, setQrError] = useState<string>("");
+  const { parseQrPayload } = useQrSetup();
+
   return (
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Server Profiles</Text>
@@ -151,6 +168,18 @@ export function ServersScreen({
 
       <View style={styles.formDivider} />
       <Text style={styles.panelLabel}>{editingServerId ? "Edit Server" : "Add Server"}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Scan QR code for server setup"
+        style={styles.buttonGhost}
+        onPress={() => {
+          setQrError("");
+          setShowQrScanner(true);
+        }}
+      >
+        <Text style={styles.buttonGhostText}>Scan QR Code</Text>
+      </Pressable>
+      <Text style={styles.emptyText}>or enter manually</Text>
       <TextInput
         style={styles.input}
         value={serverNameInput}
@@ -188,6 +217,7 @@ export function ServersScreen({
         placeholderTextColor="#7f7aa8"
         onChangeText={onSetServerCwd}
       />
+      {qrError ? <Text style={styles.emptyText}>{qrError}</Text> : null}
 
       <View style={styles.serverCard}>
         <Text style={styles.panelLabel}>Direct SSH Fallback (Optional)</Text>
@@ -402,6 +432,31 @@ export function ServersScreen({
           <Text style={styles.buttonGhostText}>Back to Terminal</Text>
         </Pressable>
       </View>
+
+      <QrScannerModal
+        visible={showQrScanner}
+        onClose={() => setShowQrScanner(false)}
+        onScanned={(raw) => {
+          const parsed = parseQrPayload(raw);
+          if (!parsed) {
+            setShowQrScanner(false);
+            setQrError("QR code not recognized. Enter server details manually.");
+            return;
+          }
+          setShowQrScanner(false);
+          setQrError("");
+          onImportServerConfig({
+            name: parsed.name,
+            url: parsed.url,
+            token: parsed.token,
+            cwd: parsed.cwd,
+            backend: parsed.backend,
+            sshHost: parsed.sshHost,
+            sshUser: parsed.sshUser,
+            sshPort: parsed.sshPort,
+          });
+        }}
+      />
     </View>
   );
 }

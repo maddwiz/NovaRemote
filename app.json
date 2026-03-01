@@ -37,7 +37,13 @@
     },
     "plugins": [
       "expo-local-authentication",
-      "expo-notifications"
+      "expo-notifications",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "NovaRemote uses the camera to scan QR codes for quick server setup."
+        }
+      ]
     ]
   }
 }

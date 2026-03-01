@@ -1,8 +1,10 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Modal, Pressable, SafeAreaView, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
+import { useQrSetup } from "../hooks/useQrSetup";
+import { QrScannerModal } from "./QrScannerModal";
 
 type OnboardingServer = {
   name: string;
@@ -34,6 +36,9 @@ export function OnboardingModal({
   const [busy, setBusy] = useState<boolean>(false);
   const [tested, setTested] = useState<boolean>(false);
   const [requireBiometric, setRequireBiometric] = useState<boolean>(true);
+  const [showQrScanner, setShowQrScanner] = useState<boolean>(false);
+  const [qrError, setQrError] = useState<string>("");
+  const { parseQrPayload } = useQrSetup();
 
   const [name, setName] = useState<string>(DEFAULT_SERVER_NAME);
   const [url, setUrl] = useState<string>("");
@@ -50,6 +55,23 @@ export function OnboardingModal({
   const server = useMemo(
     () => ({ name: name.trim() || DEFAULT_SERVER_NAME, url: url.trim(), token: token.trim(), cwd: cwd.trim() }),
     [cwd, name, token, url]
+  );
+
+  const testConnection = useCallback(
+    async (target: OnboardingServer) => {
+      setBusy(true);
+      try {
+        await onTestConnection(target);
+        setTested(true);
+        setQrError("");
+      } catch (error) {
+        setTested(false);
+        setQrError(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [onTestConnection]
   );
 
   if (!visible) {
@@ -71,6 +93,18 @@ export function OnboardingModal({
           {step === 1 ? (
             <>
               <Text style={styles.panelLabel}>Add Your First Server</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Scan QR code for server setup"
+                style={styles.buttonGhost}
+                onPress={() => {
+                  setQrError("");
+                  setShowQrScanner(true);
+                }}
+              >
+                <Text style={styles.buttonGhostText}>Scan QR Code</Text>
+              </Pressable>
+              <Text style={styles.emptyText}>or enter manually</Text>
               <TextInput
                 style={styles.input}
                 value={name}
@@ -112,14 +146,12 @@ export function OnboardingModal({
                 style={[styles.buttonGhost, busy ? styles.buttonDisabled : null]}
                 disabled={busy}
                 onPress={() => {
-                  setBusy(true);
-                  void onTestConnection(server)
-                    .then(() => setTested(true))
-                    .finally(() => setBusy(false));
+                  void testConnection(server);
                 }}
               >
                 <Text style={styles.buttonGhostText}>{busy ? "Testing..." : tested ? "Connection OK" : "Test Connection"}</Text>
               </Pressable>
+              {qrError ? <Text style={styles.emptyText}>{qrError}</Text> : null}
             </>
           ) : null}
 
@@ -182,6 +214,38 @@ export function OnboardingModal({
           </View>
         </View>
       </SafeAreaView>
+
+      <QrScannerModal
+        visible={showQrScanner}
+        onClose={() => setShowQrScanner(false)}
+        onScanned={(raw) => {
+          const parsed = parseQrPayload(raw);
+          if (!parsed) {
+            setShowQrScanner(false);
+            setQrError("QR code not recognized. Enter server details manually.");
+            return;
+          }
+
+          const scannedServer: OnboardingServer = {
+            name: parsed.name || DEFAULT_SERVER_NAME,
+            url: parsed.url,
+            token: parsed.token,
+            cwd: parsed.cwd,
+          };
+
+          setName(scannedServer.name);
+          setUrl(scannedServer.url);
+          setToken(scannedServer.token);
+          setCwd(scannedServer.cwd);
+          setTested(false);
+          setQrError("");
+          setShowQrScanner(false);
+
+          if (scannedServer.url && scannedServer.token) {
+            void testConnection(scannedServer);
+          }
+        }}
+      />
     </Modal>
   );
 }

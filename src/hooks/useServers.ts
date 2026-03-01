@@ -107,12 +107,12 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerGrafanaUrlInput(server.grafanaUrl || "");
   }, []);
 
-  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string; backend?: string; sshHost?: string; sshUser?: string; sshPort?: string | number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
+  const importServerConfig = useCallback((config: { name?: string; url?: string; token?: string; cwd?: string; backend?: string; sshHost?: string; sshUser?: string; sshPort?: string | number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
     const importedPort = sanitizeSshPort(config.sshPort);
     setEditingServerId(null);
     setServerNameInput(config.name?.trim() || DEFAULT_SERVER_NAME);
     setServerUrlInput(normalizeBaseUrl(config.url || ""));
-    setServerTokenInput("");
+    setServerTokenInput(config.token?.trim() || "");
     setServerCwdInput(config.cwd?.trim() || DEFAULT_CWD);
     setServerBackendInput(
       config.backend === "tmux" ||

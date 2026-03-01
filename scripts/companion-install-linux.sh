@@ -152,3 +152,65 @@ echo "Service (if systemd user session is available): systemctl --user status co
 echo "Health: http://127.0.0.1:8787/health"
 echo ""
 echo "Use token in NovaRemote server profile bearer token field."
+
+BIND_HOST="${NOVA_BIND:-0.0.0.0}"
+PORT="${NOVA_PORT:-8787}"
+LAN_IP=""
+
+if command -v hostname >/dev/null 2>&1; then
+  LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
+fi
+if [[ -z "${LAN_IP}" ]] && command -v ip >/dev/null 2>&1; then
+  LAN_IP="$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if($i=="src") print $(i+1)}' | head -1)"
+fi
+LAN_IP="${LAN_IP:-127.0.0.1}"
+
+SERVER_NAME_RAW="$(hostname -s 2>/dev/null || echo MyServer)"
+DEEP_LINK="$(
+  SERVER_NAME_RAW="${SERVER_NAME_RAW}" LAN_IP="${LAN_IP}" PORT="${PORT}" TOKEN="${TOKEN}" python3 - <<'PY'
+import os
+import urllib.parse
+
+name = os.environ.get("SERVER_NAME_RAW", "MyServer")
+url = f"http://{os.environ.get('LAN_IP', '127.0.0.1')}:{os.environ.get('PORT', '8787')}"
+token = os.environ.get("TOKEN", "")
+query = urllib.parse.urlencode(
+    {"name": name, "url": url, "token": token},
+    quote_via=urllib.parse.quote,
+)
+print(f"novaremote://add-server?{query}")
+PY
+)"
+
+echo ""
+echo "Quick setup deep link (scan in NovaRemote):"
+echo "${DEEP_LINK}"
+echo ""
+echo "Resolved bind host hint: ${BIND_HOST}"
+echo "Resolved LAN IP for QR: ${LAN_IP}"
+
+if command -v qrencode >/dev/null 2>&1; then
+  echo ""
+  echo "Scan this QR code with NovaRemote:"
+  echo ""
+  qrencode -t ANSIUTF8 "${DEEP_LINK}"
+  echo ""
+elif python3 -c "import qrcode" >/dev/null 2>&1; then
+  echo ""
+  echo "Scan this QR code with NovaRemote:"
+  NOVA_DEEP_LINK="${DEEP_LINK}" python3 - <<'PY'
+import os
+import qrcode
+
+qr = qrcode.QRCode(box_size=1, border=1)
+qr.add_data(os.environ["NOVA_DEEP_LINK"])
+qr.make()
+qr.print_ascii(invert=True)
+PY
+  echo ""
+else
+  echo ""
+  echo "Install 'qrencode' (apt install qrencode) to display a scannable QR code in this terminal."
+  echo "Deep link (paste into phone browser): ${DEEP_LINK}"
+  echo ""
+fi
