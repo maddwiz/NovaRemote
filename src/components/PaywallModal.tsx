@@ -17,7 +17,10 @@ export function PaywallModal({ visible, priceLabel, onClose, onUpgrade, onRestor
       <SafeAreaView style={styles.overlayBackdrop}>
         <View style={styles.overlayCard}>
           <Text style={styles.title}>NovaRemote Pro</Text>
-          <Text style={styles.serverSubtitle}>Unlock unlimited servers, sessions, snippets, push alerts, and iPad split view.</Text>
+          <Text style={styles.serverSubtitle}>
+            Unlock AI command assist, fleet execution, watch alerts, glasses mode voice control, file editor, process manager,
+            session recordings, offline queue, spectator links, iPad split view, and unlimited servers/sessions.
+          </Text>
           <Text style={styles.serverTitle}>{priceLabel ? `Pro ${priceLabel}` : "Pro subscription"}</Text>
 
           <View style={styles.rowInlineSpace}>

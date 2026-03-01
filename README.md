@@ -21,6 +21,7 @@ Drop screenshots/GIFs into `docs/media/` and wire them here:
 ![Fleet Demo GIF](docs/media/demo-fleet.gif)
 
 Use `docs/media/README.md` as the canonical media file map.
+Note: placeholder media files are currently committed; replace them with real captures before launch.
 
 ## Demo Videos
 

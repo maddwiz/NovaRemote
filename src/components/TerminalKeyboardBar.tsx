@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
 import {
   Animated,
   Keyboard,
@@ -90,14 +91,14 @@ const LAYER_FUNCTIONS: KeyDef[] = [
 ];
 
 const LAYER_COMBOS: KeyDef[] = [
-  { id: "ctrlc", label: "Ctrl+C", payloadKey: "ctrl+c", a11yLabel: "Control C" },
-  { id: "ctrld", label: "Ctrl+D", payloadKey: "ctrl+d", a11yLabel: "Control D" },
-  { id: "ctrlz", label: "Ctrl+Z", payloadKey: "ctrl+z", a11yLabel: "Control Z" },
-  { id: "ctrll", label: "Ctrl+L", payloadKey: "ctrl+l", a11yLabel: "Control L" },
-  { id: "ctrla", label: "Ctrl+A", payloadKey: "ctrl+a", a11yLabel: "Control A" },
-  { id: "ctrle", label: "Ctrl+E", payloadKey: "ctrl+e", a11yLabel: "Control E" },
-  { id: "ctrlr", label: "Ctrl+R", payloadKey: "ctrl+r", a11yLabel: "Control R" },
-  { id: "ctrlw", label: "Ctrl+W", payloadKey: "ctrl+w", a11yLabel: "Control W" },
+  { id: "ctrlc", label: "Ctrl+C", payloadKey: "ctrl+c", a11yLabel: "Control C", a11yHint: "Interrupts the running process." },
+  { id: "ctrld", label: "Ctrl+D", payloadKey: "ctrl+d", a11yLabel: "Control D", a11yHint: "Sends end-of-file to close input." },
+  { id: "ctrlz", label: "Ctrl+Z", payloadKey: "ctrl+z", a11yLabel: "Control Z", a11yHint: "Suspends the current process." },
+  { id: "ctrll", label: "Ctrl+L", payloadKey: "ctrl+l", a11yLabel: "Control L", a11yHint: "Clears the terminal screen." },
+  { id: "ctrla", label: "Ctrl+A", payloadKey: "ctrl+a", a11yLabel: "Control A", a11yHint: "Moves cursor to the start of line." },
+  { id: "ctrle", label: "Ctrl+E", payloadKey: "ctrl+e", a11yLabel: "Control E", a11yHint: "Moves cursor to the end of line." },
+  { id: "ctrlr", label: "Ctrl+R", payloadKey: "ctrl+r", a11yLabel: "Control R", a11yHint: "Opens reverse history search." },
+  { id: "ctrlw", label: "Ctrl+W", payloadKey: "ctrl+w", a11yLabel: "Control W", a11yHint: "Deletes one word backwards." },
 ];
 
 function controlFallbackText(value: string): string {
@@ -212,8 +213,10 @@ export function TerminalKeyboardBar({
   const [keyboardVisible, setKeyboardVisible] = useState<boolean>(Platform.OS === "web");
   const [keyAreaWidth, setKeyAreaWidth] = useState<number>(1);
   const layerAnimation = useRef(new Animated.Value(0)).current;
+  const currentLayerRef = useRef<0 | 1 | 2>(0);
 
   const currentLayer = compact ? 0 : state.activeLayer;
+  currentLayerRef.current = currentLayer;
 
   useEffect(() => {
     const showSub = Keyboard.addListener("keyboardDidShow", () => setKeyboardVisible(true));
@@ -233,6 +236,9 @@ export function TerminalKeyboardBar({
   }, [currentLayer, layerAnimation]);
 
   const onPressKey = (key: KeyDef) => {
+    if (Platform.OS !== "web") {
+      void Haptics.selectionAsync().catch(() => undefined);
+    }
     if (key.id === "ctrl") {
       toggleCtrl();
       return;
@@ -273,16 +279,17 @@ export function TerminalKeyboardBar({
           if (compact) {
             return;
           }
+          const layer = currentLayerRef.current;
           if (gestureState.dx <= -24) {
-            setActiveLayer((Math.min(2, currentLayer + 1) as 0 | 1 | 2));
+            setActiveLayer((Math.min(2, layer + 1) as 0 | 1 | 2));
             return;
           }
           if (gestureState.dx >= 24) {
-            setActiveLayer((Math.max(0, currentLayer - 1) as 0 | 1 | 2));
+            setActiveLayer((Math.max(0, layer - 1) as 0 | 1 | 2));
           }
         },
       }),
-    [compact, currentLayer, setActiveLayer]
+    [compact, setActiveLayer]
   );
 
   if (!visible || !keyboardVisible) {

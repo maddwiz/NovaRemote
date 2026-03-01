@@ -1,9 +1,8 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useMemo, useRef } from "react";
 import {
   NativeSyntheticEvent,
   StyleProp,
   TextInputKeyPressEventData,
-  TextInputSelectionChangeEventData,
   TextStyle,
   ScrollView,
   TextInput,
@@ -11,6 +10,7 @@ import {
   ViewStyle,
 } from "react-native";
 
+import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import {
   AiEnginePreference,
@@ -283,7 +283,18 @@ export function TerminalCard({
   historyCount,
 }: TerminalCardProps) {
   const terminalRef = useRef<ScrollView | null>(null);
-  const [draftSelection, setDraftSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const {
+    selection: draftSelection,
+    onSelectionChange: onDraftSelectionChange,
+    insertTextAtCursor,
+    handleAction: handleDraftAction,
+  } = useTextEditing({
+    value: draft,
+    onChange: onDraftChange,
+    disabled: readOnly || isSending,
+    onHistoryPrev,
+    onHistoryNext,
+  });
   const autocomplete = useMemo(() => {
     if (mode !== "shell") {
       return [];
@@ -340,123 +351,6 @@ export function TerminalCard({
           ? "POLL"
           : "OFF";
   const activeCollaborators = useMemo(() => collaborators.filter((entry) => !entry.isSelf), [collaborators]);
-
-  useEffect(() => {
-    setDraftSelection((current) => {
-      const max = draft.length;
-      const nextStart = Math.max(0, Math.min(max, current.start));
-      const nextEnd = Math.max(nextStart, Math.min(max, current.end));
-      if (nextStart === current.start && nextEnd === current.end) {
-        return current;
-      }
-      return { start: nextStart, end: nextEnd };
-    });
-  }, [draft]);
-
-  const selectionRange = () => {
-    const max = draft.length;
-    const start = Math.max(0, Math.min(max, draftSelection.start));
-    const end = Math.max(start, Math.min(max, draftSelection.end));
-    return { start, end };
-  };
-
-  const applyDraftWithSelection = (value: string, cursor: number) => {
-    onDraftChange(value);
-    const nextCursor = Math.max(0, Math.min(value.length, cursor));
-    setDraftSelection({ start: nextCursor, end: nextCursor });
-  };
-
-  const insertTextAtCursor = (text: string) => {
-    if (readOnly || isSending) {
-      return;
-    }
-    const selection = selectionRange();
-    const next = `${draft.slice(0, selection.start)}${text}${draft.slice(selection.end)}`;
-    applyDraftWithSelection(next, selection.start + text.length);
-  };
-
-  const setCursor = (cursor: number) => {
-    const bounded = Math.max(0, Math.min(draft.length, cursor));
-    setDraftSelection({ start: bounded, end: bounded });
-  };
-
-  const wordStart = (text: string, index: number) => {
-    let pointer = Math.max(0, Math.min(text.length, index));
-    while (pointer > 0 && /\s/.test(text[pointer - 1])) {
-      pointer -= 1;
-    }
-    while (pointer > 0 && !/\s/.test(text[pointer - 1])) {
-      pointer -= 1;
-    }
-    return pointer;
-  };
-
-  const wordEnd = (text: string, index: number) => {
-    let pointer = Math.max(0, Math.min(text.length, index));
-    while (pointer < text.length && /\s/.test(text[pointer])) {
-      pointer += 1;
-    }
-    while (pointer < text.length && !/\s/.test(text[pointer])) {
-      pointer += 1;
-    }
-    return pointer;
-  };
-
-  const handleKeyboardAction = (action: string) => {
-    if (action === "history_prev") {
-      if (!readOnly && !isSending) {
-        onHistoryPrev();
-      }
-      return;
-    }
-    if (action === "history_next") {
-      if (!readOnly && !isSending) {
-        onHistoryNext();
-      }
-      return;
-    }
-    if (readOnly || isSending) {
-      return;
-    }
-    const selection = selectionRange();
-    if (action === "cursor_left") {
-      setCursor(selection.start === selection.end ? selection.start - 1 : selection.start);
-      return;
-    }
-    if (action === "cursor_right") {
-      setCursor(selection.start === selection.end ? selection.end + 1 : selection.end);
-      return;
-    }
-    if (action === "cursor_home") {
-      setCursor(0);
-      return;
-    }
-    if (action === "cursor_end") {
-      setCursor(draft.length);
-      return;
-    }
-    if (action === "word_back") {
-      setCursor(wordStart(draft, selection.start));
-      return;
-    }
-    if (action === "word_forward") {
-      setCursor(wordEnd(draft, selection.end));
-      return;
-    }
-    if (action === "delete_word_back") {
-      if (selection.start !== selection.end) {
-        const next = `${draft.slice(0, selection.start)}${draft.slice(selection.end)}`;
-        applyDraftWithSelection(next, selection.start);
-        return;
-      }
-      const left = wordStart(draft, selection.start);
-      if (left === selection.start) {
-        return;
-      }
-      const next = `${draft.slice(0, left)}${draft.slice(selection.end)}`;
-      applyDraftWithSelection(next, left);
-    }
-  };
 
   const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     const native = event.nativeEvent as KeyPressEventWithModifiers;
@@ -564,9 +458,7 @@ export function TerminalCard({
         placeholderTextColor="#7f7aa8"
         onKeyPress={onDraftKeyPress}
         onChangeText={onDraftChange}
-        onSelectionChange={(event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) =>
-          setDraftSelection(event.nativeEvent.selection)
-        }
+        onSelectionChange={onDraftSelectionChange}
       />
       <TerminalKeyboardBar
         visible={!readOnly}
@@ -577,7 +469,7 @@ export function TerminalCard({
           }
           onSendControlChar(value);
         }}
-        onAction={handleKeyboardAction}
+        onAction={(action) => handleDraftAction(action as TextEditingAction)}
       />
 
       {mode === "shell" ? (

@@ -18,3 +18,6 @@ Recommended video files:
 - `demo-terminal.mp4`
 - `demo-ai-fleet.mp4`
 - `demo-glasses-mode.mp4` (optional)
+
+Current repo includes placeholder 1x1 assets so README links resolve in fresh clones.
+Replace all placeholder media with real captures before store submission and launch.

@@ -1,4 +1,3 @@
-import * as Linking from "expo-linking";
 import { useCallback } from "react";
 
 export type QrServerConfig = {
@@ -11,6 +10,22 @@ export type QrServerConfig = {
   sshUser: string;
   sshPort: string;
 };
+
+function parseDeepLink(raw: string): { path: string; queryParams: Record<string, string> } | null {
+  try {
+    const parsed = new URL(raw);
+    const hostPath = parsed.host?.trim() || "";
+    const pathname = parsed.pathname.replace(/^\/+/, "").trim();
+    const path = pathname || hostPath;
+    const queryParams: Record<string, string> = {};
+    parsed.searchParams.forEach((value, key) => {
+      queryParams[key] = value;
+    });
+    return { path, queryParams };
+  } catch {
+    return null;
+  }
+}
 
 function normalizeHttpUrl(raw: unknown): string {
   if (typeof raw !== "string") {
@@ -64,10 +79,8 @@ export function parseQrPayload(raw: string): QrServerConfig | null {
     }
   }
 
-  let parsedLink: ReturnType<typeof Linking.parse>;
-  try {
-    parsedLink = Linking.parse(payload);
-  } catch {
+  const parsedLink = parseDeepLink(payload);
+  if (!parsedLink) {
     return null;
   }
 
@@ -76,32 +89,23 @@ export function parseQrPayload(raw: string): QrServerConfig | null {
   }
 
   const url = normalizeHttpUrl(
-    typeof parsedLink.queryParams?.url === "string"
+    typeof parsedLink.queryParams.url === "string"
       ? parsedLink.queryParams.url
-      : parsedLink.queryParams?.baseUrl
+      : parsedLink.queryParams.baseUrl
   );
   if (!url) {
     return null;
   }
 
   return {
-    name: toStringValue(parsedLink.queryParams?.name),
+    name: toStringValue(parsedLink.queryParams.name),
     url,
-    token: toStringValue(parsedLink.queryParams?.token),
-    cwd: toStringValue(parsedLink.queryParams?.cwd),
-    backend: toStringValue(parsedLink.queryParams?.backend),
-    sshHost:
-      typeof parsedLink.queryParams?.ssh_host === "string"
-        ? parsedLink.queryParams.ssh_host.trim()
-        : toStringValue(parsedLink.queryParams?.sshHost),
-    sshUser:
-      typeof parsedLink.queryParams?.ssh_user === "string"
-        ? parsedLink.queryParams.ssh_user.trim()
-        : toStringValue(parsedLink.queryParams?.sshUser),
-    sshPort:
-      typeof parsedLink.queryParams?.ssh_port === "string"
-        ? parsedLink.queryParams.ssh_port.trim()
-        : toStringValue(parsedLink.queryParams?.sshPort),
+    token: toStringValue(parsedLink.queryParams.token),
+    cwd: toStringValue(parsedLink.queryParams.cwd),
+    backend: toStringValue(parsedLink.queryParams.backend),
+    sshHost: toStringValue(parsedLink.queryParams.ssh_host || parsedLink.queryParams.sshHost),
+    sshUser: toStringValue(parsedLink.queryParams.ssh_user || parsedLink.queryParams.sshUser),
+    sshPort: toStringValue(parsedLink.queryParams.ssh_port || parsedLink.queryParams.sshPort),
   };
 }
 

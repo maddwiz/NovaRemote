@@ -48,4 +48,7 @@ These Terms may be updated over time. Continued use after updates constitutes ac
 
 ## Contact
 
-Before store submission, replace this placeholder with a real support/contact channel (email or support URL).
+Support and legal contact:
+
+- Support: https://github.com/maddwiz/NovaRemote/issues
+- Email: support@novaremote.dev

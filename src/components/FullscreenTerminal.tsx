@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useRef } from "react";
 import {
   Modal,
   NativeSyntheticEvent,
@@ -9,12 +9,12 @@ import {
   Text,
   TextInput,
   TextInputKeyPressEventData,
-  TextInputSelectionChangeEventData,
   TextStyle,
   View,
   ViewStyle,
 } from "react-native";
 
+import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
@@ -73,127 +73,21 @@ export function FullscreenTerminal({
 }: FullscreenTerminalProps) {
   const terminalRef = useRef<ScrollView | null>(null);
   const searchRef = useRef<TextInput | null>(null);
-  const [draftSelection, setDraftSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
+  const {
+    selection: draftSelection,
+    onSelectionChange: onDraftSelectionChange,
+    insertTextAtCursor,
+    handleAction: handleDraftAction,
+  } = useTextEditing({
+    value: draft,
+    onChange: onDraftChange,
+    disabled: isReadOnly || isSending,
+    onHistoryPrev,
+    onHistoryNext,
+  });
   type KeyPressEventWithModifiers = TextInputKeyPressEventData & {
     ctrlKey?: boolean;
     metaKey?: boolean;
-  };
-
-  useEffect(() => {
-    setDraftSelection((current) => {
-      const max = draft.length;
-      const nextStart = Math.max(0, Math.min(max, current.start));
-      const nextEnd = Math.max(nextStart, Math.min(max, current.end));
-      if (nextStart === current.start && nextEnd === current.end) {
-        return current;
-      }
-      return { start: nextStart, end: nextEnd };
-    });
-  }, [draft]);
-
-  const selectionRange = () => {
-    const max = draft.length;
-    const start = Math.max(0, Math.min(max, draftSelection.start));
-    const end = Math.max(start, Math.min(max, draftSelection.end));
-    return { start, end };
-  };
-
-  const applyDraftWithSelection = (value: string, cursor: number) => {
-    onDraftChange(value);
-    const nextCursor = Math.max(0, Math.min(value.length, cursor));
-    setDraftSelection({ start: nextCursor, end: nextCursor });
-  };
-
-  const wordStart = (text: string, index: number) => {
-    let pointer = Math.max(0, Math.min(text.length, index));
-    while (pointer > 0 && /\s/.test(text[pointer - 1])) {
-      pointer -= 1;
-    }
-    while (pointer > 0 && !/\s/.test(text[pointer - 1])) {
-      pointer -= 1;
-    }
-    return pointer;
-  };
-
-  const wordEnd = (text: string, index: number) => {
-    let pointer = Math.max(0, Math.min(text.length, index));
-    while (pointer < text.length && /\s/.test(text[pointer])) {
-      pointer += 1;
-    }
-    while (pointer < text.length && !/\s/.test(text[pointer])) {
-      pointer += 1;
-    }
-    return pointer;
-  };
-
-  const onKeyboardAction = (action: string) => {
-    if (action === "history_prev") {
-      if (!isReadOnly && !isSending) {
-        onHistoryPrev();
-      }
-      return;
-    }
-    if (action === "history_next") {
-      if (!isReadOnly && !isSending) {
-        onHistoryNext();
-      }
-      return;
-    }
-    if (isReadOnly || isSending) {
-      return;
-    }
-    const selection = selectionRange();
-    if (action === "cursor_left") {
-      const cursor = selection.start === selection.end ? selection.start - 1 : selection.start;
-      setDraftSelection({ start: Math.max(0, cursor), end: Math.max(0, cursor) });
-      return;
-    }
-    if (action === "cursor_right") {
-      const cursor = selection.start === selection.end ? selection.end + 1 : selection.end;
-      const bounded = Math.max(0, Math.min(draft.length, cursor));
-      setDraftSelection({ start: bounded, end: bounded });
-      return;
-    }
-    if (action === "cursor_home") {
-      setDraftSelection({ start: 0, end: 0 });
-      return;
-    }
-    if (action === "cursor_end") {
-      setDraftSelection({ start: draft.length, end: draft.length });
-      return;
-    }
-    if (action === "word_back") {
-      const cursor = wordStart(draft, selection.start);
-      setDraftSelection({ start: cursor, end: cursor });
-      return;
-    }
-    if (action === "word_forward") {
-      const cursor = wordEnd(draft, selection.end);
-      setDraftSelection({ start: cursor, end: cursor });
-      return;
-    }
-    if (action === "delete_word_back") {
-      if (selection.start !== selection.end) {
-        const next = `${draft.slice(0, selection.start)}${draft.slice(selection.end)}`;
-        applyDraftWithSelection(next, selection.start);
-        return;
-      }
-      const left = wordStart(draft, selection.start);
-      if (left === selection.start) {
-        return;
-      }
-      const next = `${draft.slice(0, left)}${draft.slice(selection.end)}`;
-      applyDraftWithSelection(next, left);
-    }
-  };
-
-  const onKeyboardInsertText = (text: string) => {
-    if (isReadOnly || isSending) {
-      return;
-    }
-    const selection = selectionRange();
-    const next = `${draft.slice(0, selection.start)}${text}${draft.slice(selection.end)}`;
-    applyDraftWithSelection(next, selection.start + text.length);
   };
 
   const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -303,20 +197,18 @@ export function FullscreenTerminal({
               placeholderTextColor="#7f7aa8"
               onKeyPress={onDraftKeyPress}
               onChangeText={onDraftChange}
-              onSelectionChange={(event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) =>
-                setDraftSelection(event.nativeEvent.selection)
-              }
+              onSelectionChange={onDraftSelectionChange}
             />
             <TerminalKeyboardBar
               visible={!isReadOnly}
-              onInsertText={onKeyboardInsertText}
+              onInsertText={insertTextAtCursor}
               onControlChar={(value) => {
                 if (isReadOnly) {
                   return;
                 }
                 onSendControlChar(value);
               }}
-              onAction={onKeyboardAction}
+              onAction={(action) => handleDraftAction(action as TextEditingAction)}
             />
             <Text style={styles.emptyText}>
               {`Viewers ${collaboratorCount} · Shortcuts: Cmd/Ctrl+Enter send, Ctrl+C stop, Cmd+K clear, Cmd+F search, Cmd+W close.`}

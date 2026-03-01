@@ -19,14 +19,28 @@ Drafts are in-repo:
 - `docs/PRIVACY_POLICY.md`
 - `docs/TERMS_OF_SERVICE.md`
 
+GitHub Pages deploy assets are in:
+
+- `docs/public/privacy-policy.html`
+- `docs/public/terms-of-service.html`
+- workflow: `.github/workflows/legal-pages.yml`
+
+Recommended public URLs once Pages is enabled:
+
+- `https://maddwiz.github.io/NovaRemote/privacy-policy.html`
+- `https://maddwiz.github.io/NovaRemote/terms-of-service.html`
+
 ## RevenueCat / IAP Setup
 
 1. Create products in App Store Connect.
 2. Configure an offering in RevenueCat with entitlement id `pro`.
-3. Set env vars in EAS/local builds:
+3. Configure EAS environment variables:
+   - `eas env:create --name EXPO_PUBLIC_REVENUECAT_API_KEY_IOS --value <key> --environment production`
+   - `eas env:create --name EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID --value <key> --environment production`
+4. Set env vars in local builds (optional):
    - `EXPO_PUBLIC_REVENUECAT_API_KEY_IOS`
    - `EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID`
-4. Verify purchase and restore flows on sandbox accounts.
+5. Verify purchase and restore flows on sandbox accounts.
 
 ## Notifications
 
@@ -58,6 +72,10 @@ Store source captures in `docs/media/` before exporting App Store crops.
 - Clip 2 (20-40s): AI suggestion + fleet execute + watch alerts
 - Publish one primary share link for Product Hunt/X/Reddit posts
 
+Draft store listing text:
+
+- `docs/APP_STORE_DESCRIPTION.md`
+
 ## Final QA
 
 - Validate onboarding flow
@@ -65,3 +83,8 @@ Store source captures in `docs/media/` before exporting App Store crops.
 - Validate free-tier gating and paywall transitions
 - Validate deep-link import: `novaremote://add-server?...`
 - Validate no personal/local credentials in defaults or screenshots
+- Validate a production TestFlight build on physical iPhone/iPad:
+  - `eas build --platform ios --profile production`
+- Validate review notes are ready:
+  - “NovaRemote connects to a user-managed companion server. For review use: [test server URL + token].”
+  - Template: `docs/APP_STORE_REVIEW_NOTES.md`

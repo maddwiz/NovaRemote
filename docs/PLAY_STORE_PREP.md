@@ -9,7 +9,12 @@
 ## 2) Compliance + policy
 
 - Privacy policy URL live and accessible
-- Data safety form completed (SecureStore, optional analytics, notifications, microphone)
+- Data safety form completed:
+  - Microphone (voice commands / glasses mode)
+  - Camera (QR server setup scanner)
+  - Local storage / SecureStore (credentials and app settings)
+  - Optional analytics metadata to user-managed companion server
+  - Notifications (watch/session alerts)
 - Target API level and SDK requirements satisfied by Expo SDK 55 build output
 
 Policy drafts available in repo:

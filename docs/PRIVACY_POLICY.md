@@ -60,4 +60,7 @@ No client application can guarantee perfect security. Keep companion server toke
 
 ## Contact
 
-For privacy questions, provide a support contact before store submission (email or website support form) and replace this placeholder section.
+For privacy questions or data requests, use:
+
+- Support: https://github.com/maddwiz/NovaRemote/issues
+- Email: support@novaremote.dev

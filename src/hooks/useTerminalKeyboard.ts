@@ -16,6 +16,13 @@ export type KeyPayload = {
   action?: string;
 };
 
+export type KeyboardModifierState = {
+  ctrlActive: boolean;
+  ctrlLocked: boolean;
+  altActive: boolean;
+  altLocked: boolean;
+};
+
 function cycleModifier(active: boolean, locked: boolean): { active: boolean; locked: boolean } {
   if (!active) {
     return { active: true, locked: false };
@@ -47,6 +54,75 @@ function normalizeCombo(key: string): { forceCtrl: boolean; forceAlt: boolean; k
     return { forceCtrl: false, forceAlt: true, key: normalized.slice(4) };
   }
   return { forceCtrl: false, forceAlt: false, key: normalized };
+}
+
+export function resolveKeyboardPayload(
+  modifierState: KeyboardModifierState,
+  keyInput: string
+): { payload: KeyPayload; nextModifierState: KeyboardModifierState } {
+  const parsed = normalizeCombo(keyInput);
+  const key = parsed.key;
+  const ctrlOn = parsed.forceCtrl || modifierState.ctrlActive;
+  const altOn = parsed.forceAlt || modifierState.altActive;
+
+  let payload: KeyPayload;
+  if (key === "up") {
+    payload = { action: "history_prev" };
+  } else if (key === "down") {
+    payload = { action: "history_next" };
+  } else if (key === "left") {
+    payload = { action: "cursor_left" };
+  } else if (key === "right") {
+    payload = { action: "cursor_right" };
+  } else if (key === "tab") {
+    payload = { text: "\t" };
+  } else if (key === "esc") {
+    payload = { controlChar: "\u001b" };
+  } else if (key.startsWith("f") && /^f([1-9]|1[0-2])$/.test(key)) {
+    const map: Record<string, string> = {
+      f1: "\u001bOP",
+      f2: "\u001bOQ",
+      f3: "\u001bOR",
+      f4: "\u001bOS",
+      f5: "\u001b[15~",
+      f6: "\u001b[17~",
+      f7: "\u001b[18~",
+      f8: "\u001b[19~",
+      f9: "\u001b[20~",
+      f10: "\u001b[21~",
+      f11: "\u001b[23~",
+      f12: "\u001b[24~",
+    };
+    payload = { controlChar: map[key] };
+  } else if (ctrlOn && key === "a") {
+    payload = { action: "cursor_home" };
+  } else if (ctrlOn && key === "e") {
+    payload = { action: "cursor_end" };
+  } else if (ctrlOn && key === "w") {
+    payload = { action: "delete_word_back" };
+  } else if (altOn && key === "b") {
+    payload = { action: "word_back" };
+  } else if (altOn && key === "f") {
+    payload = { action: "word_forward" };
+  } else if (ctrlOn) {
+    const controlChar = ctrlControlChar(key);
+    payload = controlChar ? { controlChar } : { text: key };
+  } else if (altOn) {
+    payload = { controlChar: `\u001b${key}` };
+  } else {
+    payload = { text: key };
+  }
+
+  const usedCtrl = ctrlOn || parsed.forceCtrl;
+  const usedAlt = altOn || parsed.forceAlt;
+  const nextModifierState: KeyboardModifierState = {
+    ctrlActive: usedCtrl ? (modifierState.ctrlLocked ? modifierState.ctrlActive : false) : modifierState.ctrlActive,
+    ctrlLocked: modifierState.ctrlLocked,
+    altActive: usedAlt ? (modifierState.altLocked ? modifierState.altActive : false) : modifierState.altActive,
+    altLocked: modifierState.altLocked,
+  };
+
+  return { payload, nextModifierState };
 }
 
 export function useTerminalKeyboard() {
@@ -91,72 +167,37 @@ export function useTerminalKeyboard() {
     });
   }, []);
 
-  const buildKeyPayload = useCallback((keyInput: string): KeyPayload => {
-    const parsed = normalizeCombo(keyInput);
-    const key = parsed.key;
-    const ctrlOn = parsed.forceCtrl || state.ctrlActive;
-    const altOn = parsed.forceAlt || state.altActive;
+  const buildKeyPayload = useCallback(
+    (keyInput: string): KeyPayload => {
+      const { payload, nextModifierState } = resolveKeyboardPayload(
+        {
+          ctrlActive: state.ctrlActive,
+          ctrlLocked: state.ctrlLocked,
+          altActive: state.altActive,
+          altLocked: state.altLocked,
+        },
+        keyInput
+      );
 
-    let payload: KeyPayload;
-    if (key === "up") {
-      payload = { action: "history_prev" };
-    } else if (key === "down") {
-      payload = { action: "history_next" };
-    } else if (key === "left") {
-      payload = { action: "cursor_left" };
-    } else if (key === "right") {
-      payload = { action: "cursor_right" };
-    } else if (key === "tab") {
-      payload = { text: "\t" };
-    } else if (key === "esc") {
-      payload = { controlChar: "\u001b" };
-    } else if (key.startsWith("f") && /^f([1-9]|1[0-2])$/.test(key)) {
-      const map: Record<string, string> = {
-        f1: "\u001bOP",
-        f2: "\u001bOQ",
-        f3: "\u001bOR",
-        f4: "\u001bOS",
-        f5: "\u001b[15~",
-        f6: "\u001b[17~",
-        f7: "\u001b[18~",
-        f8: "\u001b[19~",
-        f9: "\u001b[20~",
-        f10: "\u001b[21~",
-        f11: "\u001b[23~",
-        f12: "\u001b[24~",
-      };
-      payload = { controlChar: map[key] };
-    } else if (ctrlOn && key === "a") {
-      payload = { action: "cursor_home" };
-    } else if (ctrlOn && key === "e") {
-      payload = { action: "cursor_end" };
-    } else if (ctrlOn && key === "w") {
-      payload = { action: "delete_word_back" };
-    } else if (altOn && key === "b") {
-      payload = { action: "word_back" };
-    } else if (altOn && key === "f") {
-      payload = { action: "word_forward" };
-    } else if (ctrlOn) {
-      const controlChar = ctrlControlChar(key);
-      payload = controlChar ? { controlChar } : { text: key };
-    } else if (altOn) {
-      payload = { controlChar: `\u001b${key}` };
-    } else {
-      payload = { text: key };
-    }
+      if (
+        nextModifierState.ctrlActive !== state.ctrlActive ||
+        nextModifierState.ctrlLocked !== state.ctrlLocked ||
+        nextModifierState.altActive !== state.altActive ||
+        nextModifierState.altLocked !== state.altLocked
+      ) {
+        setState((prev) => ({
+          ...prev,
+          ctrlActive: nextModifierState.ctrlActive,
+          ctrlLocked: nextModifierState.ctrlLocked,
+          altActive: nextModifierState.altActive,
+          altLocked: nextModifierState.altLocked,
+        }));
+      }
 
-    const usedCtrl = ctrlOn || parsed.forceCtrl;
-    const usedAlt = altOn || parsed.forceAlt;
-    if (usedCtrl || usedAlt) {
-      setState((prev) => ({
-        ...prev,
-        ctrlActive: prev.ctrlLocked ? prev.ctrlActive : false,
-        altActive: prev.altLocked ? prev.altActive : false,
-      }));
-    }
-
-    return payload;
-  }, [state.altActive, state.ctrlActive]);
+      return payload;
+    },
+    [state.altActive, state.altLocked, state.ctrlActive, state.ctrlLocked]
+  );
 
   return useMemo(
     () => ({

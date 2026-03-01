@@ -19,7 +19,9 @@
       "buildNumber": "1.1.0",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false,
-        "NSFaceIDUsageDescription": "NovaRemote uses Face ID to protect your saved server credentials."
+        "NSFaceIDUsageDescription": "NovaRemote uses Face ID to protect your saved server credentials.",
+        "NSMicrophoneUsageDescription": "NovaRemote uses the microphone for voice commands and glasses mode hands-free control.",
+        "NSCameraUsageDescription": "NovaRemote uses the camera to scan QR codes for quick server setup."
       }
     },
     "android": {

@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   NativeSyntheticEvent,
   Pressable,
@@ -7,13 +7,13 @@ import {
   Text,
   TextInput,
   TextInputKeyPressEventData,
-  TextInputSelectionChangeEventData,
   View,
 } from "react-native";
 
 import { AnsiText } from "../components/AnsiText";
 import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
+import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
 
@@ -109,7 +109,6 @@ export function GlassesModeScreen() {
   } = useAppContext().terminals;
 
   const [activeSession, setActiveSession] = useState<string | null>(null);
-  const [draftSelection, setDraftSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const outputRef = useRef<ScrollView | null>(null);
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
@@ -144,6 +143,7 @@ export function GlassesModeScreen() {
   const output = activeSession ? tails[activeSession] || "" : "";
   const draft = activeSession ? drafts[activeSession] || "" : "";
   const activeReadOnly = activeSession ? Boolean(sessionReadOnly[activeSession]) : false;
+  const keyboardEditingDisabled = !activeSession || activeReadOnly || (activeSession ? Boolean(sendBusy[activeSession]) : true);
   const transcriptReady = voiceTranscript.trim().length > 0;
   const dynamicTextStyle = useMemo(
     () => ({
@@ -153,6 +153,43 @@ export function GlassesModeScreen() {
     }),
     [glassesMode.textScale]
   );
+
+  const onDraftChangeForActiveSession = useCallback(
+    (value: string) => {
+      if (!activeSession) {
+        return;
+      }
+      onSetDraft(activeSession, value);
+    },
+    [activeSession, onSetDraft]
+  );
+
+  const onHistoryPrevForActiveSession = useCallback(() => {
+    if (!activeSession || activeReadOnly) {
+      return;
+    }
+    onHistoryPrev(activeSession);
+  }, [activeSession, activeReadOnly, onHistoryPrev]);
+
+  const onHistoryNextForActiveSession = useCallback(() => {
+    if (!activeSession || activeReadOnly) {
+      return;
+    }
+    onHistoryNext(activeSession);
+  }, [activeSession, activeReadOnly, onHistoryNext]);
+
+  const {
+    selection: draftSelection,
+    onSelectionChange: onDraftSelectionChange,
+    insertTextAtCursor: onKeyboardInsertText,
+    handleAction: onKeyboardAction,
+  } = useTextEditing({
+    value: draft,
+    onChange: onDraftChangeForActiveSession,
+    disabled: keyboardEditingDisabled,
+    onHistoryPrev: onHistoryPrevForActiveSession,
+    onHistoryNext: onHistoryNextForActiveSession,
+  });
 
   const goToNextSession = () => {
     if (openSessions.length === 0) {
@@ -268,130 +305,6 @@ export function GlassesModeScreen() {
       dynamicThresholdDbRef.current = null;
     };
   }, []);
-
-  useEffect(() => {
-    setDraftSelection((current) => {
-      const max = draft.length;
-      const nextStart = Math.max(0, Math.min(max, current.start));
-      const nextEnd = Math.max(nextStart, Math.min(max, current.end));
-      if (nextStart === current.start && nextEnd === current.end) {
-        return current;
-      }
-      return { start: nextStart, end: nextEnd };
-    });
-  }, [draft]);
-
-  const draftRange = () => {
-    const max = draft.length;
-    const start = Math.max(0, Math.min(max, draftSelection.start));
-    const end = Math.max(start, Math.min(max, draftSelection.end));
-    return { start, end };
-  };
-
-  const applyDraftWithSelection = (value: string, cursor: number) => {
-    if (!activeSession) {
-      return;
-    }
-    onSetDraft(activeSession, value);
-    const nextCursor = Math.max(0, Math.min(value.length, cursor));
-    setDraftSelection({ start: nextCursor, end: nextCursor });
-  };
-
-  const wordStart = (text: string, index: number) => {
-    let pointer = Math.max(0, Math.min(text.length, index));
-    while (pointer > 0 && /\s/.test(text[pointer - 1])) {
-      pointer -= 1;
-    }
-    while (pointer > 0 && !/\s/.test(text[pointer - 1])) {
-      pointer -= 1;
-    }
-    return pointer;
-  };
-
-  const wordEnd = (text: string, index: number) => {
-    let pointer = Math.max(0, Math.min(text.length, index));
-    while (pointer < text.length && /\s/.test(text[pointer])) {
-      pointer += 1;
-    }
-    while (pointer < text.length && !/\s/.test(text[pointer])) {
-      pointer += 1;
-    }
-    return pointer;
-  };
-
-  const onKeyboardInsertText = (text: string) => {
-    if (!activeSession || activeReadOnly || (activeSession && sendBusy[activeSession])) {
-      return;
-    }
-    const selection = draftRange();
-    const next = `${draft.slice(0, selection.start)}${text}${draft.slice(selection.end)}`;
-    applyDraftWithSelection(next, selection.start + text.length);
-  };
-
-  const onKeyboardAction = (action: string) => {
-    if (!activeSession) {
-      return;
-    }
-    if (action === "history_prev") {
-      if (!activeReadOnly) {
-        onHistoryPrev(activeSession);
-      }
-      return;
-    }
-    if (action === "history_next") {
-      if (!activeReadOnly) {
-        onHistoryNext(activeSession);
-      }
-      return;
-    }
-    if (activeReadOnly || sendBusy[activeSession]) {
-      return;
-    }
-    const selection = draftRange();
-    if (action === "cursor_left") {
-      const cursor = selection.start === selection.end ? selection.start - 1 : selection.start;
-      const bounded = Math.max(0, cursor);
-      setDraftSelection({ start: bounded, end: bounded });
-      return;
-    }
-    if (action === "cursor_right") {
-      const cursor = selection.start === selection.end ? selection.end + 1 : selection.end;
-      const bounded = Math.max(0, Math.min(draft.length, cursor));
-      setDraftSelection({ start: bounded, end: bounded });
-      return;
-    }
-    if (action === "cursor_home") {
-      setDraftSelection({ start: 0, end: 0 });
-      return;
-    }
-    if (action === "cursor_end") {
-      setDraftSelection({ start: draft.length, end: draft.length });
-      return;
-    }
-    if (action === "word_back") {
-      const cursor = wordStart(draft, selection.start);
-      setDraftSelection({ start: cursor, end: cursor });
-      return;
-    }
-    if (action === "word_forward") {
-      const cursor = wordEnd(draft, selection.end);
-      setDraftSelection({ start: cursor, end: cursor });
-      return;
-    }
-    if (action === "delete_word_back") {
-      if (selection.start !== selection.end) {
-        const next = `${draft.slice(0, selection.start)}${draft.slice(selection.end)}`;
-        applyDraftWithSelection(next, selection.start);
-        return;
-      }
-      const left = wordStart(draft, selection.start);
-      if (left === selection.start) {
-        return;
-      }
-      const next = `${draft.slice(0, left)}${draft.slice(selection.end)}`;
-      applyDraftWithSelection(next, left);
-    }
-  };
 
   return (
     <View style={styles.glassesRoutePanel}>
@@ -587,15 +500,8 @@ export function GlassesModeScreen() {
               style={[styles.input, styles.multilineInput]}
               value={draft}
               selection={draftSelection}
-              onChangeText={(value) => {
-                if (!activeSession) {
-                  return;
-                }
-                onSetDraft(activeSession, value);
-              }}
-              onSelectionChange={(event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) =>
-                setDraftSelection(event.nativeEvent.selection)
-              }
+              onChangeText={onDraftChangeForActiveSession}
+              onSelectionChange={onDraftSelectionChange}
               placeholder="Optional manual draft"
               placeholderTextColor="#7f7aa8"
               autoCapitalize="none"
@@ -613,7 +519,7 @@ export function GlassesModeScreen() {
                 }
                 onSendControlChar(activeSession, value);
               }}
-              onAction={onKeyboardAction}
+              onAction={(action) => onKeyboardAction(action as TextEditingAction)}
             />
           </>
         ) : null}

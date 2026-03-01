@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NovaRemote Privacy Policy</title>
+    <style>
+      body { font-family: -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif; max-width: 920px; margin: 36px auto; padding: 0 20px; color: #171717; }
+      h1, h2 { margin-top: 24px; }
+      li { line-height: 1.6; }
+      p { line-height: 1.6; }
+      code { background: #f2f4f7; padding: 2px 5px; border-radius: 4px; }
+    </style>
+  </head>
+  <body>
+    <h1>Privacy Policy</h1>
+    <p><strong>Last updated:</strong> March 1, 2026</p>
+
+    <h2>Overview</h2>
+    <p>NovaRemote is a mobile client for connecting to a user-managed companion server. NovaRemote does not require account creation and does not run a mandatory cloud backend for terminal traffic.</p>
+
+    <h2>Data We Process</h2>
+    <ul>
+      <li>Server profile metadata (name, URL, optional defaults)</li>
+      <li>Authentication tokens for companion servers</li>
+      <li>Terminal/session UI state (drafts, tags, history, preferences)</li>
+      <li>Optional LLM provider profiles (including API keys)</li>
+      <li>Optional app settings (biometric lock, theme, onboarding/tutorial status)</li>
+      <li>Optional analytics preference and anonymous analytics identifier</li>
+      <li>Optional referral code metadata</li>
+    </ul>
+
+    <h2>Where Data Is Stored</h2>
+    <ul>
+      <li>Sensitive profile data is stored locally using platform secure storage via Expo SecureStore.</li>
+      <li>Other app state may be kept in local app storage.</li>
+      <li>NovaRemote does not automatically upload your commands or terminal output to a NovaRemote-operated cloud.</li>
+    </ul>
+
+    <h2>Network Requests</h2>
+    <p>NovaRemote sends requests to:</p>
+    <ul>
+      <li>Your configured companion server(s) for terminal, file, AI, and related features.</li>
+      <li>Optional external LLM providers you configure.</li>
+      <li>Optional RevenueCat endpoints for purchase/entitlement flows.</li>
+      <li>Optional analytics endpoint (<code>/analytics/event</code>) on your companion server when analytics is enabled.</li>
+    </ul>
+
+    <h2>Microphone and Notifications</h2>
+    <ul>
+      <li>Microphone access is requested only for voice/glasses mode features.</li>
+      <li>Notification permission is requested only for alert/notification features.</li>
+    </ul>
+
+    <h2>Contact</h2>
+    <ul>
+      <li>Support: <a href="https://github.com/maddwiz/NovaRemote/issues">https://github.com/maddwiz/NovaRemote/issues</a></li>
+      <li>Email: <a href="mailto:support@novaremote.dev">support@novaremote.dev</a></li>
+    </ul>
+  </body>
+</html>
