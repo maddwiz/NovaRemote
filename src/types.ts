@@ -55,6 +55,9 @@ export type ServerProfile = {
   token: string;
   defaultCwd: string;
   terminalBackend?: TerminalBackendKind;
+  sshHost?: string;
+  sshUser?: string;
+  sshPort?: number;
 };
 
 export type TerminalBackendKind = "auto" | "tmux" | "screen" | "zellij" | "powershell" | "cmd" | "pty";

@@ -34,6 +34,9 @@ export const DEFAULT_SHELL_WAIT_MS = 1200;
 
 export const SERVER_URL_PLACEHOLDER = "https://your-server:8787";
 export const CWD_PLACEHOLDER = "/path/to/your/project";
+export const SSH_HOST_PLACEHOLDER = "host.example.com";
+export const SSH_USER_PLACEHOLDER = "ubuntu";
+export const DEFAULT_SSH_PORT = 22;
 
 export const BRAND_LOGO = require("../assets/novaai-logo-user.png");
 

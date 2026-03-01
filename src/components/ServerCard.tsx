@@ -11,15 +11,20 @@ type ServerCardProps = {
   onEdit: (server: ServerProfile) => void;
   onDelete: (serverId: string) => void;
   onShare: (server: ServerProfile) => void;
+  onOpenSsh: (server: ServerProfile) => void;
 };
 
-export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare }: ServerCardProps) {
+export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare, onOpenSsh }: ServerCardProps) {
+  const sshTarget = server.sshHost
+    ? `${server.sshUser ? `${server.sshUser}@` : ""}${server.sshHost}${server.sshPort ? `:${server.sshPort}` : ""}`
+    : null;
   return (
     <View style={[styles.serverCard, isActive ? styles.serverCardActive : null]}>
       <View style={styles.serverCardHeader}>
         <Text style={styles.serverName}>{server.name}</Text>
         <Text style={styles.serverUrl}>{server.baseUrl}</Text>
         <Text style={styles.emptyText}>{`Backend: ${server.terminalBackend || "auto"}`}</Text>
+        {sshTarget ? <Text style={styles.emptyText}>{`SSH: ${sshTarget}`}</Text> : null}
       </View>
       <View style={styles.actionsWrap}>
         <Pressable
@@ -41,6 +46,16 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare 
           onPress={() => onShare(server)}
         >
           <Text style={styles.actionButtonText}>Share</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open SSH fallback for ${server.name}`}
+          accessibilityHint="Opens this server in an installed SSH app using ssh URL scheme."
+          style={[styles.actionButton, !server.sshHost ? styles.buttonDisabled : null]}
+          onPress={() => onOpenSsh(server)}
+          disabled={!server.sshHost}
+        >
+          <Text style={styles.actionButtonText}>Open SSH</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"

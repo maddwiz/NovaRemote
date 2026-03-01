@@ -309,6 +309,36 @@ Response:
 }
 ```
 
+### `POST /files/write`
+
+Purpose: create/update a text file from the app editor (used for inline edit/save-upload workflows).
+
+Request:
+
+```json
+{
+  "path": "/path/to/project/.env",
+  "content": "API_URL=https://example.com\n"
+}
+```
+
+Response:
+
+```json
+{
+  "ok": true,
+  "path": "/path/to/project/.env",
+  "bytes": 29
+}
+```
+
+Behavior recommendations:
+
+- Accept UTF-8 text payloads.
+- Create the file if it does not exist.
+- Return `HTTP 403` for denied paths, `HTTP 400` for invalid paths.
+- Return `HTTP 413` for payload-too-large with a clear limit message.
+
 ## Optional Endpoints (Voice Input for Glasses Mode)
 
 NovaRemote can capture microphone audio on-device and post it to the companion server for transcription.

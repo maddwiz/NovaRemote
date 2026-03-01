@@ -9,6 +9,7 @@ type FilesScreenProps = {
   connected: boolean;
   busy: boolean;
   busyLabel: string;
+  canWrite: boolean;
   currentPath: string;
   includeHidden: boolean;
   entries: RemoteFileEntry[];
@@ -19,11 +20,14 @@ type FilesScreenProps = {
   onSetCurrentPath: (value: string) => void;
   onSetIncludeHidden: (value: boolean) => void;
   onSetTailLines: (value: string) => void;
+  onSetSelectedFilePath: (value: string | null) => void;
+  onSetSelectedContent: (value: string) => void;
   onRefresh: () => void;
   onGoUp: () => void;
   onOpenEntry: (entry: RemoteFileEntry) => void;
   onReadSelected: () => void;
   onTailSelected: () => void;
+  onSaveFile: (path: string, content: string) => void;
   onInsertPath: (session: string, path: string) => void;
   onSendPathCommand: (session: string, path: string) => void;
 };
@@ -40,6 +44,7 @@ export function FilesScreen({
   connected,
   busy,
   busyLabel,
+  canWrite,
   currentPath,
   includeHidden,
   entries,
@@ -50,15 +55,19 @@ export function FilesScreen({
   onSetCurrentPath,
   onSetIncludeHidden,
   onSetTailLines,
+  onSetSelectedFilePath,
+  onSetSelectedContent,
   onRefresh,
   onGoUp,
   onOpenEntry,
   onReadSelected,
   onTailSelected,
+  onSaveFile,
   onInsertPath,
   onSendPathCommand,
 }: FilesScreenProps) {
   const [targetSession, setTargetSession] = useState<string>("");
+  const [editorMode, setEditorMode] = useState<boolean>(false);
 
   const effectiveSession = useMemo(() => targetSession || openSessions[0] || "", [openSessions, targetSession]);
 
@@ -174,11 +183,85 @@ export function FilesScreen({
           >
             <Text style={styles.actionButtonText}>Tail</Text>
           </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={editorMode ? "Switch to preview mode" : "Switch to edit mode"}
+            accessibilityHint="Toggles between ANSI preview and editable file content."
+            style={[styles.actionButton, styles.flexButton]}
+            onPress={() => setEditorMode((prev) => !prev)}
+          >
+            <Text style={styles.actionButtonText}>{editorMode ? "Preview" : "Edit"}</Text>
+          </Pressable>
         </View>
 
-        <ScrollView style={styles.modalTerminalView}>
-          <AnsiText text={selectedContent || (busy ? "Loading file content..." : "File content will appear here.")} style={styles.terminalText} />
-        </ScrollView>
+        <TextInput
+          style={styles.input}
+          value={selectedFilePath || ""}
+          onChangeText={(value) => onSetSelectedFilePath(value || null)}
+          placeholder="/path/to/file.txt"
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+
+        {editorMode ? (
+          <TextInput
+            style={[styles.input, styles.multilineInput]}
+            value={selectedContent}
+            onChangeText={onSetSelectedContent}
+            placeholder="File content"
+            placeholderTextColor="#7f7aa8"
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+          />
+        ) : (
+          <ScrollView style={styles.modalTerminalView}>
+            <AnsiText text={selectedContent || (busy ? "Loading file content..." : "File content will appear here.")} style={styles.terminalText} />
+          </ScrollView>
+        )}
+
+        {canWrite ? (
+          <View style={styles.rowInlineSpace}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create new file draft"
+              accessibilityHint="Prepares a new untitled file in the current path."
+              style={[styles.buttonGhost, styles.flexButton, busy ? styles.buttonDisabled : null]}
+              onPress={() => {
+                const base = currentPath.trim().replace(/\/+$/, "") || "/";
+                const nextPath = base === "/" ? "/untitled.txt" : `${base}/untitled.txt`;
+                onSetSelectedFilePath(nextPath);
+                onSetSelectedContent("");
+                setEditorMode(true);
+              }}
+              disabled={busy}
+            >
+              <Text style={styles.buttonGhostText}>New File</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save file content"
+              accessibilityHint="Writes the current editor content to the selected remote file path."
+              style={[
+                styles.buttonPrimary,
+                styles.flexButton,
+                (!selectedFilePath || !connected || busy) ? styles.buttonDisabled : null,
+              ]}
+              onPress={() => {
+                if (!selectedFilePath) {
+                  return;
+                }
+                onSaveFile(selectedFilePath, selectedContent);
+              }}
+              disabled={!selectedFilePath || !connected || busy}
+            >
+              <Text style={styles.buttonPrimaryText}>Save / Upload</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <Text style={styles.emptyText}>Server is read-only for files. Add `/files/write` to enable editing/upload.</Text>
+        )}
       </View>
 
       <View style={styles.panel}>

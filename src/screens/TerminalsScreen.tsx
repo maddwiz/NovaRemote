@@ -212,6 +212,7 @@ export function TerminalsScreen() {
     onRefreshCapabilities,
     onRefreshSessions,
     onOpenServers,
+    onOpenSshFallback,
     onStartSession,
     onToggleSessionVisible,
     onSetSessionMode,
@@ -1313,6 +1314,18 @@ export function TerminalsScreen() {
             <Text style={styles.buttonGhostText}>Manage Servers</Text>
           </Pressable>
         </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Open direct SSH fallback"
+          accessibilityHint="Launches an installed SSH app using this server's ssh settings."
+          style={[styles.buttonGhost, !activeServer?.sshHost ? styles.buttonDisabled : null]}
+          onPress={onOpenSshFallback}
+          disabled={!activeServer?.sshHost}
+        >
+          <Text style={styles.buttonGhostText}>
+            {activeServer?.sshHost ? `Open SSH (${activeServer.sshUser ? `${activeServer.sshUser}@` : ""}${activeServer.sshHost})` : "Configure SSH in Servers tab"}
+          </Text>
+        </Pressable>
       </View>
 
       <View style={styles.panel}>

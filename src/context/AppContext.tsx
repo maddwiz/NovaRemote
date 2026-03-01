@@ -93,6 +93,7 @@ export type TerminalsViewModel = {
   onRefreshCapabilities: () => void;
   onRefreshSessions: () => void;
   onOpenServers: () => void;
+  onOpenSshFallback: () => void;
   onStartSession: () => void;
   onToggleSessionVisible: (session: string) => void;
   onSetSessionMode: (session: string, mode: TerminalSendMode) => void;

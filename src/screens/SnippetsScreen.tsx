@@ -9,11 +9,14 @@ type SnippetsScreenProps = {
   activeServerId: string | null;
   openSessions: string[];
   isPro: boolean;
+  syncStatus: string;
   onShowPaywall: () => void;
   onSaveSnippet: (input: Omit<Snippet, "id"> & { id?: string }) => void;
   onDeleteSnippet: (id: string) => void;
   onInsertSnippet: (session: string, command: string) => void;
   onRunSnippet: (session: string, command: string, mode: TerminalSendMode) => void;
+  onExportSnippets: (scopeServerId: string | null) => string;
+  onImportSnippets: (payload: string) => void;
 };
 
 export function SnippetsScreen({
@@ -21,11 +24,14 @@ export function SnippetsScreen({
   activeServerId,
   openSessions,
   isPro,
+  syncStatus,
   onShowPaywall,
   onSaveSnippet,
   onDeleteSnippet,
   onInsertSnippet,
   onRunSnippet,
+  onExportSnippets,
+  onImportSnippets,
 }: SnippetsScreenProps) {
   const [name, setName] = useState<string>("");
   const [command, setCommand] = useState<string>("");
@@ -33,6 +39,8 @@ export function SnippetsScreen({
   const [scopeCurrentServer, setScopeCurrentServer] = useState<boolean>(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [targetSession, setTargetSession] = useState<string>("");
+  const [syncPayload, setSyncPayload] = useState<string>("");
+  const [syncScopeCurrentServer, setSyncScopeCurrentServer] = useState<boolean>(false);
 
   const relevantSnippets = useMemo(
     () =>
@@ -137,6 +145,64 @@ export function SnippetsScreen({
             })}
           </ScrollView>
         )}
+      </View>
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Snippet Sync</Text>
+        <Text style={styles.serverSubtitle}>Export/import JSON bundles for cloud sync across devices.</Text>
+        <View style={styles.modeRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sync all snippets"
+            style={[styles.modeButton, !syncScopeCurrentServer ? styles.modeButtonOn : null]}
+            onPress={() => setSyncScopeCurrentServer(false)}
+          >
+            <Text style={[styles.modeButtonText, !syncScopeCurrentServer ? styles.modeButtonTextOn : null]}>All</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Sync snippets for current server"
+            style={[styles.modeButton, syncScopeCurrentServer ? styles.modeButtonOn : null]}
+            onPress={() => setSyncScopeCurrentServer(true)}
+            disabled={!activeServerId}
+          >
+            <Text style={[styles.modeButtonText, syncScopeCurrentServer ? styles.modeButtonTextOn : null]}>This Server + Global</Text>
+          </Pressable>
+        </View>
+        <View style={styles.rowInlineSpace}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Generate snippet export bundle"
+            style={[styles.buttonGhost, styles.flexButton]}
+            onPress={() => {
+              const payload = onExportSnippets(syncScopeCurrentServer ? activeServerId : null);
+              setSyncPayload(payload);
+            }}
+          >
+            <Text style={styles.buttonGhostText}>Generate Export</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Import snippets from bundle"
+            style={[styles.buttonPrimary, styles.flexButton]}
+            onPress={() => {
+              onImportSnippets(syncPayload);
+            }}
+          >
+            <Text style={styles.buttonPrimaryText}>Import Bundle</Text>
+          </Pressable>
+        </View>
+        <TextInput
+          style={[styles.input, styles.multilineInput]}
+          value={syncPayload}
+          onChangeText={setSyncPayload}
+          placeholder="Paste snippet JSON bundle here for import."
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+          multiline
+        />
+        {syncStatus ? <Text style={styles.emptyText}>{syncStatus}</Text> : null}
       </View>
 
       <View style={styles.panel}>

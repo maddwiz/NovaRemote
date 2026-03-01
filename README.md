@@ -38,7 +38,7 @@ Use `docs/media/README.md` as the canonical media file map.
 - Session tags + tag filtering
 - Fullscreen terminal search (highlighted matches)
 - Snippets/macros (Pro)
-- Remote file explorer (list/read/tail and path-to-terminal actions)
+- Remote file explorer (list/read/tail, inline edit/save-upload, and path-to-terminal actions)
 - Capability detection per server (terminal API family, codex/files/shell/mac-attach)
 - Cached capability detection (memory + encrypted storage) for faster reconnect/startup
 - Server backend metadata per profile (auto/tmux/screen/zellij/powershell/cmd/pty)
@@ -60,6 +60,8 @@ Use `docs/media/README.md` as the canonical media file map.
 - Pull-to-refresh + connection health metrics
 - First-run in-app tutorial overlay
 - Shareable server config links/QR (token excluded)
+- Direct SSH fallback launcher via `ssh://` (optional per-server host/user/port)
+- Snippet/macros JSON export/import for manual cloud sync
 - iPad split-view layout (Pro)
 - RevenueCat paywall scaffolding (free tier: 1 server, 2 sessions)
 - Onboarding wizard with connection test

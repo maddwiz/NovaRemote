@@ -118,14 +118,35 @@ function normalizeMatchIndex(index: number, total: number): number {
 }
 
 function toServerShareLink(server: ServerProfile): string {
+  const queryParams: Record<string, string> = {
+    name: server.name,
+    url: server.baseUrl,
+    cwd: server.defaultCwd,
+    backend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
+  };
+  if (server.sshHost) {
+    queryParams.ssh_host = server.sshHost;
+  }
+  if (server.sshUser) {
+    queryParams.ssh_user = server.sshUser;
+  }
+  if (server.sshPort) {
+    queryParams.ssh_port = String(server.sshPort);
+  }
   return Linking.createURL("add-server", {
-    queryParams: {
-      name: server.name,
-      url: server.baseUrl,
-      cwd: server.defaultCwd,
-      backend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
-    },
+    queryParams,
   });
+}
+
+function toSshFallbackUrl(server: ServerProfile): string {
+  const host = server.sshHost?.trim() || "";
+  if (!host) {
+    throw new Error("SSH host is not configured for this server.");
+  }
+  const userPrefix = server.sshUser?.trim() ? `${encodeURIComponent(server.sshUser.trim())}@` : "";
+  const hasPortInHost = /:\d+$/.test(host) && !host.includes("]");
+  const portSuffix = server.sshPort && !hasPortInHost ? `:${server.sshPort}` : "";
+  return `ssh://${userPrefix}${host}${portSuffix}`;
 }
 
 function shellQuote(value: string): string {
@@ -456,6 +477,7 @@ export default function AppShell() {
   const [llmTestOutput, setLlmTestOutput] = useState<string>("");
   const [llmTestSummary, setLlmTestSummary] = useState<string>("");
   const [llmTransferStatus, setLlmTransferStatus] = useState<string>("");
+  const [snippetSyncStatus, setSnippetSyncStatus] = useState<string>("");
   const dangerResolverRef = useRef<((approved: boolean) => void) | null>(null);
   const autoOpenedPinsServerRef = useRef<string | null>(null);
   const aliasGuessRef = useRef<Record<string, string>>({});
@@ -477,7 +499,7 @@ export default function AppShell() {
   const { loading: safetyLoading, requireDangerConfirm, setRequireDangerConfirm } = useSafetyPolicy();
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
-  const { snippets, upsertSnippet, deleteSnippet } = useSnippets();
+  const { snippets, upsertSnippet, deleteSnippet, exportSnippets, importSnippets } = useSnippets();
   const { terminalTheme, setPreset: setTerminalPreset, setFontFamily: setTerminalFontFamily, setFontSize: setTerminalFontSize, setBackgroundOpacity: setTerminalBackgroundOpacity } = useTerminalTheme();
   const {
     profiles: llmProfiles,
@@ -502,6 +524,9 @@ export default function AppShell() {
     serverTokenInput,
     serverCwdInput,
     serverBackendInput,
+    serverSshHostInput,
+    serverSshUserInput,
+    serverSshPortInput,
     editingServerId,
     tokenMasked,
     setServerNameInput,
@@ -509,6 +534,9 @@ export default function AppShell() {
     setServerTokenInput,
     setServerCwdInput,
     setServerBackendInput,
+    setServerSshHostInput,
+    setServerSshUserInput,
+    setServerSshPortInput,
     setTokenMasked,
     beginCreateServer,
     beginEditServer,
@@ -620,6 +648,8 @@ export default function AppShell() {
     entries: fileEntries,
     selectedFilePath,
     selectedContent,
+    setSelectedFilePath,
+    setSelectedContent,
     tailLines,
     setTailLines,
     busy: filesBusy,
@@ -627,6 +657,7 @@ export default function AppShell() {
     listDirectory,
     readFile,
     tailFile,
+    writeFile,
     openEntry,
     goUp,
   } = useFilesBrowser({ activeServer, connected });
@@ -716,6 +747,43 @@ export default function AppShell() {
       return !capabilities.codex;
     },
     [activeProfile, capabilities.codex, resolveAiEngine]
+  );
+
+  const openSshFallback = useCallback(
+    async (server?: ServerProfile | null) => {
+      const target = server || activeServer;
+      if (!target) {
+        throw new Error("No server selected.");
+      }
+      const sshUrl = toSshFallbackUrl(target);
+      let canOpen = false;
+      try {
+        canOpen = await Linking.canOpenURL(sshUrl);
+      } catch {
+        canOpen = false;
+      }
+      if (!canOpen) {
+        try {
+          await Linking.openURL(sshUrl);
+          return;
+        } catch {
+          throw new Error("No SSH-capable app is installed for ssh:// links.");
+        }
+      }
+      await Linking.openURL(sshUrl);
+    },
+    [activeServer]
+  );
+
+  const shouldPollRemoteSession = useCallback(
+    (session: string) => {
+      if (streamLive[session]) {
+        return false;
+      }
+      const state = connectionMeta[session]?.state;
+      return state !== "connecting" && state !== "reconnecting";
+    },
+    [connectionMeta, streamLive]
   );
 
   const runFleetCommand = useCallback(async () => {
@@ -1166,7 +1234,25 @@ export default function AppShell() {
       const baseUrl = typeof parsed.queryParams?.url === "string" ? parsed.queryParams.url : "";
       const cwd = typeof parsed.queryParams?.cwd === "string" ? parsed.queryParams.cwd : "";
       const backend = typeof parsed.queryParams?.backend === "string" ? parsed.queryParams.backend : "";
-      importServerConfig({ name, url: baseUrl, cwd, backend });
+      const sshHost =
+        typeof parsed.queryParams?.ssh_host === "string"
+          ? parsed.queryParams.ssh_host
+          : typeof parsed.queryParams?.sshHost === "string"
+            ? parsed.queryParams.sshHost
+            : "";
+      const sshUser =
+        typeof parsed.queryParams?.ssh_user === "string"
+          ? parsed.queryParams.ssh_user
+          : typeof parsed.queryParams?.sshUser === "string"
+            ? parsed.queryParams.sshUser
+            : "";
+      const sshPort =
+        typeof parsed.queryParams?.ssh_port === "string"
+          ? parsed.queryParams.ssh_port
+          : typeof parsed.queryParams?.sshPort === "string"
+            ? parsed.queryParams.sshPort
+            : "";
+      importServerConfig({ name, url: baseUrl, cwd, backend, sshHost, sshUser, sshPort });
       setRoute("servers");
       setReady("Imported server config. Add your token and save.");
     }
@@ -1260,24 +1346,30 @@ export default function AppShell() {
 
     const id = setInterval(() => {
       remoteOpenSessions.forEach((session) => {
-        if (!streamLive[session]) {
+        if (shouldPollRemoteSession(session)) {
           void fetchTail(session, false);
         }
       });
     }, POLL_INTERVAL_MS);
 
     return () => clearInterval(id);
-  }, [connected, fetchTail, remoteOpenSessions, streamLive]);
+  }, [connected, fetchTail, remoteOpenSessions, shouldPollRemoteSession]);
 
   useEffect(() => {
     if (!connected || remoteOpenSessions.length === 0) {
       return;
     }
 
-    remoteOpenSessions.forEach((session) => {
-      void fetchTail(session, false);
-    });
-  }, [connected, fetchTail, remoteOpenSessions]);
+    const id = setTimeout(() => {
+      remoteOpenSessions.forEach((session) => {
+        if (shouldPollRemoteSession(session)) {
+          void fetchTail(session, false);
+        }
+      });
+    }, 1200);
+
+    return () => clearTimeout(id);
+  }, [connected, fetchTail, remoteOpenSessions, shouldPollRemoteSession]);
 
   useEffect(() => {
     void removeMissingSessions(allSessions);
@@ -1543,6 +1635,11 @@ export default function AppShell() {
       });
     },
     onOpenServers: () => setRoute("servers"),
+    onOpenSshFallback: () => {
+      void runWithStatus("Opening SSH fallback", async () => {
+        await openSshFallback(activeServer);
+      });
+    },
     onStartSession: () => {
       void runWithStatus("Starting session", async () => {
         if (!isPro && openSessions.length >= FREE_SESSION_LIMIT) {
@@ -2011,6 +2108,9 @@ export default function AppShell() {
               serverTokenInput={serverTokenInput}
               serverCwdInput={serverCwdInput}
               serverBackendInput={serverBackendInput || DEFAULT_TERMINAL_BACKEND}
+              serverSshHostInput={serverSshHostInput}
+              serverSshUserInput={serverSshUserInput}
+              serverSshPortInput={serverSshPortInput}
               editingServerId={editingServerId}
               tokenMasked={tokenMasked}
               requireBiometric={requireBiometric}
@@ -2034,11 +2134,19 @@ export default function AppShell() {
               onShareServer={(server) => {
                 setShareConfig({ title: server.name, link: toServerShareLink(server) });
               }}
+              onOpenServerSsh={(server) => {
+                void runWithStatus(`Opening SSH fallback for ${server.name}`, async () => {
+                  await openSshFallback(server);
+                });
+              }}
               onSetServerName={setServerNameInput}
               onSetServerUrl={setServerUrlInput}
               onSetServerToken={setServerTokenInput}
               onSetServerCwd={setServerCwdInput}
               onSetServerBackend={setServerBackendInput}
+              onSetServerSshHost={setServerSshHostInput}
+              onSetServerSshUser={setServerSshUserInput}
+              onSetServerSshPort={setServerSshPortInput}
               onSetRequireBiometric={(value) => {
                 void runWithStatus("Updating lock setting", async () => {
                   await setRequireBiometric(value);
@@ -2083,6 +2191,7 @@ export default function AppShell() {
               activeServerId={activeServerId}
               openSessions={openSessions}
               isPro={isPro}
+              syncStatus={snippetSyncStatus}
               onShowPaywall={() => setPaywallVisible(true)}
               onSaveSnippet={(input) => {
                 void runWithStatus(input.id ? "Updating snippet" : "Saving snippet", async () => {
@@ -2131,6 +2240,23 @@ export default function AppShell() {
                   await addCommand(session, command);
                 });
               }}
+              onExportSnippets={(scopeServerId) => {
+                const payload = exportSnippets({
+                  serverId: scopeServerId,
+                  includeGlobal: true,
+                });
+                const targetLabel = scopeServerId ? "current server + global" : "all";
+                setSnippetSyncStatus(`Export bundle generated (${targetLabel}) at ${new Date().toLocaleTimeString()}.`);
+                return payload;
+              }}
+              onImportSnippets={(payload) => {
+                void runWithStatus("Importing snippets", async () => {
+                  const summary = await importSnippets(payload);
+                  setSnippetSyncStatus(
+                    `Imported ${summary.imported} snippet(s), skipped ${summary.skipped}. Total stored: ${summary.total}.`
+                  );
+                });
+              }}
             />
           ) : null}
 
@@ -2140,6 +2266,7 @@ export default function AppShell() {
                 connected={connected}
                 busy={filesBusy}
                 busyLabel={filesBusyLabel}
+                canWrite={capabilities.files}
                 currentPath={currentPath}
                 includeHidden={includeHidden}
                 entries={fileEntries}
@@ -2150,6 +2277,8 @@ export default function AppShell() {
                 onSetCurrentPath={setCurrentPath}
                 onSetIncludeHidden={setIncludeHidden}
                 onSetTailLines={setTailLines}
+                onSetSelectedFilePath={setSelectedFilePath}
+                onSetSelectedContent={setSelectedContent}
                 onRefresh={() => {
                   void runWithStatus("Listing files", async () => {
                     await listDirectory();
@@ -2179,6 +2308,11 @@ export default function AppShell() {
                   }
                   void runWithStatus("Tailing file", async () => {
                     await tailFile(selectedFilePath);
+                  });
+                }}
+                onSaveFile={(path, content) => {
+                  void runWithStatus("Saving remote file", async () => {
+                    await writeFile(path, content);
                   });
                 }}
                 onInsertPath={(session, path) => {

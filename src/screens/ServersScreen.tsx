@@ -1,7 +1,7 @@
 import React from "react";
 import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
-import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER } from "../constants";
+import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER, SSH_HOST_PLACEHOLDER, SSH_USER_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
 import { ServerProfile, TerminalBackendKind } from "../types";
 import { ServerCard } from "../components/ServerCard";
@@ -14,6 +14,9 @@ type ServersScreenProps = {
   serverTokenInput: string;
   serverCwdInput: string;
   serverBackendInput: TerminalBackendKind;
+  serverSshHostInput: string;
+  serverSshUserInput: string;
+  serverSshPortInput: string;
   editingServerId: string | null;
   tokenMasked: boolean;
   requireBiometric: boolean;
@@ -22,11 +25,15 @@ type ServersScreenProps = {
   onBeginEditServer: (server: ServerProfile) => void;
   onDeleteServer: (serverId: string) => void;
   onShareServer: (server: ServerProfile) => void;
+  onOpenServerSsh: (server: ServerProfile) => void;
   onSetServerName: (value: string) => void;
   onSetServerUrl: (value: string) => void;
   onSetServerToken: (value: string) => void;
   onSetServerCwd: (value: string) => void;
   onSetServerBackend: (value: TerminalBackendKind) => void;
+  onSetServerSshHost: (value: string) => void;
+  onSetServerSshUser: (value: string) => void;
+  onSetServerSshPort: (value: string) => void;
   onSetRequireBiometric: (value: boolean) => void;
   onSetRequireDangerConfirm: (value: boolean) => void;
   onToggleTokenMask: () => void;
@@ -43,6 +50,9 @@ export function ServersScreen({
   serverTokenInput,
   serverCwdInput,
   serverBackendInput,
+  serverSshHostInput,
+  serverSshUserInput,
+  serverSshPortInput,
   editingServerId,
   tokenMasked,
   requireBiometric,
@@ -51,11 +61,15 @@ export function ServersScreen({
   onBeginEditServer,
   onDeleteServer,
   onShareServer,
+  onOpenServerSsh,
   onSetServerName,
   onSetServerUrl,
   onSetServerToken,
   onSetServerCwd,
   onSetServerBackend,
+  onSetServerSshHost,
+  onSetServerSshUser,
+  onSetServerSshPort,
   onSetRequireBiometric,
   onSetRequireDangerConfirm,
   onToggleTokenMask,
@@ -78,6 +92,7 @@ export function ServersScreen({
             onEdit={onBeginEditServer}
             onDelete={onDeleteServer}
             onShare={onShareServer}
+            onOpenSsh={onOpenServerSsh}
           />
         ))}
       </View>
@@ -121,6 +136,39 @@ export function ServersScreen({
         placeholderTextColor="#7f7aa8"
         onChangeText={onSetServerCwd}
       />
+
+      <View style={styles.serverCard}>
+        <Text style={styles.panelLabel}>Direct SSH Fallback (Optional)</Text>
+        <Text style={styles.serverSubtitle}>Launches an installed SSH app via `ssh://` when companion APIs are unavailable.</Text>
+        <TextInput
+          style={styles.input}
+          value={serverSshHostInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={SSH_HOST_PLACEHOLDER}
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerSshHost}
+        />
+        <TextInput
+          style={styles.input}
+          value={serverSshUserInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder={SSH_USER_PLACEHOLDER}
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerSshUser}
+        />
+        <TextInput
+          style={styles.input}
+          value={serverSshPortInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="number-pad"
+          placeholder="22"
+          placeholderTextColor="#7f7aa8"
+          onChangeText={(value) => onSetServerSshPort(value.replace(/[^0-9]/g, ""))}
+        />
+      </View>
 
       <View style={styles.serverCard}>
         <Text style={styles.panelLabel}>Terminal Backend</Text>

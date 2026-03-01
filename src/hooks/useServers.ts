@@ -7,6 +7,7 @@ import {
   DEFAULT_BASE_URL,
   DEFAULT_CWD,
   DEFAULT_SERVER_NAME,
+  DEFAULT_SSH_PORT,
   DEFAULT_TERMINAL_BACKEND,
   STORAGE_ACTIVE_SERVER_ID,
   STORAGE_LEGACY_BASE_URL,
@@ -21,6 +22,28 @@ type UseServersArgs = {
   enabled?: boolean;
 };
 
+function sanitizeSshPort(value: string | number | undefined): number | undefined {
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) {
+      return undefined;
+    }
+    const rounded = Math.round(value);
+    return rounded >= 1 && rounded <= 65535 ? rounded : undefined;
+  }
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const digits = value.replace(/[^0-9]/g, "");
+  if (!digits) {
+    return undefined;
+  }
+  const parsed = Number.parseInt(digits, 10);
+  if (!Number.isFinite(parsed)) {
+    return undefined;
+  }
+  return parsed >= 1 && parsed <= 65535 ? parsed : undefined;
+}
+
 export function useServers({ onError, enabled = true }: UseServersArgs) {
   const [servers, setServers] = useState<ServerProfile[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
@@ -31,6 +54,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
   const [serverTokenInput, setServerTokenInput] = useState<string>("");
   const [serverCwdInput, setServerCwdInput] = useState<string>(DEFAULT_CWD);
   const [serverBackendInput, setServerBackendInput] = useState<ServerProfile["terminalBackend"]>(DEFAULT_TERMINAL_BACKEND);
+  const [serverSshHostInput, setServerSshHostInput] = useState<string>("");
+  const [serverSshUserInput, setServerSshUserInput] = useState<string>("");
+  const [serverSshPortInput, setServerSshPortInput] = useState<string>(String(DEFAULT_SSH_PORT));
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [tokenMasked, setTokenMasked] = useState<boolean>(true);
 
@@ -55,6 +81,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerTokenInput("");
     setServerCwdInput(DEFAULT_CWD);
     setServerBackendInput(DEFAULT_TERMINAL_BACKEND);
+    setServerSshHostInput("");
+    setServerSshUserInput("");
+    setServerSshPortInput(String(DEFAULT_SSH_PORT));
   }, []);
 
   const beginEditServer = useCallback((server: ServerProfile) => {
@@ -64,9 +93,13 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerTokenInput(server.token);
     setServerCwdInput(server.defaultCwd);
     setServerBackendInput(server.terminalBackend || DEFAULT_TERMINAL_BACKEND);
+    setServerSshHostInput(server.sshHost || "");
+    setServerSshUserInput(server.sshUser || "");
+    setServerSshPortInput(String(server.sshPort || DEFAULT_SSH_PORT));
   }, []);
 
-  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string; backend?: string }) => {
+  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string; backend?: string; sshHost?: string; sshUser?: string; sshPort?: string | number }) => {
+    const importedPort = sanitizeSshPort(config.sshPort);
     setEditingServerId(null);
     setServerNameInput(config.name?.trim() || DEFAULT_SERVER_NAME);
     setServerUrlInput(normalizeBaseUrl(config.url || ""));
@@ -82,6 +115,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         ? config.backend
         : DEFAULT_TERMINAL_BACKEND
     );
+    setServerSshHostInput(config.sshHost?.trim() || "");
+    setServerSshUserInput(config.sshUser?.trim() || "");
+    setServerSshPortInput(String(importedPort || DEFAULT_SSH_PORT));
   }, []);
 
   const saveServer = useCallback(async () => {
@@ -89,6 +125,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     const cleanedBaseUrl = normalizeBaseUrl(serverUrlInput);
     const cleanedToken = serverTokenInput.trim();
     const cleanedCwd = serverCwdInput.trim() || DEFAULT_CWD;
+    const cleanedSshHost = serverSshHostInput.trim();
+    const cleanedSshUser = serverSshUserInput.trim();
+    const cleanedSshPort = sanitizeSshPort(serverSshPortInput);
+    const enteredSshPort = serverSshPortInput.trim();
 
     if (!cleanedBaseUrl) {
       throw new Error("Server URL is required.");
@@ -96,6 +136,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
 
     if (!cleanedToken) {
       throw new Error("Server token is required.");
+    }
+
+    if (cleanedSshHost && enteredSshPort && !cleanedSshPort) {
+      throw new Error("SSH port must be between 1 and 65535.");
     }
 
     let nextServers: ServerProfile[] = [];
@@ -111,6 +155,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
               token: cleanedToken,
               defaultCwd: cleanedCwd,
               terminalBackend: serverBackendInput || DEFAULT_TERMINAL_BACKEND,
+              sshHost: cleanedSshHost || undefined,
+              sshUser: cleanedSshUser || undefined,
+              sshPort: cleanedSshHost ? cleanedSshPort : undefined,
             }
           : server
       );
@@ -123,6 +170,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         token: cleanedToken,
         defaultCwd: cleanedCwd,
         terminalBackend: serverBackendInput || DEFAULT_TERMINAL_BACKEND,
+        sshHost: cleanedSshHost || undefined,
+        sshUser: cleanedSshUser || undefined,
+        sshPort: cleanedSshHost ? cleanedSshPort : undefined,
       };
       nextServers = [newServer, ...servers];
       nextActiveId = newServer.id;
@@ -142,13 +192,19 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverTokenInput,
     serverUrlInput,
     serverBackendInput,
+    serverSshHostInput,
+    serverSshPortInput,
+    serverSshUserInput,
     servers,
   ]);
 
   const addServerDirect = useCallback(
-    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string; terminalBackend?: ServerProfile["terminalBackend"] }) => {
+    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string; terminalBackend?: ServerProfile["terminalBackend"]; sshHost?: string; sshUser?: string; sshPort?: number }) => {
       const cleanedBaseUrl = normalizeBaseUrl(server.baseUrl);
       const cleanedToken = server.token.trim();
+      const cleanedSshHost = server.sshHost?.trim() || "";
+      const cleanedSshUser = server.sshUser?.trim() || "";
+      const cleanedSshPort = sanitizeSshPort(server.sshPort);
       if (!cleanedBaseUrl || !cleanedToken) {
         throw new Error("Server URL and token are required.");
       }
@@ -160,6 +216,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         token: cleanedToken,
         defaultCwd: server.defaultCwd.trim(),
         terminalBackend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
+        sshHost: cleanedSshHost || undefined,
+        sshUser: cleanedSshUser || undefined,
+        sshPort: cleanedSshHost ? cleanedSshPort : undefined,
       };
 
       const nextServers = [newServer, ...servers];
@@ -228,6 +287,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
               ? parsed.map((entry) => ({
                   ...entry,
                   terminalBackend: entry.terminalBackend || DEFAULT_TERMINAL_BACKEND,
+                  sshHost: entry.sshHost?.trim() || undefined,
+                  sshUser: entry.sshUser?.trim() || undefined,
+                  sshPort: entry.sshHost ? sanitizeSshPort(entry.sshPort) : undefined,
                 }))
               : [];
           } catch {
@@ -280,6 +342,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverTokenInput,
     serverCwdInput,
     serverBackendInput,
+    serverSshHostInput,
+    serverSshUserInput,
+    serverSshPortInput,
     editingServerId,
     tokenMasked,
     setServerNameInput,
@@ -287,6 +352,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerTokenInput,
     setServerCwdInput,
     setServerBackendInput,
+    setServerSshHostInput,
+    setServerSshUserInput,
+    setServerSshPortInput,
     setTokenMasked,
     beginCreateServer,
     beginEditServer,

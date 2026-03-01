@@ -19,6 +19,12 @@ type FileTailResponse = {
   content: string;
 };
 
+type FileWriteResponse = {
+  ok?: boolean;
+  path?: string;
+  bytes?: number;
+};
+
 type UseFilesBrowserArgs = {
   activeServer: ServerProfile | null;
   connected: boolean;
@@ -142,6 +148,44 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
     [activeServer, connected, tailLines]
   );
 
+  const writeFile = useCallback(
+    async (filePath: string, content: string) => {
+      if (!activeServer || !connected) {
+        throw new Error("Connect to a server first.");
+      }
+
+      const targetPath = filePath.trim();
+      if (!targetPath) {
+        throw new Error("File path is required.");
+      }
+
+      setBusy(true);
+      setBusyLabel("Saving file...");
+      try {
+        const data = await apiRequest<FileWriteResponse>(activeServer.baseUrl, activeServer.token, "/files/write", {
+          method: "POST",
+          body: JSON.stringify({
+            path: targetPath,
+            content,
+          }),
+        });
+        setSelectedFilePath(data.path || targetPath);
+        setSelectedContent(content);
+        return data;
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (message.startsWith("404")) {
+          throw new Error("This server does not expose /files/write yet.");
+        }
+        throw error;
+      } finally {
+        setBusy(false);
+        setBusyLabel("");
+      }
+    },
+    [activeServer, connected]
+  );
+
   const openEntry = useCallback(
     async (entry: RemoteFileEntry) => {
       if (entry.is_dir) {
@@ -172,6 +216,8 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
     selectedFilePath,
     selectedEntry,
     selectedContent,
+    setSelectedFilePath,
+    setSelectedContent,
     tailLines,
     setTailLines,
     busy,
@@ -179,6 +225,7 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
     listDirectory,
     readFile,
     tailFile,
+    writeFile,
     openEntry,
     goUp,
   };
