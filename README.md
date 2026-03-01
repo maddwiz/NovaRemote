@@ -2,6 +2,22 @@
 
 NovaRemote is an Expo + React Native app for controlling remote terminal and AI sessions through a companion server.
 
+## Why NovaRemote
+
+- Mobile-first remote terminal + AI workflow for homelabs, devops, and remote coding
+- Companion-server model (no raw SSH credentials stored in app)
+- Fleet operations, watch alerts, AI routing, and glass-friendly on-the-go mode
+
+## Demo / Screens
+
+- Add App Store screenshots and short GIFs under `docs/media/`
+- Recommended clips:
+  - Terminal streaming + ANSI colors
+  - AI suggestions + error triage
+  - Fleet execution across multiple servers
+  - Glasses mode voice controls
+- Keep a single public demo video link in this section for product discovery
+
 ## Features
 
 - Multi-server profiles with secure storage
@@ -39,6 +55,14 @@ NovaRemote is an Expo + React Native app for controlling remote terminal and AI 
 - Onboarding wizard with connection test
 - App-level React error boundary with recovery UI
 
+## Companion Server
+
+NovaRemote requires a companion backend. API contracts and auth are documented in `docs/SERVER_SETUP.md`.
+
+For adoption/migration guidance (including a Docker-first path for a reference server), see:
+
+- `docs/REFERENCE_SERVER.md`
+
 ## Requirements
 
 - Companion API server (see `docs/SERVER_SETUP.md`)
@@ -52,6 +76,15 @@ npm install
 npm run start
 ```
 
+## Quality Gates
+
+- Typecheck: `npm run typecheck`
+- Unit tests: `npm run test`
+- Expo doctor: `npm run doctor`
+- Full local CI pass: `npm run ci`
+
+GitHub Actions CI is configured in `.github/workflows/ci.yml`.
+
 ## Optional Environment Variables
 
 RevenueCat is optional in development. To enable purchase flows:
@@ -60,6 +93,16 @@ RevenueCat is optional in development. To enable purchase flows:
 - `EXPO_PUBLIC_REVENUECAT_API_KEY_ANDROID`
 
 Without these keys, paywall UI still renders but purchasing/restoring is disabled.
+
+## Pricing Notes
+
+Recommended structure for indie/mobile-devops audience:
+
+- Free: `1` server + `2` open sessions
+- Pro subscription: monthly + yearly plans
+- Optional lifetime offer for early adopters
+
+Set these offerings in App Store Connect + RevenueCat (entitlement `pro`).
 
 ## Companion Server Setup
 

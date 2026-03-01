@@ -7,6 +7,11 @@
     "android": "expo run:android",
     "ios": "expo run:ios",
     "web": "expo start --web",
+    "typecheck": "tsc --noEmit",
+    "doctor": "npx expo-doctor",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "ci": "npm run typecheck && npm run test && npm run doctor",
     "fix:ios:path-spaces": "node scripts/fix-ios-space-paths.mjs",
     "pods:install:ios": "cd ios && pod install",
     "prebuild:ios": "expo prebuild --platform ios --clean --no-install && npm run fix:ios:path-spaces && npm run pods:install:ios && npm run fix:ios:path-spaces",
@@ -35,8 +40,10 @@
   },
   "devDependencies": {
     "@types/crypto-js": "^4.2.2",
+    "@types/node": "^25.3.3",
     "@types/react": "~19.2.2",
-    "typescript": "~5.9.2"
+    "typescript": "~5.9.2",
+    "vitest": "^4.0.18"
   },
   "expo": {
     "doctor": {
