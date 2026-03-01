@@ -755,6 +755,7 @@ export default function AppShell() {
     handleSend,
     sendCommand,
     handleStop,
+    sendControlChar,
     handleOpenOnMac,
   } = useTerminalSessions({
     activeServer,
@@ -1117,6 +1118,25 @@ export default function AppShell() {
       await addCommand(session, trimmed);
     },
     [addCommand, connected, isLocalSession, queueSessionCommand, sendCommand, sendViaExternalLlm, sessionReadOnly, shouldRouteToExternalAi]
+  );
+
+  const sendControlToSession = useCallback(
+    async (session: string, char: string) => {
+      if (!char) {
+        return;
+      }
+      if (isLocalSession(session)) {
+        throw new Error("Local LLM sessions do not support terminal control characters.");
+      }
+      if (sessionReadOnly[session]) {
+        throw new Error(`${session} is read-only. Disable read-only before sending control keys.`);
+      }
+      if (!connected) {
+        throw new Error("Server is disconnected. Reconnect before sending control keys.");
+      }
+      await sendControlChar(session, char);
+    },
+    [connected, isLocalSession, sendControlChar, sessionReadOnly]
   );
 
   const clearVoiceLoopRestart = useCallback((session: string) => {
@@ -2036,6 +2056,12 @@ export default function AppShell() {
       setDrafts((prev) => ({ ...prev, [session]: adapted }));
       setStatus({ text: `Adapted command for ${activeServer?.terminalBackend || "auto"} backend.`, error: false });
     },
+    onSendControlChar: (session, char) => {
+      void Haptics.selectionAsync();
+      void sendControlToSession(session, char).catch((error) => {
+        setError(error);
+      });
+    },
     onSend: (session) => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
       void runWithStatus(`Sending to ${session}`, async () => {
@@ -2817,6 +2843,15 @@ export default function AppShell() {
             return;
           }
           setDrafts((prev) => ({ ...prev, [focusedSession]: value }));
+        }}
+        onSendControlChar={(char) => {
+          if (!focusedSession) {
+            return;
+          }
+          void Haptics.selectionAsync();
+          void sendControlToSession(focusedSession, char).catch((error) => {
+            setError(error);
+          });
         }}
         onSend={() => {
           if (!focusedSession) {

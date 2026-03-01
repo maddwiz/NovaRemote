@@ -112,6 +112,7 @@ export type TerminalsViewModel = {
   onAutoNameSession: (session: string) => void;
   onSetDraft: (session: string, value: string) => void;
   onAdaptDraftForBackend: (session: string) => void;
+  onSendControlChar: (session: string, char: string) => void;
   onSend: (session: string) => void;
   onClearDraft: (session: string) => void;
   onTogglePinSession: (session: string) => void;

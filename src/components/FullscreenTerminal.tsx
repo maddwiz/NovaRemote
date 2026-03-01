@@ -1,4 +1,4 @@
-import React, { useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   Modal,
   NativeSyntheticEvent,
@@ -9,6 +9,7 @@ import {
   Text,
   TextInput,
   TextInputKeyPressEventData,
+  TextInputSelectionChangeEventData,
   TextStyle,
   View,
   ViewStyle,
@@ -17,6 +18,7 @@ import {
 import { styles } from "../theme/styles";
 import { TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
+import { TerminalKeyboardBar } from "./TerminalKeyboardBar";
 
 type FullscreenTerminalProps = {
   session: string | null;
@@ -39,6 +41,7 @@ type FullscreenTerminalProps = {
   onHistoryPrev: () => void;
   onHistoryNext: () => void;
   onDraftChange: (value: string) => void;
+  onSendControlChar: (char: string) => void;
   onSend: () => void;
   onStop: () => void;
 };
@@ -64,15 +67,135 @@ export function FullscreenTerminal({
   onHistoryPrev,
   onHistoryNext,
   onDraftChange,
+  onSendControlChar,
   onSend,
   onStop,
 }: FullscreenTerminalProps) {
   const terminalRef = useRef<ScrollView | null>(null);
   const searchRef = useRef<TextInput | null>(null);
+  const [draftSelection, setDraftSelection] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   type KeyPressEventWithModifiers = TextInputKeyPressEventData & {
     ctrlKey?: boolean;
     metaKey?: boolean;
   };
+
+  useEffect(() => {
+    setDraftSelection((current) => {
+      const max = draft.length;
+      const nextStart = Math.max(0, Math.min(max, current.start));
+      const nextEnd = Math.max(nextStart, Math.min(max, current.end));
+      if (nextStart === current.start && nextEnd === current.end) {
+        return current;
+      }
+      return { start: nextStart, end: nextEnd };
+    });
+  }, [draft]);
+
+  const selectionRange = () => {
+    const max = draft.length;
+    const start = Math.max(0, Math.min(max, draftSelection.start));
+    const end = Math.max(start, Math.min(max, draftSelection.end));
+    return { start, end };
+  };
+
+  const applyDraftWithSelection = (value: string, cursor: number) => {
+    onDraftChange(value);
+    const nextCursor = Math.max(0, Math.min(value.length, cursor));
+    setDraftSelection({ start: nextCursor, end: nextCursor });
+  };
+
+  const wordStart = (text: string, index: number) => {
+    let pointer = Math.max(0, Math.min(text.length, index));
+    while (pointer > 0 && /\s/.test(text[pointer - 1])) {
+      pointer -= 1;
+    }
+    while (pointer > 0 && !/\s/.test(text[pointer - 1])) {
+      pointer -= 1;
+    }
+    return pointer;
+  };
+
+  const wordEnd = (text: string, index: number) => {
+    let pointer = Math.max(0, Math.min(text.length, index));
+    while (pointer < text.length && /\s/.test(text[pointer])) {
+      pointer += 1;
+    }
+    while (pointer < text.length && !/\s/.test(text[pointer])) {
+      pointer += 1;
+    }
+    return pointer;
+  };
+
+  const onKeyboardAction = (action: string) => {
+    if (action === "history_prev") {
+      if (!isReadOnly && !isSending) {
+        onHistoryPrev();
+      }
+      return;
+    }
+    if (action === "history_next") {
+      if (!isReadOnly && !isSending) {
+        onHistoryNext();
+      }
+      return;
+    }
+    if (isReadOnly || isSending) {
+      return;
+    }
+    const selection = selectionRange();
+    if (action === "cursor_left") {
+      const cursor = selection.start === selection.end ? selection.start - 1 : selection.start;
+      setDraftSelection({ start: Math.max(0, cursor), end: Math.max(0, cursor) });
+      return;
+    }
+    if (action === "cursor_right") {
+      const cursor = selection.start === selection.end ? selection.end + 1 : selection.end;
+      const bounded = Math.max(0, Math.min(draft.length, cursor));
+      setDraftSelection({ start: bounded, end: bounded });
+      return;
+    }
+    if (action === "cursor_home") {
+      setDraftSelection({ start: 0, end: 0 });
+      return;
+    }
+    if (action === "cursor_end") {
+      setDraftSelection({ start: draft.length, end: draft.length });
+      return;
+    }
+    if (action === "word_back") {
+      const cursor = wordStart(draft, selection.start);
+      setDraftSelection({ start: cursor, end: cursor });
+      return;
+    }
+    if (action === "word_forward") {
+      const cursor = wordEnd(draft, selection.end);
+      setDraftSelection({ start: cursor, end: cursor });
+      return;
+    }
+    if (action === "delete_word_back") {
+      if (selection.start !== selection.end) {
+        const next = `${draft.slice(0, selection.start)}${draft.slice(selection.end)}`;
+        applyDraftWithSelection(next, selection.start);
+        return;
+      }
+      const left = wordStart(draft, selection.start);
+      if (left === selection.start) {
+        return;
+      }
+      const next = `${draft.slice(0, left)}${draft.slice(selection.end)}`;
+      applyDraftWithSelection(next, left);
+    }
+  };
+
+  const onKeyboardInsertText = (text: string) => {
+    if (isReadOnly || isSending) {
+      return;
+    }
+    const selection = selectionRange();
+    const next = `${draft.slice(0, selection.start)}${text}${draft.slice(selection.end)}`;
+    applyDraftWithSelection(next, selection.start + text.length);
+  };
+
   const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     const native = event.nativeEvent as KeyPressEventWithModifiers;
     const key = (native.key || "").toLowerCase();
@@ -173,12 +296,27 @@ export function FullscreenTerminal({
             <TextInput
               style={[styles.input, styles.modalInput]}
               value={draft}
+              selection={draftSelection}
               multiline
               editable={!isSending && !isReadOnly}
               placeholder={isReadOnly ? "Read-only collaboration mode is enabled" : mode === "ai" ? "Message AI..." : "Run shell command..."}
               placeholderTextColor="#7f7aa8"
               onKeyPress={onDraftKeyPress}
               onChangeText={onDraftChange}
+              onSelectionChange={(event: NativeSyntheticEvent<TextInputSelectionChangeEventData>) =>
+                setDraftSelection(event.nativeEvent.selection)
+              }
+            />
+            <TerminalKeyboardBar
+              visible={!isReadOnly}
+              onInsertText={onKeyboardInsertText}
+              onControlChar={(value) => {
+                if (isReadOnly) {
+                  return;
+                }
+                onSendControlChar(value);
+              }}
+              onAction={onKeyboardAction}
             />
             <Text style={styles.emptyText}>
               {`Viewers ${collaboratorCount} · Shortcuts: Cmd/Ctrl+Enter send, Ctrl+C stop, Cmd+K clear, Cmd+F search, Cmd+W close.`}

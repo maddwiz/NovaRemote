@@ -231,6 +231,7 @@ export function TerminalsScreen() {
     onAutoNameSession,
     onSetDraft,
     onAdaptDraftForBackend,
+    onSendControlChar,
     onSend,
     onClearDraft,
     onTogglePinSession,
@@ -527,6 +528,7 @@ export function TerminalsScreen() {
           onAutoName={() => onAutoNameSession(session)}
           onDraftChange={(value) => onSetDraft(session, value)}
           onAdaptDraftForBackend={() => onAdaptDraftForBackend(session)}
+          onSendControlChar={(value) => onSendControlChar(session, value)}
           onRequestSuggestions={() => onRequestSuggestions(session)}
           onUseSuggestion={(value) => onUseSuggestion(session, value)}
           onExplainError={() => onExplainError(session)}
@@ -590,6 +592,7 @@ export function TerminalsScreen() {
     onSetSessionAlias,
     onAutoNameSession,
     onAdaptDraftForBackend,
+    onSendControlChar,
     onSetWatchPattern,
     onClearWatchAlerts,
     onRefreshSessionPresence,

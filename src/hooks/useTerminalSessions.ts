@@ -12,6 +12,13 @@ import {
   TmuxTailResponse,
 } from "../types";
 
+const CONTROL_CHAR_TO_CTRL_KEY: Record<string, string> = {
+  "\u0003": "C-c",
+  "\u0004": "C-d",
+  "\u001a": "C-z",
+  "\u000c": "C-l",
+};
+
 type UseTerminalSessionsArgs = {
   activeServer: ServerProfile | null;
   connected: boolean;
@@ -301,6 +308,43 @@ export function useTerminalSessions({ activeServer, connected, terminalApiBasePa
     [activeServer, connected, terminalApiBasePath]
   );
 
+  const sendControlChar = useCallback(
+    async (session: string, controlChar: string) => {
+      if (!activeServer || !connected) {
+        throw new Error("Connect to a server first.");
+      }
+      if (!controlChar) {
+        return;
+      }
+
+      const mappedKey = CONTROL_CHAR_TO_CTRL_KEY[controlChar];
+      if (mappedKey) {
+        await apiRequest(activeServer.baseUrl, activeServer.token, `${terminalApiBasePath}/ctrl`, {
+          method: "POST",
+          body: JSON.stringify({ session, key: mappedKey }),
+        });
+        return;
+      }
+
+      try {
+        await apiRequest(activeServer.baseUrl, activeServer.token, `${terminalApiBasePath}/input`, {
+          method: "POST",
+          body: JSON.stringify({ session, data: controlChar }),
+        });
+      } catch (inputError) {
+        try {
+          await apiRequest(activeServer.baseUrl, activeServer.token, `${terminalApiBasePath}/send`, {
+            method: "POST",
+            body: JSON.stringify({ session, text: controlChar, enter: false }),
+          });
+        } catch {
+          throw inputError;
+        }
+      }
+    },
+    [activeServer, connected, terminalApiBasePath]
+  );
+
   const handleOpenOnMac = useCallback(
     async (session: string) => {
       if (!activeServer || !connected) {
@@ -346,6 +390,7 @@ export function useTerminalSessions({ activeServer, connected, terminalApiBasePa
     handleSend,
     sendCommand,
     handleStop,
+    sendControlChar,
     handleOpenOnMac,
   };
 }
