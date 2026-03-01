@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { styles } from "../theme/styles";
-import { LlmProfile, LlmProviderKind } from "../types";
+import { LlmProfile, LlmProviderKind, LlmSendOptions } from "../types";
 
 type LlmsScreenProps = {
   profiles: LlmProfile[];
@@ -15,10 +15,51 @@ type LlmsScreenProps = {
   onSetActive: (id: string) => void;
   onSaveProfile: (input: Omit<LlmProfile, "id"> & { id?: string }) => void;
   onDeleteProfile: (id: string) => void;
-  onTestPrompt: (profile: LlmProfile, prompt: string) => void;
+  onTestPrompt: (profile: LlmProfile, prompt: string, options?: LlmSendOptions) => void;
   onExportEncrypted: (passphrase: string) => string;
   onImportEncrypted: (payload: string, passphrase: string) => void;
 };
+
+function parseToolContext(raw: string): Record<string, string> {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return {};
+  }
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      const result: Record<string, string> = {};
+      Object.entries(parsed as Record<string, unknown>).forEach(([key, value]) => {
+        const cleanKey = key.trim();
+        const cleanValue = String(value ?? "").trim();
+        if (cleanKey && cleanValue) {
+          result[cleanKey] = cleanValue;
+        }
+      });
+      return result;
+    }
+  } catch {
+    // fall through to line parser
+  }
+
+  const result: Record<string, string> = {};
+  trimmed.split(/\r?\n/).forEach((line) => {
+    const clean = line.trim();
+    if (!clean) {
+      return;
+    }
+    const split = clean.indexOf(":");
+    if (split <= 0) {
+      return;
+    }
+    const key = clean.slice(0, split).trim();
+    const value = clean.slice(split + 1).trim();
+    if (key && value) {
+      result[key] = value;
+    }
+  });
+  return result;
+}
 
 export function LlmsScreen({
   profiles,
@@ -78,6 +119,18 @@ export function LlmsScreen({
   const [azureDeployment, setAzureDeployment] = useState<string>("");
   const [azureApiVersion, setAzureApiVersion] = useState<string>("2024-10-21");
   const [testPrompt, setTestPrompt] = useState<string>("Give me a one-line terminal command to list disk usage.");
+  const [testVisionUrl, setTestVisionUrl] = useState<string>("");
+  const [testEnableTools, setTestEnableTools] = useState<boolean>(true);
+  const [testToolContextRaw, setTestToolContextRaw] = useState<string>(
+    JSON.stringify(
+      {
+        platform: "mobile",
+        app: "NovaRemote",
+      },
+      null,
+      2
+    )
+  );
   const [transferPassphrase, setTransferPassphrase] = useState<string>("");
   const [importPayload, setImportPayload] = useState<string>("");
   const [exportPayload, setExportPayload] = useState<string>("");
@@ -610,6 +663,24 @@ export function LlmsScreen({
         <Text style={styles.panelLabel}>Test Active Provider</Text>
         <Text style={styles.serverSubtitle}>{activeProfile ? activeProfile.name : "No active provider"}</Text>
         {testSummary ? <Text style={styles.emptyText}>{testSummary}</Text> : null}
+        <View style={styles.modeRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Disable LLM tool calling for this test"
+            style={[styles.modeButton, !testEnableTools ? styles.modeButtonOn : null]}
+            onPress={() => setTestEnableTools(false)}
+          >
+            <Text style={[styles.modeButtonText, !testEnableTools ? styles.modeButtonTextOn : null]}>No Tools</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Enable LLM tool calling for this test"
+            style={[styles.modeButton, testEnableTools ? styles.modeButtonOn : null]}
+            onPress={() => setTestEnableTools(true)}
+          >
+            <Text style={[styles.modeButtonText, testEnableTools ? styles.modeButtonTextOn : null]}>Built-in Tools</Text>
+          </Pressable>
+        </View>
         <TextInput
           style={[styles.input, styles.multilineInput]}
           value={testPrompt}
@@ -618,6 +689,27 @@ export function LlmsScreen({
           placeholderTextColor="#7f7aa8"
           multiline
         />
+        <TextInput
+          style={styles.input}
+          value={testVisionUrl}
+          onChangeText={setTestVisionUrl}
+          placeholder="Optional image URL for vision test (https://...)"
+          placeholderTextColor="#7f7aa8"
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        {testEnableTools ? (
+          <TextInput
+            style={[styles.input, styles.multilineInput]}
+            value={testToolContextRaw}
+            onChangeText={setTestToolContextRaw}
+            placeholder="Optional tool context JSON (or key:value lines)"
+            placeholderTextColor="#7f7aa8"
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+          />
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Run LLM test prompt"
@@ -626,7 +718,11 @@ export function LlmsScreen({
           disabled={!activeProfile || testBusy || loading}
           onPress={() => {
             if (activeProfile) {
-              onTestPrompt(activeProfile, testPrompt);
+              onTestPrompt(activeProfile, testPrompt, {
+                imageUrl: testVisionUrl.trim() || undefined,
+                enableBuiltInTools: testEnableTools,
+                toolContext: testEnableTools ? parseToolContext(testToolContextRaw) : undefined,
+              });
             }
           }}
         >

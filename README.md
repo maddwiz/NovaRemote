@@ -46,6 +46,7 @@ Use `docs/media/README.md` as the canonical media file map.
 - External LLM profiles (OpenAI-compatible, first-class Azure OpenAI, Anthropic, Gemini, Ollama + preset shortcuts for OpenRouter/Groq/xAI/Together/Mistral/DeepSeek)
 - Advanced OpenAI-compatible profile controls (custom request path + custom headers)
 - LLM provider test diagnostics (latency + explicit failure output)
+- LLM advanced test harness (vision image URL + built-in tool-calling + tool-context payload)
 - Per-session AI engine routing (auto/server/external)
 - Local AI sessions powered directly by configured external LLMs
 - Encrypted LLM profile export/import with passphrase
@@ -125,6 +126,10 @@ Set these offerings in App Store Connect + RevenueCat (entitlement `pro`).
 ## Companion Server Setup
 
 See `docs/SERVER_SETUP.md` for endpoint contracts and auth requirements.
+
+Cross-platform ecosystem/install guide:
+
+- `docs/ECOSYSTEM.md`
 
 ## App Store / Launch Checklist
 

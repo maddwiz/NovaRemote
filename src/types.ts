@@ -227,3 +227,24 @@ export type LlmProfile = {
   azureDeployment?: string;
   azureApiVersion?: string;
 };
+
+export type LlmToolExecution = {
+  name: string;
+  arguments: string;
+  output: string;
+  error?: string;
+};
+
+export type LlmSendOptions = {
+  imageUrl?: string;
+  enableBuiltInTools?: boolean;
+  toolContext?: Record<string, string>;
+  maxToolRounds?: number;
+};
+
+export type LlmSendResult = {
+  text: string;
+  toolCalls: LlmToolExecution[];
+  usedVision: boolean;
+  usedTools: boolean;
+};

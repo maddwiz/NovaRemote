@@ -512,7 +512,7 @@ export default function AppShell() {
     exportEncrypted,
     importEncrypted,
   } = useLlmProfiles();
-  const { sendPrompt } = useLlmClient();
+  const { sendPrompt, sendPromptDetailed } = useLlmClient();
 
   const {
     servers,
@@ -2369,14 +2369,31 @@ export default function AppShell() {
                   await deleteProfile(id);
                 });
               }}
-              onTestPrompt={(profile, prompt) => {
+              onTestPrompt={(profile, prompt, options) => {
                 void runWithStatus(`Testing ${profile.name}`, async () => {
                   setLlmTestBusy(true);
                   const started = Date.now();
                   try {
-                    const output = await sendPrompt(profile, prompt);
+                    const result = await sendPromptDetailed(profile, prompt, options);
                     const elapsed = Date.now() - started;
-                    setLlmTestSummary(`${profile.kind} • ${profile.model} • ${elapsed} ms`);
+                    const trace = result.toolCalls
+                      .map((entry, index) => {
+                        const header = `${index + 1}. ${entry.name}(${entry.arguments})`;
+                        return `${header}\n${entry.output}`;
+                      })
+                      .join("\n\n");
+                    const output = trace
+                      ? `${result.text}\n\n[Tool Calls]\n${trace}`
+                      : result.text;
+                    const flags = [
+                      result.usedVision ? "vision" : "",
+                      result.usedTools ? `${result.toolCalls.length} tool call(s)` : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" • ");
+                    setLlmTestSummary(
+                      `${profile.kind} • ${profile.model} • ${elapsed} ms${flags ? ` • ${flags}` : ""}`
+                    );
                     setLlmTestOutput(output);
                   } catch (error) {
                     const elapsed = Date.now() - started;

@@ -13,6 +13,11 @@ To improve adoption, keep a public reference server implementation that matches 
    - health/capabilities endpoint examples
 3. Version the API and changelog so app/client compatibility is clear.
 
+For quick cross-platform bootstrap from this client repo:
+
+- Linux: `npm run companion:install:linux`
+- Windows (PowerShell): `npm run companion:install:windows`
+
 ## Docker-First Quick Start (Template)
 
 Use this as a baseline in the server repo:
