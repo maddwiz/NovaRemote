@@ -277,6 +277,26 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     }
   }, [activeServer, connected, resetAudioMode]);
 
+  const stopCapture = useCallback(async (): Promise<boolean> => {
+    const recorder = recordingRef.current;
+    if (!recorder) {
+      setRecording(false);
+      setMeteringDb(null);
+      await resetAudioMode();
+      return false;
+    }
+    recordingRef.current = null;
+    setRecording(false);
+    setMeteringDb(null);
+    try {
+      await recorder.stopAndUnloadAsync();
+    } catch {
+      // best effort
+    }
+    await resetAudioMode();
+    return true;
+  }, [resetAudioMode]);
+
   useEffect(() => {
     return () => {
       const recorder = recordingRef.current;
@@ -296,6 +316,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     permissionStatus,
     requestCapturePermission,
     startCapture,
+    stopCapture,
     stopAndTranscribe,
     setLastTranscript,
   };

@@ -268,6 +268,28 @@ function extractWakePhraseCommand(transcript: string, wakePhrase: string): strin
   return transcript.slice(0, match.index).trim();
 }
 
+function shouldRetryVoiceLoopError(message: string): boolean {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return true;
+  }
+  if (
+    /read-only|permission is required|microphone permission|permission denied|no active external llm|server ai engine is not available|local llm sessions|unsupported|invalid encrypted|http 401|http 403|http 415|cannot authenticate|no transcription endpoint/i.test(
+      normalized
+    )
+  ) {
+    return false;
+  }
+  if (
+    /no transcript|wake phrase|connect to a server|http \d+|network|timeout|capture failed|voice capture has not started|retry/i.test(
+      normalized
+    )
+  ) {
+    return true;
+  }
+  return true;
+}
+
 function adaptCommandForBackend(command: string, backend: TerminalBackendKind | undefined): string {
   const parts = command.split(/(\|\||&&|;|\|)/);
   if (parts.length > 1) {
@@ -536,6 +558,7 @@ export default function AppShell() {
     permissionStatus: voicePermissionStatus,
     requestCapturePermission: requestVoicePermission,
     startCapture: startVoiceCapture,
+    stopCapture: stopVoiceCapture,
     stopAndTranscribe: stopVoiceCaptureAndTranscribe,
     setLastTranscript: setVoiceTranscript,
   } = useVoiceCapture({ activeServer, connected });
@@ -958,6 +981,12 @@ export default function AppShell() {
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         if (glassesMode.voiceLoop) {
+          if (!shouldRetryVoiceLoopError(message)) {
+            clearVoiceLoopRestart(session);
+            voiceLoopRetryCountRef.current[session] = 0;
+            setStatus({ text: `Voice loop stopped: ${message}`, error: true });
+            return false;
+          }
           const nextRetry = (voiceLoopRetryCountRef.current[session] || 0) + 1;
           voiceLoopRetryCountRef.current[session] = nextRetry;
           const delayMs = Math.min(Math.round(900 * Math.pow(1.45, nextRetry - 1)), 10000);
@@ -975,6 +1004,7 @@ export default function AppShell() {
       glassesMode.wakePhraseEnabled,
       glassesMode.vadEnabled,
       glassesMode.vadSilenceMs,
+      clearVoiceLoopRestart,
       scheduleVoiceLoopRestart,
       sendTextToSession,
       setDrafts,
@@ -1100,6 +1130,23 @@ export default function AppShell() {
       setRoute("terminals");
     }
   }, [glassesMode.enabled, route]);
+
+  useEffect(() => {
+    if (route === "glasses") {
+      return;
+    }
+    Object.values(voiceLoopRestartTimerRef.current).forEach((timer) => {
+      if (timer) {
+        clearTimeout(timer);
+      }
+    });
+    voiceLoopRestartTimerRef.current = {};
+    voiceLoopRetryCountRef.current = {};
+    if (!voiceRecording) {
+      return;
+    }
+    void stopVoiceCapture();
+  }, [route, stopVoiceCapture, voiceRecording]);
 
   useEffect(() => {
     async function handleLink(url: string | null) {
