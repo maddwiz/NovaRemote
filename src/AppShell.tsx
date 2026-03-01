@@ -483,6 +483,7 @@ export default function AppShell() {
     profiles: llmProfiles,
     activeProfile,
     activeProfileId,
+    loading: llmProfilesLoading,
     saveProfile,
     deleteProfile,
     setActive,
@@ -621,6 +622,8 @@ export default function AppShell() {
     selectedContent,
     tailLines,
     setTailLines,
+    busy: filesBusy,
+    busyLabel: filesBusyLabel,
     listDirectory,
     readFile,
     tailFile,
@@ -2135,6 +2138,8 @@ export default function AppShell() {
             capabilities.files ? (
               <FilesScreen
                 connected={connected}
+                busy={filesBusy}
+                busyLabel={filesBusyLabel}
                 currentPath={currentPath}
                 includeHidden={includeHidden}
                 entries={fileEntries}
@@ -2210,6 +2215,7 @@ export default function AppShell() {
             <LlmsScreen
               profiles={llmProfiles}
               activeProfileId={activeProfileId}
+              loading={llmProfilesLoading}
               testBusy={llmTestBusy}
               testOutput={llmTestOutput}
               testSummary={llmTestSummary}

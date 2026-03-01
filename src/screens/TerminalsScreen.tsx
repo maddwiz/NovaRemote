@@ -1104,6 +1104,7 @@ export function TerminalsScreen() {
                 <Text style={styles.actionButtonText}>{processesBusy ? "Refreshing..." : "Refresh"}</Text>
               </Pressable>
             </View>
+            {processesBusy && processes.length === 0 ? <Text style={styles.emptyText}>Loading processes...</Text> : null}
 
             <TextInput
               style={styles.input}
@@ -1142,11 +1143,12 @@ export function TerminalsScreen() {
 
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
               {(["TERM", "KILL", "INT"] as ProcessSignal[]).map((signal) => (
-                <Pressable accessibilityRole="button"
-                  key={`signal-${signal}`}
-                  style={[styles.chip, processSignal === signal ? styles.chipActive : null]}
-                  onPress={() => setProcessSignal(signal)}
-                >
+              <Pressable accessibilityRole="button"
+                accessibilityLabel={`Set process kill signal ${signal}`}
+                key={`signal-${signal}`}
+                style={[styles.chip, processSignal === signal ? styles.chipActive : null]}
+                onPress={() => setProcessSignal(signal)}
+              >
                   <Text style={[styles.chipText, processSignal === signal ? styles.chipTextActive : null]}>{signal}</Text>
                 </Pressable>
               ))}
@@ -1155,6 +1157,8 @@ export function TerminalsScreen() {
             <View style={styles.rowInlineSpace}>
               <Text style={styles.serverSubtitle}>{`${selectedProcessPids.length} selected`}</Text>
               <Pressable accessibilityRole="button"
+                accessibilityLabel={`Kill ${selectedProcessPids.length} selected processes`}
+                accessibilityHint="Opens confirmation before sending signal to selected process IDs."
                 style={[styles.actionDangerButton, selectedProcessPids.length === 0 ? styles.buttonDisabled : null]}
                 disabled={selectedProcessPids.length === 0}
                 onPress={() => setPendingProcessKill({ pids: selectedProcessPids, signal: processSignal })}
@@ -1172,6 +1176,7 @@ export function TerminalsScreen() {
                 {process.command ? <Text style={styles.emptyText}>{process.command}</Text> : null}
                 <View style={styles.actionsWrap}>
                   <Pressable accessibilityRole="button"
+                    accessibilityLabel={selected ? `Deselect process ${process.pid}` : `Select process ${process.pid}`}
                     style={[styles.actionButton, selected ? styles.modeButtonOn : null]}
                     onPress={() =>
                       setSelectedProcessPids((prev) => (prev.includes(process.pid) ? prev.filter((pid) => pid !== process.pid) : [...prev, process.pid]))
@@ -1179,7 +1184,13 @@ export function TerminalsScreen() {
                   >
                     <Text style={styles.actionButtonText}>{selected ? "Selected" : "Select"}</Text>
                   </Pressable>
-                  <Pressable accessibilityRole="button" style={styles.actionDangerButton} onPress={() => setPendingProcessKill({ pids: [process.pid], signal: processSignal })}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Kill process ${process.pid}`}
+                    accessibilityHint={`Opens confirmation to send ${processSignal} to process ${process.pid}.`}
+                    style={styles.actionDangerButton}
+                    onPress={() => setPendingProcessKill({ pids: [process.pid], signal: processSignal })}
+                  >
                     <Text style={styles.actionDangerText}>{`Kill ${processSignal}`}</Text>
                   </Pressable>
                 </View>

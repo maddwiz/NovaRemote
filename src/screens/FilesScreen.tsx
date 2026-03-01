@@ -7,6 +7,8 @@ import { RemoteFileEntry } from "../types";
 
 type FilesScreenProps = {
   connected: boolean;
+  busy: boolean;
+  busyLabel: string;
   currentPath: string;
   includeHidden: boolean;
   entries: RemoteFileEntry[];
@@ -36,6 +38,8 @@ function formatFileMeta(entry: RemoteFileEntry): string {
 
 export function FilesScreen({
   connected,
+  busy,
+  busyLabel,
   currentPath,
   includeHidden,
   entries,
@@ -62,6 +66,7 @@ export function FilesScreen({
     <>
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Remote Files</Text>
+        {busy ? <Text style={styles.emptyText}>{busyLabel || "Working..."}</Text> : null}
         <TextInput
           style={styles.input}
           value={currentPath}
@@ -73,10 +78,24 @@ export function FilesScreen({
         />
 
         <View style={styles.rowInlineSpace}>
-          <Pressable accessibilityRole="button" style={[styles.buttonPrimary, styles.flexButton]} onPress={onRefresh} disabled={!connected}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="List remote directory"
+            accessibilityHint="Loads files and folders from the current path."
+            style={[styles.buttonPrimary, styles.flexButton, (!connected || busy) ? styles.buttonDisabled : null]}
+            onPress={onRefresh}
+            disabled={!connected || busy}
+          >
             <Text style={styles.buttonPrimaryText}>List Directory</Text>
           </Pressable>
-          <Pressable accessibilityRole="button" style={[styles.buttonGhost, styles.flexButton]} onPress={onGoUp} disabled={!connected}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Go to parent directory"
+            accessibilityHint="Navigates to the parent path."
+            style={[styles.buttonGhost, styles.flexButton, (!connected || busy) ? styles.buttonDisabled : null]}
+            onPress={onGoUp}
+            disabled={!connected || busy}
+          >
             <Text style={styles.buttonGhostText}>Go Up</Text>
           </Pressable>
         </View>
@@ -94,11 +113,23 @@ export function FilesScreen({
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Directory Entries</Text>
-        {entries.length === 0 ? (
-          <Text style={styles.emptyText}>No entries loaded yet.</Text>
+        {!connected ? (
+          <Text style={styles.emptyText}>Connect to a server to browse files.</Text>
+        ) : busy && entries.length === 0 ? (
+          <Text style={styles.emptyText}>Loading directory entries...</Text>
+        ) : entries.length === 0 ? (
+          <Text style={styles.emptyText}>No files or folders found in this directory.</Text>
         ) : (
           entries.map((entry) => (
-            <Pressable accessibilityRole="button" key={entry.path} style={styles.terminalCard} onPress={() => onOpenEntry(entry)}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={entry.is_dir ? `Open folder ${entry.name}` : `Read file ${entry.name}`}
+              accessibilityHint={entry.is_dir ? "Opens this folder." : "Loads this file preview."}
+              key={entry.path}
+              style={[styles.terminalCard, busy ? styles.buttonDisabled : null]}
+              onPress={() => onOpenEntry(entry)}
+              disabled={busy}
+            >
               <View style={styles.terminalNameRow}>
                 <Text style={styles.terminalName}>{entry.is_dir ? `[DIR] ${entry.name}` : `[FILE] ${entry.name}`}</Text>
               </View>
@@ -114,7 +145,14 @@ export function FilesScreen({
         <Text style={styles.serverSubtitle}>{selectedFilePath || "Select a file to preview"}</Text>
 
         <View style={styles.rowInlineSpace}>
-          <Pressable accessibilityRole="button" style={[styles.actionButton, styles.flexButton]} disabled={!selectedFilePath} onPress={onReadSelected}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Read selected file"
+            accessibilityHint="Loads full file content into preview."
+            style={[styles.actionButton, styles.flexButton, (!selectedFilePath || busy) ? styles.buttonDisabled : null]}
+            disabled={!selectedFilePath || busy}
+            onPress={onReadSelected}
+          >
             <Text style={styles.actionButtonText}>Read</Text>
           </Pressable>
           <TextInput
@@ -125,13 +163,20 @@ export function FilesScreen({
             placeholder="200"
             placeholderTextColor="#7f7aa8"
           />
-          <Pressable accessibilityRole="button" style={[styles.actionButton, styles.flexButton]} disabled={!selectedFilePath} onPress={onTailSelected}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Tail selected file"
+            accessibilityHint="Loads the last N lines of the selected file."
+            style={[styles.actionButton, styles.flexButton, (!selectedFilePath || busy) ? styles.buttonDisabled : null]}
+            disabled={!selectedFilePath || busy}
+            onPress={onTailSelected}
+          >
             <Text style={styles.actionButtonText}>Tail</Text>
           </Pressable>
         </View>
 
         <ScrollView style={styles.modalTerminalView}>
-          <AnsiText text={selectedContent || "File content will appear here."} style={styles.terminalText} />
+          <AnsiText text={selectedContent || (busy ? "Loading file content..." : "File content will appear here.")} style={styles.terminalText} />
         </ScrollView>
       </View>
 
@@ -154,8 +199,10 @@ export function FilesScreen({
 
         <View style={styles.rowInlineSpace}>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Insert selected path into draft"
+            accessibilityHint="Adds the selected file path to the draft input for the target session."
             style={[styles.buttonGhost, styles.flexButton]}
-            disabled={!selectedFilePath || !effectiveSession}
+            disabled={!selectedFilePath || !effectiveSession || busy}
             onPress={() => {
               if (selectedFilePath && effectiveSession) {
                 onInsertPath(effectiveSession, selectedFilePath);
@@ -165,8 +212,10 @@ export function FilesScreen({
             <Text style={styles.buttonGhostText}>Insert Path</Text>
           </Pressable>
           <Pressable accessibilityRole="button"
+            accessibilityLabel="Run cat command for selected file"
+            accessibilityHint="Runs cat with the selected path in the target terminal session."
             style={[styles.buttonPrimary, styles.flexButton]}
-            disabled={!selectedFilePath || !effectiveSession}
+            disabled={!selectedFilePath || !effectiveSession || busy}
             onPress={() => {
               if (selectedFilePath && effectiveSession) {
                 onSendPathCommand(effectiveSession, selectedFilePath);

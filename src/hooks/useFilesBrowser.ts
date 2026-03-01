@@ -43,6 +43,8 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
   const [selectedFilePath, setSelectedFilePath] = useState<string | null>(null);
   const [selectedContent, setSelectedContent] = useState<string>("");
   const [tailLines, setTailLines] = useState<string>("200");
+  const [busy, setBusy] = useState<boolean>(false);
+  const [busyLabel, setBusyLabel] = useState<string>("");
   const currentPathRef = useRef<string>("");
 
   useEffect(() => {
@@ -61,6 +63,8 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
       if (!activeServer || !connected) {
         throw new Error("Connect to a server first.");
       }
+      setBusy(true);
+      setBusyLabel("Listing directory...");
 
       const targetPath = (pathOverride ?? currentPathRef.current).trim();
       const query = new URLSearchParams();
@@ -72,10 +76,15 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
       }
 
       const suffix = query.toString() ? `?${query.toString()}` : "";
-      const data = await apiRequest<FilesListResponse>(activeServer.baseUrl, activeServer.token, `/files/list${suffix}`);
-      setCurrentPath(data.path);
-      setEntries(data.entries || []);
-      return data;
+      try {
+        const data = await apiRequest<FilesListResponse>(activeServer.baseUrl, activeServer.token, `/files/list${suffix}`);
+        setCurrentPath(data.path);
+        setEntries(data.entries || []);
+        return data;
+      } finally {
+        setBusy(false);
+        setBusyLabel("");
+      }
     },
     [activeServer, connected, includeHidden]
   );
@@ -85,14 +94,21 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
       if (!activeServer || !connected) {
         throw new Error("Connect to a server first.");
       }
-      const data = await apiRequest<FileReadResponse>(
-        activeServer.baseUrl,
-        activeServer.token,
-        `/files/read?path=${encodeURIComponent(filePath)}`
-      );
-      setSelectedFilePath(data.path);
-      setSelectedContent(data.content || "");
-      return data;
+      setBusy(true);
+      setBusyLabel("Reading file...");
+      try {
+        const data = await apiRequest<FileReadResponse>(
+          activeServer.baseUrl,
+          activeServer.token,
+          `/files/read?path=${encodeURIComponent(filePath)}`
+        );
+        setSelectedFilePath(data.path);
+        setSelectedContent(data.content || "");
+        return data;
+      } finally {
+        setBusy(false);
+        setBusyLabel("");
+      }
     },
     [activeServer, connected]
   );
@@ -102,19 +118,26 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
       if (!activeServer || !connected) {
         throw new Error("Connect to a server first.");
       }
+      setBusy(true);
+      setBusyLabel("Tailing file...");
 
       const lines = Number.isFinite(linesOverride)
         ? Math.max(1, Math.min(linesOverride || 200, 5000))
         : Math.max(1, Math.min(Number.parseInt(tailLines, 10) || 200, 5000));
 
-      const data = await apiRequest<FileTailResponse>(
-        activeServer.baseUrl,
-        activeServer.token,
-        `/files/tail?path=${encodeURIComponent(filePath)}&lines=${lines}`
-      );
-      setSelectedFilePath(data.path);
-      setSelectedContent(data.content || "");
-      return data;
+      try {
+        const data = await apiRequest<FileTailResponse>(
+          activeServer.baseUrl,
+          activeServer.token,
+          `/files/tail?path=${encodeURIComponent(filePath)}&lines=${lines}`
+        );
+        setSelectedFilePath(data.path);
+        setSelectedContent(data.content || "");
+        return data;
+      } finally {
+        setBusy(false);
+        setBusyLabel("");
+      }
     },
     [activeServer, connected, tailLines]
   );
@@ -151,6 +174,8 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
     selectedContent,
     tailLines,
     setTailLines,
+    busy,
+    busyLabel,
     listDirectory,
     readFile,
     tailFile,
