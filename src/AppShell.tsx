@@ -234,7 +234,7 @@ async function createSpectateLink(
     } catch (error) {
       lastError = error;
       const message = error instanceof Error ? error.message : String(error);
-      if (/^404\b/.test(message)) {
+      if (/^(404|405|501)\b/.test(message)) {
         continue;
       }
       throw error;
