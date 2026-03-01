@@ -137,6 +137,15 @@ function toServerShareLink(server: ServerProfile): string {
   if (server.sshPort) {
     queryParams.ssh_port = String(server.sshPort);
   }
+  if (server.portainerUrl) {
+    queryParams.portainer_url = server.portainerUrl;
+  }
+  if (server.proxmoxUrl) {
+    queryParams.proxmox_url = server.proxmoxUrl;
+  }
+  if (server.grafanaUrl) {
+    queryParams.grafana_url = server.grafanaUrl;
+  }
   return Linking.createURL("add-server", {
     queryParams,
   });
@@ -536,6 +545,9 @@ export default function AppShell() {
     serverSshHostInput,
     serverSshUserInput,
     serverSshPortInput,
+    serverPortainerUrlInput,
+    serverProxmoxUrlInput,
+    serverGrafanaUrlInput,
     editingServerId,
     tokenMasked,
     setServerNameInput,
@@ -546,6 +558,9 @@ export default function AppShell() {
     setServerSshHostInput,
     setServerSshUserInput,
     setServerSshPortInput,
+    setServerPortainerUrlInput,
+    setServerProxmoxUrlInput,
+    setServerGrafanaUrlInput,
     setTokenMasked,
     beginCreateServer,
     beginEditServer,
@@ -1277,7 +1292,25 @@ export default function AppShell() {
           : typeof parsed.queryParams?.sshPort === "string"
             ? parsed.queryParams.sshPort
             : "";
-      importServerConfig({ name, url: baseUrl, cwd, backend, sshHost, sshUser, sshPort });
+      const portainerUrl =
+        typeof parsed.queryParams?.portainer_url === "string"
+          ? parsed.queryParams.portainer_url
+          : typeof parsed.queryParams?.portainerUrl === "string"
+            ? parsed.queryParams.portainerUrl
+            : "";
+      const proxmoxUrl =
+        typeof parsed.queryParams?.proxmox_url === "string"
+          ? parsed.queryParams.proxmox_url
+          : typeof parsed.queryParams?.proxmoxUrl === "string"
+            ? parsed.queryParams.proxmoxUrl
+            : "";
+      const grafanaUrl =
+        typeof parsed.queryParams?.grafana_url === "string"
+          ? parsed.queryParams.grafana_url
+          : typeof parsed.queryParams?.grafanaUrl === "string"
+            ? parsed.queryParams.grafanaUrl
+            : "";
+      importServerConfig({ name, url: baseUrl, cwd, backend, sshHost, sshUser, sshPort, portainerUrl, proxmoxUrl, grafanaUrl });
       setRoute("servers");
       setReady("Imported server config. Add your token and save.");
       track("server_config_imported", { via: "deep_link" });
@@ -2156,6 +2189,9 @@ export default function AppShell() {
               serverSshHostInput={serverSshHostInput}
               serverSshUserInput={serverSshUserInput}
               serverSshPortInput={serverSshPortInput}
+              serverPortainerUrlInput={serverPortainerUrlInput}
+              serverProxmoxUrlInput={serverProxmoxUrlInput}
+              serverGrafanaUrlInput={serverGrafanaUrlInput}
               editingServerId={editingServerId}
               tokenMasked={tokenMasked}
               isPro={isPro}
@@ -2202,6 +2238,9 @@ export default function AppShell() {
               onSetServerSshHost={setServerSshHostInput}
               onSetServerSshUser={setServerSshUserInput}
               onSetServerSshPort={setServerSshPortInput}
+              onSetServerPortainerUrl={setServerPortainerUrlInput}
+              onSetServerProxmoxUrl={setServerProxmoxUrlInput}
+              onSetServerGrafanaUrl={setServerGrafanaUrlInput}
               onSetAnalyticsEnabled={(value) => {
                 void runWithStatus("Updating analytics setting", async () => {
                   await setAnalyticsEnabled(value);
@@ -2266,9 +2305,15 @@ export default function AppShell() {
                   sshHost: template.sshHost,
                   sshUser: template.sshUser,
                   sshPort: template.sshPort,
+                  portainerUrl: template.portainerUrl,
+                  proxmoxUrl: template.proxmoxUrl,
+                  grafanaUrl: template.grafanaUrl,
                 });
                 setGrowthStatus(`Applied shared template ${template.name}. Add token then save.`);
-                track("shared_template_applied", { has_ssh: Boolean(template.sshHost) });
+                track("shared_template_applied", {
+                  has_ssh: Boolean(template.sshHost),
+                  has_integrations: Boolean(template.portainerUrl || template.proxmoxUrl || template.grafanaUrl),
+                });
               }}
               onDeleteSharedTemplate={(templateId) => {
                 void runWithStatus("Deleting shared template", async () => {

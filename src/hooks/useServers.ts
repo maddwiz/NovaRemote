@@ -57,6 +57,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
   const [serverSshHostInput, setServerSshHostInput] = useState<string>("");
   const [serverSshUserInput, setServerSshUserInput] = useState<string>("");
   const [serverSshPortInput, setServerSshPortInput] = useState<string>(String(DEFAULT_SSH_PORT));
+  const [serverPortainerUrlInput, setServerPortainerUrlInput] = useState<string>("");
+  const [serverProxmoxUrlInput, setServerProxmoxUrlInput] = useState<string>("");
+  const [serverGrafanaUrlInput, setServerGrafanaUrlInput] = useState<string>("");
   const [editingServerId, setEditingServerId] = useState<string | null>(null);
   const [tokenMasked, setTokenMasked] = useState<boolean>(true);
 
@@ -84,6 +87,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerSshHostInput("");
     setServerSshUserInput("");
     setServerSshPortInput(String(DEFAULT_SSH_PORT));
+    setServerPortainerUrlInput("");
+    setServerProxmoxUrlInput("");
+    setServerGrafanaUrlInput("");
   }, []);
 
   const beginEditServer = useCallback((server: ServerProfile) => {
@@ -96,9 +102,12 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerSshHostInput(server.sshHost || "");
     setServerSshUserInput(server.sshUser || "");
     setServerSshPortInput(String(server.sshPort || DEFAULT_SSH_PORT));
+    setServerPortainerUrlInput(server.portainerUrl || "");
+    setServerProxmoxUrlInput(server.proxmoxUrl || "");
+    setServerGrafanaUrlInput(server.grafanaUrl || "");
   }, []);
 
-  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string; backend?: string; sshHost?: string; sshUser?: string; sshPort?: string | number }) => {
+  const importServerConfig = useCallback((config: { name?: string; url?: string; cwd?: string; backend?: string; sshHost?: string; sshUser?: string; sshPort?: string | number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
     const importedPort = sanitizeSshPort(config.sshPort);
     setEditingServerId(null);
     setServerNameInput(config.name?.trim() || DEFAULT_SERVER_NAME);
@@ -118,6 +127,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerSshHostInput(config.sshHost?.trim() || "");
     setServerSshUserInput(config.sshUser?.trim() || "");
     setServerSshPortInput(String(importedPort || DEFAULT_SSH_PORT));
+    setServerPortainerUrlInput(config.portainerUrl?.trim() || "");
+    setServerProxmoxUrlInput(config.proxmoxUrl?.trim() || "");
+    setServerGrafanaUrlInput(config.grafanaUrl?.trim() || "");
   }, []);
 
   const saveServer = useCallback(async () => {
@@ -129,6 +141,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     const cleanedSshUser = serverSshUserInput.trim();
     const cleanedSshPort = sanitizeSshPort(serverSshPortInput);
     const enteredSshPort = serverSshPortInput.trim();
+    const cleanedPortainerUrl = serverPortainerUrlInput.trim();
+    const cleanedProxmoxUrl = serverProxmoxUrlInput.trim();
+    const cleanedGrafanaUrl = serverGrafanaUrlInput.trim();
 
     if (!cleanedBaseUrl) {
       throw new Error("Server URL is required.");
@@ -158,6 +173,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
               sshHost: cleanedSshHost || undefined,
               sshUser: cleanedSshUser || undefined,
               sshPort: cleanedSshHost ? cleanedSshPort : undefined,
+              portainerUrl: cleanedPortainerUrl || undefined,
+              proxmoxUrl: cleanedProxmoxUrl || undefined,
+              grafanaUrl: cleanedGrafanaUrl || undefined,
             }
           : server
       );
@@ -173,6 +191,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         sshHost: cleanedSshHost || undefined,
         sshUser: cleanedSshUser || undefined,
         sshPort: cleanedSshHost ? cleanedSshPort : undefined,
+        portainerUrl: cleanedPortainerUrl || undefined,
+        proxmoxUrl: cleanedProxmoxUrl || undefined,
+        grafanaUrl: cleanedGrafanaUrl || undefined,
       };
       nextServers = [newServer, ...servers];
       nextActiveId = newServer.id;
@@ -195,16 +216,22 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverSshHostInput,
     serverSshPortInput,
     serverSshUserInput,
+    serverPortainerUrlInput,
+    serverProxmoxUrlInput,
+    serverGrafanaUrlInput,
     servers,
   ]);
 
   const addServerDirect = useCallback(
-    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string; terminalBackend?: ServerProfile["terminalBackend"]; sshHost?: string; sshUser?: string; sshPort?: number }) => {
+    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string; terminalBackend?: ServerProfile["terminalBackend"]; sshHost?: string; sshUser?: string; sshPort?: number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
       const cleanedBaseUrl = normalizeBaseUrl(server.baseUrl);
       const cleanedToken = server.token.trim();
       const cleanedSshHost = server.sshHost?.trim() || "";
       const cleanedSshUser = server.sshUser?.trim() || "";
       const cleanedSshPort = sanitizeSshPort(server.sshPort);
+      const cleanedPortainerUrl = server.portainerUrl?.trim() || "";
+      const cleanedProxmoxUrl = server.proxmoxUrl?.trim() || "";
+      const cleanedGrafanaUrl = server.grafanaUrl?.trim() || "";
       if (!cleanedBaseUrl || !cleanedToken) {
         throw new Error("Server URL and token are required.");
       }
@@ -219,6 +246,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         sshHost: cleanedSshHost || undefined,
         sshUser: cleanedSshUser || undefined,
         sshPort: cleanedSshHost ? cleanedSshPort : undefined,
+        portainerUrl: cleanedPortainerUrl || undefined,
+        proxmoxUrl: cleanedProxmoxUrl || undefined,
+        grafanaUrl: cleanedGrafanaUrl || undefined,
       };
 
       const nextServers = [newServer, ...servers];
@@ -290,6 +320,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
                   sshHost: entry.sshHost?.trim() || undefined,
                   sshUser: entry.sshUser?.trim() || undefined,
                   sshPort: entry.sshHost ? sanitizeSshPort(entry.sshPort) : undefined,
+                  portainerUrl: entry.portainerUrl?.trim() || undefined,
+                  proxmoxUrl: entry.proxmoxUrl?.trim() || undefined,
+                  grafanaUrl: entry.grafanaUrl?.trim() || undefined,
                 }))
               : [];
           } catch {
@@ -345,6 +378,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverSshHostInput,
     serverSshUserInput,
     serverSshPortInput,
+    serverPortainerUrlInput,
+    serverProxmoxUrlInput,
+    serverGrafanaUrlInput,
     editingServerId,
     tokenMasked,
     setServerNameInput,
@@ -355,6 +391,9 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerSshHostInput,
     setServerSshUserInput,
     setServerSshPortInput,
+    setServerPortainerUrlInput,
+    setServerProxmoxUrlInput,
+    setServerGrafanaUrlInput,
     setTokenMasked,
     beginCreateServer,
     beginEditServer,

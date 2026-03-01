@@ -396,6 +396,12 @@ function normalizeOptions(options?: LlmSendOptions) {
   };
 }
 
+export const llmClientTestUtils = {
+  parseExtraHeaders,
+  mapCommandToBackend,
+  normalizeOptions,
+};
+
 export function useLlmClient() {
   const sendPromptDetailed = useCallback(
     async (profile: LlmProfile, prompt: string, options?: LlmSendOptions): Promise<LlmSendResult> => {

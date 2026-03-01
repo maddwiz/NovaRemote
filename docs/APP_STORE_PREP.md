@@ -14,6 +14,11 @@ Before submission, publish and link:
 - Privacy Policy URL
 - Terms of Service URL
 
+Drafts are in-repo:
+
+- `docs/PRIVACY_POLICY.md`
+- `docs/TERMS_OF_SERVICE.md`
+
 ## RevenueCat / IAP Setup
 
 1. Create products in App Store Connect.

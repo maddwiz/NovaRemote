@@ -28,9 +28,34 @@ function sanitizeSshPort(value: number | undefined): number | undefined {
   return rounded;
 }
 
+function normalizeHttpUrl(raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  try {
+    const parsed = new URL(trimmed);
+    const protocol = parsed.protocol.toLowerCase();
+    if (protocol !== "http:" && protocol !== "https:") {
+      return null;
+    }
+    return parsed.toString().replace(/\/+$/, "");
+  } catch {
+    return null;
+  }
+}
+
+function normalizeOptionalHttpUrl(raw: string | undefined): string | undefined {
+  if (!raw) {
+    return undefined;
+  }
+  return normalizeHttpUrl(raw) || undefined;
+}
+
 function normalizeTemplate(input: Partial<SharedServerTemplate>): SharedServerTemplate | null {
   const name = (input.name || "").trim();
-  const baseUrl = (input.baseUrl || "").trim();
+  const baseUrl = normalizeHttpUrl(input.baseUrl || "");
   if (!name || !baseUrl) {
     return null;
   }
@@ -44,6 +69,9 @@ function normalizeTemplate(input: Partial<SharedServerTemplate>): SharedServerTe
     sshHost: input.sshHost?.trim() || undefined,
     sshUser: input.sshUser?.trim() || undefined,
     sshPort: sanitizeSshPort(input.sshPort),
+    portainerUrl: normalizeOptionalHttpUrl(input.portainerUrl),
+    proxmoxUrl: normalizeOptionalHttpUrl(input.proxmoxUrl),
+    grafanaUrl: normalizeOptionalHttpUrl(input.grafanaUrl),
     importedAt: input.importedAt || new Date().toISOString(),
   };
 }
@@ -57,6 +85,9 @@ function templateFingerprint(template: SharedServerTemplate): string {
     (template.sshHost || "").trim().toLowerCase(),
     (template.sshUser || "").trim().toLowerCase(),
     String(template.sshPort || ""),
+    (template.portainerUrl || "").trim().toLowerCase(),
+    (template.proxmoxUrl || "").trim().toLowerCase(),
+    (template.grafanaUrl || "").trim().toLowerCase(),
   ].join("|");
 }
 
@@ -116,6 +147,9 @@ export function useSharedProfiles() {
           sshHost: server.sshHost,
           sshUser: server.sshUser,
           sshPort: sanitizeSshPort(server.sshPort),
+          portainerUrl: normalizeOptionalHttpUrl(server.portainerUrl),
+          proxmoxUrl: normalizeOptionalHttpUrl(server.proxmoxUrl),
+          grafanaUrl: normalizeOptionalHttpUrl(server.grafanaUrl),
         }))
         .filter((entry) => entry.baseUrl.trim()),
     };

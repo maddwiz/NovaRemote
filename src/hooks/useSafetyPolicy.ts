@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useState } from "react";
 
 import { STORAGE_REQUIRE_DANGER_CONFIRM } from "../constants";
+import { decodeRequireDangerConfirm, encodeRequireDangerConfirm } from "./safetyPolicyCodec";
 
 export function useSafetyPolicy() {
   const [loading, setLoading] = useState<boolean>(true);
@@ -15,7 +16,7 @@ export function useSafetyPolicy() {
       if (!mounted) {
         return;
       }
-      setRequireDangerConfirmState(raw !== "0");
+      setRequireDangerConfirmState(decodeRequireDangerConfirm(raw));
       setLoading(false);
     }
 
@@ -28,11 +29,7 @@ export function useSafetyPolicy() {
 
   const setRequireDangerConfirm = useCallback(async (value: boolean) => {
     setRequireDangerConfirmState(value);
-    if (value) {
-      await SecureStore.setItemAsync(STORAGE_REQUIRE_DANGER_CONFIRM, "1");
-    } else {
-      await SecureStore.setItemAsync(STORAGE_REQUIRE_DANGER_CONFIRM, "0");
-    }
+    await SecureStore.setItemAsync(STORAGE_REQUIRE_DANGER_CONFIRM, encodeRequireDangerConfirm(value));
   }, []);
 
   return {

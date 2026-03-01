@@ -12,6 +12,11 @@
 - Data safety form completed (SecureStore, optional analytics, notifications, microphone)
 - Target API level and SDK requirements satisfied by Expo SDK 55 build output
 
+Policy drafts available in repo:
+
+- `docs/PRIVACY_POLICY.md`
+- `docs/TERMS_OF_SERVICE.md`
+
 ## 3) Store listing assets
 
 - App icon (512x512)

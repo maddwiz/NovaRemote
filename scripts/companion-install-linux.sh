@@ -17,6 +17,15 @@ ensure_command() {
   fi
 }
 
+ensure_python_version() {
+  python3 - <<'PY'
+import sys
+
+if sys.version_info < (3, 6):
+    raise SystemExit("python3 >= 3.6 is required for secrets-based token generation.")
+PY
+}
+
 copy_local_source() {
   mkdir -p "${TARGET_DIR}"
   if command -v rsync >/dev/null 2>&1; then
@@ -43,6 +52,7 @@ clone_or_update_remote() {
 }
 
 ensure_command python3
+ensure_python_version
 
 if [[ -d "${LOCAL_SOURCE_DIR}/app" ]]; then
   echo "Using local codex_remote source: ${LOCAL_SOURCE_DIR}"

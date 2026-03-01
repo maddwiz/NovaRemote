@@ -142,3 +142,5 @@ See `docs/APP_STORE_PREP.md`.
 Google Play checklist:
 
 - `docs/PLAY_STORE_PREP.md`
+- `docs/PRIVACY_POLICY.md`
+- `docs/TERMS_OF_SERVICE.md`

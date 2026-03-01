@@ -17,6 +17,9 @@ type ServersScreenProps = {
   serverSshHostInput: string;
   serverSshUserInput: string;
   serverSshPortInput: string;
+  serverPortainerUrlInput: string;
+  serverProxmoxUrlInput: string;
+  serverGrafanaUrlInput: string;
   editingServerId: string | null;
   tokenMasked: boolean;
   isPro: boolean;
@@ -44,6 +47,9 @@ type ServersScreenProps = {
   onSetServerSshHost: (value: string) => void;
   onSetServerSshUser: (value: string) => void;
   onSetServerSshPort: (value: string) => void;
+  onSetServerPortainerUrl: (value: string) => void;
+  onSetServerProxmoxUrl: (value: string) => void;
+  onSetServerGrafanaUrl: (value: string) => void;
   onSetAnalyticsEnabled: (value: boolean) => void;
   onShareReferral: () => void;
   onSetReferralCodeInput: (value: string) => void;
@@ -73,6 +79,9 @@ export function ServersScreen({
   serverSshHostInput,
   serverSshUserInput,
   serverSshPortInput,
+  serverPortainerUrlInput,
+  serverProxmoxUrlInput,
+  serverGrafanaUrlInput,
   editingServerId,
   tokenMasked,
   isPro,
@@ -100,6 +109,9 @@ export function ServersScreen({
   onSetServerSshHost,
   onSetServerSshUser,
   onSetServerSshPort,
+  onSetServerPortainerUrl,
+  onSetServerProxmoxUrl,
+  onSetServerGrafanaUrl,
   onSetAnalyticsEnabled,
   onShareReferral,
   onSetReferralCodeInput,
@@ -228,6 +240,38 @@ export function ServersScreen({
             </Pressable>
           ))}
         </View>
+      </View>
+
+      <View style={styles.serverCard}>
+        <Text style={styles.panelLabel}>Self-Hosted Integrations (Optional)</Text>
+        <Text style={styles.serverSubtitle}>Quick-link metadata for tools like Portainer, Proxmox, and Grafana.</Text>
+        <TextInput
+          style={styles.input}
+          value={serverPortainerUrlInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="https://portainer.example.com"
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerPortainerUrl}
+        />
+        <TextInput
+          style={styles.input}
+          value={serverProxmoxUrlInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="https://proxmox.example.com:8006"
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerProxmoxUrl}
+        />
+        <TextInput
+          style={styles.input}
+          value={serverGrafanaUrlInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="https://grafana.example.com"
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerGrafanaUrl}
+        />
       </View>
 
       <View style={styles.rowInlineSpace}>

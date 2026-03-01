@@ -58,6 +58,9 @@ export type ServerProfile = {
   sshHost?: string;
   sshUser?: string;
   sshPort?: number;
+  portainerUrl?: string;
+  proxmoxUrl?: string;
+  grafanaUrl?: string;
 };
 
 export type TerminalBackendKind = "auto" | "tmux" | "screen" | "zellij" | "powershell" | "cmd" | "pty";
@@ -258,5 +261,8 @@ export type SharedServerTemplate = {
   sshHost?: string;
   sshUser?: string;
   sshPort?: number;
+  portainerUrl?: string;
+  proxmoxUrl?: string;
+  grafanaUrl?: string;
   importedAt: string;
 };

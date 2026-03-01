@@ -107,7 +107,6 @@ export function useAnalytics({ activeServer, connected }: UseAnalyticsArgs) {
       void fetch(endpoint, {
         method: "POST",
         headers: {
-          Authorization: `Bearer ${activeServer.token}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify(payload),

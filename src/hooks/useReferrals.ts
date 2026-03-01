@@ -6,9 +6,15 @@ import { STORAGE_REFERRAL_CLAIMED_CODE, STORAGE_REFERRAL_CODE } from "../constan
 
 function generateReferralCode(): string {
   const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  const cryptoObj = globalThis.crypto;
+  const randomValues = typeof cryptoObj?.getRandomValues === "function" ? new Uint32Array(8) : null;
+  if (randomValues) {
+    cryptoObj.getRandomValues(randomValues);
+  }
   let result = "";
   for (let index = 0; index < 8; index += 1) {
-    const random = Math.floor(Math.random() * alphabet.length);
+    const randomSource = randomValues ? randomValues[index] : Math.floor(Math.random() * 2 ** 32);
+    const random = randomSource % alphabet.length;
     result += alphabet[random];
   }
   return result;

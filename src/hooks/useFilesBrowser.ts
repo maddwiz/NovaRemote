@@ -30,6 +30,15 @@ type UseFilesBrowserArgs = {
   connected: boolean;
 };
 
+const MAX_FILE_WRITE_BYTES = 1024 * 1024;
+
+function contentByteLength(value: string): number {
+  if (typeof TextEncoder !== "undefined") {
+    return new TextEncoder().encode(value).length;
+  }
+  return value.length;
+}
+
 function parentPath(path: string): string {
   const clean = path.trim().replace(/\/+$/, "");
   if (!clean || clean === "/") {
@@ -157,6 +166,14 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
       const targetPath = filePath.trim();
       if (!targetPath) {
         throw new Error("File path is required.");
+      }
+      const byteSize = contentByteLength(content);
+      if (byteSize > MAX_FILE_WRITE_BYTES) {
+        throw new Error(
+          `File content is too large (${Math.round(byteSize / 1024)} KB). Max supported write size is ${Math.round(
+            MAX_FILE_WRITE_BYTES / 1024
+          )} KB.`
+        );
       }
 
       setBusy(true);

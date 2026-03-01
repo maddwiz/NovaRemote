@@ -405,7 +405,7 @@ Example VAD response:
 
 Purpose: receive anonymous in-app events for product analytics.
 
-Request:
+Request (recommended without bearer token requirement):
 
 ```json
 {
@@ -419,6 +419,8 @@ Request:
   }
 }
 ```
+
+`Authorization` header is intentionally omitted by the app for this endpoint to avoid sending terminal-control credentials into analytics pipelines.
 
 Response:
 
