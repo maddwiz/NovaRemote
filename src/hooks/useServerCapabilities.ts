@@ -16,6 +16,7 @@ const EMPTY_CAPABILITIES: ServerCapabilities = {
   sysStats: false,
   processes: false,
   collaboration: false,
+  spectate: false,
 };
 
 const CAPABILITY_CACHE_TTL_MS = 45000;
@@ -112,6 +113,15 @@ async function endpointSupportsAction(baseUrl: string, token: string, path: stri
       }
     } catch {
       // Try next method.
+    }
+  }
+  return false;
+}
+
+async function endpointSupportsAnyAction(baseUrl: string, token: string, paths: string[]): Promise<boolean> {
+  for (const path of paths) {
+    if (await endpointSupportsAction(baseUrl, token, path)) {
+      return true;
     }
   }
   return false;
@@ -304,11 +314,21 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         "presence.available",
         "multiplayer",
       ]);
+      const manifestSpectate = readBool(manifest, [
+        "spectate",
+        "spectate.available",
+        "session_share",
+        "session.share",
+        "session.share.available",
+        "sharing.spectate",
+        "terminal.spectate",
+        "tmux.spectate",
+      ]);
       const apiHint = readTerminalApiHint(manifest);
 
       const probeTmuxSessions = manifestTmux === null || (manifestTerminal === null && apiHint === null);
       const probeTerminalSessions = manifestTerminal === null && apiHint === null;
-      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe, procListProbe, collabProbe] = await Promise.all([
+      const [tmuxSessions, terminalSessions, filesList, shellRunProbe, macAttachProbe, codexProbe, sysStatsProbe, procListProbe, collabProbe, spectateProbe] = await Promise.all([
         probeTmuxSessions ? endpointExists(baseUrl, token, "/tmux/sessions") : Promise.resolve(false),
         probeTerminalSessions ? endpointExists(baseUrl, token, "/terminal/sessions") : Promise.resolve(false),
         manifestFiles === null ? endpointExists(baseUrl, token, "/files/list?path=%2F") : Promise.resolve(false),
@@ -318,6 +338,9 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         manifestSysStats === null ? endpointExists(baseUrl, token, "/sys/stats") : Promise.resolve(false),
         manifestProcesses === null ? endpointExists(baseUrl, token, "/proc/list") : Promise.resolve(false),
         manifestCollaboration === null ? endpointSupportsAction(baseUrl, token, "/collab/presence") : Promise.resolve(false),
+        manifestSpectate === null
+          ? endpointSupportsAnyAction(baseUrl, token, ["/session/spectate", "/terminal/spectate", "/tmux/spectate", "/spectate/token"])
+          : Promise.resolve(false),
       ]);
 
       const terminalAvailable = manifestTerminal ?? (terminalSessions || tmuxSessions || manifestTmux === true);
@@ -332,6 +355,7 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
         sysStats: manifestSysStats ?? sysStatsProbe,
         processes: manifestProcesses ?? procListProbe,
         collaboration: manifestCollaboration ?? collabProbe,
+        spectate: manifestSpectate ?? spectateProbe,
       };
 
       const nextApiKind = apiHint || pickTerminalApiKind(manifest, terminalSessions, tmuxSessions);
@@ -404,6 +428,9 @@ export function useServerCapabilities({ activeServer, connected }: UseServerCapa
     }
     if (capabilities.collaboration) {
       features.push("collab");
+    }
+    if (capabilities.spectate) {
+      features.push("spectate");
     }
     return features.join(", ");
   }, [activeServer?.terminalBackend, capabilities, terminalApiKind]);

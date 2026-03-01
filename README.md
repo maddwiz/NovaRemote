@@ -58,6 +58,7 @@ Use `docs/media/README.md` as the canonical media file map.
 - Biometric app unlock (Face ID / Touch ID)
 - Optional dangerous-command confirmation guardrail
 - Session export (shareable JSON with command history + output)
+- Live session spectator links (read-only browser share with expiring token, when server supports spectate endpoints)
 - Pull-to-refresh + connection health metrics
 - First-run in-app tutorial overlay
 - Shareable server config links/QR (token excluded)

@@ -219,6 +219,7 @@ export function TerminalsScreen() {
     onSetSessionAiEngine,
     onOpenOnMac,
     onSyncSession,
+    onShareLiveSession,
     onExportSession,
     onFocusSession,
     onStopSession,
@@ -482,6 +483,7 @@ export function TerminalsScreen() {
           shellAvailable={!isLocalOnly && capabilities.terminal}
           canOpenOnMac={!isLocalOnly && capabilities.macAttach}
           canSync={!isLocalOnly}
+          canShareLive={!isLocalOnly && capabilities.spectate}
           canStop={!isLocalOnly}
           aiEngine={aiEngine}
           canUseServerAi={!isLocalOnly && capabilities.codex}
@@ -513,6 +515,7 @@ export function TerminalsScreen() {
           onSetAiEngine={(nextEngine) => onSetSessionAiEngine(session, nextEngine)}
           onOpenOnMac={() => onOpenOnMac(session)}
           onSync={() => onSyncSession(session)}
+          onShareLive={() => onShareLiveSession(session)}
           onExport={() => onExportSession(session)}
           onFullscreen={() => onFocusSession(session)}
           onStop={() => onStopSession(session)}
@@ -549,6 +552,7 @@ export function TerminalsScreen() {
     capabilities.terminal,
     capabilities.macAttach,
     capabilities.collaboration,
+    capabilities.spectate,
     connected,
     connectionMeta,
     drafts,
@@ -574,6 +578,7 @@ export function TerminalsScreen() {
     onHistoryNext,
     onHistoryPrev,
     onOpenOnMac,
+    onShareLiveSession,
     onExplainError,
     onSuggestErrorFixes,
     onRequestSuggestions,

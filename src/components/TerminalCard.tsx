@@ -138,6 +138,7 @@ type TerminalCardProps = {
   shellAvailable: boolean;
   canOpenOnMac: boolean;
   canSync: boolean;
+  canShareLive: boolean;
   canStop: boolean;
   aiEngine: AiEnginePreference;
   canUseServerAi: boolean;
@@ -168,6 +169,7 @@ type TerminalCardProps = {
   onSetAiEngine: (engine: AiEnginePreference) => void;
   onOpenOnMac: () => void;
   onSync: () => void;
+  onShareLive: () => void;
   onExport: () => void;
   onFullscreen: () => void;
   onStop: () => void;
@@ -214,6 +216,7 @@ export function TerminalCard({
   shellAvailable,
   canOpenOnMac,
   canSync,
+  canShareLive,
   canStop,
   aiEngine,
   canUseServerAi,
@@ -244,6 +247,7 @@ export function TerminalCard({
   onSetAiEngine,
   onOpenOnMac,
   onSync,
+  onShareLive,
   onExport,
   onFullscreen,
   onStop,
@@ -391,6 +395,7 @@ export function TerminalCard({
         liveLabel={liveLabel}
         canOpenOnMac={canOpenOnMac}
         canSync={canSync}
+        canShareLive={canShareLive}
         canStop={canStop}
         pinned={pinned}
         recordingActive={recordingActive}
@@ -400,6 +405,7 @@ export function TerminalCard({
         onSetAiEngine={onSetAiEngine}
         onOpenOnMac={onOpenOnMac}
         onSync={onSync}
+        onShareLive={onShareLive}
         onExport={onExport}
         onFullscreen={onFullscreen}
         onTogglePin={onTogglePin}

@@ -49,7 +49,7 @@ If both families are present, NovaRemote prefers `/terminal/*`.
 For best results, expose a manifest endpoint:
 
 - `GET /capabilities` (recommended) or include equivalent fields in `GET /health`
-- Return booleans for `terminal`, `codex`, `files`, `shellRun`, `macAttach`, `stream`
+- Return booleans for `terminal`, `codex`, `files`, `shellRun`, `macAttach`, `stream`, `spectate`
 
 NovaRemote consumes this manifest first and only falls back to lightweight `GET`/`OPTIONS` probing when the manifest is missing.
 
@@ -63,6 +63,7 @@ Endpoint mapping:
 | `POST /tmux/session` | `POST /terminal/session` |
 | `POST /tmux/send` | `POST /terminal/send` |
 | `POST /tmux/ctrl` | `POST /terminal/ctrl` |
+| `POST /tmux/spectate` (optional) | `POST /terminal/spectate` (optional) |
 
 ## Required Endpoints
 
@@ -119,6 +120,47 @@ Server messages:
 ```json
 { "type": "error", "session": "...", "data": "error detail" }
 ```
+
+### `POST /terminal/spectate` or `POST /tmux/spectate` (recommended)  
+Fallbacks recognized by app: `POST /session/spectate`, `POST /spectate/token`
+
+Purpose: create a short-lived spectator link for read-only browser viewing.
+
+Request:
+
+```json
+{
+  "session": "term-20260228-abcd",
+  "read_only": true,
+  "ttl_seconds": 900
+}
+```
+
+Response (any one of these URL/token shapes is accepted):
+
+```json
+{
+  "ok": true,
+  "viewer_url": "https://host.example.com/spectate?session=term-20260228-abcd&token=...",
+  "expires_at": "2026-03-01T06:45:00Z"
+}
+```
+
+```json
+{
+  "ok": true,
+  "token": "short-lived-spectator-token",
+  "path": "/spectate",
+  "expires_at": "2026-03-01T06:45:00Z"
+}
+```
+
+Viewer page requirements:
+
+- Serve a lightweight web page at `/spectate` (or return absolute `viewer_url` in API response)
+- Render output read-only (no send/ctrl endpoints exposed to spectator token)
+- Stream output via server-side WS fanout or tail polling
+- Reject expired spectator tokens
 
 ### `POST /tmux/session` or `POST /terminal/session`
 

@@ -28,6 +28,19 @@ export type ShellRunResponse = {
   output?: string;
 };
 
+export type SpectateLinkResponse = {
+  ok?: boolean;
+  url?: string;
+  viewer_url?: string;
+  spectate_url?: string;
+  web_url?: string;
+  token?: string;
+  viewer_token?: string;
+  path?: string;
+  expires_at?: string;
+  expiresAt?: string;
+};
+
 export type TmuxTailResponse = {
   session: string;
   output?: string;
@@ -116,6 +129,7 @@ export type ServerCapabilities = {
   sysStats: boolean;
   processes: boolean;
   collaboration: boolean;
+  spectate: boolean;
 };
 
 export type TerminalApiKind = "tmux" | "terminal";

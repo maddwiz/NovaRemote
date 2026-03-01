@@ -37,6 +37,7 @@ export const DEFAULT_SERVER_NAME = "My Server";
 export const DEFAULT_TERMINAL_BACKEND: TerminalBackendKind = "auto";
 export const DEFAULT_FLEET_WAIT_MS = 5000;
 export const DEFAULT_SHELL_WAIT_MS = 1200;
+export const DEFAULT_SPECTATE_TTL_SECONDS = 900;
 
 export const SERVER_URL_PLACEHOLDER = "https://your-server:8787";
 export const CWD_PLACEHOLDER = "/path/to/your/project";

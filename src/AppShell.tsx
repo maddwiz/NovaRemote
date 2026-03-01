@@ -31,6 +31,7 @@ import {
   BRAND_LOGO,
   DEFAULT_CWD,
   DEFAULT_FLEET_WAIT_MS,
+  DEFAULT_SPECTATE_TTL_SECONDS,
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
@@ -86,6 +87,7 @@ import {
   ServerProfile,
   SessionRecording,
   Status,
+  SpectateLinkResponse,
   SharedServerTemplate,
   SysStats,
   TerminalBackendKind,
@@ -149,6 +151,100 @@ function toServerShareLink(server: ServerProfile): string {
   return Linking.createURL("add-server", {
     queryParams,
   });
+}
+
+function resolveMaybeAbsoluteUrl(baseUrl: string, raw: string): string | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (trimmed.startsWith("/")) {
+    return `${normalizeBaseUrl(baseUrl)}${trimmed}`;
+  }
+  return `${normalizeBaseUrl(baseUrl)}/${trimmed.replace(/^\/+/, "")}`;
+}
+
+function parseSpectateLinkPayload(
+  baseUrl: string,
+  session: string,
+  payload: SpectateLinkResponse
+): { url: string; expiresAt: string | null } {
+  const direct = [payload.viewer_url, payload.spectate_url, payload.web_url, payload.url]
+    .map((entry) => (typeof entry === "string" ? entry.trim() : ""))
+    .find(Boolean);
+
+  const expiresRaw =
+    typeof payload.expires_at === "string"
+      ? payload.expires_at.trim()
+      : typeof payload.expiresAt === "string"
+      ? payload.expiresAt.trim()
+      : "";
+  const expiresAt = expiresRaw && !Number.isNaN(Date.parse(expiresRaw)) ? new Date(expiresRaw).toISOString() : null;
+
+  if (direct) {
+    const resolved = resolveMaybeAbsoluteUrl(baseUrl, direct);
+    if (!resolved) {
+      throw new Error("Server returned an empty spectator URL.");
+    }
+    return {
+      url: resolved,
+      expiresAt,
+    };
+  }
+
+  const token = typeof payload.viewer_token === "string"
+    ? payload.viewer_token.trim()
+    : typeof payload.token === "string"
+    ? payload.token.trim()
+    : "";
+  if (!token) {
+    throw new Error("Server did not return a spectator URL or token.");
+  }
+
+  const customPath = typeof payload.path === "string" ? payload.path.trim() : "";
+  const path = customPath ? (customPath.startsWith("/") ? customPath : `/${customPath}`) : "/spectate";
+  return {
+    url: `${normalizeBaseUrl(baseUrl)}${path}?session=${encodeURIComponent(session)}&token=${encodeURIComponent(token)}`,
+    expiresAt,
+  };
+}
+
+async function createSpectateLink(
+  server: ServerProfile,
+  terminalApiBasePath: "/tmux" | "/terminal",
+  session: string
+): Promise<{ url: string; expiresAt: string | null }> {
+  const candidates = Array.from(new Set([`${terminalApiBasePath}/spectate`, "/session/spectate", "/spectate/token"]));
+  let lastError: unknown = null;
+
+  for (const path of candidates) {
+    try {
+      const payload = await apiRequest<SpectateLinkResponse>(server.baseUrl, server.token, path, {
+        method: "POST",
+        body: JSON.stringify({
+          session,
+          read_only: true,
+          ttl_seconds: DEFAULT_SPECTATE_TTL_SECONDS,
+        }),
+      });
+      return parseSpectateLinkPayload(server.baseUrl, session, payload);
+    } catch (error) {
+      lastError = error;
+      const message = error instanceof Error ? error.message : String(error);
+      if (/^404\b/.test(message)) {
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  if (lastError) {
+    throw lastError;
+  }
+  throw new Error("No compatible spectate endpoint was found on this server.");
 }
 
 function toSshFallbackUrl(server: ServerProfile): string {
@@ -467,7 +563,13 @@ export default function AppShell() {
   const [tagFilter, setTagFilter] = useState<string>("");
   const [searchTerms, setSearchTerms] = useState<Record<string, string>>({});
   const [searchIndex, setSearchIndex] = useState<Record<string, number>>({});
-  const [shareConfig, setShareConfig] = useState<{ title: string; link: string } | null>(null);
+  const [shareConfig, setShareConfig] = useState<{
+    title: string;
+    link: string;
+    heading?: string;
+    description?: string;
+    shareButtonLabel?: string;
+  } | null>(null);
   const [fleetCommand, setFleetCommand] = useState<string>("");
   const [fleetCwd, setFleetCwd] = useState<string>("");
   const [fleetTargets, setFleetTargets] = useState<string[]>([]);
@@ -1817,6 +1919,37 @@ export default function AppShell() {
         await fetchTail(session, true);
       });
     },
+    onShareLiveSession: (session) => {
+      void runWithStatus(`Creating live share link for ${session}`, async () => {
+        if (isLocalSession(session)) {
+          throw new Error("Local LLM sessions cannot be shared as live spectator links.");
+        }
+        if (!activeServer) {
+          throw new Error("No active server selected.");
+        }
+        if (!capabilities.spectate) {
+          throw new Error("Active server does not support session spectator links.");
+        }
+
+        const result = await createSpectateLink(activeServer, terminalApiBasePath, session);
+        const expiresLabel = result.expiresAt
+          ? `Read-only browser view. Expires ${new Date(result.expiresAt).toLocaleString()}.`
+          : "Read-only browser view. Server controls token expiry.";
+
+        setShareConfig({
+          title: sessionAliases[session]?.trim() || session,
+          link: result.url,
+          heading: "Share Live Session",
+          description: expiresLabel,
+          shareButtonLabel: "Share Spectator Link",
+        });
+
+        track("session_spectate_link_created", {
+          has_expiry: Boolean(result.expiresAt),
+          ttl_seconds: DEFAULT_SPECTATE_TTL_SECONDS,
+        });
+      });
+    },
     onExportSession: (session) => {
       void runWithStatus(`Exporting ${session}`, async () => {
         const payload = {
@@ -2888,6 +3021,9 @@ export default function AppShell() {
         visible={Boolean(shareConfig)}
         title={shareConfig?.title || "Server"}
         value={shareConfig?.link || ""}
+        heading={shareConfig?.heading}
+        description={shareConfig?.description}
+        shareButtonLabel={shareConfig?.shareButtonLabel}
         onClose={() => setShareConfig(null)}
       />
 

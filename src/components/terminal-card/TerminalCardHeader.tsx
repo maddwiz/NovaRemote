@@ -21,6 +21,7 @@ type TerminalCardHeaderProps = {
   liveLabel: string;
   canOpenOnMac: boolean;
   canSync: boolean;
+  canShareLive: boolean;
   canStop: boolean;
   pinned: boolean;
   recordingActive: boolean;
@@ -30,6 +31,7 @@ type TerminalCardHeaderProps = {
   onSetAiEngine: (engine: AiEnginePreference) => void;
   onOpenOnMac: () => void;
   onSync: () => void;
+  onShareLive: () => void;
   onExport: () => void;
   onFullscreen: () => void;
   onTogglePin: () => void;
@@ -55,6 +57,7 @@ export function TerminalCardHeader({
   liveLabel,
   canOpenOnMac,
   canSync,
+  canShareLive,
   canStop,
   pinned,
   recordingActive,
@@ -64,6 +67,7 @@ export function TerminalCardHeader({
   onSetAiEngine,
   onOpenOnMac,
   onSync,
+  onShareLive,
   onExport,
   onFullscreen,
   onTogglePin,
@@ -153,6 +157,15 @@ export function TerminalCardHeader({
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={`Sync output for ${session}`} style={[styles.actionButton, !canSync ? styles.buttonDisabled : null]} onPress={onSync} disabled={!canSync}>
           <Text style={styles.actionButtonText}>Sync</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Create live spectator link for ${session}`}
+          style={[styles.actionButton, !canShareLive ? styles.buttonDisabled : null]}
+          onPress={onShareLive}
+          disabled={!canShareLive}
+        >
+          <Text style={styles.actionButtonText}>Share Live</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={`Export ${session} log`} style={styles.actionButton} onPress={onExport}>
           <Text style={styles.actionButtonText}>Export</Text>

@@ -100,6 +100,7 @@ export type TerminalsViewModel = {
   onSetSessionAiEngine: (session: string, engine: AiEnginePreference) => void;
   onOpenOnMac: (session: string) => void;
   onSyncSession: (session: string) => void;
+  onShareLiveSession: (session: string) => void;
   onExportSession: (session: string) => void;
   onFocusSession: (session: string) => void;
   onStopSession: (session: string) => void;

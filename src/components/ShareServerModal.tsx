@@ -8,19 +8,30 @@ type ShareServerModalProps = {
   visible: boolean;
   value: string;
   title: string;
+  heading?: string;
+  description?: string;
+  shareButtonLabel?: string;
   onClose: () => void;
 };
 
-export function ShareServerModal({ visible, value, title, onClose }: ShareServerModalProps) {
+export function ShareServerModal({
+  visible,
+  value,
+  title,
+  heading = "Share Server Config",
+  description = "Token is intentionally excluded. The recipient enters their own token after import.",
+  shareButtonLabel = "Share Link",
+  onClose,
+}: ShareServerModalProps) {
   const safeValue = value.trim();
 
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <SafeAreaView style={styles.overlayBackdrop}>
         <View style={styles.overlayCard}>
-          <Text style={styles.panelLabel}>Share Server Config</Text>
+          <Text style={styles.panelLabel}>{heading}</Text>
           <Text style={styles.serverTitle}>{title}</Text>
-          <Text style={styles.serverSubtitle}>Token is intentionally excluded. The recipient enters their own token after import.</Text>
+          <Text style={styles.serverSubtitle}>{description}</Text>
 
           {safeValue ? (
             <View style={styles.qrWrap}>
@@ -31,15 +42,15 @@ export function ShareServerModal({ visible, value, title, onClose }: ShareServer
           )}
 
           <Pressable accessibilityRole="button"
-            accessibilityLabel="Share server link"
-            accessibilityHint="Opens the system share sheet for this server configuration link."
+            accessibilityLabel="Share link"
+            accessibilityHint="Opens the system share sheet for this link."
             style={[styles.buttonGhost, !safeValue ? styles.buttonDisabled : null]}
             disabled={!safeValue}
             onPress={() => {
               void Share.share({ message: safeValue });
             }}
           >
-            <Text style={styles.buttonGhostText}>Share Link</Text>
+            <Text style={styles.buttonGhostText}>{shareButtonLabel}</Text>
           </Pressable>
 
           <Pressable accessibilityRole="button" accessibilityLabel="Close share modal" style={styles.buttonPrimary} onPress={onClose}>
