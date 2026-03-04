@@ -107,6 +107,10 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     closeStream,
     recallPrev,
     setDrafts,
+    setServerSessionDraft,
+    sendServerSessionDraft,
+    clearServerSessionDraft,
+    sendServerSessionControlChar,
     recallNext,
     setTagsForSession,
     parseCommaTags,
@@ -160,7 +164,9 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     requestVoicePermission,
     startVoiceCapture,
     stopVoiceCaptureIntoSession,
+    stopVoiceCaptureIntoServerSession,
     sendVoiceTranscriptToSession,
+    sendVoiceTranscriptToServerSession,
     runFleetCommand,
   } = args as any;
 
@@ -468,6 +474,16 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         [session]: value,
       }));
     },
+    onSetServerSessionDraft: (serverId, session, value) => {
+      if (typeof setServerSessionDraft === "function") {
+        setServerSessionDraft(serverId, session, value);
+        return;
+      }
+      if (activeServer?.id !== serverId) {
+        return;
+      }
+      setDrafts((prev: any) => ({ ...prev, [session]: value }));
+    },
     onAdaptDraftForBackend: (session) => {
       const source = drafts[session] || "";
       const adapted = adaptCommandForBackend(source, activeServer?.terminalBackend);
@@ -480,6 +496,22 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     },
     onSendControlChar: (session, char) => {
       void Haptics.selectionAsync();
+      void sendControlToSession(session, char).catch((error: unknown) => {
+        setError(error);
+      });
+    },
+    onSendServerSessionControlChar: (serverId, session, char) => {
+      void Haptics.selectionAsync();
+      if (typeof sendServerSessionControlChar === "function") {
+        void sendServerSessionControlChar(serverId, session, char).catch((error: unknown) => {
+          setError(error);
+        });
+        return;
+      }
+      if (activeServer?.id !== serverId) {
+        setStatus({ text: "Focus the target server before sending control keys.", error: true });
+        return;
+      }
       void sendControlToSession(session, char).catch((error: unknown) => {
         setError(error);
       });
@@ -518,7 +550,45 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         }
       });
     },
+    onSendServerSessionDraft: (serverId, session) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      if (typeof sendServerSessionDraft === "function") {
+        void runWithStatus(`Sending to ${session}`, async () => {
+          const connection = connections.get(serverId);
+          const mode = connection?.sendModes?.[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+          const draft = (connection?.drafts?.[session] || "").trim();
+          if (mode === "shell") {
+            const approved = await requestDangerApproval(draft, `Send to ${session}`);
+            if (!approved) {
+              return;
+            }
+          }
+          await sendServerSessionDraft(serverId, session);
+        });
+        return;
+      }
+      if (activeServer?.id !== serverId) {
+        setStatus({ text: "Focus the target server before sending.", error: true });
+        return;
+      }
+      void runWithStatus(`Sending to ${session}`, async () => {
+        const sent = await handleSend(session);
+        if (sent) {
+          await addCommand(session, sent);
+        }
+      });
+    },
     onClearDraft: (session) => {
+      setDrafts((prev: any) => ({ ...prev, [session]: "" }));
+    },
+    onClearServerSessionDraft: (serverId, session) => {
+      if (typeof clearServerSessionDraft === "function") {
+        clearServerSessionDraft(serverId, session);
+        return;
+      }
+      if (activeServer?.id !== serverId) {
+        return;
+      }
       setDrafts((prev: any) => ({ ...prev, [session]: "" }));
     },
     onTogglePinSession: (session) => {
@@ -671,7 +741,63 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       });
     },
+    onVoiceStopCaptureForServer: (serverId, session) => {
+      if (typeof stopVoiceCaptureIntoServerSession === "function") {
+        if (glassesMode.voiceLoop) {
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          void stopVoiceCaptureIntoServerSession(serverId, session).then((ok: boolean) => {
+            if (ok) {
+              void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              return;
+            }
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+          });
+          return;
+        }
+        void runWithStatus(`Transcribing voice for ${session}`, async () => {
+          await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+          await stopVoiceCaptureIntoServerSession(serverId, session);
+          await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        });
+        return;
+      }
+      if (activeServer?.id !== serverId) {
+        setStatus({ text: "Focus the target server before transcribing voice.", error: true });
+        return;
+      }
+      if (glassesMode.voiceLoop) {
+        void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        void stopVoiceCaptureIntoSession(session).then((ok: boolean) => {
+          if (ok) {
+            void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+            return;
+          }
+          void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning);
+        });
+        return;
+      }
+      void runWithStatus(`Transcribing voice for ${session}`, async () => {
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+        await stopVoiceCaptureIntoSession(session);
+        await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      });
+    },
     onVoiceSendTranscript: (session) => {
+      void runWithStatus(`Sending transcript to ${session}`, async () => {
+        await sendVoiceTranscriptToSession(session);
+      });
+    },
+    onVoiceSendTranscriptForServer: (serverId, session) => {
+      if (typeof sendVoiceTranscriptToServerSession === "function") {
+        void runWithStatus(`Sending transcript to ${session}`, async () => {
+          await sendVoiceTranscriptToServerSession(serverId, session);
+        });
+        return;
+      }
+      if (activeServer?.id !== serverId) {
+        setStatus({ text: "Focus the target server before sending transcript.", error: true });
+        return;
+      }
       void runWithStatus(`Sending transcript to ${session}`, async () => {
         await sendVoiceTranscriptToSession(session);
       });

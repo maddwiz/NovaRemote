@@ -118,10 +118,14 @@ export type TerminalsViewModel = {
   onSetSessionAlias: (session: string, alias: string) => void;
   onAutoNameSession: (session: string) => void;
   onSetDraft: (session: string, value: string) => void;
+  onSetServerSessionDraft: (serverId: string, session: string, value: string) => void;
   onAdaptDraftForBackend: (session: string) => void;
   onSendControlChar: (session: string, char: string) => void;
+  onSendServerSessionControlChar: (serverId: string, session: string, char: string) => void;
   onSend: (session: string) => void;
+  onSendServerSessionDraft: (serverId: string, session: string) => void;
   onClearDraft: (session: string) => void;
+  onClearServerSessionDraft: (serverId: string, session: string) => void;
   onTogglePinSession: (session: string) => void;
   onSetFleetCommand: (value: string) => void;
   onSetFleetCwd: (value: string) => void;
@@ -166,7 +170,9 @@ export type TerminalsViewModel = {
   onCloseGlassesMode: () => void;
   onVoiceStartCapture: () => void;
   onVoiceStopCapture: (session: string) => void;
+  onVoiceStopCaptureForServer: (serverId: string, session: string) => void;
   onVoiceSendTranscript: (session: string) => void;
+  onVoiceSendTranscriptForServer: (serverId: string, session: string) => void;
   onRunFleet: () => void;
 };
 

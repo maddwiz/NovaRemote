@@ -1277,8 +1277,8 @@ export default function AppShell() {
     }
   }, [fleetCommand, fleetCwd, fleetTargets, fleetWaitMs, poolConnections, servers]);
 
-  const sendViaExternalLlm = useCallback(
-    async (session: string, prompt: string) => {
+  const sendViaExternalLlmToServer = useCallback(
+    async (serverId: string, session: string, prompt: string) => {
       const cleanPrompt = prompt.trim();
       if (!cleanPrompt) {
         return "";
@@ -1288,13 +1288,23 @@ export default function AppShell() {
         throw new Error("No active LLM profile selected. Configure one in the LLMs tab.");
       }
 
-      setDrafts((prev) => ({ ...prev, [session]: "" }));
+      setPoolDrafts(serverId, (prev) => ({ ...prev, [session]: "" }));
       const reply = await sendPrompt(activeProfile, cleanPrompt);
       const nextBlock = `\\n\\n[LLM Prompt]\\n${cleanPrompt}\\n\\n[LLM Reply]\\n${reply}\\n`;
-      setTails((prev) => ({ ...prev, [session]: `${prev[session] || ""}${nextBlock}` }));
+      setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prev[session] || ""}${nextBlock}` }));
       return cleanPrompt;
     },
-    [activeProfile, sendPrompt, setDrafts, setTails]
+    [activeProfile, sendPrompt, setPoolDrafts, setPoolTails]
+  );
+
+  const sendViaExternalLlm = useCallback(
+    async (session: string, prompt: string) => {
+      if (!focusedServerId) {
+        throw new Error("Select a server before sending an external AI prompt.");
+      }
+      return await sendViaExternalLlmToServer(focusedServerId, session, prompt);
+    },
+    [focusedServerId, sendViaExternalLlmToServer]
   );
 
   const {
@@ -1489,34 +1499,113 @@ export default function AppShell() {
     },
   });
 
-  const sendTextToSession = useCallback(
-    async (session: string, text: string, mode: TerminalSendMode) => {
+  const sendTextToServerSession = useCallback(
+    async (serverId: string, session: string, text: string, mode: TerminalSendMode, clearDraft: boolean = false) => {
       const trimmed = text.trim();
       if (!trimmed) {
         return;
       }
 
-      if (sessionReadOnly[session]) {
+      const targetConnection = poolConnections.get(serverId);
+      if (!targetConnection) {
+        throw new Error("Selected server is not available.");
+      }
+
+      const focusedTarget = scopedServerId === serverId;
+      const localSession = targetConnection.localAiSessions.includes(session);
+
+      if (focusedTarget && sessionReadOnly[session]) {
         throw new Error(`${session} is read-only. Disable read-only to send commands.`);
       }
 
-      if (mode === "ai" && shouldRouteToExternalAi(session)) {
-        const sent = await sendViaExternalLlm(session, trimmed);
+      const routeToExternal = mode === "ai" && (localSession || !targetConnection.capabilities.codex);
+      if (routeToExternal) {
+        const sent = await sendViaExternalLlmToServer(serverId, session, trimmed);
         if (sent) {
-          await addCommand(session, sent);
+          if (focusedTarget) {
+            await addCommand(session, sent);
+          }
         }
         return;
       }
 
-      if (!connected && !isLocalSession(session)) {
-        queueSessionCommand(session, trimmed, mode);
+      if (!targetConnection.connected && !localSession) {
+        if (focusedTarget) {
+          queueSessionCommand(session, trimmed, mode);
+          return;
+        }
+        throw new Error(`${targetConnection.server.name} is disconnected. Reconnect before sending commands.`);
+      }
+
+      if (clearDraft) {
+        setPoolDrafts(serverId, (prev) => ({ ...prev, [session]: "" }));
+      }
+
+      await sendPoolCommand(serverId, session, trimmed, mode, false);
+      if (focusedTarget) {
+        await addCommand(session, trimmed);
+      }
+    },
+    [addCommand, poolConnections, queueSessionCommand, scopedServerId, sendPoolCommand, sendViaExternalLlmToServer, sessionReadOnly, setPoolDrafts]
+  );
+
+  const sendTextToSession = useCallback(
+    async (session: string, text: string, mode: TerminalSendMode) => {
+      if (!focusedServerId) {
+        throw new Error("Select a server before sending commands.");
+      }
+      await sendTextToServerSession(focusedServerId, session, text, mode, false);
+    },
+    [focusedServerId, sendTextToServerSession]
+  );
+
+  const setServerSessionDraft = useCallback(
+    (serverId: string, session: string, value: string) => {
+      setPoolDrafts(serverId, (prev) => ({ ...prev, [session]: value }));
+    },
+    [setPoolDrafts]
+  );
+
+  const clearServerSessionDraft = useCallback(
+    (serverId: string, session: string) => {
+      setPoolDrafts(serverId, (prev) => ({ ...prev, [session]: "" }));
+    },
+    [setPoolDrafts]
+  );
+
+  const sendServerSessionDraft = useCallback(
+    async (serverId: string, session: string) => {
+      const targetConnection = poolConnections.get(serverId);
+      if (!targetConnection) {
+        throw new Error("Selected server is not available.");
+      }
+
+      const draft = (targetConnection.drafts[session] || "").trim();
+      if (!draft) {
         return;
       }
 
-      await sendCommand(session, trimmed, mode, false);
-      await addCommand(session, trimmed);
+      const mode = targetConnection.sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+      await sendTextToServerSession(serverId, session, draft, mode, true);
     },
-    [addCommand, connected, isLocalSession, queueSessionCommand, sendCommand, sendViaExternalLlm, sessionReadOnly, shouldRouteToExternalAi]
+    [poolConnections, sendTextToServerSession]
+  );
+
+  const sendServerSessionControlChar = useCallback(
+    async (serverId: string, session: string, char: string) => {
+      const targetConnection = poolConnections.get(serverId);
+      if (!targetConnection || !targetConnection.connected) {
+        throw new Error("Target server is disconnected.");
+      }
+      if (targetConnection.localAiSessions.includes(session)) {
+        throw new Error("Local LLM sessions do not support terminal control characters.");
+      }
+      if (scopedServerId === serverId && sessionReadOnly[session]) {
+        throw new Error(`${session} is read-only. Disable read-only before sending control keys.`);
+      }
+      await sendPoolControlChar(serverId, session, char);
+    },
+    [poolConnections, scopedServerId, sendPoolControlChar, sessionReadOnly]
   );
 
   const sendControlToSession = useCallback(
@@ -1562,7 +1651,11 @@ export default function AppShell() {
   );
 
   const stopVoiceCaptureIntoSession = useCallback(
-    async (session: string): Promise<boolean> => {
+    async (session: string, serverId?: string): Promise<boolean> => {
+      const targetServerId = serverId ?? focusedServerId;
+      if (!targetServerId) {
+        throw new Error("Select a server before using voice capture.");
+      }
       try {
         const rawTranscript = (
           await stopVoiceCaptureAndTranscribe({
@@ -1586,7 +1679,7 @@ export default function AppShell() {
           setVoiceTranscript(commandTranscript);
         }
 
-        setDrafts((prev) => ({ ...prev, [session]: commandTranscript }));
+        setPoolDrafts(targetServerId, (prev) => ({ ...prev, [session]: commandTranscript }));
         if (!glassesMode.voiceAutoSend) {
           voiceLoopRetryCountRef.current[session] = 0;
           if (glassesMode.voiceLoop) {
@@ -1594,8 +1687,12 @@ export default function AppShell() {
           }
           return true;
         }
-        setSessionMode(session, "ai");
-        await sendTextToSession(session, commandTranscript, "ai");
+        if (targetServerId === focusedServerId) {
+          setSessionMode(session, "ai");
+        } else {
+          setPoolSessionMode(targetServerId, session, "ai");
+        }
+        await sendTextToServerSession(targetServerId, session, commandTranscript, "ai", false);
         voiceLoopRetryCountRef.current[session] = 0;
         if (glassesMode.voiceLoop) {
           scheduleVoiceLoopRestart(session, 180);
@@ -1628,9 +1725,11 @@ export default function AppShell() {
       glassesMode.vadEnabled,
       glassesMode.vadSilenceMs,
       clearVoiceLoopRestart,
+      focusedServerId,
       scheduleVoiceLoopRestart,
-      sendTextToSession,
-      setDrafts,
+      sendTextToServerSession,
+      setPoolDrafts,
+      setPoolSessionMode,
       setSessionMode,
       setStatus,
       setVoiceTranscript,
@@ -1639,15 +1738,37 @@ export default function AppShell() {
   );
 
   const sendVoiceTranscriptToSession = useCallback(
-    async (session: string) => {
+    async (session: string, serverId?: string) => {
+      const targetServerId = serverId ?? focusedServerId;
+      if (!targetServerId) {
+        throw new Error("Select a server before sending transcript.");
+      }
       const transcript = voiceTranscript.trim();
       if (!transcript) {
         throw new Error("No voice transcript is available yet.");
       }
-      setSessionMode(session, "ai");
-      await sendTextToSession(session, transcript, "ai");
+      if (targetServerId === focusedServerId) {
+        setSessionMode(session, "ai");
+      } else {
+        setPoolSessionMode(targetServerId, session, "ai");
+      }
+      await sendTextToServerSession(targetServerId, session, transcript, "ai", false);
     },
-    [sendTextToSession, setSessionMode, voiceTranscript]
+    [focusedServerId, sendTextToServerSession, setPoolSessionMode, setSessionMode, voiceTranscript]
+  );
+
+  const stopVoiceCaptureIntoServerSession = useCallback(
+    async (serverId: string, session: string): Promise<boolean> => {
+      return await stopVoiceCaptureIntoSession(session, serverId);
+    },
+    [stopVoiceCaptureIntoSession]
+  );
+
+  const sendVoiceTranscriptToServerSession = useCallback(
+    async (serverId: string, session: string) => {
+      await sendVoiceTranscriptToSession(session, serverId);
+    },
+    [sendVoiceTranscriptToSession]
   );
 
   const openPlayback = useCallback(
@@ -2212,6 +2333,10 @@ export default function AppShell() {
     closeStream,
     recallPrev,
     setDrafts,
+    setServerSessionDraft,
+    sendServerSessionDraft,
+    clearServerSessionDraft,
+    sendServerSessionControlChar,
     recallNext,
     setTagsForSession,
     parseCommaTags,
@@ -2265,7 +2390,9 @@ export default function AppShell() {
     requestVoicePermission,
     startVoiceCapture,
     stopVoiceCaptureIntoSession,
+    stopVoiceCaptureIntoServerSession,
     sendVoiceTranscriptToSession,
+    sendVoiceTranscriptToServerSession,
     runFleetCommand,
   });
 

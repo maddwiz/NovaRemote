@@ -207,10 +207,10 @@ export function GlassesModeScreen() {
     voiceTranscript,
     voiceError,
     voiceMeteringDb,
-    onSetDraft,
-    onSend,
-    onClearDraft,
-    onSendControlChar,
+    onSetServerSessionDraft,
+    onSendServerSessionDraft,
+    onClearServerSessionDraft,
+    onSendServerSessionControlChar,
     onHistoryPrev,
     onHistoryNext,
     onSetGlassesBrand,
@@ -226,8 +226,8 @@ export function GlassesModeScreen() {
     onSetGlassesLoopCaptureMs,
     onSetGlassesHeadsetPttEnabled,
     onVoiceStartCapture,
-    onVoiceStopCapture,
-    onVoiceSendTranscript,
+    onVoiceStopCaptureForServer,
+    onVoiceSendTranscriptForServer,
     onCloseGlassesMode,
   } = useAppContext().terminals;
 
@@ -241,15 +241,11 @@ export function GlassesModeScreen() {
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
   const localStopPendingRef = useRef<boolean>(false);
-  const voiceStopRef = useRef(onVoiceStopCapture);
+  const activePanelRef = useRef<SpatialPanelCandidate | null>(null);
+  const voiceStopRef = useRef<() => void>(() => {});
   const voiceStartRef = useRef(onVoiceStartCapture);
   const ambientFloorDbRef = useRef<number | null>(null);
   const dynamicThresholdDbRef = useRef<number | null>(null);
-  const pendingPanelActionRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    voiceStopRef.current = onVoiceStopCapture;
-  }, [onVoiceStopCapture]);
 
   useEffect(() => {
     voiceStartRef.current = onVoiceStartCapture;
@@ -330,35 +326,25 @@ export function GlassesModeScreen() {
     }
   }, [focusedPanelId, focusedServerId, onFocusServer, panelMap]);
 
-  useEffect(() => {
-    if (!pendingPanelActionRef.current) {
-      return;
-    }
-    const action = pendingPanelActionRef.current;
-    pendingPanelActionRef.current = null;
-    action();
-  }, [focusedServerId]);
-
   const activePanel = focusedPanelId ? panelMap.get(focusedPanelId) || null : null;
   const activeSession = activePanel?.session || null;
   const transcriptReady = voiceTranscript.trim().length > 0;
 
-  const runOnPanel = useCallback(
-    (panelId: string, action: (panel: SpatialPanelCandidate) => void) => {
-      const panel = panelMap.get(panelId);
-      if (!panel) {
-        return;
-      }
-      if (focusedServerId !== panel.serverId) {
-        pendingPanelActionRef.current = () => action(panel);
-        setFocusedPanelId(panel.id);
-        onFocusServer(panel.serverId);
-        return;
-      }
-      action(panel);
-    },
-    [focusedServerId, onFocusServer, panelMap]
-  );
+  useEffect(() => {
+    activePanelRef.current = activePanel;
+  }, [activePanel]);
+
+  const stopVoiceForActivePanel = useCallback(() => {
+    const panel = activePanelRef.current;
+    if (!panel) {
+      return;
+    }
+    onVoiceStopCaptureForServer(panel.serverId, panel.session);
+  }, [onVoiceStopCaptureForServer]);
+
+  useEffect(() => {
+    voiceStopRef.current = stopVoiceForActivePanel;
+  }, [stopVoiceForActivePanel]);
 
   const arrangedPanels = useMemo(
     () => buildSpatialPanels(allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode),
@@ -385,32 +371,32 @@ export function GlassesModeScreen() {
       if (!activePanel) {
         return;
       }
-      if (focusedServerId !== activePanel.serverId) {
-        onFocusServer(activePanel.serverId);
-        return;
-      }
-      onSetDraft(activePanel.session, value);
+      onSetServerSessionDraft(activePanel.serverId, activePanel.session, value);
     },
-    [activePanel, focusedServerId, onFocusServer, onSetDraft]
+    [activePanel, onSetServerSessionDraft]
   );
 
   const onHistoryPrevForActivePanel = useCallback(() => {
     if (!activePanel || activePanel.readOnly) {
       return;
     }
-    runOnPanel(activePanel.id, (panel) => {
-      onHistoryPrev(panel.session);
-    });
-  }, [activePanel, onHistoryPrev, runOnPanel]);
+    if (focusedServerId !== activePanel.serverId) {
+      onFocusServer(activePanel.serverId);
+      return;
+    }
+    onHistoryPrev(activePanel.session);
+  }, [activePanel, focusedServerId, onFocusServer, onHistoryPrev]);
 
   const onHistoryNextForActivePanel = useCallback(() => {
     if (!activePanel || activePanel.readOnly) {
       return;
     }
-    runOnPanel(activePanel.id, (panel) => {
-      onHistoryNext(panel.session);
-    });
-  }, [activePanel, onHistoryNext, runOnPanel]);
+    if (focusedServerId !== activePanel.serverId) {
+      onFocusServer(activePanel.serverId);
+      return;
+    }
+    onHistoryNext(activePanel.session);
+  }, [activePanel, focusedServerId, onFocusServer, onHistoryNext]);
 
   const {
     selection: draftSelection,
@@ -448,7 +434,7 @@ export function GlassesModeScreen() {
       return;
     }
     if (voiceRecording) {
-      voiceStopRef.current(activeSession);
+      voiceStopRef.current();
       return;
     }
     voiceStartRef.current();
@@ -471,7 +457,7 @@ export function GlassesModeScreen() {
     }
 
     loopTimeoutRef.current = setTimeout(() => {
-      voiceStopRef.current(activeSession);
+      voiceStopRef.current();
     }, glassesMode.loopCaptureMs);
 
     return () => {
@@ -521,7 +507,7 @@ export function GlassesModeScreen() {
 
     if (now - silenceSinceRef.current >= glassesMode.vadSilenceMs) {
       localStopPendingRef.current = true;
-      voiceStopRef.current(activeSession);
+      voiceStopRef.current();
     }
   }, [
     activeSession,
@@ -866,9 +852,7 @@ export function GlassesModeScreen() {
                 if (!activePanel || activePanel.readOnly) {
                   return;
                 }
-                runOnPanel(activePanel.id, (panel) => {
-                  onSendControlChar(panel.session, value);
-                });
+                onSendServerSessionControlChar(activePanel.serverId, activePanel.session, value);
               }}
               onAction={(action) => onKeyboardAction(action as TextEditingAction)}
             />
@@ -895,7 +879,10 @@ export function GlassesModeScreen() {
               if (!activeSession) {
                 return;
               }
-              onVoiceStopCapture(activeSession);
+              if (!activePanel) {
+                return;
+              }
+              onVoiceStopCaptureForServer(activePanel.serverId, activeSession);
             }}
           >
             <Text style={styles.glassesRouteButtonText}>{voiceBusy ? "Transcribing..." : "Stop + Transcribe"}</Text>
@@ -921,12 +908,14 @@ export function GlassesModeScreen() {
                 return;
               }
               if (route.kind === "send_command") {
-                runOnPanel(route.panelId, (panel) => {
-                  onSetDraft(panel.session, route.command);
-                  if (glassesMode.voiceAutoSend) {
-                    onSend(panel.session);
-                  }
-                });
+                const target = panelMap.get(route.panelId);
+                if (!target) {
+                  return;
+                }
+                onSetServerSessionDraft(target.serverId, target.session, route.command);
+                if (glassesMode.voiceAutoSend) {
+                  onSendServerSessionDraft(target.serverId, target.session);
+                }
               }
             }}
           >
@@ -942,9 +931,7 @@ export function GlassesModeScreen() {
               if (!activePanel) {
                 return;
               }
-              runOnPanel(activePanel.id, (panel) => {
-                onVoiceSendTranscript(panel.session);
-              });
+              onVoiceSendTranscriptForServer(activePanel.serverId, activePanel.session);
             }}
           >
             <Text style={styles.glassesRouteButtonText}>Send Transcript</Text>
@@ -965,7 +952,7 @@ export function GlassesModeScreen() {
               if (!activeSession || !voiceRecording) {
                 return;
               }
-              voiceStopRef.current(activeSession);
+              voiceStopRef.current();
             }}
           >
             <Text style={styles.glassesRouteButtonText}>Hold to Talk</Text>
@@ -980,9 +967,7 @@ export function GlassesModeScreen() {
               if (!activePanel) {
                 return;
               }
-              runOnPanel(activePanel.id, (panel) => {
-                onSend(panel.session);
-              });
+              onSendServerSessionDraft(activePanel.serverId, activePanel.session);
             }}
           >
             <Text style={styles.glassesRoutePrimaryText}>{activePanel?.sending ? "Sending..." : "Send Draft"}</Text>
@@ -996,9 +981,7 @@ export function GlassesModeScreen() {
               if (!activePanel) {
                 return;
               }
-              runOnPanel(activePanel.id, (panel) => {
-                onClearDraft(panel.session);
-              });
+              onClearServerSessionDraft(activePanel.serverId, activePanel.session);
             }}
           >
             <Text style={styles.glassesRouteButtonText}>Clear Draft</Text>
