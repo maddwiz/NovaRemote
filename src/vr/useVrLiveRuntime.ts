@@ -13,6 +13,8 @@ export type UseVrLiveRuntimeArgs = {
   sessionClient?: VrSessionClient;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
+  onConnectAllServers?: () => Promise<void> | void;
+  onDisconnectAllServers?: () => Promise<void> | void;
 };
 
 export function useVrLiveRuntime({
@@ -22,6 +24,8 @@ export function useVrLiveRuntime({
   sessionClient,
   onReconnectServer,
   onReconnectServers,
+  onConnectAllServers,
+  onDisconnectAllServers,
 }: UseVrLiveRuntimeArgs) {
   const workspace = useVrWorkspace({
     connections,
@@ -122,6 +126,8 @@ export function useVrLiveRuntime({
     onSendControlChar: sendServerControlChar,
     onReconnectServer,
     onReconnectServers,
+    onConnectAllServers,
+    onDisconnectAllServers,
     onStopSession: stopServerSession,
     onOpenOnMac: openServerOnMac,
   });

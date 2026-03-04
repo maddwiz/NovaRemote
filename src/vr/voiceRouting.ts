@@ -8,6 +8,8 @@ export type VrVoiceIntent =
   | { kind: "focus"; panelId: string }
   | { kind: "reconnect_server"; panelId: string }
   | { kind: "reconnect_all" }
+  | { kind: "pause_pool" }
+  | { kind: "resume_pool" }
   | { kind: "send"; panelId: string; command: string }
   | { kind: "control"; panelId: string; char: string }
   | { kind: "stop_session"; panelId: string }
@@ -200,6 +202,16 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
   if (route.kind === "reconnect_all") {
     return {
       kind: "reconnect_all",
+    };
+  }
+  if (route.kind === "pause_pool") {
+    return {
+      kind: "pause_pool",
+    };
+  }
+  if (route.kind === "resume_pool") {
+    return {
+      kind: "resume_pool",
     };
   }
   if (route.kind === "control_char") {

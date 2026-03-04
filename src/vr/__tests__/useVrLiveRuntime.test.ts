@@ -319,6 +319,8 @@ describe("useVrLiveRuntime", () => {
     >(async () => undefined);
     const onReconnectServer = vi.fn(async () => undefined);
     const onReconnectServers = vi.fn(async () => undefined);
+    const onDisconnectAllServers = vi.fn(async () => undefined);
+    const onConnectAllServers = vi.fn(async () => undefined);
 
     let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
     const current = () => {
@@ -335,6 +337,8 @@ describe("useVrLiveRuntime", () => {
         maxPanels: 3,
         onReconnectServer,
         onReconnectServers,
+        onDisconnectAllServers,
+        onConnectAllServers,
       });
       return null;
     }
@@ -405,6 +409,18 @@ describe("useVrLiveRuntime", () => {
     });
     expect(onReconnectServers).toHaveBeenCalledWith(["dgx"]);
     expect(current().hudStatus?.message).toContain("Reconnect queued for 1 servers");
+
+    await act(async () => {
+      await current().dispatchVoice("pause pool");
+    });
+    expect(onDisconnectAllServers).toHaveBeenCalledTimes(1);
+    expect(current().hudStatus?.message).toContain("Connection pool paused");
+
+    await act(async () => {
+      await current().dispatchVoice("resume pool");
+    });
+    expect(onConnectAllServers).toHaveBeenCalledTimes(1);
+    expect(current().hudStatus?.message).toContain("Connection pool resumed");
 
     await act(async () => {
       renderer?.unmount();

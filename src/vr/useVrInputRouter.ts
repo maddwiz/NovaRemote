@@ -26,6 +26,8 @@ export type UseVrInputRouterArgs = {
   onSendControlChar?: (serverId: string, session: string, char: string) => Promise<void> | void;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
+  onConnectAllServers?: () => Promise<void> | void;
+  onDisconnectAllServers?: () => Promise<void> | void;
   onStopSession?: (serverId: string, session: string) => Promise<void> | void;
   onOpenOnMac?: (serverId: string, session: string) => Promise<void> | void;
   onSetOverviewMode?: (enabled: boolean) => void;
@@ -54,6 +56,8 @@ export function useVrInputRouter({
   onSendControlChar,
   onReconnectServer,
   onReconnectServers,
+  onConnectAllServers,
+  onDisconnectAllServers,
   onStopSession,
   onOpenOnMac,
   onSetOverviewMode,
@@ -107,6 +111,7 @@ export function useVrInputRouter({
       const action = workspace.applyVoiceTranscript(transcript, {
         targetPanelId: options?.targetPanelId ?? null,
       });
+
       if (action.kind === "send") {
         try {
           await onSendCommand(action.serverId, action.session, action.command);
@@ -124,6 +129,7 @@ export function useVrInputRouter({
         }
         return action;
       }
+
       if (action.kind === "control") {
         if (!onSendControlChar) {
           publishHudStatus({
@@ -149,6 +155,7 @@ export function useVrInputRouter({
         }
         return action;
       }
+
       if (action.kind === "reconnect_server") {
         if (!onReconnectServer) {
           publishHudStatus({
@@ -174,6 +181,7 @@ export function useVrInputRouter({
         }
         return action;
       }
+
       if (action.kind === "reconnect_all") {
         if (onReconnectServers) {
           try {
@@ -218,6 +226,59 @@ export function useVrInputRouter({
         }
         return action;
       }
+
+      if (action.kind === "pause_pool") {
+        if (!onDisconnectAllServers) {
+          publishHudStatus({
+            message: "Pool pause is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          await onDisconnectAllServers();
+          publishHudStatus({
+            message: "Connection pool paused",
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to pause connection pool",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "resume_pool") {
+        if (!onConnectAllServers) {
+          publishHudStatus({
+            message: "Pool resume is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          await onConnectAllServers();
+          publishHudStatus({
+            message: "Connection pool resumed",
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to resume connection pool",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
       if (action.kind === "stop_session") {
         if (!onStopSession) {
           publishHudStatus({
@@ -243,6 +304,7 @@ export function useVrInputRouter({
         }
         return action;
       }
+
       if (action.kind === "open_on_mac") {
         if (!onOpenOnMac) {
           publishHudStatus({
@@ -268,6 +330,7 @@ export function useVrInputRouter({
         }
         return action;
       }
+
       if (action.kind === "focus") {
         publishHudStatus({
           message: `Focused panel ${action.panelId}`,
@@ -276,6 +339,7 @@ export function useVrInputRouter({
         });
         return action;
       }
+
       if (action.kind === "rotate_workspace") {
         publishHudStatus({
           message: `Rotated workspace ${action.direction}`,
@@ -284,6 +348,7 @@ export function useVrInputRouter({
         });
         return action;
       }
+
       if (action.kind === "overview") {
         workspace.setOverviewMode?.(true);
         onSetOverviewMode?.(true);
@@ -294,9 +359,11 @@ export function useVrInputRouter({
         });
         return action;
       }
+
       if (action.kind === "none") {
         return action;
       }
+
       if (action.kind === "panel_mini") {
         publishHudStatus({
           message: `Mini panel ${action.panelId}`,
@@ -305,6 +372,7 @@ export function useVrInputRouter({
         });
         return action;
       }
+
       if (action.kind === "panel_expand") {
         publishHudStatus({
           message: `Expanded panel ${action.panelId}`,
@@ -313,6 +381,7 @@ export function useVrInputRouter({
         });
         return action;
       }
+
       if (action.kind === "panel_opacity") {
         publishHudStatus({
           message: `Panel opacity ${Math.round(action.opacity * 100)}%`,
@@ -321,6 +390,7 @@ export function useVrInputRouter({
         });
         return action;
       }
+
       if (action.kind === "layout_preset") {
         publishHudStatus({
           message: `Layout preset ${action.preset}`,
@@ -329,9 +399,8 @@ export function useVrInputRouter({
         });
         return action;
       }
-      if (action.kind === "minimize") {
-        workspace.setOverviewMode?.(false);
-      }
+
+      workspace.setOverviewMode?.(false);
       onSetOverviewMode?.(false);
       publishHudStatus({
         message: "Focus mode",
@@ -341,6 +410,8 @@ export function useVrInputRouter({
       return action;
     },
     [
+      onConnectAllServers,
+      onDisconnectAllServers,
       onOpenOnMac,
       onReconnectServer,
       onReconnectServers,

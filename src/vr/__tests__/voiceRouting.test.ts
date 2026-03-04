@@ -92,6 +92,12 @@ describe("parseVrVoiceIntent", () => {
     expect(parseVrVoiceIntent("reconnect all", PANELS, "dgx-main")).toEqual({
       kind: "reconnect_all",
     });
+    expect(parseVrVoiceIntent("pause pool", PANELS, "dgx-main")).toEqual({
+      kind: "pause_pool",
+    });
+    expect(parseVrVoiceIntent("resume all streams", PANELS, "dgx-main")).toEqual({
+      kind: "resume_pool",
+    });
   });
 
   it("focuses target panels for natural show-logs phrasing", () => {

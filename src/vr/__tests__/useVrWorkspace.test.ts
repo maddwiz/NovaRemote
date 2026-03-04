@@ -223,6 +223,16 @@ describe("useVrWorkspace", () => {
       serverIds: ["dgx", "home"],
     });
 
+    const pausePoolAction = current().applyVoiceTranscript("pause all streams");
+    expect(pausePoolAction).toEqual({
+      kind: "pause_pool",
+    });
+
+    const resumePoolAction = current().applyVoiceTranscript("resume pool");
+    expect(resumePoolAction).toEqual({
+      kind: "resume_pool",
+    });
+
     await act(async () => {
       renderer?.unmount();
     });

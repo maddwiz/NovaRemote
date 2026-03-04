@@ -24,6 +24,8 @@ export type VrWorkspaceVoiceAction =
   | { kind: "focus"; panelId: string }
   | { kind: "reconnect_server"; panelId: string; serverId: string }
   | { kind: "reconnect_all"; serverIds: string[] }
+  | { kind: "pause_pool" }
+  | { kind: "resume_pool" }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | {
       kind: "stop_session";
@@ -675,6 +677,12 @@ export function useVrWorkspace({
           kind: "reconnect_all",
           serverIds: serverScopeIds.slice(),
         };
+      }
+      if (intent.kind === "pause_pool") {
+        return { kind: "pause_pool" };
+      }
+      if (intent.kind === "resume_pool") {
+        return { kind: "resume_pool" };
       }
       if (intent.kind === "rotate_workspace") {
         rotateWorkspace(intent.direction);

@@ -287,6 +287,54 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches pool lifecycle voice actions through connect/disconnect callbacks", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({ kind: "pause_pool" })
+      .mockReturnValueOnce({ kind: "resume_pool" });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onDisconnectAllServers = vi.fn(async () => undefined);
+    const onConnectAllServers = vi.fn(async () => undefined);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onDisconnectAllServers,
+        onConnectAllServers,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("pause pool");
+    });
+    expect(onDisconnectAllServers).toHaveBeenCalledTimes(1);
+    expect(current().hudStatus?.message).toContain("Connection pool paused");
+
+    await act(async () => {
+      await current().dispatchVoice("resume pool");
+    });
+    expect(onConnectAllServers).toHaveBeenCalledTimes(1);
+    expect(current().hudStatus?.message).toContain("Connection pool resumed");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("toggles overview mode from voice and gesture actions", async () => {
     const applyVoiceTranscript = vi.fn<
       (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
