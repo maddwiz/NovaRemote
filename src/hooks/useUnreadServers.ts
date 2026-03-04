@@ -7,17 +7,24 @@ type UseUnreadServersArgs = {
   focusedServerId: string | null;
 };
 
-function snapshotTailLengths(connection: ServerConnection): Map<string, number> {
-  const lengths = new Map<string, number>();
+const TAIL_SIGNATURE_SUFFIX_LENGTH = 160;
+
+function tailSignature(output: string): string {
+  const suffix = output.slice(-TAIL_SIGNATURE_SUFFIX_LENGTH);
+  return `${output.length}:${suffix}`;
+}
+
+function snapshotTailSignatures(connection: ServerConnection): Map<string, string> {
+  const signatures = new Map<string, string>();
   Object.entries(connection.tails).forEach(([session, output]) => {
-    lengths.set(session, output.length);
+    signatures.set(session, tailSignature(output));
   });
-  return lengths;
+  return signatures;
 }
 
 export function useUnreadServers({ connections, focusedServerId }: UseUnreadServersArgs): Set<string> {
   const [unreadServers, setUnreadServers] = useState<Set<string>>(new Set());
-  const lastSeenTailLengthsRef = useRef<Map<string, Map<string, number>>>(new Map());
+  const lastSeenTailSignaturesRef = useRef<Map<string, Map<string, string>>>(new Map());
 
   useEffect(() => {
     if (!focusedServerId) {
@@ -28,7 +35,7 @@ export function useUnreadServers({ connections, focusedServerId }: UseUnreadServ
       return;
     }
 
-    lastSeenTailLengthsRef.current.set(focusedServerId, snapshotTailLengths(focusedConnection));
+    lastSeenTailSignaturesRef.current.set(focusedServerId, snapshotTailSignatures(focusedConnection));
     setUnreadServers((prev) => {
       if (!prev.has(focusedServerId)) {
         return prev;
@@ -49,15 +56,19 @@ export function useUnreadServers({ connections, focusedServerId }: UseUnreadServ
         return;
       }
 
-      const recorded = lastSeenTailLengthsRef.current.get(serverId);
+      const recorded = lastSeenTailSignaturesRef.current.get(serverId);
       if (!recorded) {
-        lastSeenTailLengthsRef.current.set(serverId, snapshotTailLengths(connection));
+        lastSeenTailSignaturesRef.current.set(serverId, snapshotTailSignatures(connection));
         return;
       }
 
       const hasUnread = Object.entries(connection.tails).some(([session, output]) => {
-        const previousLength = recorded.get(session) ?? 0;
-        return output.length > previousLength;
+        const previousSignature = recorded.get(session);
+        const currentSignature = tailSignature(output);
+        if (!previousSignature) {
+          return output.length > 0;
+        }
+        return currentSignature !== previousSignature;
       });
 
       if (hasUnread) {
@@ -65,9 +76,9 @@ export function useUnreadServers({ connections, focusedServerId }: UseUnreadServ
       }
     });
 
-    Array.from(lastSeenTailLengthsRef.current.keys()).forEach((serverId) => {
+    Array.from(lastSeenTailSignaturesRef.current.keys()).forEach((serverId) => {
       if (!availableServerIds.has(serverId)) {
-        lastSeenTailLengthsRef.current.delete(serverId);
+        lastSeenTailSignaturesRef.current.delete(serverId);
       }
     });
 

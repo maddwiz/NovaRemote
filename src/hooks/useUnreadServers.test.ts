@@ -165,4 +165,102 @@ describe("useUnreadServers", () => {
       renderer!.unmount();
     });
   });
+
+  it("marks unread when unfocused tail content changes even if it shrinks", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const cloud = makeServer("cloud", "Cloud");
+
+    let latestUnread = new Set<string>();
+    function Harness({ connections, focusedServerId }: { connections: Map<string, ServerConnection>; focusedServerId: string | null }) {
+      latestUnread = useUnreadServers({ connections, focusedServerId });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(Harness, {
+          connections: makeConnections([
+            { server: dgx, tails: { main: "dgx output\n" } },
+            { server: cloud, tails: { main: "cloud baseline payload that is long\n" } },
+          ]),
+          focusedServerId: "dgx",
+        })
+      );
+    });
+
+    expect(latestUnread.size).toBe(0);
+
+    await act(async () => {
+      renderer!.update(
+        React.createElement(Harness, {
+          connections: makeConnections([
+            { server: dgx, tails: { main: "dgx output\nmore\n" } },
+            { server: cloud, tails: { main: "short\n" } },
+          ]),
+          focusedServerId: "dgx",
+        })
+      );
+    });
+
+    expect(latestUnread.has("cloud")).toBe(true);
+
+    await act(async () => {
+      renderer!.unmount();
+    });
+  });
+
+  it("drops unread entry when server is removed from pool", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const lab = makeServer("lab", "Lab");
+
+    let latestUnread = new Set<string>();
+    function Harness({ connections, focusedServerId }: { connections: Map<string, ServerConnection>; focusedServerId: string | null }) {
+      latestUnread = useUnreadServers({ connections, focusedServerId });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(Harness, {
+          connections: makeConnections([
+            { server: dgx, tails: { main: "dgx\n" } },
+            { server: lab, tails: { main: "" } },
+          ]),
+          focusedServerId: "dgx",
+        })
+      );
+    });
+
+    await act(async () => {
+      renderer!.update(
+        React.createElement(Harness, {
+          connections: makeConnections([
+            { server: dgx, tails: { main: "dgx\nnext\n" } },
+            { server: lab, tails: { main: "lab new\n" } },
+          ]),
+          focusedServerId: "dgx",
+        })
+      );
+    });
+
+    expect(latestUnread.has("lab")).toBe(true);
+
+    await act(async () => {
+      renderer!.update(
+        React.createElement(Harness, {
+          connections: makeConnections([{ server: dgx, tails: { main: "dgx\nnext\n" } }]),
+          focusedServerId: "dgx",
+        })
+      );
+    });
+
+    expect(latestUnread.has("lab")).toBe(false);
+    expect(latestUnread.size).toBe(0);
+
+    await act(async () => {
+      renderer!.unmount();
+    });
+  });
 });
