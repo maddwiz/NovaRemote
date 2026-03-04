@@ -51,6 +51,14 @@ describe("parseVrVoiceIntent", () => {
     expect(parseVrVoiceIntent("show all", PANELS, "dgx-main")).toEqual({ kind: "overview" });
     expect(parseVrVoiceIntent("show me all logs", PANELS, "dgx-main")).toEqual({ kind: "overview" });
     expect(parseVrVoiceIntent("focus mode", PANELS, "dgx-main")).toEqual({ kind: "minimize" });
+    expect(parseVrVoiceIntent("layout grid", PANELS, "dgx-main")).toEqual({
+      kind: "layout_preset",
+      preset: "grid",
+    });
+    expect(parseVrVoiceIntent("snap cockpit", PANELS, "dgx-main")).toEqual({
+      kind: "layout_preset",
+      preset: "cockpit",
+    });
     expect(parseVrVoiceIntent("rotate left", PANELS, "dgx-main")).toEqual({
       kind: "rotate_workspace",
       direction: "left",

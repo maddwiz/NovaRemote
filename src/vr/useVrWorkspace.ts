@@ -25,6 +25,7 @@ export type VrWorkspaceVoiceAction =
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | { kind: "overview" }
   | { kind: "minimize" }
+  | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
   | { kind: "panel_mini"; panelId: string }
   | { kind: "panel_expand"; panelId: string }
   | { kind: "panel_opacity"; panelId: string; opacity: number }
@@ -648,6 +649,10 @@ export function useVrWorkspace({
       if (intent.kind === "minimize") {
         setOverviewMode(false);
         return { kind: "minimize" };
+      }
+      if (intent.kind === "layout_preset") {
+        setPreset(intent.preset);
+        return { kind: "layout_preset", preset: intent.preset };
       }
       if (intent.kind === "panel_mini") {
         setPanelMini(intent.panelId, true);

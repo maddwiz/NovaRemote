@@ -257,6 +257,42 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("publishes HUD updates for layout preset voice actions", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({ kind: "layout_preset", preset: "grid" });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("layout grid");
+    });
+    expect(current().hudStatus?.message).toContain("Layout preset grid");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("records rotate HUD status for gesture rotation actions", async () => {
     const applyVoiceTranscript = vi.fn<
       (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction

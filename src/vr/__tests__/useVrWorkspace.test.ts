@@ -748,6 +748,12 @@ describe("useVrWorkspace", () => {
     });
     expect(current().overviewMode).toBe(true);
 
+    await act(async () => {
+      const action = current().applyVoiceTranscript("layout cockpit");
+      expect(action).toEqual({ kind: "layout_preset", preset: "cockpit" });
+    });
+    expect(current().preset).toBe("cockpit");
+
     const snapshot = current().exportSnapshot();
     expect(snapshot.overviewMode).toBe(true);
 

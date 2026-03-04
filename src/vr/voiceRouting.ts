@@ -1,3 +1,4 @@
+import { VrLayoutPreset } from "./contracts";
 import { findPanelByTarget, resolveSpatialVoiceRoute, VoiceRoutePanel } from "../spatialVoiceRoutingCore";
 
 export type VrRoutePanel = VoiceRoutePanel;
@@ -8,6 +9,7 @@ export type VrVoiceIntent =
   | { kind: "send"; panelId: string; command: string }
   | { kind: "overview" }
   | { kind: "minimize" }
+  | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
   | { kind: "panel_mini"; panelId: string }
   | { kind: "panel_expand"; panelId: string }
   | { kind: "panel_opacity"; panelId: string; opacity: number }
@@ -34,6 +36,16 @@ function resolvePanelId(panels: VrRoutePanel[], focusedPanelId: string | null, t
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
   const cleaned = transcript.trim();
   if (cleaned) {
+    const layoutMatch = cleaned.match(
+      /^(?:layout|preset|snap(?:\s+layout)?)\s+(arc|grid|stacked|cockpit)$/i
+    );
+    if (layoutMatch) {
+      return {
+        kind: "layout_preset",
+        preset: layoutMatch[1].toLowerCase() as Exclude<VrLayoutPreset, "custom">,
+      };
+    }
+
     const miniMatch = cleaned.match(
       /^(?:mini panel|mini|minimize panel|minimize)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
     );

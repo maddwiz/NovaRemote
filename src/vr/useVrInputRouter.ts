@@ -167,6 +167,14 @@ export function useVrInputRouter({
         });
         return action;
       }
+      if (action.kind === "layout_preset") {
+        publishHudStatus({
+          message: `Layout preset ${action.preset}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
       if (action.kind === "minimize") {
         workspace.setOverviewMode?.(false);
       }
