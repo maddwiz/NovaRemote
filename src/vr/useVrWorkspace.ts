@@ -24,6 +24,18 @@ export type VrWorkspaceVoiceAction =
   | { kind: "focus"; panelId: string }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | {
+      kind: "stop_session";
+      panelId: string;
+      serverId: string;
+      session: string;
+    }
+  | {
+      kind: "open_on_mac";
+      panelId: string;
+      serverId: string;
+      session: string;
+    }
+  | {
       kind: "control";
       panelId: string;
       serverId: string;
@@ -672,6 +684,30 @@ export function useVrWorkspace({
           serverId: panel.serverId,
           session: panel.session,
           char: intent.char,
+        };
+      }
+      if (intent.kind === "stop_session") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "stop_session",
+          panelId: panel.id,
+          serverId: panel.serverId,
+          session: panel.session,
+        };
+      }
+      if (intent.kind === "open_on_mac") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "open_on_mac",
+          panelId: panel.id,
+          serverId: panel.serverId,
+          session: panel.session,
         };
       }
       if (intent.kind === "panel_mini") {

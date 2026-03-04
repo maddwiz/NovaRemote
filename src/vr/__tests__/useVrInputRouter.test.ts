@@ -174,6 +174,64 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches stop-session and open-on-mac voice actions through lifecycle callbacks", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({
+        kind: "stop_session",
+        panelId: "home::build",
+        serverId: "home",
+        session: "build",
+      })
+      .mockReturnValueOnce({
+        kind: "open_on_mac",
+        panelId: "home::build",
+        serverId: "home",
+        session: "build",
+      });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onStopSession = vi.fn(async () => undefined);
+    const onOpenOnMac = vi.fn(async () => undefined);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onStopSession,
+        onOpenOnMac,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("stop session");
+    });
+    expect(onStopSession).toHaveBeenCalledWith("home", "build");
+    expect(current().hudStatus?.message).toContain("Stopped home/build");
+
+    await act(async () => {
+      await current().dispatchVoice("open on mac");
+    });
+    expect(onOpenOnMac).toHaveBeenCalledWith("home", "build");
+    expect(current().hudStatus?.message).toContain("Opened home/build on Mac");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("toggles overview mode from voice and gesture actions", async () => {
     const applyVoiceTranscript = vi.fn<
       (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction

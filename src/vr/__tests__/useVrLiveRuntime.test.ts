@@ -304,6 +304,19 @@ describe("useVrLiveRuntime", () => {
         key: string
       ) => Promise<void>
     >(async () => undefined);
+    const stopSessionMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["stopSession"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string
+      ) => Promise<void>
+    >(async () => undefined);
+    const openOnMacMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["openOnMac"]>[0],
+        session: string
+      ) => Promise<void>
+    >(async () => undefined);
 
     let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
     const current = () => {
@@ -316,7 +329,7 @@ describe("useVrLiveRuntime", () => {
     function Harness() {
       latest = useVrLiveRuntime({
         connections,
-        sessionClient: buildSessionClient({ sendMock, ctrlMock }),
+        sessionClient: buildSessionClient({ sendMock, ctrlMock, stopSessionMock, openOnMacMock }),
         maxPanels: 3,
       });
       return null;
@@ -347,6 +360,35 @@ describe("useVrLiveRuntime", () => {
     );
     expect(current().hudStatus?.message).toContain("Sent C-c to dgx/main");
     expect(sendMock).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      await current().dispatchVoice("stop session");
+    });
+    expect(stopSessionMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "/tmux",
+      "main"
+    );
+    expect(current().hudStatus?.message).toContain("Stopped dgx/main");
+
+    await act(async () => {
+      await current().dispatchVoice("open on mac");
+    });
+    expect(openOnMacMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "main"
+    );
+    expect(current().hudStatus?.message).toContain("Opened dgx/main on Mac");
 
     await act(async () => {
       renderer?.unmount();

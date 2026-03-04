@@ -73,6 +73,18 @@ describe("parseVrVoiceIntent", () => {
       kind: "rotate_workspace",
       direction: "left",
     });
+    expect(parseVrVoiceIntent("stop session for build worker", PANELS, "dgx-main")).toEqual({
+      kind: "stop_session",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("open on mac for homelab", PANELS, "dgx-main")).toEqual({
+      kind: "open_on_mac",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("open dgx spark on mac", PANELS, "home-build")).toEqual({
+      kind: "open_on_mac",
+      panelId: "dgx-main",
+    });
   });
 
   it("focuses target panels for natural show-logs phrasing", () => {

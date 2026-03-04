@@ -8,6 +8,8 @@ export type VrVoiceIntent =
   | { kind: "focus"; panelId: string }
   | { kind: "send"; panelId: string; command: string }
   | { kind: "control"; panelId: string; char: string }
+  | { kind: "stop_session"; panelId: string }
+  | { kind: "open_on_mac"; panelId: string }
   | { kind: "overview" }
   | { kind: "minimize" }
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
@@ -37,6 +39,35 @@ function resolvePanelId(panels: VrRoutePanel[], focusedPanelId: string | null, t
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
   const cleaned = transcript.trim();
   if (cleaned) {
+    const stopSessionMatch = cleaned.match(
+      /^(?:stop|terminate|halt)\s+(?:session|terminal)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+    );
+    if (stopSessionMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, stopSessionMatch[1] || stopSessionMatch[2] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "stop_session", panelId };
+    }
+
+    const openOnMacMatch = cleaned.match(/^open(?:\s+(.+?))?\s+on\s+mac$/i);
+    if (openOnMacMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, openOnMacMatch[1] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "open_on_mac", panelId };
+    }
+
+    const openOnMacForMatch = cleaned.match(/^open\s+on\s+mac(?:\s+(?:for|on)\s+(.+))?$/i);
+    if (openOnMacForMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, openOnMacForMatch[1] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "open_on_mac", panelId };
+    }
+
     const interruptMatch = cleaned.match(
       /^(?:interrupt|stop command|cancel command)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
     );

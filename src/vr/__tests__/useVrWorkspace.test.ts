@@ -194,6 +194,22 @@ describe("useVrWorkspace", () => {
       char: "C-c",
     });
 
+    const stopAction = current().applyVoiceTranscript("stop session for homelab");
+    expect(stopAction).toEqual({
+      kind: "stop_session",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+    });
+
+    const openOnMacAction = current().applyVoiceTranscript("open on mac for homelab");
+    expect(openOnMacAction).toEqual({
+      kind: "open_on_mac",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+    });
+
     await act(async () => {
       renderer?.unmount();
     });

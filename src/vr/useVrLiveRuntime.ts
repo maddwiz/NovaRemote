@@ -116,6 +116,8 @@ export function useVrLiveRuntime({
     onSetOverviewMode: workspace.setOverviewMode,
     onSendCommand: sendServerCommand,
     onSendControlChar: sendServerControlChar,
+    onStopSession: stopServerSession,
+    onOpenOnMac: openServerOnMac,
   });
 
   return {

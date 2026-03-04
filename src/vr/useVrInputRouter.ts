@@ -24,6 +24,8 @@ export type UseVrInputRouterArgs = {
   workspace: WorkspaceInputBridge;
   onSendCommand: (serverId: string, session: string, command: string) => Promise<void> | void;
   onSendControlChar?: (serverId: string, session: string, char: string) => Promise<void> | void;
+  onStopSession?: (serverId: string, session: string) => Promise<void> | void;
+  onOpenOnMac?: (serverId: string, session: string) => Promise<void> | void;
   onSetOverviewMode?: (enabled: boolean) => void;
   hudAutoClearMs?: number;
 };
@@ -48,6 +50,8 @@ export function useVrInputRouter({
   workspace,
   onSendCommand,
   onSendControlChar,
+  onStopSession,
+  onOpenOnMac,
   onSetOverviewMode,
   hudAutoClearMs = 3000,
 }: UseVrInputRouterArgs): UseVrInputRouterResult {
@@ -141,6 +145,56 @@ export function useVrInputRouter({
         }
         return action;
       }
+      if (action.kind === "stop_session") {
+        if (!onStopSession) {
+          publishHudStatus({
+            message: "Session stop is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          await onStopSession(action.serverId, action.session);
+          publishHudStatus({
+            message: `Stopped ${action.serverId}/${action.session}`,
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to stop session",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+      if (action.kind === "open_on_mac") {
+        if (!onOpenOnMac) {
+          publishHudStatus({
+            message: "Open-on-Mac is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          await onOpenOnMac(action.serverId, action.session);
+          publishHudStatus({
+            message: `Opened ${action.serverId}/${action.session} on Mac`,
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to open session on Mac",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
       if (action.kind === "focus") {
         publishHudStatus({
           message: `Focused panel ${action.panelId}`,
@@ -213,7 +267,7 @@ export function useVrInputRouter({
       });
       return action;
     },
-    [onSendCommand, onSendControlChar, onSetOverviewMode, publishHudStatus, workspace]
+    [onOpenOnMac, onSendCommand, onSendControlChar, onSetOverviewMode, onStopSession, publishHudStatus, workspace]
   );
 
   const dispatchGesture = useCallback(
