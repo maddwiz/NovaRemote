@@ -55,6 +55,7 @@ function AgentCard({
   onApprove,
   onDeny,
   onRemove,
+  onClearMemory,
 }: {
   agent: NovaAgent;
   sessions: string[];
@@ -74,6 +75,7 @@ function AgentCard({
   onApprove: () => void;
   onDeny: () => void;
   onRemove: () => void;
+  onClearMemory: () => void;
 }) {
   const recentMemory = memoryEntries.slice(0, 4);
 
@@ -198,7 +200,18 @@ function AgentCard({
       )}
 
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>Memory Timeline</Text>
+        <View style={styles.terminalNameRow}>
+          <Text style={styles.panelLabel}>Memory Timeline</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Clear memory for ${agent.name}`}
+            style={[styles.actionButton, memoryEntries.length === 0 ? styles.buttonDisabled : null]}
+            disabled={memoryEntries.length === 0}
+            onPress={onClearMemory}
+          >
+            <Text style={styles.actionButtonText}>Clear</Text>
+          </Pressable>
+        </View>
         {recentMemory.length === 0 ? (
           <Text style={styles.emptyText}>No memory events yet.</Text>
         ) : (
@@ -234,6 +247,7 @@ export function NovaAgentPanel({
     requestAgentApproval,
     approveAgentApproval,
     denyAgentApproval,
+    clearAgentMemory,
   } = useNovaAgentRuntime({
     serverId,
     onDispatchCommand: onQueueCommand,
@@ -364,6 +378,9 @@ export function NovaAgentPanel({
             }}
             onRemove={() => {
               removeRuntimeAgent(agent.agentId);
+            }}
+            onClearMemory={() => {
+              clearAgentMemory(agent.agentId);
             }}
           />
         );
