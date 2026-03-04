@@ -15,6 +15,7 @@ export type UseVrLiveRuntimeArgs = {
   sessionClient?: VrSessionClient;
   streamPool?: VrStreamPool;
   autoSyncWorkspacePanelStreams?: boolean;
+  autoSyncWorkspacePanelIds?: string[];
   workspaceStreamCallbacks?: VrWorkspaceStreamCallbacks;
   pauseWorkspaceStreamsOnAppBackground?: boolean;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
@@ -60,6 +61,7 @@ export function useVrLiveRuntime({
   sessionClient,
   streamPool,
   autoSyncWorkspacePanelStreams = false,
+  autoSyncWorkspacePanelIds,
   workspaceStreamCallbacks,
   pauseWorkspaceStreamsOnAppBackground = true,
   onReconnectServer,
@@ -266,11 +268,20 @@ export function useVrLiveRuntime({
     if (!autoSyncWorkspacePanelStreams) {
       return;
     }
-    syncWorkspacePanelStreams(workspaceStreamCallbacks);
+    const panelIds = autoSyncWorkspacePanelIds && autoSyncWorkspacePanelIds.length > 0
+      ? autoSyncWorkspacePanelIds
+      : undefined;
+    syncWorkspacePanelStreams(workspaceStreamCallbacks, panelIds);
     return () => {
       clearWorkspacePanelStreams();
     };
-  }, [autoSyncWorkspacePanelStreams, clearWorkspacePanelStreams, syncWorkspacePanelStreams, workspaceStreamCallbacks]);
+  }, [
+    autoSyncWorkspacePanelIds,
+    autoSyncWorkspacePanelStreams,
+    clearWorkspacePanelStreams,
+    syncWorkspacePanelStreams,
+    workspaceStreamCallbacks,
+  ]);
 
   useEffect(() => {
     if (!autoSyncWorkspacePanelStreams || !pauseWorkspaceStreamsOnAppBackground) {
@@ -280,7 +291,10 @@ export function useVrLiveRuntime({
     const handleAppState = (nextState: AppStateStatus) => {
       if (nextState === "active") {
         resumeServerStreams();
-        syncWorkspacePanelStreams(workspaceStreamCallbacks);
+        const panelIds = autoSyncWorkspacePanelIds && autoSyncWorkspacePanelIds.length > 0
+          ? autoSyncWorkspacePanelIds
+          : undefined;
+        syncWorkspacePanelStreams(workspaceStreamCallbacks, panelIds);
         return;
       }
       pauseServerStreams();
@@ -294,6 +308,7 @@ export function useVrLiveRuntime({
       subscription.remove();
     };
   }, [
+    autoSyncWorkspacePanelIds,
     autoSyncWorkspacePanelStreams,
     pauseWorkspaceStreamsOnAppBackground,
     pauseServerStreams,

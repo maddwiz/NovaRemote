@@ -52,26 +52,6 @@ export function VrCommandCenterScreen() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
   const { channels: voiceChannels, loading: voiceChannelsLoading, joinChannel, leaveChannel, toggleMute } = useVoiceChannels();
-  const runtime = useVrLiveRuntime({
-    connections,
-    maxPanels: 12,
-    autoSyncWorkspacePanelStreams: true,
-    pauseWorkspaceStreamsOnAppBackground: true,
-    onReconnectServer,
-    onReconnectServers,
-    onCreateAgent: onCreateAgentForServers,
-    onSetAgentGoal: onSetAgentGoalForServers,
-    onQueueAgentCommand: onQueueAgentCommandForServers,
-    onApproveReadyAgents: onApproveReadyAgentsForServers,
-    onDenyAllPendingAgents: onDenyAllPendingAgentsForServers,
-    onConnectAllServers,
-    onDisconnectAllServers,
-  });
-
-  const focusedPanel = useMemo(
-    () => runtime.workspace.panels.find((panel) => panel.id === runtime.workspace.focusedPanelId) || null,
-    [runtime.workspace.focusedPanelId, runtime.workspace.panels]
-  );
   const vmHostScopeOptions = useMemo(() => {
     const labels = new Map<string, string>();
     let hasUnassigned = false;
@@ -119,6 +99,41 @@ export function VrCommandCenterScreen() {
       serverIds: new Set(workspace.serverIds),
     };
   }, [activeWorkspaceId, sharedWorkspaces]);
+  const scopedAutoSyncPanelIds = useMemo(() => {
+    const next: string[] = [];
+    connections.forEach((connection, serverId) => {
+      if (!matchesVmHostScope(serverId)) {
+        return;
+      }
+      if (workspaceScope && !workspaceScope.serverIds.has(serverId)) {
+        return;
+      }
+      connection.openSessions.forEach((session) => {
+        next.push(buildVrPanelId(serverId, session));
+      });
+    });
+    return next;
+  }, [connections, matchesVmHostScope, workspaceScope]);
+  const runtime = useVrLiveRuntime({
+    connections,
+    maxPanels: 12,
+    autoSyncWorkspacePanelStreams: true,
+    autoSyncWorkspacePanelIds: scopedAutoSyncPanelIds,
+    pauseWorkspaceStreamsOnAppBackground: true,
+    onReconnectServer,
+    onReconnectServers,
+    onCreateAgent: onCreateAgentForServers,
+    onSetAgentGoal: onSetAgentGoalForServers,
+    onQueueAgentCommand: onQueueAgentCommandForServers,
+    onApproveReadyAgents: onApproveReadyAgentsForServers,
+    onDenyAllPendingAgents: onDenyAllPendingAgentsForServers,
+    onConnectAllServers,
+    onDisconnectAllServers,
+  });
+  const focusedPanel = useMemo(
+    () => runtime.workspace.panels.find((panel) => panel.id === runtime.workspace.focusedPanelId) || null,
+    [runtime.workspace.focusedPanelId, runtime.workspace.panels]
+  );
   const visiblePanels = useMemo(() => {
     return runtime.workspace.panels.filter((panel) => {
       if (!matchesVmHostScope(panel.serverId)) {

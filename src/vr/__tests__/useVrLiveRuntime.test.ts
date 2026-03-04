@@ -509,6 +509,97 @@ describe("useVrLiveRuntime", () => {
     expect(closeAll).toHaveBeenCalledTimes(1);
   });
 
+  it("auto-syncs only selected workspace panel ids when selector is provided", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string,
+        enter?: boolean
+      ) => Promise<void>
+    >(async () => undefined);
+    const openStream = vi.fn((args: { server: { id: string }; session: string }) => `${args.server.id}::${args.session}`);
+    const closeStream = vi.fn();
+    const closeServer = vi.fn();
+    const closeAll = vi.fn();
+    const pause = vi.fn();
+    const resume = vi.fn();
+    const trackedStreamCount = vi.fn(() => 2);
+    const activeStreamCount = vi.fn(() => 1);
+    const isPaused = vi.fn(() => false);
+
+    const streamPoolMock: VrStreamPool = {
+      openStream,
+      closeStream,
+      closeServer,
+      closeAll,
+      pause,
+      resume,
+      trackedStreamCount,
+      activeStreamCount,
+      isPaused,
+    };
+
+    let selectedPanelIds = ["dgx::main"];
+
+    function Harness({ panelIds }: { panelIds: string[] }) {
+      useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({ sendMock }),
+        streamPool: streamPoolMock,
+        autoSyncWorkspacePanelStreams: true,
+        autoSyncWorkspacePanelIds: panelIds,
+        maxPanels: 4,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness, { panelIds: selectedPanelIds }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(openStream).toHaveBeenCalledTimes(1);
+    expect(openStream).toHaveBeenCalledWith(
+      expect.objectContaining({
+        server: expect.objectContaining({ id: "dgx" }),
+        session: "main",
+      })
+    );
+
+    selectedPanelIds = ["home::build"];
+    await act(async () => {
+      renderer?.update(React.createElement(Harness, { panelIds: selectedPanelIds }));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(openStream).toHaveBeenCalledTimes(2);
+    expect(openStream).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        server: expect.objectContaining({ id: "home" }),
+        session: "build",
+      })
+    );
+    expect(closeStream).toHaveBeenCalledWith("dgx", "main");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+    expect(closeAll).toHaveBeenCalledTimes(1);
+  });
+
   it("applies layout presets from voice and gesture dispatch without transport calls", async () => {
     const dgx = makeServer("dgx", "DGX");
     const connections = new Map<string, ServerConnection>([
