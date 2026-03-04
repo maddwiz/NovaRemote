@@ -8,7 +8,6 @@ import { AnsiText } from "../components/AnsiText";
 import { ServerSwitcherRail } from "../components/ServerSwitcherRail";
 import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
-import { GlassesHudModal } from "../components/GlassesHudModal";
 import { NovaAgentPanel } from "../components/NovaAgentPanel";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
@@ -356,7 +355,6 @@ export function TerminalsScreen() {
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
   const [glassesSession, setGlassesSession] = useState<string | null>(null);
-  const [glassesHudVisible, setGlassesHudVisible] = useState<boolean>(false);
   const [processFilter, setProcessFilter] = useState<string>("");
   const [processSorts, setProcessSorts] = useState<ProcessSortMode[]>(["cpu"]);
   const [processSignal, setProcessSignal] = useState<ProcessSignal>("TERM");
@@ -535,12 +533,6 @@ export function TerminalsScreen() {
       setGlassesSession(sortedOpenSessions[0]);
     }
   }, [glassesSession, sortedOpenSessions]);
-
-  useEffect(() => {
-    if (!glassesMode.enabled && glassesHudVisible) {
-      setGlassesHudVisible(false);
-    }
-  }, [glassesHudVisible, glassesMode.enabled]);
 
   const openTerminalCards = useMemo(() => {
     return sortedOpenSessions.map((session) => {
@@ -1366,23 +1358,13 @@ export function TerminalsScreen() {
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Open glasses HUD modal"
-                accessibilityHint="Opens a full-screen heads-up display for mirrored glasses use."
+                accessibilityLabel="Open spatial glasses HUD"
+                accessibilityHint="Opens the dedicated multi-panel glasses route with cross-server voice control."
                 style={[styles.buttonPrimary, !glassesActiveSession ? styles.buttonDisabled : null]}
-                disabled={!glassesActiveSession}
-                onPress={() => setGlassesHudVisible(true)}
-              >
-                <Text style={styles.buttonPrimaryText}>Open HUD</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Open on-the-go glasses route"
-                accessibilityHint="Switches to the dedicated glasses screen with larger controls."
-                style={[styles.buttonGhost, !glassesActiveSession ? styles.buttonDisabled : null]}
                 disabled={!glassesActiveSession}
                 onPress={onOpenGlassesMode}
               >
-                <Text style={styles.buttonGhostText}>On-the-Go Route</Text>
+                <Text style={styles.buttonPrimaryText}>Open Spatial HUD</Text>
               </Pressable>
             </View>
 
@@ -1393,7 +1375,7 @@ export function TerminalsScreen() {
                 ? "Processing voice input..."
                 : glassesMode.voiceLoop
                 ? "Voice loop is enabled. Stop + Transcribe will auto re-arm capture."
-                : "Mirror this screen to your glasses for a compact terminal HUD."}
+                : "Open Spatial HUD to route voice commands across multiple servers and panels."}
             </Text>
             {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}
             {voiceTranscript.trim() ? <Text style={styles.serverSubtitle}>{`Transcript: ${voiceTranscript}`}</Text> : null}
@@ -1820,57 +1802,6 @@ export function TerminalsScreen() {
     />
   );
 
-  const glassesHudModal = (
-    <GlassesHudModal
-      visible={glassesHudVisible && glassesMode.enabled}
-      brand={glassesMode.brand}
-      session={glassesActiveSession}
-      sessionLabel={glassesSessionLabel}
-      sessions={sortedOpenSessions.map((session) => ({ id: session, label: sessionAliases[session]?.trim() || session }))}
-      textScale={glassesMode.textScale}
-      output={glassesOutput}
-      draft={glassesDraft}
-      isSending={Boolean(glassesActiveSession ? sendBusy[glassesActiveSession] : false)}
-      voiceRecording={voiceRecording}
-      voiceBusy={voiceBusy}
-      voiceTranscript={voiceTranscript}
-      voiceError={voiceError}
-      onClose={() => setGlassesHudVisible(false)}
-      onSelectSession={setGlassesSession}
-      onDraftChange={(value) => {
-        if (!glassesActiveSession) {
-          return;
-        }
-        onSetDraft(glassesActiveSession, value);
-      }}
-      onSend={() => {
-        if (!glassesActiveSession) {
-          return;
-        }
-        onSend(glassesActiveSession);
-      }}
-      onClearDraft={() => {
-        if (!glassesActiveSession) {
-          return;
-        }
-        onClearDraft(glassesActiveSession);
-      }}
-      onVoiceStart={onVoiceStartCapture}
-      onVoiceStop={() => {
-        if (!glassesActiveSession) {
-          return;
-        }
-        onVoiceStopCapture(glassesActiveSession);
-      }}
-      onVoiceSendTranscript={() => {
-        if (!glassesActiveSession) {
-          return;
-        }
-        onVoiceSendTranscript(glassesActiveSession);
-      }}
-    />
-  );
-
   if (wantsSplit && !splitEnabled) {
     return (
       <>
@@ -1887,7 +1818,6 @@ export function TerminalsScreen() {
           {renderOpenTerminals()}
         </View>
         {processKillModal}
-        {glassesHudModal}
       </>
     );
   }
@@ -1905,7 +1835,6 @@ export function TerminalsScreen() {
           </View>
         </View>
         {processKillModal}
-        {glassesHudModal}
       </>
     );
   }
@@ -1918,7 +1847,6 @@ export function TerminalsScreen() {
         {renderOpenTerminals()}
       </View>
       {processKillModal}
-      {glassesHudModal}
     </>
   );
 }
