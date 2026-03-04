@@ -307,6 +307,40 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("bounds stored tail output per server stream to prevent unbounded growth", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX")]);
+    await harness.waitFor(() => FakeWebSocket.instances.length === 1, "single websocket instance");
+
+    const dgxWs = wsFor("dgx");
+    expect(dgxWs).toBeDefined();
+
+    const snapshotLines = Array.from({ length: 1305 }, (_value, index) => `line-${index + 1}`).join("\n");
+    const deltaLines = Array.from({ length: 5 }, (_value, index) => `line-${1306 + index}`).join("\n");
+
+    await harness.act(async () => {
+      dgxWs?.emitOpen();
+      dgxWs?.emitMessage({ type: "snapshot", session: "main", data: snapshotLines });
+    });
+
+    const firstTail = harness.getPool().connections.get("dgx")?.tails.main || "";
+    const firstTailLines = firstTail.split("\n");
+    expect(firstTailLines.length).toBe(1200);
+    expect(firstTailLines[0]).toBe("line-106");
+    expect(firstTailLines[firstTailLines.length - 1]).toBe("line-1305");
+
+    await harness.act(async () => {
+      dgxWs?.emitMessage({ type: "delta", session: "main", data: `\n${deltaLines}` });
+    });
+
+    const secondTail = harness.getPool().connections.get("dgx")?.tails.main || "";
+    const secondTailLines = secondTail.split("\n");
+    expect(secondTailLines.length).toBe(1200);
+    expect(secondTailLines[0]).toBe("line-111");
+    expect(secondTailLines[secondTailLines.length - 1]).toBe("line-1310");
+
+    await harness.unmount();
+  });
+
   it("reconnects closed streams with backoff and preserves other server streams", async () => {
     const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
 
