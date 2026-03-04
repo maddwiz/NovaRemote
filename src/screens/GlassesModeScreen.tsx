@@ -15,6 +15,7 @@ import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
 import { SpatialLayoutSnapshot, useSpatialLayoutPrefs } from "../hooks/useSpatialLayoutPrefs";
 import { SpatialVoicePanel, useSpatialVoiceRouting } from "../hooks/useSpatialVoiceRouting";
+import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import {
   buildSpatialPanels,
   cyclicalIndex,
@@ -137,6 +138,18 @@ const GLASSES_BRANDS: GlassesBrand[] = [
   "custom",
 ];
 
+function sameStringArray(left: string[], right: string[]): boolean {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let index = 0; index < left.length; index += 1) {
+    if (left[index] !== right[index]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 export function GlassesModeScreen() {
   const {
     connections,
@@ -192,12 +205,65 @@ export function GlassesModeScreen() {
   } = useAppContext().terminals;
 
   const brandProfile = BRAND_PROFILES[glassesMode.brand] || BRAND_PROFILES.custom;
+  const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
   const [panelIds, setPanelIds] = useState<string[]>([]);
   const [pinnedPanelIds, setPinnedPanelIds] = useState<string[]>([]);
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
   const [overviewMode, setOverviewMode] = useState<boolean>(true);
   const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const [activeVmHostScope, setActiveVmHostScope] = useState<string | null>(null);
   const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
+
+  const vmHostScopeOptions = useMemo(() => {
+    const labels = new Map<string, string>();
+    let hasStandalone = false;
+    connections.forEach((connection) => {
+      const host = (connection.server.vmHost || "").trim();
+      if (!host) {
+        hasStandalone = true;
+        return;
+      }
+      labels.set(host.toLowerCase(), host);
+    });
+    const options = Array.from(labels.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (hasStandalone) {
+      options.push({ key: "__none__", label: "Standalone" });
+    }
+    return options;
+  }, [connections]);
+
+  const matchesVmHostScope = useCallback(
+    (serverId: string) => {
+      if (!activeVmHostScope) {
+        return true;
+      }
+      const connection = connections.get(serverId);
+      const host = (connection?.server.vmHost || "").trim().toLowerCase();
+      if (activeVmHostScope === "__none__") {
+        return !host;
+      }
+      return host === activeVmHostScope;
+    },
+    [activeVmHostScope, connections]
+  );
+
+  const workspaceScope = useMemo(() => {
+    if (!activeWorkspaceId) {
+      return null;
+    }
+    const workspace = sharedWorkspaces.find((entry) => entry.id === activeWorkspaceId);
+    if (!workspace) {
+      return null;
+    }
+    return {
+      id: workspace.id,
+      name: workspace.name,
+      serverIds: new Set(workspace.serverIds),
+    };
+  }, [activeWorkspaceId, sharedWorkspaces]);
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
@@ -216,6 +282,12 @@ export function GlassesModeScreen() {
   const allPanels = useMemo(() => {
     const next: SpatialPanelCandidate[] = [];
     connections.forEach((connection, serverId) => {
+      if (!matchesVmHostScope(serverId)) {
+        return;
+      }
+      if (workspaceScope && !workspaceScope.serverIds.has(serverId)) {
+        return;
+      }
       connection.openSessions.forEach((session) => {
         const alias = serverId === focusedServerId ? sessionAliases[session]?.trim() : "";
         next.push({
@@ -233,13 +305,16 @@ export function GlassesModeScreen() {
     });
 
     return next.sort((a, b) => normalizePanelOrder(a, b, focusedServerId));
-  }, [connections, focusedServerId, sessionAliases, sessionReadOnly]);
+  }, [connections, focusedServerId, matchesVmHostScope, sessionAliases, sessionReadOnly, workspaceScope]);
 
   const panelMap = useMemo(() => new Map(allPanels.map((panel) => [panel.id, panel])), [allPanels]);
 
   useEffect(() => {
     const availableSet = new Set(allPanels.map((panel) => panel.id));
-    setPinnedPanelIds((previous) => previous.filter((panelId) => availableSet.has(panelId)));
+    setPinnedPanelIds((previous) => {
+      const next = previous.filter((panelId) => availableSet.has(panelId));
+      return sameStringArray(previous, next) ? previous : next;
+    });
     setPanelIds((previous) => {
       const hadPanels = previous.length > 0;
       let next = previous.filter((panelId) => availableSet.has(panelId));
@@ -257,9 +332,9 @@ export function GlassesModeScreen() {
         next = [...pinned, ...rest].slice(0, maxPanels);
       }
 
-      return next;
+      return sameStringArray(previous, next) ? previous : next;
     });
-  }, [allPanels, brandProfile.maxPanels, pinnedPanelIds]);
+  }, [allPanels, maxPanels, pinnedPanelIds]);
 
   useEffect(() => {
     setFocusedPanelId((previous) => {
@@ -269,6 +344,24 @@ export function GlassesModeScreen() {
       return panelIds[0] || null;
     });
   }, [panelIds]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    if (!sharedWorkspaces.some((workspace) => workspace.id === activeWorkspaceId)) {
+      setActiveWorkspaceId(null);
+    }
+  }, [activeWorkspaceId, sharedWorkspaces]);
+
+  useEffect(() => {
+    if (!activeVmHostScope) {
+      return;
+    }
+    if (!vmHostScopeOptions.some((option) => option.key === activeVmHostScope)) {
+      setActiveVmHostScope(null);
+    }
+  }, [activeVmHostScope, vmHostScopeOptions]);
 
   useEffect(() => {
     if (!focusedPanelId) {
@@ -810,7 +903,7 @@ export function GlassesModeScreen() {
         </View>
 
         <Text style={styles.serverSubtitle}>
-          {`Panels ${panelIds.length}/${Math.min(6, brandProfile.maxPanels)} • Layout ${overviewMode ? "overview" : "focus"} • Aspect ${brandProfile.displayAspect}`}
+          {`Panels ${panelIds.length}/${Math.min(6, brandProfile.maxPanels)} • Layout ${overviewMode ? "overview" : "focus"} • Workspace ${workspaceScope?.name || "all"} • Host ${activeVmHostScope ? vmHostScopeOptions.find((option) => option.key === activeVmHostScope)?.label || activeVmHostScope : "all"} • Aspect ${brandProfile.displayAspect}`}
         </Text>
 
         <View style={styles.modeRow}>
@@ -853,6 +946,56 @@ export function GlassesModeScreen() {
               >
                 <Text style={[styles.chipText, glassesMode.brand === brand ? styles.chipTextActive : null]}>
                   {BRAND_PROFILES[brand].label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <Text style={styles.serverSubtitle}>Workspace scope</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show glasses panels for all servers"
+              style={[styles.chip, activeWorkspaceId === null ? styles.chipActive : null]}
+              onPress={() => setActiveWorkspaceId(null)}
+            >
+              <Text style={[styles.chipText, activeWorkspaceId === null ? styles.chipTextActive : null]}>All servers</Text>
+            </Pressable>
+            {sharedWorkspaces.map((workspace) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Scope glasses panels to workspace ${workspace.name}`}
+                key={`glasses-workspace-scope-${workspace.id}`}
+                style={[styles.chip, activeWorkspaceId === workspace.id ? styles.chipActive : null]}
+                onPress={() => setActiveWorkspaceId(workspace.id)}
+              >
+                <Text style={[styles.chipText, activeWorkspaceId === workspace.id ? styles.chipTextActive : null]}>
+                  {workspace.name}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <Text style={styles.serverSubtitle}>VM host scope</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show glasses panels for all VM hosts"
+              style={[styles.chip, activeVmHostScope === null ? styles.chipActive : null]}
+              onPress={() => setActiveVmHostScope(null)}
+            >
+              <Text style={[styles.chipText, activeVmHostScope === null ? styles.chipTextActive : null]}>All hosts</Text>
+            </Pressable>
+            {vmHostScopeOptions.map((option) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Scope glasses panels to VM host ${option.label}`}
+                key={`glasses-vmhost-scope-${option.key}`}
+                style={[styles.chip, activeVmHostScope === option.key ? styles.chipActive : null]}
+                onPress={() => setActiveVmHostScope(option.key)}
+              >
+                <Text style={[styles.chipText, activeVmHostScope === option.key ? styles.chipTextActive : null]}>
+                  {option.label}
                 </Text>
               </Pressable>
             ))}
