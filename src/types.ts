@@ -374,3 +374,13 @@ export type SharedWorkspace = {
   createdAt: string;
   updatedAt: string;
 };
+
+export type VoiceChannel = {
+  id: string;
+  workspaceId: string;
+  name: string;
+  joined: boolean;
+  muted: boolean;
+  createdAt: string;
+  updatedAt: string;
+};

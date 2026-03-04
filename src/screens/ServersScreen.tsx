@@ -8,6 +8,7 @@ import { ServerCard } from "../components/ServerCard";
 import { useQrSetup } from "../hooks/useQrSetup";
 import { QrScannerModal } from "../components/QrScannerModal";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
+import { useVoiceChannels } from "../hooks/useVoiceChannels";
 
 type ServersScreenProps = {
   servers: ServerProfile[];
@@ -178,8 +179,19 @@ export function ServersScreen({
     setWorkspaceServers,
     setMemberRole,
   } = useSharedWorkspaces();
+  const {
+    channels: voiceChannels,
+    loading: voiceChannelsLoading,
+    createChannel,
+    deleteChannel,
+    pruneWorkspaceChannels,
+    joinChannel,
+    leaveChannel,
+    toggleMute,
+  } = useVoiceChannels();
   const [workspaceNameInput, setWorkspaceNameInput] = useState<string>("");
   const [workspaceServerIds, setWorkspaceServerIds] = useState<string[]>([]);
+  const [workspaceChannelInputs, setWorkspaceChannelInputs] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (workspaceServerIds.length > 0) {
@@ -231,6 +243,26 @@ export function ServersScreen({
       });
   }, [servers]);
 
+  const channelsByWorkspace = useMemo(() => {
+    const grouped = new Map<string, typeof voiceChannels>();
+    voiceChannels.forEach((channel) => {
+      const existing = grouped.get(channel.workspaceId);
+      if (existing) {
+        existing.push(channel);
+        return;
+      }
+      grouped.set(channel.workspaceId, [channel]);
+    });
+    return grouped;
+  }, [voiceChannels]);
+
+  useEffect(() => {
+    if (workspacesLoading || voiceChannelsLoading) {
+      return;
+    }
+    pruneWorkspaceChannels(workspaces.map((workspace) => workspace.id));
+  }, [pruneWorkspaceChannels, voiceChannelsLoading, workspaces, workspacesLoading]);
+
   const toggleWorkspaceServer = (serverId: string) => {
     setWorkspaceServerIds((previous) =>
       previous.includes(serverId) ? previous.filter((id) => id !== serverId) : [...previous, serverId]
@@ -247,6 +279,18 @@ export function ServersScreen({
     }
     setWorkspaceNameInput("");
     setWorkspaceServerIds(created.serverIds);
+  };
+
+  const createWorkspaceChannel = (workspaceId: string) => {
+    const value = workspaceChannelInputs[workspaceId] || "";
+    const created = createChannel({
+      workspaceId,
+      name: value,
+    });
+    if (!created) {
+      return;
+    }
+    setWorkspaceChannelInputs((previous) => ({ ...previous, [workspaceId]: "" }));
   };
 
   return (
@@ -323,6 +367,8 @@ export function ServersScreen({
             const localMember = workspace.members.find((member) => member.id === "local-user") || workspace.members[0];
             const nextRole = localMember?.role === "owner" ? "editor" : localMember?.role === "editor" ? "viewer" : "owner";
             const activeServerIncluded = activeServerId ? workspace.serverIds.includes(activeServerId) : false;
+            const workspaceChannels = channelsByWorkspace.get(workspace.id) || [];
+            const workspaceChannelInput = workspaceChannelInputs[workspace.id] || "";
 
             return (
               <View key={workspace.id} style={styles.terminalCard}>
@@ -334,6 +380,79 @@ export function ServersScreen({
                 <Text style={styles.emptyText}>
                   {`Local role: ${localMember?.role || "viewer"} • Updated ${new Date(workspace.updatedAt).toLocaleString()}`}
                 </Text>
+                <View style={styles.serverCard}>
+                  <Text style={styles.panelLabel}>Voice Channels</Text>
+                  <Text style={styles.serverSubtitle}>Route live team calls per workspace with one active joined channel at a time.</Text>
+                  <View style={styles.rowInlineSpace}>
+                    <TextInput
+                      style={[styles.input, styles.flexButton]}
+                      value={workspaceChannelInput}
+                      onChangeText={(value) =>
+                        setWorkspaceChannelInputs((previous) => ({
+                          ...previous,
+                          [workspace.id]: value,
+                        }))
+                      }
+                      placeholder="Channel name (example: Incident Bridge)"
+                      placeholderTextColor="#7f7aa8"
+                    />
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Create voice channel for ${workspace.name}`}
+                      style={[styles.actionButton, !workspaceChannelInput.trim() ? styles.buttonDisabled : null]}
+                      disabled={!workspaceChannelInput.trim()}
+                      onPress={() => createWorkspaceChannel(workspace.id)}
+                    >
+                      <Text style={styles.actionButtonText}>Add</Text>
+                    </Pressable>
+                  </View>
+
+                  {workspaceChannels.length === 0 ? <Text style={styles.emptyText}>No channels yet.</Text> : null}
+                  {workspaceChannels.map((channel) => (
+                    <View key={channel.id} style={styles.serverCard}>
+                      <View style={styles.terminalNameRow}>
+                        <Text style={styles.serverName}>{`# ${channel.name}`}</Text>
+                        <Text style={[styles.livePill, channel.joined ? styles.livePillOn : styles.livePillOff]}>
+                          {channel.joined ? (channel.muted ? "joined-muted" : "joined") : "idle"}
+                        </Text>
+                      </View>
+                      <Text style={styles.emptyText}>{`Updated ${new Date(channel.updatedAt).toLocaleString()}`}</Text>
+                      <View style={styles.actionsWrap}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`${channel.joined ? "Leave" : "Join"} voice channel ${channel.name}`}
+                          style={styles.actionButton}
+                          onPress={() => {
+                            if (channel.joined) {
+                              leaveChannel(channel.id);
+                              return;
+                            }
+                            joinChannel(channel.id);
+                          }}
+                        >
+                          <Text style={styles.actionButtonText}>{channel.joined ? "Leave" : "Join"}</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`${channel.muted ? "Unmute" : "Mute"} voice channel ${channel.name}`}
+                          style={[styles.actionButton, !channel.joined ? styles.buttonDisabled : null]}
+                          disabled={!channel.joined}
+                          onPress={() => toggleMute(channel.id)}
+                        >
+                          <Text style={styles.actionButtonText}>{channel.muted ? "Unmute" : "Mute"}</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete voice channel ${channel.name}`}
+                          style={styles.actionDangerButton}
+                          onPress={() => deleteChannel(channel.id)}
+                        >
+                          <Text style={styles.actionDangerText}>Delete Channel</Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  ))}
+                </View>
                 <View style={styles.actionsWrap}>
                   {activeServerId ? (
                     <Pressable
