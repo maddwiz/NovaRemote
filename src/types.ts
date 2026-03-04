@@ -171,6 +171,28 @@ export type FleetRunResult = {
   error?: string;
 };
 
+export type NovaAgentStatus = "idle" | "monitoring" | "executing" | "waiting_approval";
+
+export type NovaAgentPendingApproval = {
+  requestedAt: string;
+  summary: string;
+  command?: string;
+  session?: string;
+};
+
+export type NovaAgent = {
+  serverId: string;
+  agentId: string;
+  name: string;
+  status: NovaAgentStatus;
+  currentGoal: string;
+  memoryContextId: string;
+  capabilities: string[];
+  pendingApproval: NovaAgentPendingApproval | null;
+  updatedAt: string;
+  lastActionAt: string | null;
+};
+
 export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";
 
 export type AiEnginePreference = "auto" | "server" | "external";

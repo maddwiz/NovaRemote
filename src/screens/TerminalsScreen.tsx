@@ -9,6 +9,7 @@ import { ServerSwitcherRail } from "../components/ServerSwitcherRail";
 import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
 import { GlassesHudModal } from "../components/GlassesHudModal";
+import { NovaAgentPanel } from "../components/NovaAgentPanel";
 import { styles } from "../theme/styles";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
@@ -273,8 +274,10 @@ export function TerminalsScreen() {
     onSetSessionAlias,
     onAutoNameSession,
     onSetDraft,
+    onSetServerSessionDraft,
     onAdaptDraftForBackend,
     onSendControlChar,
+    onSendServerSessionDraft,
     onSend,
     onClearDraft,
     onTogglePinSession,
@@ -359,6 +362,17 @@ export function TerminalsScreen() {
     [connections]
   );
   const showServerBadge = connectedServerCount > 1;
+
+  const queueAgentCommand = (session: string, command: string) => {
+    if (!focusedServerId || !session || !command.trim()) {
+      return;
+    }
+    onSetServerSessionDraft(focusedServerId, session, command);
+    setTimeout(() => {
+      void onSendServerSessionDraft(focusedServerId, session);
+    }, 0);
+  };
+
   const onStartPromptKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     const native = event.nativeEvent as TextInputKeyPressEventData & { ctrlKey?: boolean; metaKey?: boolean };
     const key = (native.key || "").toLowerCase();
@@ -860,6 +874,15 @@ export function TerminalsScreen() {
         <Text style={styles.serverSubtitle}>{`Last ping ${health.lastPingAt ? new Date(health.lastPingAt).toLocaleTimeString() : "never"}`}</Text>
         <Text style={styles.emptyText}>{`Server features: ${supportedFeatures || "none"}`}</Text>
       </View>
+
+      <NovaAgentPanel
+        serverId={focusedServerId}
+        serverName={activeServer?.name || null}
+        sessions={sortedOpenSessions}
+        isPro={isPro}
+        onShowPaywall={onShowPaywall}
+        onQueueCommand={queueAgentCommand}
+      />
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>On-the-Go Glasses Mode</Text>
