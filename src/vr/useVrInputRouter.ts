@@ -26,6 +26,8 @@ export type UseVrInputRouterArgs = {
   onSendControlChar?: (serverId: string, session: string, char: string) => Promise<void> | void;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
+  onApproveReadyAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
+  onDenyAllPendingAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onConnectAllServers?: () => Promise<void> | void;
   onDisconnectAllServers?: () => Promise<void> | void;
   onStopSession?: (serverId: string, session: string) => Promise<void> | void;
@@ -50,12 +52,24 @@ function now(): number {
   return Date.now();
 }
 
+function resolveActionCount(result: void | number | string[] | null | undefined): number | null {
+  if (typeof result === "number" && Number.isFinite(result)) {
+    return Math.max(0, Math.floor(result));
+  }
+  if (Array.isArray(result)) {
+    return result.length;
+  }
+  return null;
+}
+
 export function useVrInputRouter({
   workspace,
   onSendCommand,
   onSendControlChar,
   onReconnectServer,
   onReconnectServers,
+  onApproveReadyAgents,
+  onDenyAllPendingAgents,
   onConnectAllServers,
   onDisconnectAllServers,
   onStopSession,
@@ -220,6 +234,70 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to reconnect all servers",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "approve_ready_agents") {
+        if (!onApproveReadyAgents) {
+          publishHudStatus({
+            message: "Agent approval routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const result = await onApproveReadyAgents(action.serverIds);
+          const count = resolveActionCount(result);
+          publishHudStatus({
+            message:
+              count === 0
+                ? "No ready agent approvals found"
+                : count === null
+                  ? "Approved ready agent queue"
+                  : `Approved ${count} ready agent approval${count === 1 ? "" : "s"}`,
+            severity: count === 0 ? "warning" : "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to approve ready agents",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "deny_all_pending_agents") {
+        if (!onDenyAllPendingAgents) {
+          publishHudStatus({
+            message: "Agent denial routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const result = await onDenyAllPendingAgents(action.serverIds);
+          const count = resolveActionCount(result);
+          publishHudStatus({
+            message:
+              count === 0
+                ? "No pending agent approvals to deny"
+                : count === null
+                  ? "Denied pending agent approvals"
+                  : `Denied ${count} pending agent approval${count === 1 ? "" : "s"}`,
+            severity: count === 0 ? "warning" : "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to deny pending agents",
             severity: "error",
             at: now(),
           });
@@ -411,6 +489,8 @@ export function useVrInputRouter({
     },
     [
       onConnectAllServers,
+      onApproveReadyAgents,
+      onDenyAllPendingAgents,
       onDisconnectAllServers,
       onOpenOnMac,
       onReconnectServer,

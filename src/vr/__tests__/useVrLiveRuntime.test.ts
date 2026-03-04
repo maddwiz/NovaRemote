@@ -319,6 +319,8 @@ describe("useVrLiveRuntime", () => {
     >(async () => undefined);
     const onReconnectServer = vi.fn(async () => undefined);
     const onReconnectServers = vi.fn(async () => undefined);
+    const onApproveReadyAgents = vi.fn(async () => ["agent-a", "agent-b"]);
+    const onDenyAllPendingAgents = vi.fn(async () => ["agent-a"]);
     const onDisconnectAllServers = vi.fn(async () => undefined);
     const onConnectAllServers = vi.fn(async () => undefined);
 
@@ -337,6 +339,8 @@ describe("useVrLiveRuntime", () => {
         maxPanels: 3,
         onReconnectServer,
         onReconnectServers,
+        onApproveReadyAgents,
+        onDenyAllPendingAgents,
         onDisconnectAllServers,
         onConnectAllServers,
       });
@@ -409,6 +413,18 @@ describe("useVrLiveRuntime", () => {
     });
     expect(onReconnectServers).toHaveBeenCalledWith(["dgx"]);
     expect(current().hudStatus?.message).toContain("Reconnect queued for 1 servers");
+
+    await act(async () => {
+      await current().dispatchVoice("approve ready agents");
+    });
+    expect(onApproveReadyAgents).toHaveBeenCalledWith(["dgx"]);
+    expect(current().hudStatus?.message).toContain("Approved 2 ready agent approvals");
+
+    await act(async () => {
+      await current().dispatchVoice("deny all pending agents");
+    });
+    expect(onDenyAllPendingAgents).toHaveBeenCalledWith(["dgx"]);
+    expect(current().hudStatus?.message).toContain("Denied 1 pending agent approval");
 
     await act(async () => {
       await current().dispatchVoice("pause pool");

@@ -24,6 +24,8 @@ export type VrWorkspaceVoiceAction =
   | { kind: "focus"; panelId: string }
   | { kind: "reconnect_server"; panelId: string; serverId: string }
   | { kind: "reconnect_all"; serverIds: string[] }
+  | { kind: "approve_ready_agents"; serverIds: string[] }
+  | { kind: "deny_all_pending_agents"; serverIds: string[] }
   | { kind: "pause_pool" }
   | { kind: "resume_pool" }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
@@ -675,6 +677,18 @@ export function useVrWorkspace({
       if (intent.kind === "reconnect_all") {
         return {
           kind: "reconnect_all",
+          serverIds: serverScopeIds.slice(),
+        };
+      }
+      if (intent.kind === "approve_ready_agents") {
+        return {
+          kind: "approve_ready_agents",
+          serverIds: serverScopeIds.slice(),
+        };
+      }
+      if (intent.kind === "deny_all_pending_agents") {
+        return {
+          kind: "deny_all_pending_agents",
           serverIds: serverScopeIds.slice(),
         };
       }

@@ -92,6 +92,12 @@ describe("parseVrVoiceIntent", () => {
     expect(parseVrVoiceIntent("reconnect all", PANELS, "dgx-main")).toEqual({
       kind: "reconnect_all",
     });
+    expect(parseVrVoiceIntent("approve ready agents", PANELS, "dgx-main")).toEqual({
+      kind: "approve_ready_agents",
+    });
+    expect(parseVrVoiceIntent("deny all pending agents", PANELS, "dgx-main")).toEqual({
+      kind: "deny_all_pending_agents",
+    });
     expect(parseVrVoiceIntent("pause pool", PANELS, "dgx-main")).toEqual({
       kind: "pause_pool",
     });

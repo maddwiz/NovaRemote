@@ -287,6 +287,60 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches agent approval voice actions through approval callbacks", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({
+        kind: "approve_ready_agents",
+        serverIds: ["dgx", "home"],
+      })
+      .mockReturnValueOnce({
+        kind: "deny_all_pending_agents",
+        serverIds: ["dgx", "home"],
+      });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onApproveReadyAgents = vi.fn(async () => ["agent-a", "agent-b"]);
+    const onDenyAllPendingAgents = vi.fn(async () => ["agent-a"]);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onApproveReadyAgents,
+        onDenyAllPendingAgents,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("approve ready agents");
+    });
+    expect(onApproveReadyAgents).toHaveBeenCalledWith(["dgx", "home"]);
+    expect(current().hudStatus?.message).toContain("Approved 2 ready agent approvals");
+
+    await act(async () => {
+      await current().dispatchVoice("deny all pending agents");
+    });
+    expect(onDenyAllPendingAgents).toHaveBeenCalledWith(["dgx", "home"]);
+    expect(current().hudStatus?.message).toContain("Denied 1 pending agent approval");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("dispatches pool lifecycle voice actions through connect/disconnect callbacks", async () => {
     const applyVoiceTranscript = vi
       .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()

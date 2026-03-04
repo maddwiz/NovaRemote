@@ -8,6 +8,8 @@ export type VrVoiceIntent =
   | { kind: "focus"; panelId: string }
   | { kind: "reconnect_server"; panelId: string }
   | { kind: "reconnect_all" }
+  | { kind: "approve_ready_agents" }
+  | { kind: "deny_all_pending_agents" }
   | { kind: "pause_pool" }
   | { kind: "resume_pool" }
   | { kind: "send"; panelId: string; command: string }
@@ -55,6 +57,20 @@ function ctrlKeyFromChar(char: string): string {
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
   const cleaned = transcript.trim();
   if (cleaned) {
+    const approveReadyAgentsMatch = cleaned.match(
+      /^(?:approve(?:\s+ready)?\s+agents?|approve\s+all\s+agents?|run\s+ready\s+agents?)$/i
+    );
+    if (approveReadyAgentsMatch) {
+      return { kind: "approve_ready_agents" };
+    }
+
+    const denyPendingAgentsMatch = cleaned.match(
+      /^(?:deny|reject)\s+(?:all\s+)?(?:pending\s+)?agents?(?:\s+approvals?)?$/i
+    );
+    if (denyPendingAgentsMatch) {
+      return { kind: "deny_all_pending_agents" };
+    }
+
     const stopSessionMatch = cleaned.match(
       /^(?:stop|terminate|halt)\s+(?:session|terminal)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
     );
