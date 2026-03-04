@@ -52,8 +52,6 @@ export const SSH_HOST_PLACEHOLDER = "host.example.com";
 export const SSH_USER_PLACEHOLDER = "ubuntu";
 export const DEFAULT_SSH_PORT = 22;
 
-export const BRAND_LOGO = require("../assets/novaai-logo-user.png");
-
 export const STREAM_RETRY_BASE_MS = 900;
 export const STREAM_RETRY_FACTOR = 1.5;
 export const STREAM_RETRY_MAX_MS = 30000;

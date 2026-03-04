@@ -1,7 +1,7 @@
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-const STORAGE_VM_GROUP_PREFS_PREFIX = "novaremote.vm_group_prefs.v1";
+import { STORAGE_VM_GROUP_PREFS_PREFIX } from "../constants";
 
 export type VmGroupPrefsScope = "rail" | "servers";
 

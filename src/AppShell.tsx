@@ -28,8 +28,8 @@ import { StatusPill } from "./components/StatusPill";
 import { TabBar } from "./components/TabBar";
 import { TutorialModal } from "./components/TutorialModal";
 import { AppProvider } from "./context/AppContext";
+import { BRAND_LOGO } from "./branding";
 import {
-  BRAND_LOGO,
   DEFAULT_CWD,
   DEFAULT_FLEET_WAIT_MS,
   DEFAULT_SPECTATE_TTL_SECONDS,
