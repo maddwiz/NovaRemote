@@ -174,7 +174,7 @@ describe("useVrInputRouter", () => {
     });
   });
 
-  it("dispatches stop-session and open-on-mac voice actions through lifecycle callbacks", async () => {
+  it("dispatches stop-session, open-on-mac, and live-share voice actions through lifecycle callbacks", async () => {
     const applyVoiceTranscript = vi
       .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
       .mockReturnValueOnce({
@@ -188,10 +188,17 @@ describe("useVrInputRouter", () => {
         panelId: "home::build",
         serverId: "home",
         session: "build",
+      })
+      .mockReturnValueOnce({
+        kind: "share_live",
+        panelId: "home::build",
+        serverId: "home",
+        session: "build",
       });
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
     const onStopSession = vi.fn(async () => undefined);
     const onOpenOnMac = vi.fn(async () => undefined);
+    const onShareLive = vi.fn(async () => undefined);
 
     let latest: UseVrInputRouterResult | null = null;
     const current = () => {
@@ -206,6 +213,7 @@ describe("useVrInputRouter", () => {
         onSendCommand: async () => undefined,
         onStopSession,
         onOpenOnMac,
+        onShareLive,
       });
       return null;
     }
@@ -226,6 +234,12 @@ describe("useVrInputRouter", () => {
     });
     expect(onOpenOnMac).toHaveBeenCalledWith("home", "build");
     expect(current().hudStatus?.message).toContain("Opened home/build on Mac");
+
+    await act(async () => {
+      await current().dispatchVoice("share live");
+    });
+    expect(onShareLive).toHaveBeenCalledWith("home", "build");
+    expect(current().hudStatus?.message).toContain("Shared live link for home/build");
 
     await act(async () => {
       renderer?.unmount();

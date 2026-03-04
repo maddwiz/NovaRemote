@@ -43,6 +43,7 @@ export type UseVrInputRouterArgs = {
   onDisconnectAllServers?: () => Promise<void> | void;
   onStopSession?: (serverId: string, session: string) => Promise<void> | void;
   onOpenOnMac?: (serverId: string, session: string) => Promise<void> | void;
+  onShareLive?: (serverId: string, session: string) => Promise<void> | void;
   onSetOverviewMode?: (enabled: boolean) => void;
   hudAutoClearMs?: number;
 };
@@ -91,6 +92,7 @@ export function useVrInputRouter({
   onDisconnectAllServers,
   onStopSession,
   onOpenOnMac,
+  onShareLive,
   onSetOverviewMode,
   hudAutoClearMs = 3000,
 }: UseVrInputRouterArgs): UseVrInputRouterResult {
@@ -522,6 +524,32 @@ export function useVrInputRouter({
         return action;
       }
 
+      if (action.kind === "share_live") {
+        if (!onShareLive) {
+          publishHudStatus({
+            message: "Live sharing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          await onShareLive(action.serverId, action.session);
+          publishHudStatus({
+            message: `Shared live link for ${action.serverId}/${action.session}`,
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to create live share link",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
       if (action.kind === "focus") {
         publishHudStatus({
           message: `Focused panel ${action.panelId}`,
@@ -606,6 +634,7 @@ export function useVrInputRouter({
       onDenyAllPendingAgents,
       onDisconnectAllServers,
       onOpenOnMac,
+      onShareLive,
       onReconnectServer,
       onReconnectServers,
       onCreateAgent,

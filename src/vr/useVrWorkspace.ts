@@ -45,6 +45,12 @@ export type VrWorkspaceVoiceAction =
       session: string;
     }
   | {
+      kind: "share_live";
+      panelId: string;
+      serverId: string;
+      session: string;
+    }
+  | {
       kind: "control";
       panelId: string;
       serverId: string;
@@ -838,6 +844,18 @@ export function useVrWorkspace({
         }
         return {
           kind: "open_on_mac",
+          panelId: panel.id,
+          serverId: panel.serverId,
+          session: panel.session,
+        };
+      }
+      if (intent.kind === "share_live") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "share_live",
           panelId: panel.id,
           serverId: panel.serverId,
           session: panel.session,

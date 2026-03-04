@@ -239,6 +239,14 @@ describe("useVrWorkspace", () => {
       session: "build-01",
     });
 
+    const shareLiveAction = current().applyVoiceTranscript("share live for homelab");
+    expect(shareLiveAction).toEqual({
+      kind: "share_live",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+    });
+
     const reconnectServerAction = current().applyVoiceTranscript("reconnect homelab");
     expect(reconnectServerAction).toEqual({
       kind: "reconnect_server",

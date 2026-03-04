@@ -299,7 +299,7 @@ describe("VrCommandCenterScreen", () => {
     });
   });
 
-  it("shares live panel links through server-scoped terminal callback", async () => {
+  it("routes panel live-share controls through vr voice dispatch and runtime share callback", async () => {
     const runtime = makeRuntime();
     const onShareServerSessionLive = vi.fn();
     const dgx = makeServer("dgx", "DGX");
@@ -315,7 +315,11 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Share live main" }).props.onPress();
     });
 
-    expect(onShareServerSessionLive).toHaveBeenCalledWith("dgx", "main");
+    expect(runtime.dispatchVoice).toHaveBeenCalledWith("share live", { targetPanelId: "dgx::main" });
+    const latestArgs = useVrLiveRuntimeMock.mock.calls.at(-1)?.[0] as {
+      onShareLive?: (serverId: string, session: string) => Promise<void> | void;
+    };
+    expect(latestArgs.onShareLive).toBe(onShareServerSessionLive);
 
     await act(async () => {
       renderer.unmount();

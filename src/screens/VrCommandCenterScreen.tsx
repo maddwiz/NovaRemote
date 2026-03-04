@@ -130,6 +130,7 @@ export function VrCommandCenterScreen() {
     onDenyAllPendingAgents: onDenyAllPendingAgentsForServers,
     onConnectAllServers,
     onDisconnectAllServers,
+    onShareLive: onShareServerSessionLive,
   });
   const focusedPanel = useMemo(
     () => runtime.workspace.panels.find((panel) => panel.id === runtime.workspace.focusedPanelId) || null,
@@ -762,7 +763,9 @@ export function VrCommandCenterScreen() {
                   accessibilityLabel={`Share live ${panel.sessionLabel}`}
                   style={[styles.chip, !canShareLive ? styles.buttonDisabled : null]}
                   disabled={!canShareLive}
-                  onPress={() => onShareServerSessionLive(panel.serverId, panel.session)}
+                  onPress={() => {
+                    void runtime.dispatchVoice("share live", { targetPanelId: panel.id });
+                  }}
                 >
                   <Text style={styles.chipText}>Share Live</Text>
                 </Pressable>

@@ -331,6 +331,64 @@ describe("useVrLiveRuntime", () => {
     });
   });
 
+  it("routes live-share voice actions through the runtime share callback", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Homelab");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"], { capabilities: { ...CAPABILITIES, spectate: true } })],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string,
+        enter?: boolean
+      ) => Promise<void>
+    >(async () => undefined);
+    const onShareLive = vi.fn(async () => undefined);
+
+    let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Runtime not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({ sendMock }),
+        maxPanels: 4,
+        onShareLive,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("share live", {
+        targetPanelId: buildVrPanelId("home", "build"),
+      });
+    });
+
+    expect(onShareLive).toHaveBeenCalledWith("home", "build");
+    expect(current().hudStatus?.message).toContain("Shared live link for home/build");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("syncs and clears managed workspace panel streams", async () => {
     const dgx = makeServer("dgx", "DGX");
     const home = makeServer("home", "Home");

@@ -35,6 +35,7 @@ export type UseVrLiveRuntimeArgs = {
   onDenyAllPendingAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onConnectAllServers?: () => Promise<void> | void;
   onDisconnectAllServers?: () => Promise<void> | void;
+  onShareLive?: (serverId: string, session: string) => Promise<void> | void;
 };
 
 export type VrWorkspaceStreamCallbacks = {
@@ -73,6 +74,7 @@ export function useVrLiveRuntime({
   onDenyAllPendingAgents,
   onConnectAllServers,
   onDisconnectAllServers,
+  onShareLive,
 }: UseVrLiveRuntimeArgs) {
   const workspace = useVrWorkspace({
     connections,
@@ -333,6 +335,7 @@ export function useVrLiveRuntime({
     onDisconnectAllServers,
     onStopSession: stopServerSession,
     onOpenOnMac: openServerOnMac,
+    onShareLive,
   });
 
   return {

@@ -19,6 +19,7 @@ export type VrVoiceIntent =
   | { kind: "control"; panelId: string; char: string }
   | { kind: "stop_session"; panelId: string }
   | { kind: "open_on_mac"; panelId: string }
+  | { kind: "share_live"; panelId: string }
   | { kind: "overview" }
   | { kind: "minimize" }
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
@@ -133,6 +134,17 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
         return { kind: "none" };
       }
       return { kind: "open_on_mac", panelId };
+    }
+
+    const shareLiveMatch = cleaned.match(
+      /^(?:share|create|generate)\s+(?:live|spectate|spectator)(?:\s+session)?(?:\s+link)?(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+    );
+    if (shareLiveMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, shareLiveMatch[1] || shareLiveMatch[2] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "share_live", panelId };
     }
 
     const interruptMatch = cleaned.match(

@@ -103,6 +103,14 @@ describe("parseVrVoiceIntent", () => {
       kind: "open_on_mac",
       panelId: "dgx-main",
     });
+    expect(parseVrVoiceIntent("share live for homelab", PANELS, "dgx-main")).toEqual({
+      kind: "share_live",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("create spectator link", PANELS, "home-build")).toEqual({
+      kind: "share_live",
+      panelId: "home-build",
+    });
     expect(parseVrVoiceIntent("reconnect homelab", PANELS, "dgx-main")).toEqual({
       kind: "reconnect_server",
       panelId: "home-build",
