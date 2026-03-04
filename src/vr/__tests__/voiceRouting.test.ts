@@ -37,6 +37,11 @@ describe("parseVrVoiceIntent", () => {
     expect(intent).toEqual({ kind: "send", panelId: "home-build", command: "npm run build" });
   });
 
+  it("parses explicit send-to commands without a colon delimiter", () => {
+    const intent = parseVrVoiceIntent("send to Build Worker npm run build", PANELS, "dgx-main");
+    expect(intent).toEqual({ kind: "send", panelId: "home-build", command: "npm run build" });
+  });
+
   it("parses focus commands", () => {
     const intent = parseVrVoiceIntent("focus build-01", PANELS, "dgx-main");
     expect(intent).toEqual({ kind: "focus", panelId: "home-build" });

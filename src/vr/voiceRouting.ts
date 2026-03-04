@@ -22,6 +22,53 @@ function normalize(value: string): string {
     .trim();
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseExplicitSendWithoutColon(
+  transcript: string,
+  panels: VrRoutePanel[]
+): { panelId: string; command: string } | null {
+  const candidates = new Map<string, string>();
+
+  panels.forEach((panel) => {
+    [panel.serverName, panel.session, panel.sessionLabel].forEach((value) => {
+      const target = value?.trim();
+      if (!target) {
+        return;
+      }
+      const key = normalize(target);
+      if (!key || candidates.has(key)) {
+        return;
+      }
+      candidates.set(key, target);
+    });
+  });
+
+  const orderedTargets = Array.from(candidates.values()).sort((a, b) => b.length - a.length);
+  for (const target of orderedTargets) {
+    const pattern = new RegExp(`^(?:send|route)\\s+to\\s+${escapeRegex(target)}\\s+(.+)$`, "i");
+    const match = transcript.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const command = match[1]?.trim() || "";
+    if (!command) {
+      continue;
+    }
+
+    const panel = findVrPanelByTarget(panels, target) ?? panels[0];
+    if (!panel) {
+      continue;
+    }
+    return { panelId: panel.id, command };
+  }
+
+  return null;
+}
+
 export function findVrPanelByTarget(panels: VrRoutePanel[], target: string): VrRoutePanel | null {
   const needle = normalize(target);
   if (!needle) {
@@ -85,6 +132,11 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
     if (panel && command) {
       return { kind: "send", panelId: panel.id, command };
     }
+  }
+
+  const colonlessSend = parseExplicitSendWithoutColon(raw, panels);
+  if (colonlessSend) {
+    return { kind: "send", panelId: colonlessSend.panelId, command: colonlessSend.command };
   }
 
   const focusMatch = raw.match(/^focus\s+(.+)$/i);
