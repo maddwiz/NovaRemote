@@ -9,6 +9,7 @@ import { useQrSetup } from "../hooks/useQrSetup";
 import { QrScannerModal } from "../components/QrScannerModal";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
+import { getWorkspaceLocalMember, getWorkspacePermissions } from "../workspacePermissions";
 
 type ServersScreenProps = {
   servers: ServerProfile[];
@@ -364,7 +365,8 @@ export function ServersScreen({
         ) : null}
         <View style={styles.serverListWrap}>
           {workspaces.map((workspace) => {
-            const localMember = workspace.members.find((member) => member.id === "local-user") || workspace.members[0];
+            const localMember = getWorkspaceLocalMember(workspace);
+            const permissions = getWorkspacePermissions(workspace);
             const nextRole = localMember?.role === "owner" ? "editor" : localMember?.role === "editor" ? "viewer" : "owner";
             const activeServerIncluded = activeServerId ? workspace.serverIds.includes(activeServerId) : false;
             const workspaceChannels = channelsByWorkspace.get(workspace.id) || [];
@@ -378,11 +380,15 @@ export function ServersScreen({
                 </Text>
                 <Text style={styles.emptyText}>{`Servers: ${workspace.serverIds.join(", ") || "none"}`}</Text>
                 <Text style={styles.emptyText}>
-                  {`Local role: ${localMember?.role || "viewer"} • Updated ${new Date(workspace.updatedAt).toLocaleString()}`}
+                  {`Local role: ${permissions.role} • Updated ${new Date(workspace.updatedAt).toLocaleString()}`}
                 </Text>
                 <View style={styles.serverCard}>
                   <Text style={styles.panelLabel}>Voice Channels</Text>
-                  <Text style={styles.serverSubtitle}>Route live team calls per workspace with one active joined channel at a time.</Text>
+                  <Text style={styles.serverSubtitle}>
+                    {permissions.canManageChannels
+                      ? "Route live team calls per workspace with one active joined channel at a time."
+                      : "Viewer role can join channels but cannot create or delete them."}
+                  </Text>
                   <View style={styles.rowInlineSpace}>
                     <TextInput
                       style={[styles.input, styles.flexButton]}
@@ -395,12 +401,16 @@ export function ServersScreen({
                       }
                       placeholder="Channel name (example: Incident Bridge)"
                       placeholderTextColor="#7f7aa8"
+                      editable={permissions.canManageChannels}
                     />
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Create voice channel for ${workspace.name}`}
-                      style={[styles.actionButton, !workspaceChannelInput.trim() ? styles.buttonDisabled : null]}
-                      disabled={!workspaceChannelInput.trim()}
+                      style={[
+                        styles.actionButton,
+                        (!workspaceChannelInput.trim() || !permissions.canManageChannels) ? styles.buttonDisabled : null,
+                      ]}
+                      disabled={!workspaceChannelInput.trim() || !permissions.canManageChannels}
                       onPress={() => createWorkspaceChannel(workspace.id)}
                     >
                       <Text style={styles.actionButtonText}>Add</Text>
@@ -421,8 +431,12 @@ export function ServersScreen({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`${channel.joined ? "Leave" : "Join"} voice channel ${channel.name}`}
-                          style={styles.actionButton}
+                          style={[styles.actionButton, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                          disabled={!permissions.canJoinChannels}
                           onPress={() => {
+                            if (!permissions.canJoinChannels) {
+                              return;
+                            }
                             if (channel.joined) {
                               leaveChannel(channel.id);
                               return;
@@ -435,8 +449,8 @@ export function ServersScreen({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`${channel.muted ? "Unmute" : "Mute"} voice channel ${channel.name}`}
-                          style={[styles.actionButton, !channel.joined ? styles.buttonDisabled : null]}
-                          disabled={!channel.joined}
+                          style={[styles.actionButton, (!channel.joined || !permissions.canJoinChannels) ? styles.buttonDisabled : null]}
+                          disabled={!channel.joined || !permissions.canJoinChannels}
                           onPress={() => toggleMute(channel.id)}
                         >
                           <Text style={styles.actionButtonText}>{channel.muted ? "Unmute" : "Mute"}</Text>
@@ -444,7 +458,8 @@ export function ServersScreen({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Delete voice channel ${channel.name}`}
-                          style={styles.actionDangerButton}
+                          style={[styles.actionDangerButton, !permissions.canManageChannels ? styles.buttonDisabled : null]}
+                          disabled={!permissions.canManageChannels}
                           onPress={() => deleteChannel(channel.id)}
                         >
                           <Text style={styles.actionDangerText}>Delete Channel</Text>
@@ -458,8 +473,12 @@ export function ServersScreen({
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`${activeServerIncluded ? "Remove" : "Add"} active server from workspace`}
-                      style={styles.actionButton}
+                      style={[styles.actionButton, !permissions.canManageWorkspace ? styles.buttonDisabled : null]}
+                      disabled={!permissions.canManageWorkspace}
                       onPress={() => {
+                        if (!permissions.canManageWorkspace) {
+                          return;
+                        }
                         const nextServers = activeServerIncluded
                           ? workspace.serverIds.filter((id) => id !== activeServerId)
                           : [...workspace.serverIds, activeServerId];
@@ -475,7 +494,8 @@ export function ServersScreen({
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel="Cycle local workspace role"
-                      style={styles.actionButton}
+                      style={[styles.actionButton, !permissions.canManageMembers ? styles.buttonDisabled : null]}
+                      disabled={!permissions.canManageMembers}
                       onPress={() => setMemberRole(workspace.id, localMember.id, nextRole)}
                     >
                       <Text style={styles.actionButtonText}>{`Role -> ${nextRole}`}</Text>
@@ -484,7 +504,8 @@ export function ServersScreen({
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Delete workspace ${workspace.name}`}
-                    style={styles.actionDangerButton}
+                    style={[styles.actionDangerButton, !permissions.canDeleteWorkspace ? styles.buttonDisabled : null]}
+                    disabled={!permissions.canDeleteWorkspace}
                     onPress={() => deleteWorkspace(workspace.id)}
                   >
                     <Text style={styles.actionDangerText}>Delete</Text>

@@ -13,6 +13,7 @@ import { NovaAgentPanel } from "../components/NovaAgentPanel";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import { styles } from "../theme/styles";
+import { getWorkspacePermissions } from "../workspacePermissions";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
   TERMINAL_FONT_OPTIONS,
@@ -843,16 +844,26 @@ export function TerminalsScreen() {
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
             {sharedWorkspaces.map((workspace) => {
               const targetIds = workspace.serverIds.filter((serverId) => servers.some((server) => server.id === serverId));
+              const permissions = getWorkspacePermissions(workspace);
               const active = targetIds.length > 0 && sameIdSet(fleetTargets, targetIds);
+              const disabled = targetIds.length === 0 || !permissions.canUseFleetTargets;
               return (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={`Apply workspace ${workspace.name} as fleet targets`}
                   key={`fleet-workspace-${workspace.id}`}
-                  style={[styles.chip, active ? styles.chipActive : null]}
-                  onPress={() => onSetFleetTargets(targetIds)}
+                  style={[styles.chip, active ? styles.chipActive : null, disabled ? styles.buttonDisabled : null]}
+                  onPress={() => {
+                    if (disabled) {
+                      return;
+                    }
+                    onSetFleetTargets(targetIds);
+                  }}
+                  disabled={disabled}
                 >
-                  <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{`${workspace.name} (${targetIds.length})`}</Text>
+                  <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
+                    {`${workspace.name} (${targetIds.length})${permissions.canUseFleetTargets ? "" : " • view only"}`}
+                  </Text>
                 </Pressable>
               );
             })}
@@ -947,6 +958,7 @@ export function TerminalsScreen() {
         {sharedWorkspaces.map((workspace) => {
           const workspaceChannels = voiceChannelsByWorkspace.get(workspace.id) || [];
           const joinedChannel = workspaceChannels.find((channel) => channel.joined);
+          const permissions = getWorkspacePermissions(workspace);
 
           return (
             <View key={`voice-workspace-${workspace.id}`} style={styles.serverCard}>
@@ -956,6 +968,7 @@ export function TerminalsScreen() {
                   {joinedChannel ? (joinedChannel.muted ? "MUTED" : "LIVE") : "IDLE"}
                 </Text>
               </View>
+              <Text style={styles.emptyText}>{`Role: ${permissions.role}`}</Text>
               {workspaceChannels.length === 0 ? <Text style={styles.emptyText}>No channels configured.</Text> : null}
               {workspaceChannels.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -966,8 +979,12 @@ export function TerminalsScreen() {
                         accessibilityRole="button"
                         accessibilityLabel={`${active ? "Leave" : "Join"} voice channel ${channel.name}`}
                         key={channel.id}
-                        style={[styles.chip, active ? styles.chipActive : null]}
+                        style={[styles.chip, active ? styles.chipActive : null, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                        disabled={!permissions.canJoinChannels}
                         onPress={() => {
+                          if (!permissions.canJoinChannels) {
+                            return;
+                          }
                           if (active) {
                             leaveChannel(channel.id);
                             return;
@@ -988,7 +1005,8 @@ export function TerminalsScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`${joinedChannel.muted ? "Unmute" : "Mute"} joined channel ${joinedChannel.name}`}
-                    style={styles.actionButton}
+                    style={[styles.actionButton, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                    disabled={!permissions.canJoinChannels}
                     onPress={() => toggleMute(joinedChannel.id)}
                   >
                     <Text style={styles.actionButtonText}>{joinedChannel.muted ? "Unmute" : "Mute"}</Text>
@@ -996,7 +1014,8 @@ export function TerminalsScreen() {
                   <Pressable
                     accessibilityRole="button"
                     accessibilityLabel={`Leave joined channel ${joinedChannel.name}`}
-                    style={styles.actionButton}
+                    style={[styles.actionButton, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                    disabled={!permissions.canJoinChannels}
                     onPress={() => leaveChannel(joinedChannel.id)}
                   >
                     <Text style={styles.actionButtonText}>Leave</Text>
