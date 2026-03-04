@@ -582,6 +582,30 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("reconnects a requested server on demand after disconnectAll", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    await harness.act(async () => {
+      harness.getPool().disconnectAll();
+    });
+    const countAfterDisconnect = FakeWebSocket.instances.length;
+
+    await harness.act(async () => {
+      await harness.getPool().reconnectServer("dgx", true);
+    });
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= countAfterDisconnect + 1,
+      "single-server reconnect websocket recreation"
+    );
+
+    const reconnectWave = FakeWebSocket.instances.slice(countAfterDisconnect);
+    expect(reconnectWave.length).toBeGreaterThanOrEqual(1);
+    expect(reconnectWave.some((ws) => ws.url.includes("dgx.novaremote.test"))).toBe(true);
+
+    await harness.unmount();
+  });
+
   it("cleans up only the target server stream when a session_closed message arrives", async () => {
     const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
 
