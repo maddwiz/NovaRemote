@@ -109,6 +109,7 @@ export function useSpatialLayoutPrefs({
   );
   const restoreRef = useRef(onRestore);
   const loadedKeyRef = useRef<string | null>(null);
+  const skipNextPersistKeyRef = useRef<string | null>(null);
   const [hydratedKey, setHydratedKey] = useState<string | null>(null);
 
   useEffect(() => {
@@ -123,6 +124,7 @@ export function useSpatialLayoutPrefs({
 
     let cancelled = false;
     const load = async () => {
+      let restoredFromStorage = false;
       try {
         const raw = await SecureStore.getItemAsync(key);
         if (cancelled) {
@@ -133,12 +135,14 @@ export function useSpatialLayoutPrefs({
             const parsed = JSON.parse(raw) as unknown;
             const normalized = normalizeSpatialLayoutSnapshot(parsed, stablePanelUniverseIds, maxPanels);
             restoreRef.current(normalized);
+            restoredFromStorage = true;
           } catch {
             // Ignore corrupt snapshots.
           }
         }
       } finally {
         if (!cancelled) {
+          skipNextPersistKeyRef.current = restoredFromStorage ? key : null;
           setHydratedKey(key);
         }
       }
@@ -157,6 +161,10 @@ export function useSpatialLayoutPrefs({
 
   useEffect(() => {
     if (hydratedKey !== key) {
+      return;
+    }
+    if (skipNextPersistKeyRef.current === key) {
+      skipNextPersistKeyRef.current = null;
       return;
     }
     const payload = {

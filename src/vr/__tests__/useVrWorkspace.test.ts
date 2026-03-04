@@ -400,7 +400,9 @@ describe("useVrWorkspace", () => {
     expect(current().panels.find((panel) => panel.id === homePanel)?.pinned).toBe(true);
     expect(current().panels.find((panel) => panel.id === homePanel)?.transform.yaw).toBe(22);
     expect(getItemAsyncMock).toHaveBeenCalledTimes(1);
-    expect(setItemAsyncMock).toHaveBeenCalled();
+    const persistedPayloads = setItemAsyncMock.mock.calls.map((call) => JSON.parse(String(call[1])) as { panelIds: string[] });
+    const staleWrite = persistedPayloads.some((payload) => payload.panelIds[0] === dgxPanel);
+    expect(staleWrite).toBe(false);
 
     await act(async () => {
       renderer?.unmount();

@@ -1,4 +1,7 @@
-import { describe, expect, it, vi } from "vitest";
+import * as SecureStore from "expo-secure-store";
+import React from "react";
+import TestRenderer, { act } from "react-test-renderer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("expo-secure-store", () => ({
   getItemAsync: vi.fn(async () => null),
@@ -13,7 +16,36 @@ import {
   makeSpatialLayoutScope,
   makeSpatialLayoutStorageKey,
   normalizeSpatialLayoutSnapshot,
+  useSpatialLayoutPrefs,
 } from "./useSpatialLayoutPrefs";
+
+const getItemAsyncMock = vi.mocked(SecureStore.getItemAsync);
+const setItemAsyncMock = vi.mocked(SecureStore.setItemAsync);
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+beforeEach(() => {
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    const joined = args.map((value) => String(value)).join(" ");
+    if (
+      joined.includes("react-test-renderer is deprecated") ||
+      joined.includes("The current testing environment is not configured to support act")
+    ) {
+      return;
+    }
+    process.stderr.write(`${joined}\n`);
+  });
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  getItemAsyncMock.mockReset();
+  setItemAsyncMock.mockReset();
+  getItemAsyncMock.mockResolvedValue(null);
+  setItemAsyncMock.mockResolvedValue(undefined);
+});
+
+afterEach(() => {
+  consoleErrorSpy?.mockRestore();
+  consoleErrorSpy = null;
+  vi.unstubAllGlobals();
+});
 
 describe("useSpatialLayoutPrefs helpers", () => {
   it("builds stable scope hashes regardless of order", () => {
@@ -53,5 +85,59 @@ describe("useSpatialLayoutPrefs helpers", () => {
     expect(normalized.panelIds).toEqual(["main"]);
     expect(normalized.focusedPanelId).toBe("main");
     expect(normalized.overviewMode).toBe(true);
+  });
+});
+
+describe("useSpatialLayoutPrefs", () => {
+  it("does not overwrite stored snapshot with stale pre-restore state", async () => {
+    getItemAsyncMock.mockResolvedValueOnce(
+      JSON.stringify({
+        panelIds: ["b"],
+        pinnedPanelIds: ["b"],
+        focusedPanelId: "b",
+        overviewMode: false,
+      })
+    );
+
+    function Harness() {
+      const [snapshot, setSnapshot] = React.useState({
+        panelIds: ["a"],
+        pinnedPanelIds: [] as string[],
+        focusedPanelId: "a" as string | null,
+        overviewMode: true,
+      });
+      useSpatialLayoutPrefs({
+        brand: "meta_orion",
+        serverScopeIds: ["dgx"],
+        panelUniverseIds: ["a", "b"],
+        maxPanels: 4,
+        value: snapshot,
+        onRestore: setSnapshot,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(getItemAsyncMock).toHaveBeenCalledTimes(1);
+    const payloads = setItemAsyncMock.mock.calls.map((call) => JSON.parse(String(call[1])) as { panelIds: string[] });
+    const staleWrite = payloads.some((payload) => payload.panelIds[0] === "a");
+    expect(staleWrite).toBe(false);
+    if (payloads.length > 0) {
+      expect(payloads[payloads.length - 1]?.panelIds).toEqual(["b"]);
+    }
+
+    await act(async () => {
+      renderer?.unmount();
+    });
   });
 });
