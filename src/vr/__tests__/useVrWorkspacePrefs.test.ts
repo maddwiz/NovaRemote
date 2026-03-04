@@ -84,6 +84,7 @@ describe("useVrWorkspacePrefs helpers", () => {
     expect(normalized.panelIds).toEqual(["a", "b"]);
     expect(normalized.pinnedPanelIds).toEqual(["b"]);
     expect(normalized.focusedPanelId).toBe("a");
+    expect(normalized.overviewMode).toBe(false);
     expect(normalized.customTransforms).toEqual({
       a: { x: 0.2, y: 1.1, z: -1.4, yaw: 11, width: 1.2 },
     });
@@ -95,6 +96,7 @@ describe("useVrWorkspacePrefs helpers", () => {
     expect(normalized.preset).toBe("arc");
     expect(normalized.panelIds).toEqual(["main"]);
     expect(normalized.focusedPanelId).toBe("main");
+    expect(normalized.overviewMode).toBe(false);
     expect(normalized.customTransforms).toBeUndefined();
   });
 });

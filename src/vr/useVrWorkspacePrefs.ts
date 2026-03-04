@@ -143,6 +143,7 @@ export function normalizeVrWorkspaceSnapshot(
     focusedPanelId,
     panelIds,
     pinnedPanelIds,
+    overviewMode: Boolean(parsed.overviewMode),
     customTransforms: sanitizeCustomTransforms(parsed.customTransforms, panelSet),
   };
 }

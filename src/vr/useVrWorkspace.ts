@@ -23,6 +23,7 @@ export type VrWorkspaceVoiceAction =
   | { kind: "focus"; panelId: string }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | { kind: "overview" }
+  | { kind: "minimize" }
   | {
       kind: "send";
       panelId: string;
@@ -43,7 +44,9 @@ export type UseVrWorkspaceResult = {
   preset: VrLayoutPreset;
   panels: VrWorkspacePanel[];
   focusedPanelId: string | null;
+  overviewMode: boolean;
   setPreset: (preset: VrLayoutPreset) => void;
+  setOverviewMode: (enabled: boolean) => void;
   focusPanel: (panelId: string) => void;
   rotateWorkspace: (direction: "left" | "right") => void;
   addPanel: (serverId: string, session: string) => void;
@@ -182,6 +185,7 @@ export function useVrWorkspace({
 }: UseVrWorkspaceArgs): UseVrWorkspaceResult {
   const panelLimit = Math.max(1, Math.min(maxPanels, 12));
   const [preset, setPreset] = useState<VrLayoutPreset>(initialPreset);
+  const [overviewMode, setOverviewMode] = useState<boolean>(false);
   const [panelIds, setPanelIds] = useState<string[]>([]);
   const [pinnedPanelIds, setPinnedPanelIds] = useState<string[]>([]);
   const [customTransforms, setCustomTransforms] = useState<Record<string, VrPanelTransform>>({});
@@ -265,7 +269,8 @@ export function useVrWorkspace({
         };
       });
 
-    const laidOut = preset === "custom" ? basePanels : buildPresetLayout(preset, basePanels);
+    const activePreset: VrLayoutPreset = overviewMode ? "grid" : preset;
+    const laidOut = activePreset === "custom" ? basePanels : buildPresetLayout(activePreset, basePanels);
     return laidOut
       .map((panel) => {
         const source = universeById.get(panel.id);
@@ -279,7 +284,7 @@ export function useVrWorkspace({
         };
       })
       .filter((panel): panel is VrWorkspacePanel => Boolean(panel));
-  }, [customTransforms, panelIds, pinnedPanelIds, preset, universeById]);
+  }, [customTransforms, overviewMode, panelIds, pinnedPanelIds, preset, universeById]);
 
   const routePanels = useMemo<VrRoutePanel[]>(
     () =>
@@ -414,8 +419,9 @@ export function useVrWorkspace({
       panelIds: panelIds.slice(),
       pinnedPanelIds: pinnedPanelIds.filter((panelId) => activePanelIds.has(panelId)),
       customTransforms: Object.keys(persistedTransforms).length > 0 ? persistedTransforms : undefined,
+      overviewMode,
     };
-  }, [customTransforms, focusedPanelId, panelIds, pinnedPanelIds, preset]);
+  }, [customTransforms, focusedPanelId, overviewMode, panelIds, pinnedPanelIds, preset]);
 
   const restoreSnapshot = useCallback(
     (snapshot: VrWorkspaceSnapshot | null | undefined) => {
@@ -446,6 +452,7 @@ export function useVrWorkspace({
       const nextCustomTransforms = sanitizeTransformsByPanelId(snapshot.customTransforms, new Set(nextPanelIds));
 
       setPreset(nextPreset);
+      setOverviewMode(Boolean(snapshot.overviewMode));
       setPanelIds(nextPanelIds);
       setFocusedPanelId(nextFocusedPanelId);
       setPinnedPanelIds(nextPinnedPanelIds);
@@ -476,7 +483,12 @@ export function useVrWorkspace({
         return { kind: "rotate_workspace", direction: intent.direction };
       }
       if (intent.kind === "overview") {
+        setOverviewMode(true);
         return { kind: "overview" };
+      }
+      if (intent.kind === "minimize") {
+        setOverviewMode(false);
+        return { kind: "minimize" };
       }
       if (intent.kind === "send") {
         const panel = universeById.get(intent.panelId);
@@ -520,6 +532,10 @@ export function useVrWorkspace({
         rotateWorkspace(action.direction);
         return action;
       }
+      if (action.kind === "overview") {
+        setOverviewMode(true);
+        return action;
+      }
       return action;
     },
     [focusPanel, focusedPanelId, panels, rotateWorkspace, updatePanelTransform]
@@ -529,7 +545,9 @@ export function useVrWorkspace({
     preset,
     panels,
     focusedPanelId,
+    overviewMode,
     setPreset,
+    setOverviewMode,
     focusPanel,
     rotateWorkspace,
     addPanel,

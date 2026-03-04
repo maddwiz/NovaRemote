@@ -48,5 +48,6 @@ export type VrWorkspaceSnapshot = {
   focusedPanelId: string | null;
   panelIds: string[];
   pinnedPanelIds: string[];
+  overviewMode?: boolean;
   customTransforms?: Record<string, VrPanelTransform>;
 };

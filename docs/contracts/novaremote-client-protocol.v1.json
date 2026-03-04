@@ -104,6 +104,9 @@
           "type": "array",
           "items": { "type": "string", "minLength": 1 }
         },
+        "overviewMode": {
+          "type": "boolean"
+        },
         "customTransforms": {
           "type": "object",
           "additionalProperties": {

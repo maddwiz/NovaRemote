@@ -6,6 +6,7 @@ import { VrWorkspaceGestureAction, VrWorkspaceVoiceAction } from "./useVrWorkspa
 type WorkspaceInputBridge = {
   applyVoiceTranscript: (transcript: string) => VrWorkspaceVoiceAction;
   applyGesture: (event: VrGestureEvent) => VrWorkspaceGestureAction;
+  setOverviewMode?: (enabled: boolean) => void;
 };
 
 export type VrHudStatus = {
@@ -113,6 +114,7 @@ export function useVrInputRouter({
         return action;
       }
       if (action.kind === "overview") {
+        workspace.setOverviewMode?.(true);
         onSetOverviewMode?.(true);
         publishHudStatus({
           message: "Overview mode",
@@ -123,6 +125,9 @@ export function useVrInputRouter({
       }
       if (action.kind === "none") {
         return action;
+      }
+      if (action.kind === "minimize") {
+        workspace.setOverviewMode?.(false);
       }
       onSetOverviewMode?.(false);
       publishHudStatus({
@@ -155,6 +160,7 @@ export function useVrInputRouter({
         return action;
       }
       if (action.kind === "overview") {
+        workspace.setOverviewMode?.(true);
         onSetOverviewMode?.(true);
         publishHudStatus({
           message: "Overview mode",

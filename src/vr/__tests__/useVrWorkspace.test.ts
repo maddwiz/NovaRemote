@@ -472,4 +472,60 @@ describe("useVrWorkspace", () => {
       renderer?.unmount();
     });
   });
+
+  it("toggles overview mode from voice and gesture inputs", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 4, initialPreset: "arc" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(current().overviewMode).toBe(false);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("show all panels");
+      expect(action).toEqual({ kind: "overview" });
+    });
+    expect(current().overviewMode).toBe(true);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("focus mode");
+      expect(action).toEqual({ kind: "minimize" });
+    });
+    expect(current().overviewMode).toBe(false);
+
+    await act(async () => {
+      current().applyGesture({ kind: "spread_overview" });
+    });
+    expect(current().overviewMode).toBe(true);
+
+    const snapshot = current().exportSnapshot();
+    expect(snapshot.overviewMode).toBe(true);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

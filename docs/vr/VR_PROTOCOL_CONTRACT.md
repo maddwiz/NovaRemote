@@ -216,6 +216,7 @@ Snapshot shape:
 {
   "version": "1.0.0",
   "preset": "custom",
+  "overviewMode": false,
   "focusedPanelId": "home::build-01",
   "panelIds": ["home::build-01", "dgx::main"],
   "pinnedPanelIds": ["home::build-01"],
@@ -231,5 +232,6 @@ Rules:
 - `focusedPanelId` may be `null` if there are no panels.
 - `panelIds` order is the rendered panel order.
 - `pinnedPanelIds` must be a subset of `panelIds`.
+- `overviewMode` toggles expanded overview (`true`) versus focus mode (`false`).
 - `customTransforms` keys must be panel IDs in `panelIds`.
 - Each transform requires `x`, `y`, `z`, `yaw`; optional fields are `pitch`, `roll`, `width`, `height`, `index`.
