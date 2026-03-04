@@ -427,6 +427,26 @@ export const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: "#ff8c42",
   },
+  serverPoolSummary: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2a2350",
+    backgroundColor: "rgba(8, 6, 24, 0.92)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    gap: 8,
+  },
+  serverPoolSummaryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  serverPoolSummaryText: {
+    color: "#9fcfff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
   terminalCard: {
     borderRadius: 14,
     borderWidth: 1,

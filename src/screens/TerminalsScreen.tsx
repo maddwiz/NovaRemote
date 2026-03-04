@@ -197,6 +197,8 @@ export function TerminalsScreen() {
     focusedServerId,
     connections,
     unreadServers,
+    connectedServerCount,
+    totalActiveStreams,
     servers,
     allSessions,
     openSessions,
@@ -268,6 +270,7 @@ export function TerminalsScreen() {
     onFocusServer,
     onReconnectServer,
     onReconnectServers,
+    onReconnectAllServers,
     onEditServer,
     onOpenSshFallback,
     onStartSession,
@@ -372,10 +375,6 @@ export function TerminalsScreen() {
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
-  const connectedServerCount = useMemo(
-    () => Array.from(connections.values()).filter((connection) => connection.connected).length,
-    [connections]
-  );
   const showServerBadge = connectedServerCount > 1;
   const voiceChannelsByWorkspace = useMemo(() => {
     const grouped = new Map<string, typeof voiceChannels>();
@@ -391,6 +390,7 @@ export function TerminalsScreen() {
   }, [voiceChannels]);
   const vmHostTargetGroups = useMemo(() => buildVmHostTargetGroups(servers), [servers]);
   const vmHostVmTypeTargetGroups = useMemo(() => buildVmHostVmTypeTargetGroups(servers), [servers]);
+  const disconnectedServerCount = Math.max(0, servers.length - connectedServerCount);
 
   const queueAgentCommand = (session: string, command: string) => {
     if (!focusedServerId || !session || !command.trim()) {
@@ -970,6 +970,28 @@ export function TerminalsScreen() {
         onAddServer={onOpenServers}
         unreadServers={unreadServers}
       />
+
+      <View style={styles.serverPoolSummary}>
+        <View style={styles.serverPoolSummaryRow}>
+          <Text style={styles.serverPoolSummaryText}>{`Connected ${connectedServerCount}/${servers.length}`}</Text>
+          <Text style={styles.serverPoolSummaryText}>{`Live streams ${totalActiveStreams}`}</Text>
+          <Text style={styles.serverPoolSummaryText}>{`Unread ${unreadServers.size}`}</Text>
+        </View>
+        <View style={styles.serverPoolSummaryRow}>
+          <Text style={styles.serverSubtitle}>
+            {disconnectedServerCount > 0 ? `${disconnectedServerCount} server(s) disconnected` : "All configured servers are connected"}
+          </Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Reconnect all connected servers"
+            style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
+            disabled={connectedServerCount === 0}
+            onPress={onReconnectAllServers}
+          >
+            <Text style={styles.actionButtonText}>Reconnect All</Text>
+          </Pressable>
+        </View>
+      </View>
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Connection Health</Text>

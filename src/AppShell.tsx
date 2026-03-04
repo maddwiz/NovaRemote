@@ -733,6 +733,8 @@ export default function AppShell() {
     closeStream: closePoolStream,
     connectAll: connectPoolAll,
     disconnectAll: disconnectPoolAll,
+    allConnectedServers,
+    totalActiveStreams,
   } = pool;
 
   useEffect(() => {
@@ -879,6 +881,16 @@ export default function AppShell() {
     },
     [reconnectPoolServers, setError]
   );
+
+  const reconnectAllServers = useCallback(() => {
+    const serverIds = allConnectedServers.map((server) => server.id);
+    if (serverIds.length === 0) {
+      return;
+    }
+    void reconnectPoolServers(serverIds, true).catch((error) => {
+      setError(error);
+    });
+  }, [allConnectedServers, reconnectPoolServers, setError]);
 
   const [startCwd, setStartCwd] = useState<string>(DEFAULT_CWD);
   const [startPrompt, setStartPrompt] = useState<string>("");
@@ -2264,6 +2276,8 @@ export default function AppShell() {
     focusedServerId,
     connections: poolConnections,
     unreadServers,
+    connectedServerCount: allConnectedServers.length,
+    totalActiveStreams,
     servers,
     allSessions,
     openSessions,
@@ -2336,6 +2350,7 @@ export default function AppShell() {
     focusServer,
     reconnectServer,
     reconnectServers,
+    reconnectAllServers,
     editServer,
     openSshFallback,
     createLocalAiSession,

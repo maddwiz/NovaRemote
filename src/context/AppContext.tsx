@@ -29,6 +29,8 @@ export type TerminalsViewModel = {
   focusedServerId: string | null;
   connections: Map<string, ServerConnection>;
   unreadServers: Set<string>;
+  connectedServerCount: number;
+  totalActiveStreams: number;
   servers: ServerProfile[];
   allSessions: string[];
   openSessions: string[];
@@ -100,6 +102,7 @@ export type TerminalsViewModel = {
   onFocusServer: (serverId: string) => void;
   onReconnectServer: (serverId: string) => void;
   onReconnectServers: (serverIds: string[]) => void;
+  onReconnectAllServers: () => void;
   onEditServer: (serverId: string) => void;
   onOpenSshFallback: () => void;
   onStartSession: () => void;
