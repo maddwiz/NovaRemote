@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveFleetTerminalApiBasePath, shouldAttemptFleetShellRun } from "./fleetTerminalBasePath";
+import {
+  isFleetShellRunUnavailableError,
+  resolveFleetTerminalApiBasePath,
+  shouldAttemptFleetShellRun,
+} from "./fleetTerminalBasePath";
 import { ServerConnection, ServerProfile } from "./types";
 
 function makeServer(id: string): ServerProfile {
@@ -117,5 +121,18 @@ describe("shouldAttemptFleetShellRun", () => {
     const connections = new Map<string, ServerConnection>([[server.id, connection]]);
 
     expect(shouldAttemptFleetShellRun({ serverId: server.id, connections })).toBe(true);
+  });
+});
+
+describe("isFleetShellRunUnavailableError", () => {
+  it("detects 404 errors across message formats", () => {
+    expect(isFleetShellRunUnavailableError(new Error("404 Not Found"))).toBe(true);
+    expect(isFleetShellRunUnavailableError(new Error("Request failed with status 404"))).toBe(true);
+    expect(isFleetShellRunUnavailableError("status=404")).toBe(true);
+  });
+
+  it("returns false for non-404 errors", () => {
+    expect(isFleetShellRunUnavailableError(new Error("500 Internal Server Error"))).toBe(false);
+    expect(isFleetShellRunUnavailableError(new Error("Network timeout"))).toBe(false);
   });
 });

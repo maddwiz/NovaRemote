@@ -71,7 +71,11 @@ import { useAnalytics } from "./hooks/useAnalytics";
 import { useReferrals } from "./hooks/useReferrals";
 import { useSharedProfiles } from "./hooks/useSharedProfiles";
 import { useTerminalsViewModel } from "./hooks/useTerminalsViewModel";
-import { resolveFleetTerminalApiBasePath, shouldAttemptFleetShellRun } from "./fleetTerminalBasePath";
+import {
+  isFleetShellRunUnavailableError,
+  resolveFleetTerminalApiBasePath,
+  shouldAttemptFleetShellRun,
+} from "./fleetTerminalBasePath";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -1243,8 +1247,7 @@ export default function AppShell() {
                 output = data.output || "";
                 shellRunSucceeded = true;
               } catch (shellError) {
-                const shellMessage = shellError instanceof Error ? shellError.message : String(shellError);
-                if (!shellMessage.startsWith("404")) {
+                if (!isFleetShellRunUnavailableError(shellError)) {
                   throw shellError;
                 }
               }

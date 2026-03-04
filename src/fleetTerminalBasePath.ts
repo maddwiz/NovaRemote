@@ -35,3 +35,8 @@ export function shouldAttemptFleetShellRun({ serverId, connections }: ResolveFle
   }
   return pooled.capabilities.shellRun;
 }
+
+export function isFleetShellRunUnavailableError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b404\b/.test(message);
+}
