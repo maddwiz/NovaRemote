@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildSpatialPanels,
   cyclicalIndex,
+  ensurePanelVisible,
   normalizePanelOrder,
   SpatialPanelCandidate,
 } from "./spatialPanelPlanner";
@@ -49,6 +50,27 @@ describe("cyclicalIndex", () => {
 
   it("returns zero for empty sizes", () => {
     expect(cyclicalIndex(99, 0)).toBe(0);
+  });
+});
+
+describe("ensurePanelVisible", () => {
+  it("appends a missing panel when there is room", () => {
+    expect(ensurePanelVisible(["dgx::main"], [], "home::build", 4)).toEqual(["dgx::main", "home::build"]);
+  });
+
+  it("injects a focused panel while preserving pinned panels first", () => {
+    const next = ensurePanelVisible(
+      ["dgx::main", "home::build", "cloud::deploy"],
+      ["dgx::main"],
+      "lab::ops",
+      3
+    );
+    expect(next).toEqual(["dgx::main", "lab::ops", "home::build"]);
+  });
+
+  it("keeps layout unchanged when every visible slot is pinned", () => {
+    const next = ensurePanelVisible(["a", "b", "c"], ["a", "b", "c"], "x", 3);
+    expect(next).toEqual(["a", "b", "c"]);
   });
 });
 

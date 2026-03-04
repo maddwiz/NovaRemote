@@ -15,7 +15,13 @@ import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
 import { SpatialLayoutSnapshot, useSpatialLayoutPrefs } from "../hooks/useSpatialLayoutPrefs";
 import { SpatialVoicePanel, useSpatialVoiceRouting } from "../hooks/useSpatialVoiceRouting";
-import { buildSpatialPanels, cyclicalIndex, normalizePanelOrder, SpatialPanelCandidate } from "../spatialPanelPlanner";
+import {
+  buildSpatialPanels,
+  cyclicalIndex,
+  ensurePanelVisible,
+  normalizePanelOrder,
+  SpatialPanelCandidate,
+} from "../spatialPanelPlanner";
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
@@ -366,6 +372,7 @@ export function GlassesModeScreen() {
         return firstServerId ? [firstServerId] : [];
       };
       if (route.kind === "focus_panel") {
+        setPanelIds((previous) => ensurePanelVisible(previous, pinnedPanelIds, route.panelId, maxPanels));
         setFocusedPanelId(route.panelId);
         return;
       }
@@ -565,7 +572,9 @@ export function GlassesModeScreen() {
       onSetServerSessionDraft,
       panelIds,
       panelMap,
+      pinnedPanelIds,
       routeTranscript,
+      maxPanels,
     ]
   );
 

@@ -37,6 +37,36 @@ export function cyclicalIndex(index: number, size: number): number {
   return ((index % size) + size) % size;
 }
 
+export function ensurePanelVisible(
+  panelIds: string[],
+  pinnedPanelIds: string[],
+  targetPanelId: string,
+  maxPanels: number
+): string[] {
+  const limit = Math.max(1, maxPanels);
+  const uniquePanelIds = Array.from(new Set(panelIds.filter(Boolean)));
+  const clamped = uniquePanelIds.slice(0, limit);
+
+  if (!targetPanelId) {
+    return clamped;
+  }
+  if (clamped.includes(targetPanelId)) {
+    return clamped;
+  }
+  if (clamped.length < limit) {
+    return [...clamped, targetPanelId];
+  }
+
+  const pinnedSet = new Set(pinnedPanelIds);
+  const pinned = clamped.filter((panelId) => pinnedSet.has(panelId) && panelId !== targetPanelId);
+  if (pinned.length >= limit) {
+    return clamped;
+  }
+
+  const unpinned = clamped.filter((panelId) => !pinnedSet.has(panelId) && panelId !== targetPanelId);
+  return [...pinned, targetPanelId, ...unpinned].slice(0, limit);
+}
+
 export function buildSpatialPanels(
   allPanels: SpatialPanelCandidate[],
   focusedPanelId: string | null,
