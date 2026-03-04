@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { WatchRule } from "./types";
-import { applyWatchMatches, findWatchMatches } from "./watchAlerts";
+import { applyWatchMatches, findWatchMatches, formatWatchAlertMessage } from "./watchAlerts";
 
 describe("findWatchMatches", () => {
   it("returns latest line matches for enabled valid rules", () => {
@@ -48,3 +48,16 @@ describe("applyWatchMatches", () => {
   });
 });
 
+describe("formatWatchAlertMessage", () => {
+  it("includes server context when provided", () => {
+    expect(formatWatchAlertMessage("build-01", "ERROR: Build failed", "Homelab")).toBe(
+      "[Homelab] Watch alert on session build-01: ERROR: Build failed"
+    );
+  });
+
+  it("omits server context when missing", () => {
+    expect(formatWatchAlertMessage("main", "warning: check logs")).toBe(
+      "Watch alert on session main: warning: check logs"
+    );
+  });
+});

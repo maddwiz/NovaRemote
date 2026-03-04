@@ -80,7 +80,7 @@ import { GlassesModeScreen } from "./screens/GlassesModeScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
-import { applyWatchMatches, findWatchMatches } from "./watchAlerts";
+import { applyWatchMatches, findWatchMatches, formatWatchAlertMessage } from "./watchAlerts";
 import {
   AiEnginePreference,
   FleetRunResult,
@@ -1431,7 +1431,7 @@ export default function AppShell() {
       }
 
       matches.forEach(({ session, match }) => {
-        void notify("Watch alert", `[${server.name}] Watch alert on session ${session}: ${match.slice(0, 120)}`);
+        void notify("Watch alert", formatWatchAlertMessage(session, match, server.name));
       });
 
       crossServerWatchRulesRef.current[server.id] = applied.nextRules;

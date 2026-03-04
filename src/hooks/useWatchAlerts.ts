@@ -3,7 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { STORAGE_WATCH_RULES_PREFIX } from "../constants";
 import { WatchRule } from "../types";
-import { applyWatchMatches, findWatchMatches } from "../watchAlerts";
+import { applyWatchMatches, findWatchMatches, formatWatchAlertMessage } from "../watchAlerts";
 
 type UseWatchAlertsArgs = {
   activeServerId: string | null;
@@ -151,9 +151,8 @@ export function useWatchAlerts({ activeServerId, activeServerName, allSessions, 
       return next;
     });
 
-    const serverPrefix = activeServerName?.trim() ? `[${activeServerName.trim()}] ` : "";
     pending.forEach(({ session, match }) => {
-      void notify("Watch alert", `${serverPrefix}${session}: ${match.slice(0, 120)}`);
+      void notify("Watch alert", formatWatchAlertMessage(session, match, activeServerName));
     });
   }, [activeServerName, isPro, notify, tails, watchRules]);
 

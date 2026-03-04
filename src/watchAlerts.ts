@@ -1,11 +1,19 @@
 import { WatchRule } from "./types";
 
 export const WATCH_SCAN_LINE_LIMIT = 240;
+export const WATCH_ALERT_PREVIEW_LIMIT = 120;
 
 export type WatchMatch = {
   session: string;
   match: string;
 };
+
+export function formatWatchAlertMessage(session: string, match: string, serverName?: string | null): string {
+  const scopedServer = serverName?.trim();
+  const prefix = scopedServer ? `[${scopedServer}] ` : "";
+  const preview = match.slice(0, WATCH_ALERT_PREVIEW_LIMIT);
+  return `${prefix}Watch alert on session ${session}: ${preview}`;
+}
 
 export function findWatchMatches(
   watchRules: Record<string, WatchRule>,
@@ -64,4 +72,3 @@ export function applyWatchMatches(
     changed: true,
   };
 }
-
