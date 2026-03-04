@@ -79,6 +79,22 @@ export function useVrLiveRuntime({
     [liveClient, resolveServerTarget]
   );
 
+  const stopServerSession = useCallback(
+    async (serverId: string, session: string) => {
+      const { connection, target } = resolveServerTarget(serverId);
+      await liveClient.stopSession(target, connection.terminalApiBasePath, session);
+    },
+    [liveClient, resolveServerTarget]
+  );
+
+  const openServerOnMac = useCallback(
+    async (serverId: string, session: string) => {
+      const { target } = resolveServerTarget(serverId);
+      await liveClient.openOnMac(target, session);
+    },
+    [liveClient, resolveServerTarget]
+  );
+
   const fetchServerTail = useCallback(
     async (serverId: string, session: string, lines?: number) => {
       const { connection, target } = resolveServerTarget(serverId);
@@ -107,6 +123,8 @@ export function useVrLiveRuntime({
     input,
     listServerSessions,
     createServerSession,
+    stopServerSession,
+    openServerOnMac,
     fetchServerTail,
     pingServerHealth,
     sendServerCommand,

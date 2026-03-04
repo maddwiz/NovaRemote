@@ -89,6 +89,15 @@ function buildSessionClient(args: {
     session: string,
     key: string
   ) => Promise<void>;
+  stopSessionMock?: (
+    server: Parameters<VrSessionClient["stopSession"]>[0],
+    basePath: VrTerminalApiBasePath,
+    session: string
+  ) => Promise<void>;
+  openOnMacMock?: (
+    server: Parameters<VrSessionClient["openOnMac"]>[0],
+    session: string
+  ) => Promise<void>;
   listSessionsMock?: (
     server: Parameters<VrSessionClient["listSessions"]>[0],
     basePath: VrTerminalApiBasePath
@@ -114,6 +123,8 @@ function buildSessionClient(args: {
     createSession: args.createSessionMock || (vi.fn(async () => undefined) as VrSessionClient["createSession"]),
     send: args.sendMock,
     ctrl: args.ctrlMock || (vi.fn(async () => undefined) as VrSessionClient["ctrl"]),
+    stopSession: args.stopSessionMock || (vi.fn(async () => undefined) as VrSessionClient["stopSession"]),
+    openOnMac: args.openOnMacMock || (vi.fn(async () => undefined) as VrSessionClient["openOnMac"]),
     tail: args.tailMock || (vi.fn(async () => "") as VrSessionClient["tail"]),
     health: args.healthMock || (vi.fn(async () => ({ ok: true, latencyMs: 12 })) as VrSessionClient["health"]),
   };
@@ -378,6 +389,19 @@ describe("useVrLiveRuntime", () => {
         lines?: number
       ) => Promise<string>
     >(async () => "tail-output");
+    const stopSessionMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["stopSession"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string
+      ) => Promise<void>
+    >(async () => undefined);
+    const openOnMacMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["openOnMac"]>[0],
+        session: string
+      ) => Promise<void>
+    >(async () => undefined);
     const healthMock = vi.fn<
       (
         server: Parameters<VrSessionClient["health"]>[0]
@@ -400,6 +424,8 @@ describe("useVrLiveRuntime", () => {
           listSessionsMock,
           createSessionMock,
           tailMock,
+          stopSessionMock,
+          openOnMacMock,
           healthMock,
         }),
         maxPanels: 3,
@@ -417,6 +443,8 @@ describe("useVrLiveRuntime", () => {
 
     await expect(current().listServerSessions("dgx")).resolves.toEqual([{ name: "main" }, { name: "build" }]);
     await expect(current().createServerSession("dgx", "build", "/workspace")).resolves.toBeUndefined();
+    await expect(current().stopServerSession("dgx", "main")).resolves.toBeUndefined();
+    await expect(current().openServerOnMac("dgx", "main")).resolves.toBeUndefined();
     await expect(current().fetchServerTail("dgx", "main", 120)).resolves.toBe("tail-output");
     await expect(current().pingServerHealth("dgx")).resolves.toEqual({ ok: true, latencyMs: 17 });
 
@@ -450,6 +478,25 @@ describe("useVrLiveRuntime", () => {
       "/tmux",
       "main",
       120
+    );
+    expect(stopSessionMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "/tmux",
+      "main"
+    );
+    expect(openOnMacMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "main"
     );
     expect(healthMock).toHaveBeenCalledWith({
       id: "dgx",

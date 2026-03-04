@@ -47,7 +47,7 @@ describe("createVrSessionClient", () => {
     );
   });
 
-  it("creates sessions and sends command/control payloads", async () => {
+  it("creates sessions and sends command/control lifecycle payloads", async () => {
     apiRequestMock.mockResolvedValue({ ok: true });
 
     const client = createVrSessionClient();
@@ -56,6 +56,8 @@ describe("createVrSessionClient", () => {
     await client.createSession(server, "/terminal", "main", "/workspace");
     await client.send(server, "/terminal", "main", "npm run build", true);
     await client.ctrl(server, "/terminal", "main", "C-c");
+    await client.stopSession(server, "/terminal", "main");
+    await client.openOnMac(server, "main");
 
     expect(apiRequestMock).toHaveBeenNthCalledWith(
       1,
@@ -85,6 +87,26 @@ describe("createVrSessionClient", () => {
       {
         method: "POST",
         body: JSON.stringify({ session: "main", key: "C-c" }),
+      }
+    );
+    expect(apiRequestMock).toHaveBeenNthCalledWith(
+      4,
+      server.baseUrl,
+      server.token,
+      "/terminal/ctrl",
+      {
+        method: "POST",
+        body: JSON.stringify({ session: "main", key: "C-c" }),
+      }
+    );
+    expect(apiRequestMock).toHaveBeenNthCalledWith(
+      5,
+      server.baseUrl,
+      server.token,
+      "/mac/attach",
+      {
+        method: "POST",
+        body: JSON.stringify({ session: "main" }),
       }
     );
   });

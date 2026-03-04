@@ -13,6 +13,8 @@ export type VrSessionClient = {
   createSession: (server: VrServerTarget, basePath: VrTerminalApiBasePath, session: string, cwd: string) => Promise<void>;
   send: (server: VrServerTarget, basePath: VrTerminalApiBasePath, session: string, text: string, enter?: boolean) => Promise<void>;
   ctrl: (server: VrServerTarget, basePath: VrTerminalApiBasePath, session: string, key: string) => Promise<void>;
+  stopSession: (server: VrServerTarget, basePath: VrTerminalApiBasePath, session: string) => Promise<void>;
+  openOnMac: (server: VrServerTarget, session: string) => Promise<void>;
   tail: (server: VrServerTarget, basePath: VrTerminalApiBasePath, session: string, lines?: number) => Promise<string>;
   health: (server: VrServerTarget) => Promise<{ ok: boolean; latencyMs: number | null }>;
 };
@@ -46,6 +48,20 @@ export function createVrSessionClient(): VrSessionClient {
       await apiRequest(server.baseUrl, server.token, `${basePath}/ctrl`, {
         method: "POST",
         body: JSON.stringify({ session, key }),
+      });
+    },
+
+    async stopSession(server, basePath, session) {
+      await apiRequest(server.baseUrl, server.token, `${basePath}/ctrl`, {
+        method: "POST",
+        body: JSON.stringify({ session, key: "C-c" }),
+      });
+    },
+
+    async openOnMac(server, session) {
+      await apiRequest(server.baseUrl, server.token, "/mac/attach", {
+        method: "POST",
+        body: JSON.stringify({ session }),
       });
     },
 
