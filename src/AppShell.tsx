@@ -1754,31 +1754,25 @@ export default function AppShell() {
   );
 
   const processPendingAgentServerActions = useCallback(() => {
-    let current = pendingAgentServerActionsRef.current[0];
-    while (current && !servers.some((server) => server.id === current.serverId)) {
+    while (pendingAgentServerActionsRef.current.length > 0) {
+      const current = pendingAgentServerActionsRef.current[0];
+      if (!servers.some((server) => server.id === current.serverId)) {
+        pendingAgentServerActionsRef.current.shift();
+        current.reject(new Error("Target server is no longer available."));
+        continue;
+      }
+
+      if (!focusedServerId || focusedServerId !== current.serverId) {
+        focusServer(current.serverId);
+        return;
+      }
+
       pendingAgentServerActionsRef.current.shift();
-      current.reject(new Error("Target server is no longer available."));
-      current = pendingAgentServerActionsRef.current[0];
-    }
-    if (!current) {
-      return;
-    }
-
-    if (!focusedServerId || focusedServerId !== current.serverId) {
-      focusServer(current.serverId);
-      return;
-    }
-
-    pendingAgentServerActionsRef.current.shift();
-    try {
-      current.resolve(executeFocusedAgentServerAction(current.action));
-    } catch (error) {
-      current.reject(error);
-    }
-
-    const next = pendingAgentServerActionsRef.current[0];
-    if (next && next.serverId !== focusedServerId) {
-      focusServer(next.serverId);
+      try {
+        current.resolve(executeFocusedAgentServerAction(current.action));
+      } catch (error) {
+        current.reject(error);
+      }
     }
   }, [executeFocusedAgentServerAction, focusServer, focusedServerId, servers]);
 
