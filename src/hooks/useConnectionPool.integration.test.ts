@@ -492,6 +492,15 @@ describe("useConnectionPool websocket integration", () => {
     expect(pool.connections.get("lab")?.connected).toBe(false);
     expect(pool.connections.get("lab")?.status).toBe("disconnected");
     expect(wsFor("lab")).toBeUndefined();
+    expect(pool.allConnectedServers.map((server) => server.id)).toEqual(["dgx"]);
+    expect(pool.totalActiveStreams).toBe(0);
+
+    const dgxWs = wsFor("dgx");
+    await harness.act(async () => {
+      dgxWs?.emitOpen();
+    });
+
+    expect(harness.getPool().totalActiveStreams).toBe(1);
 
     await harness.unmount();
   });
