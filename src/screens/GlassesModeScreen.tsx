@@ -17,6 +17,7 @@ import { resolveGlassesScopeRoute } from "../glassesScopeRouting";
 import { SpatialLayoutSnapshot, useSpatialLayoutPrefs } from "../hooks/useSpatialLayoutPrefs";
 import { SpatialVoicePanel, useSpatialVoiceRouting } from "../hooks/useSpatialVoiceRouting";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
+import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import {
   buildSpatialPanels,
   cyclicalIndex,
@@ -27,6 +28,7 @@ import {
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
+import { getWorkspacePermissions } from "../workspacePermissions";
 
 type BrandProfile = {
   label: string;
@@ -151,6 +153,14 @@ function sameStringArray(left: string[], right: string[]): boolean {
   return true;
 }
 
+function normalizeToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function GlassesModeScreen() {
   const {
     connections,
@@ -207,6 +217,14 @@ export function GlassesModeScreen() {
 
   const brandProfile = BRAND_PROFILES[glassesMode.brand] || BRAND_PROFILES.custom;
   const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
+  const {
+    channels: voiceChannels,
+    createChannel,
+    deleteChannel,
+    joinChannel,
+    leaveChannel,
+    toggleMute,
+  } = useVoiceChannels();
   const [panelIds, setPanelIds] = useState<string[]>([]);
   const [pinnedPanelIds, setPinnedPanelIds] = useState<string[]>([]);
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
@@ -214,6 +232,7 @@ export function GlassesModeScreen() {
   const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeVmHostScope, setActiveVmHostScope] = useState<string | null>(null);
+  const [routeStatus, setRouteStatus] = useState<string | null>(null);
   const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
 
   const vmHostScopeOptions = useMemo(() => {
@@ -265,6 +284,9 @@ export function GlassesModeScreen() {
       serverIds: new Set(workspace.serverIds),
     };
   }, [activeWorkspaceId, sharedWorkspaces]);
+  const workspaceById = useMemo(() => {
+    return new Map(sharedWorkspaces.map((workspace) => [workspace.id, workspace]));
+  }, [sharedWorkspaces]);
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
@@ -457,13 +479,149 @@ export function GlassesModeScreen() {
       });
       if (scopeRoute.kind === "set_workspace_scope") {
         setActiveWorkspaceId(scopeRoute.workspaceId);
+        const label = scopeRoute.workspaceId ? workspaceById.get(scopeRoute.workspaceId)?.name || "selected workspace" : "all servers";
+        setRouteStatus(`Scoped workspace to ${label}.`);
         return;
       }
       if (scopeRoute.kind === "set_vm_host_scope") {
         setActiveVmHostScope(scopeRoute.vmHostScope);
+        const label = scopeRoute.vmHostScope
+          ? vmHostScopeOptions.find((option) => option.key === scopeRoute.vmHostScope)?.label || scopeRoute.vmHostScope
+          : "all hosts";
+        setRouteStatus(`Scoped VM host to ${label}.`);
         return;
       }
 
+      const manageChannelMatch = transcript.match(
+        /^(create|add|delete|remove)\s+(?:voice\s+)?channel\s+(.+?)(?:\s+in\s+(.+))?$/i
+      );
+      if (manageChannelMatch) {
+        const action = (manageChannelMatch[1] || "").toLowerCase();
+        const channelName = (manageChannelMatch[2] || "").trim();
+        const requestedWorkspaceLabel = normalizeToken(manageChannelMatch[3] || "");
+        const requestedWorkspace =
+          requestedWorkspaceLabel.length > 0
+            ? sharedWorkspaces.find((workspace) => {
+                const normalizedName = normalizeToken(workspace.name);
+                return (
+                  normalizedName === requestedWorkspaceLabel ||
+                  normalizedName.includes(requestedWorkspaceLabel) ||
+                  requestedWorkspaceLabel.includes(normalizedName)
+                );
+              }) || null
+            : null;
+        const targetWorkspace =
+          requestedWorkspace ||
+          (activeWorkspaceId ? workspaceById.get(activeWorkspaceId) || null : null) ||
+          (sharedWorkspaces.length === 1 ? sharedWorkspaces[0] : null);
+        if (!targetWorkspace) {
+          setRouteStatus(
+            sharedWorkspaces.length > 1
+              ? "Specify a workspace or scope to one workspace before channel management."
+              : "No workspace available for channel management."
+          );
+          return;
+        }
+
+        const workspacePermissions = getWorkspacePermissions(targetWorkspace);
+        if (!workspacePermissions.canManageChannels) {
+          setRouteStatus(`Channel management is blocked for ${targetWorkspace.name}.`);
+          return;
+        }
+
+        if (action === "create" || action === "add") {
+          const existing = voiceChannels.find(
+            (channel) =>
+              channel.workspaceId === targetWorkspace.id &&
+              normalizeToken(channel.name) === normalizeToken(channelName)
+          );
+          if (existing) {
+            setRouteStatus(`#${existing.name} already exists in ${targetWorkspace.name}.`);
+            return;
+          }
+          createChannel({
+            workspaceId: targetWorkspace.id,
+            name: channelName,
+          });
+          setRouteStatus(`Created #${channelName} in ${targetWorkspace.name}`);
+          return;
+        }
+
+        const channelToDelete = voiceChannels.find(
+          (channel) =>
+            channel.workspaceId === targetWorkspace.id &&
+            (normalizeToken(channel.name) === normalizeToken(channelName) ||
+              normalizeToken(channel.name).includes(normalizeToken(channelName)) ||
+              normalizeToken(channelName).includes(normalizeToken(channel.name)))
+        );
+        if (!channelToDelete) {
+          setRouteStatus(`No channel named "${channelName}" found in ${targetWorkspace.name}.`);
+          return;
+        }
+        deleteChannel(channelToDelete.id);
+        setRouteStatus(`Deleted #${channelToDelete.name} from ${targetWorkspace.name}`);
+        return;
+      }
+
+      const channelMatch = transcript.match(/^(join|leave|mute|unmute)\s+(?:voice\s+)?channel(?:\s+(.+))?$/i);
+      if (channelMatch) {
+        const action = (channelMatch[1] || "").toLowerCase();
+        const targetName = normalizeToken(channelMatch[2] || "");
+        const scopedChannels = activeWorkspaceId
+          ? voiceChannels.filter((channel) => channel.workspaceId === activeWorkspaceId)
+          : voiceChannels;
+        const candidates = scopedChannels.length > 0 ? scopedChannels : voiceChannels;
+        const joinedChannels = candidates.filter((channel) => channel.joined);
+        const resolveChannel = () => {
+          if (targetName) {
+            const exact = candidates.find((channel) => normalizeToken(channel.name) === targetName);
+            if (exact) {
+              return exact;
+            }
+            return (
+              candidates.find((channel) => normalizeToken(channel.name).includes(targetName)) ||
+              candidates.find((channel) => targetName.includes(normalizeToken(channel.name))) ||
+              null
+            );
+          }
+          if (action === "join") {
+            return candidates[0] || null;
+          }
+          return joinedChannels[0] || null;
+        };
+
+        const target = resolveChannel();
+        if (!target) {
+          setRouteStatus(targetName ? `No channel found for "${targetName}".` : "No matching channel available.");
+          return;
+        }
+        const workspace = workspaceById.get(target.workspaceId);
+        if (workspace && !getWorkspacePermissions(workspace).canJoinChannels) {
+          setRouteStatus(`Channel access blocked for ${workspace.name}.`);
+          return;
+        }
+
+        if (action === "join") {
+          joinChannel(target.id);
+          setRouteStatus(`Joined #${target.name}`);
+        } else if (action === "leave") {
+          leaveChannel(target.id);
+          setRouteStatus(`Left #${target.name}`);
+        } else if (action === "mute") {
+          if (!target.muted) {
+            toggleMute(target.id);
+          }
+          setRouteStatus(`Muted #${target.name}`);
+        } else if (action === "unmute") {
+          if (target.muted) {
+            toggleMute(target.id);
+          }
+          setRouteStatus(`Unmuted #${target.name}`);
+        }
+        return;
+      }
+
+      setRouteStatus(null);
       const route = routeTranscript(transcript);
       const resolveAgentTargetServerIds = (panelId?: string): string[] => {
         if (panelId) {
@@ -684,8 +842,16 @@ export function GlassesModeScreen() {
       pinnedPanelIds,
       routeTranscript,
       sharedWorkspaces,
+      activeWorkspaceId,
+      createChannel,
+      deleteChannel,
+      joinChannel,
+      leaveChannel,
       maxPanels,
       vmHostScopeOptions,
+      toggleMute,
+      voiceChannels,
+      workspaceById,
     ]
   );
 
@@ -1106,6 +1272,7 @@ export function GlassesModeScreen() {
           {`Focused panel: ${activePanel ? `${activePanel.serverName} / ${activePanel.sessionLabel}` : "none"}`}
         </Text>
         {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}
+        {routeStatus ? <Text style={styles.emptyText}>{routeStatus}</Text> : null}
         {transcriptReady ? <Text style={styles.serverSubtitle}>{`Transcript: ${voiceTranscript}`}</Text> : null}
         {voiceRecording && typeof voiceMeteringDb === "number" ? (
           <Text style={styles.emptyText}>{`Mic level ${Math.round(voiceMeteringDb)} dB`}</Text>

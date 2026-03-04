@@ -2,10 +2,11 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useSharedWorkspacesMock, useSpatialVoiceRoutingMock, useTextEditingMock } = vi.hoisted(() => ({
+const { useSharedWorkspacesMock, useSpatialVoiceRoutingMock, useTextEditingMock, useVoiceChannelsMock } = vi.hoisted(() => ({
   useSharedWorkspacesMock: vi.fn(),
   useSpatialVoiceRoutingMock: vi.fn(),
   useTextEditingMock: vi.fn(),
+  useVoiceChannelsMock: vi.fn(),
 }));
 
 vi.mock("../hooks/useSharedWorkspaces", () => ({
@@ -22,6 +23,10 @@ vi.mock("../hooks/useSpatialVoiceRouting", () => ({
 
 vi.mock("../hooks/useTextEditing", () => ({
   useTextEditing: (...args: unknown[]) => useTextEditingMock(...args),
+}));
+
+vi.mock("../hooks/useVoiceChannels", () => ({
+  useVoiceChannels: (...args: unknown[]) => useVoiceChannelsMock(...args),
 }));
 
 vi.mock("expo-haptics", () => ({
@@ -184,6 +189,7 @@ beforeEach(() => {
   useSharedWorkspacesMock.mockReset();
   useSpatialVoiceRoutingMock.mockReset();
   useTextEditingMock.mockReset();
+  useVoiceChannelsMock.mockReset();
 
   useSharedWorkspacesMock.mockReturnValue({
     workspaces: [],
@@ -202,6 +208,16 @@ beforeEach(() => {
     onSelectionChange: vi.fn(),
     insertTextAtCursor: vi.fn(),
     handleAction: vi.fn(),
+  });
+  useVoiceChannelsMock.mockReturnValue({
+    channels: [],
+    loading: false,
+    createChannel: vi.fn(),
+    deleteChannel: vi.fn(),
+    pruneWorkspaceChannels: vi.fn(),
+    joinChannel: vi.fn(),
+    leaveChannel: vi.fn(),
+    toggleMute: vi.fn(),
   });
 
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -386,6 +402,168 @@ describe("GlassesModeScreen", () => {
 
     expect(() => screen.root.findByProps({ accessibilityLabel: "Focus DGX main" })).toThrow();
     expect(screen.root.findByProps({ accessibilityLabel: "Focus Home build" })).toBeDefined();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("handles voice channel join commands before spatial route dispatch", async () => {
+    const routeTranscript = vi.fn(() => ({ kind: "none" }));
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const joinChannel = vi.fn();
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [
+        {
+          id: "voice-1",
+          workspaceId: "workspace-1",
+          name: "incident",
+          joined: false,
+          muted: false,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createChannel: vi.fn(),
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel,
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    useSharedWorkspacesMock.mockReturnValue({
+      workspaces: [
+        {
+          id: "workspace-1",
+          name: "Platform Ops",
+          serverIds: ["dgx"],
+          members: [{ id: "local-user", name: "Local User", role: "owner" }],
+          channelId: "channel-workspace-1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(),
+      renameWorkspace: vi.fn(),
+      setWorkspaceServers: vi.fn(),
+      setMemberRole: vi.fn(),
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([[dgx.id, makeConnection(dgx, ["main"])]]);
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections, {
+              voiceTranscript: "join channel incident",
+            }),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(joinChannel).toHaveBeenCalledWith("voice-1");
+    expect(routeTranscript).not.toHaveBeenCalled();
+    expect(() => screen.root.findByProps({ children: "Joined #incident" })).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("handles voice channel create commands with explicit workspace targeting", async () => {
+    const createChannel = vi.fn((input: { workspaceId: string; name: string }) => ({
+      id: "voice-2",
+      workspaceId: input.workspaceId,
+      name: input.name,
+      joined: false,
+      muted: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    }));
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [],
+      loading: false,
+      createChannel,
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    useSharedWorkspacesMock.mockReturnValue({
+      workspaces: [
+        {
+          id: "workspace-1",
+          name: "Platform Ops",
+          serverIds: ["dgx"],
+          members: [{ id: "local-user", name: "Local User", role: "owner" }],
+          channelId: "channel-workspace-1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "workspace-2",
+          name: "Release Hub",
+          serverIds: ["home"],
+          members: [{ id: "local-user", name: "Local User", role: "owner" }],
+          channelId: "channel-workspace-2",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(),
+      renameWorkspace: vi.fn(),
+      setWorkspaceServers: vi.fn(),
+      setMemberRole: vi.fn(),
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["ops"])],
+    ]);
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections, {
+              voiceTranscript: "create channel war-room in release hub",
+            }),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(createChannel).toHaveBeenCalledWith({
+      workspaceId: "workspace-2",
+      name: "war-room",
+    });
+    expect(() => screen.root.findByProps({ children: "Created #war-room in Release Hub" })).not.toThrow();
 
     await act(async () => {
       screen.unmount();
