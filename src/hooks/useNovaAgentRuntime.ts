@@ -21,6 +21,13 @@ type ApproveAgentOptions = {
   nextStatus?: NovaAgentStatus;
 };
 
+type ApproveReadyApprovalsOptions = {
+  commandByAgent?: Record<string, string>;
+  sessionByAgent?: Record<string, string>;
+  defaultSession?: string | null;
+  nextStatus?: NovaAgentStatus;
+};
+
 export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgentRuntimeArgs) {
   const {
     agents,
@@ -222,6 +229,51 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
     [addEntry, agentById, resolveApproval]
   );
 
+  const approveReadyApprovals = useCallback(
+    (options: ApproveReadyApprovalsOptions = {}): string[] => {
+      const approved: string[] = [];
+      const commandByAgent = options.commandByAgent || {};
+      const sessionByAgent = options.sessionByAgent || {};
+      const defaultSession = options.defaultSession?.trim() || "";
+
+      agents.forEach((agent) => {
+        if (!agent.pendingApproval) {
+          return;
+        }
+        const command = (commandByAgent[agent.agentId] || agent.pendingApproval.command || "").trim();
+        const session = (sessionByAgent[agent.agentId] || agent.pendingApproval.session || defaultSession || "").trim();
+        if (!command || !session) {
+          return;
+        }
+        const didApprove = approveAgentApproval(agent.agentId, {
+          commandOverride: command,
+          sessionOverride: session,
+          nextStatus: options.nextStatus,
+        });
+        if (didApprove) {
+          approved.push(agent.agentId);
+        }
+      });
+
+      return approved;
+    },
+    [agents, approveAgentApproval]
+  );
+
+  const denyAllPendingApprovals = useCallback((): string[] => {
+    const denied: string[] = [];
+    agents.forEach((agent) => {
+      if (!agent.pendingApproval) {
+        return;
+      }
+      const didDeny = denyAgentApproval(agent.agentId);
+      if (didDeny) {
+        denied.push(agent.agentId);
+      }
+    });
+    return denied;
+  }, [agents, denyAgentApproval]);
+
   const clearAgentMemory = useCallback(
     (agentId: string) => {
       const agent = agentById.get(agentId);
@@ -247,6 +299,8 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
       requestAgentApproval,
       approveAgentApproval,
       denyAgentApproval,
+      approveReadyApprovals,
+      denyAllPendingApprovals,
       clearAgentMemory,
     }),
     [
@@ -255,15 +309,16 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
       approveAgentApproval,
       clearAgentMemory,
       denyAgentApproval,
+      denyAllPendingApprovals,
       loading,
       memoryEntries,
       memoryLoading,
       removeRuntimeAgent,
       requestAgentApproval,
+      approveReadyApprovals,
       setRuntimeAgentCapabilities,
       setRuntimeAgentGoal,
       setRuntimeAgentStatus,
     ]
   );
 }
-

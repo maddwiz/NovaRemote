@@ -247,6 +247,8 @@ export function NovaAgentPanel({
     requestAgentApproval,
     approveAgentApproval,
     denyAgentApproval,
+    approveReadyApprovals,
+    denyAllPendingApprovals,
     clearAgentMemory,
   } = useNovaAgentRuntime({
     serverId,
@@ -287,33 +289,25 @@ export function NovaAgentPanel({
   };
 
   const approveReadyPending = () => {
-    if (pendingAgents.length === 0) {
+    const approvedAgentIds = approveReadyApprovals({
+      commandByAgent,
+      sessionByAgent,
+      defaultSession,
+    });
+    if (approvedAgentIds.length === 0) {
       return;
     }
-
-    const nextCommands: Record<string, string> = { ...commandByAgent };
-    pendingAgents.forEach((agent) => {
-      const selectedSession = sessionByAgent[agent.agentId] || agent.pendingApproval?.session || defaultSession;
-      const command = (commandByAgent[agent.agentId] || agent.pendingApproval?.command || "").trim();
-      if (!selectedSession || !command) {
-        return;
-      }
-
-      const approved = approveAgentApproval(agent.agentId, {
-        commandOverride: command,
-        sessionOverride: selectedSession,
+    setCommandByAgent((previous) => {
+      const next = { ...previous };
+      approvedAgentIds.forEach((agentId) => {
+        next[agentId] = "";
       });
-      if (approved) {
-        nextCommands[agent.agentId] = "";
-      }
+      return next;
     });
-    setCommandByAgent(nextCommands);
   };
 
   const denyAllPending = () => {
-    pendingAgents.forEach((agent) => {
-      denyAgentApproval(agent.agentId);
-    });
+    denyAllPendingApprovals();
   };
 
   if (!serverId) {

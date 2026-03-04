@@ -199,5 +199,83 @@ describe("useNovaAgentRuntime", () => {
       renderer?.unmount();
     });
   });
-});
 
+  it("supports bulk approve-ready and deny-all pending approval flows", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({ serverId: "dgx", onDispatchCommand });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentAId = "";
+    let agentBId = "";
+    await act(async () => {
+      const agentA = current().addRuntimeAgent("Agent A", ["watch"]);
+      const agentB = current().addRuntimeAgent("Agent B", ["deploy"]);
+      agentAId = agentA?.agentId || "";
+      agentBId = agentB?.agentId || "";
+    });
+
+    await act(async () => {
+      current().requestAgentApproval(agentAId, {
+        command: "npm run lint",
+        session: "lint",
+      });
+      current().requestAgentApproval(agentBId, {
+        command: "npm run deploy",
+        session: "deploy",
+      });
+    });
+
+    let approvedIds: string[] = [];
+    await act(async () => {
+      approvedIds = current().approveReadyApprovals();
+    });
+
+    expect(approvedIds.sort()).toEqual([agentAId, agentBId].sort());
+    expect(onDispatchCommand).toHaveBeenCalledWith("lint", "npm run lint");
+    expect(onDispatchCommand).toHaveBeenCalledWith("deploy", "npm run deploy");
+    expect(current().agents.find((agent) => agent.agentId === agentAId)?.status).toBe("executing");
+    expect(current().agents.find((agent) => agent.agentId === agentBId)?.status).toBe("executing");
+
+    await act(async () => {
+      current().requestAgentApproval(agentAId, {
+        command: "npm run smoke",
+        session: "smoke",
+      });
+      current().requestAgentApproval(agentBId, {
+        command: "npm run verify",
+        session: "verify",
+      });
+    });
+
+    let deniedIds: string[] = [];
+    await act(async () => {
+      deniedIds = current().denyAllPendingApprovals();
+    });
+
+    expect(deniedIds.sort()).toEqual([agentAId, agentBId].sort());
+    expect(current().agents.find((agent) => agent.agentId === agentAId)?.status).toBe("idle");
+    expect(current().agents.find((agent) => agent.agentId === agentBId)?.status).toBe("idle");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+});
