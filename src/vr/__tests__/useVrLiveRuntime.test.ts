@@ -451,6 +451,20 @@ describe("useVrLiveRuntime", () => {
     expect(current().hudStatus?.message).toContain("Denied 1 pending agent approval");
 
     await act(async () => {
+      current().dispatchGesture({ kind: "approve_agents", scope: "focused" });
+      await Promise.resolve();
+    });
+    expect(onApproveReadyAgents).toHaveBeenCalledWith(["dgx"]);
+    expect(current().hudStatus?.message).toContain("Approved 2 ready agent approvals");
+
+    await act(async () => {
+      current().dispatchGesture({ kind: "deny_agents", scope: "all" });
+      await Promise.resolve();
+    });
+    expect(onDenyAllPendingAgents).toHaveBeenCalledWith(["dgx"]);
+    expect(current().hudStatus?.message).toContain("Denied 1 pending agent approval");
+
+    await act(async () => {
       await current().dispatchVoice("pause pool");
     });
     expect(onDisconnectAllServers).toHaveBeenCalledTimes(1);

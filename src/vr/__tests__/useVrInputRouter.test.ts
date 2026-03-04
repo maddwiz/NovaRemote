@@ -752,6 +752,58 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches gesture agent approval actions through approval callbacks", async () => {
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({ kind: "none" }));
+    const applyGesture = vi
+      .fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>()
+      .mockReturnValueOnce({ kind: "approve_ready_agents", serverIds: ["dgx"] })
+      .mockReturnValueOnce({ kind: "deny_all_pending_agents", serverIds: ["dgx", "home"] });
+    const onApproveReadyAgents = vi.fn(async () => ["agent-a"]);
+    const onDenyAllPendingAgents = vi.fn(async () => ["agent-a", "agent-b"]);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onApproveReadyAgents,
+        onDenyAllPendingAgents,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      current().dispatchGesture({ kind: "approve_agents", scope: "focused" });
+      await Promise.resolve();
+    });
+    expect(onApproveReadyAgents).toHaveBeenCalledWith(["dgx"]);
+    expect(current().hudStatus?.message).toContain("Approved 1 ready agent approval");
+
+    await act(async () => {
+      current().dispatchGesture({ kind: "deny_agents", scope: "all" });
+      await Promise.resolve();
+    });
+    expect(onDenyAllPendingAgents).toHaveBeenCalledWith(["dgx", "home"]);
+    expect(current().hudStatus?.message).toContain("Denied 2 pending agent approvals");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("auto-clears HUD status after the configured timeout", async () => {
     vi.useFakeTimers();
     const applyVoiceTranscript = vi.fn<

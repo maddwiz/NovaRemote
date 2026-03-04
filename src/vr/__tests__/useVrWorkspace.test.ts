@@ -746,6 +746,22 @@ describe("useVrWorkspace", () => {
     expect(current().preset).toBe("grid");
 
     await act(async () => {
+      const approveFocusedAction = current().applyGesture({ kind: "approve_agents" });
+      expect(approveFocusedAction).toEqual({
+        kind: "approve_ready_agents",
+        serverIds: ["dgx"],
+      });
+    });
+
+    await act(async () => {
+      const denyAllAction = current().applyGesture({ kind: "deny_agents", scope: "all" });
+      expect(denyAllAction).toEqual({
+        kind: "deny_all_pending_agents",
+        serverIds: ["dgx", "home"],
+      });
+    });
+
+    await act(async () => {
       renderer?.unmount();
     });
   });

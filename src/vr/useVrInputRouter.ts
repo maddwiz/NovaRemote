@@ -647,6 +647,70 @@ export function useVrInputRouter({
         });
         return action;
       }
+      if (action.kind === "approve_ready_agents") {
+        if (!onApproveReadyAgents) {
+          publishHudStatus({
+            message: "Agent approval routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        void Promise.resolve(onApproveReadyAgents(action.serverIds))
+          .then((result) => {
+            const count = resolveActionCount(result);
+            publishHudStatus({
+              message:
+                count === 0
+                  ? "No ready agent approvals found"
+                  : count === null
+                    ? "Approved ready agent queue"
+                    : `Approved ${count} ready agent approval${count === 1 ? "" : "s"}`,
+              severity: count === 0 ? "warning" : "success",
+              at: now(),
+            });
+          })
+          .catch((error) => {
+            publishHudStatus({
+              message: error instanceof Error ? error.message : "Failed to approve ready agents",
+              severity: "error",
+              at: now(),
+            });
+          });
+        return action;
+      }
+      if (action.kind === "deny_all_pending_agents") {
+        if (!onDenyAllPendingAgents) {
+          publishHudStatus({
+            message: "Agent denial routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        void Promise.resolve(onDenyAllPendingAgents(action.serverIds))
+          .then((result) => {
+            const count = resolveActionCount(result);
+            publishHudStatus({
+              message:
+                count === 0
+                  ? "No pending agent approvals to deny"
+                  : count === null
+                    ? "Denied pending agent approvals"
+                    : `Denied ${count} pending agent approval${count === 1 ? "" : "s"}`,
+              severity: count === 0 ? "warning" : "success",
+              at: now(),
+            });
+          })
+          .catch((error) => {
+            publishHudStatus({
+              message: error instanceof Error ? error.message : "Failed to deny pending agents",
+              severity: "error",
+              at: now(),
+            });
+          });
+        return action;
+      }
       if (action.kind === "overview") {
         workspace.setOverviewMode?.(true);
         onSetOverviewMode?.(true);
@@ -658,7 +722,7 @@ export function useVrInputRouter({
       }
       return action;
     },
-    [onSetOverviewMode, publishHudStatus, workspace]
+    [onApproveReadyAgents, onDenyAllPendingAgents, onSetOverviewMode, publishHudStatus, workspace]
   );
 
   return {

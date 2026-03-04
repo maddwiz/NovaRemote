@@ -99,6 +99,23 @@ describe("resolveVrGestureAction", () => {
 
     expect(action).toEqual({ kind: "snap_layout", preset: "grid" });
   });
+
+  it("maps approval gestures to agent lifecycle actions", () => {
+    const panels = [makePanel("a")];
+    const approveFocused = resolveVrGestureAction({
+      event: { kind: "approve_agents" },
+      panels,
+      focusedPanelId: "a",
+    });
+    const denyAll = resolveVrGestureAction({
+      event: { kind: "deny_agents", scope: "all" },
+      panels,
+      focusedPanelId: "a",
+    });
+
+    expect(approveFocused).toEqual({ kind: "gesture_approve_ready_agents", scope: "focused" });
+    expect(denyAll).toEqual({ kind: "gesture_deny_all_pending_agents", scope: "all" });
+  });
 });
 
 describe("inputGesturesTestUtils", () => {

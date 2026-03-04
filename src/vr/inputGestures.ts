@@ -15,7 +15,9 @@ export type VrGestureEvent =
   | { kind: "pinch_resize"; panelId?: string; scale?: number }
   | { kind: "spread_overview" }
   | { kind: "fist_pull_rotate"; direction?: VrGestureDirection; deltaX?: number }
-  | { kind: "snap_layout"; preset?: Exclude<VrLayoutPreset, "custom"> };
+  | { kind: "snap_layout"; preset?: Exclude<VrLayoutPreset, "custom"> }
+  | { kind: "approve_agents"; scope?: "focused" | "all" }
+  | { kind: "deny_agents"; scope?: "focused" | "all" };
 
 export type VrGestureAction =
   | { kind: "none" }
@@ -24,6 +26,8 @@ export type VrGestureAction =
   | { kind: "resize"; panelId: string; patch: Partial<VrPanelTransform> }
   | { kind: "overview" }
   | { kind: "snap_layout"; preset: Exclude<VrLayoutPreset, "custom"> }
+  | { kind: "gesture_approve_ready_agents"; scope: "focused" | "all" }
+  | { kind: "gesture_deny_all_pending_agents"; scope: "focused" | "all" }
   | { kind: "rotate_workspace"; direction: VrGestureDirection };
 
 const MIN_WIDTH = 0.6;
@@ -73,6 +77,14 @@ export function resolveVrGestureAction({
 
   if (event.kind === "spread_overview") {
     return { kind: "overview" };
+  }
+
+  if (event.kind === "approve_agents") {
+    return { kind: "gesture_approve_ready_agents", scope: event.scope || "focused" };
+  }
+
+  if (event.kind === "deny_agents") {
+    return { kind: "gesture_deny_all_pending_agents", scope: event.scope || "focused" };
   }
 
   if (event.kind === "fist_pull_rotate") {

@@ -65,7 +65,10 @@ export type VrWorkspaceVoiceAction =
       command: string;
     };
 
-export type VrWorkspaceGestureAction = VrGestureAction;
+export type VrWorkspaceGestureAction =
+  | VrGestureAction
+  | { kind: "approve_ready_agents"; serverIds: string[] }
+  | { kind: "deny_all_pending_agents"; serverIds: string[] };
 
 export type VrVoiceDispatchOptions = {
   targetPanelId?: string | null;
@@ -887,9 +890,47 @@ export function useVrWorkspace({
         setOverviewMode(true);
         return action;
       }
+      if (action.kind === "gesture_approve_ready_agents") {
+        if (action.scope === "all") {
+          return {
+            kind: "approve_ready_agents",
+            serverIds: serverScopeIds.slice(),
+          };
+        }
+        const focusedPanel =
+          (focusedPanelId && universeById.get(focusedPanelId)) ||
+          (routePanels[0] && universeById.get(routePanels[0].id)) ||
+          null;
+        if (!focusedPanel) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "approve_ready_agents",
+          serverIds: [focusedPanel.serverId],
+        };
+      }
+      if (action.kind === "gesture_deny_all_pending_agents") {
+        if (action.scope === "all") {
+          return {
+            kind: "deny_all_pending_agents",
+            serverIds: serverScopeIds.slice(),
+          };
+        }
+        const focusedPanel =
+          (focusedPanelId && universeById.get(focusedPanelId)) ||
+          (routePanels[0] && universeById.get(routePanels[0].id)) ||
+          null;
+        if (!focusedPanel) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "deny_all_pending_agents",
+          serverIds: [focusedPanel.serverId],
+        };
+      }
       return action;
     },
-    [focusPanel, focusedPanelId, panels, rotateWorkspace, updatePanelTransform]
+    [focusPanel, focusedPanelId, panels, rotateWorkspace, routePanels, serverScopeIds, universeById, updatePanelTransform]
   );
 
   return {
