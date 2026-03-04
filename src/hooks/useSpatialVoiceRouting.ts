@@ -12,6 +12,7 @@ export type SpatialVoiceRoute =
   | { kind: "none" }
   | { kind: "show_all" }
   | { kind: "minimize" }
+  | { kind: "rotate_workspace"; direction: "left" | "right" }
   | { kind: "focus_panel"; panelId: string }
   | { kind: "send_command"; panelId: string; command: string };
 
@@ -125,6 +126,14 @@ export function resolveSpatialVoiceRoute({
     normalized === "single panel"
   ) {
     return { kind: "minimize" };
+  }
+
+  if (normalized === "rotate left" || normalized === "rotate workspace left" || normalized === "previous panel") {
+    return { kind: "rotate_workspace", direction: "left" };
+  }
+
+  if (normalized === "rotate right" || normalized === "rotate workspace right" || normalized === "next panel") {
+    return { kind: "rotate_workspace", direction: "right" };
   }
 
   const explicitSendMatch = cleaned.match(/^(?:send|route)\s+to\s+(.+?)\s*:\s*(.+)$/i);

@@ -70,6 +70,22 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(minimize).toEqual({ kind: "minimize" });
   });
 
+  it("recognizes rotate workspace commands", () => {
+    const rotateLeft = resolveSpatialVoiceRoute({
+      transcript: "rotate left",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const rotateRight = resolveSpatialVoiceRoute({
+      transcript: "next panel",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+
+    expect(rotateLeft).toEqual({ kind: "rotate_workspace", direction: "left" });
+    expect(rotateRight).toEqual({ kind: "rotate_workspace", direction: "right" });
+  });
+
   it("defaults to sending on the focused panel", () => {
     const route = resolveSpatialVoiceRoute({
       transcript: "git status",

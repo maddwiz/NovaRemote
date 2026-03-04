@@ -210,6 +210,7 @@ export function GlassesModeScreen() {
     voiceMeteringDb,
     onSetServerSessionDraft,
     onSendServerSessionDraft,
+    onSendServerSessionCommand,
     onClearServerSessionDraft,
     onSendServerSessionControlChar,
     onHistoryPrev,
@@ -398,6 +399,17 @@ export function GlassesModeScreen() {
         setOverviewMode(false);
         return;
       }
+      if (route.kind === "rotate_workspace") {
+        if (panelIds.length < 2) {
+          return;
+        }
+        const current = focusedPanelId && panelIds.includes(focusedPanelId) ? focusedPanelId : panelIds[0];
+        const currentIndex = panelIds.indexOf(current);
+        const step = route.direction === "right" ? 1 : -1;
+        const nextIndex = cyclicalIndex(currentIndex + step, panelIds.length);
+        setFocusedPanelId(panelIds[nextIndex]);
+        return;
+      }
       if (route.kind !== "send_command") {
         return;
       }
@@ -407,10 +419,10 @@ export function GlassesModeScreen() {
       }
       onSetServerSessionDraft(target.serverId, target.session, route.command);
       if (autoSend) {
-        onSendServerSessionDraft(target.serverId, target.session);
+        onSendServerSessionCommand(target.serverId, target.session, route.command, "ai");
       }
     },
-    [onSendServerSessionDraft, onSetServerSessionDraft, panelMap, routeTranscript]
+    [focusedPanelId, onSendServerSessionCommand, onSetServerSessionDraft, panelIds, panelMap, routeTranscript]
   );
 
   const stopVoiceForActivePanel = useCallback(() => {
