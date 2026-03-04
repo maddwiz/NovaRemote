@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 
 import { STORAGE_WATCH_RULES_PREFIX } from "../constants";
 import { WatchRule } from "../types";
+import { applyWatchMatches, findWatchMatches } from "../watchAlerts";
 
 type UseWatchAlertsArgs = {
   activeServerId: string | null;
@@ -130,44 +131,19 @@ export function useWatchAlerts({ activeServerId, activeServerName, allSessions, 
       return;
     }
 
-    const matchesBySession: Record<string, string> = {};
-    for (const session of Object.keys(watchRules)) {
-      const rule = watchRules[session];
-      if (!rule?.enabled || !rule.pattern.trim()) {
-        continue;
-      }
-
-      let regex: RegExp;
-      try {
-        regex = new RegExp(rule.pattern, "i");
-      } catch {
-        continue;
-      }
-
-      const lines = (tails[session] || "").split("\n").slice(-240);
-      const matchedLine = [...lines].reverse().find((line) => regex.test(line.trim()));
-      if (matchedLine && matchedLine.trim() && matchedLine.trim() !== (rule.lastMatch || "")) {
-        matchesBySession[session] = matchedLine.trim();
-      }
-    }
-
-    const pending = Object.entries(matchesBySession);
+    const pending = findWatchMatches(watchRules, tails);
     if (pending.length === 0) {
       return;
     }
 
     setWatchRules((prev) => {
-      const next = { ...prev };
-      pending.forEach(([session, match]) => {
-        const existing = next[session] || defaultWatchRule();
-        next[session] = { ...existing, lastMatch: match };
-      });
-      return next;
+      const applied = applyWatchMatches(prev, pending);
+      return applied.changed ? applied.nextRules : prev;
     });
 
     setWatchAlertHistoryBySession((prev) => {
       const next = { ...prev };
-      pending.forEach(([session, match]) => {
+      pending.forEach(({ session, match }) => {
         const stamp = new Date().toLocaleTimeString();
         const existing = next[session] || [];
         next[session] = [`[${stamp}] ${match}`, ...existing].slice(0, 12);
@@ -176,7 +152,7 @@ export function useWatchAlerts({ activeServerId, activeServerName, allSessions, 
     });
 
     const serverPrefix = activeServerName?.trim() ? `[${activeServerName.trim()}] ` : "";
-    pending.forEach(([session, match]) => {
+    pending.forEach(({ session, match }) => {
       void notify("Watch alert", `${serverPrefix}${session}: ${match.slice(0, 120)}`);
     });
   }, [activeServerName, isPro, notify, tails, watchRules]);

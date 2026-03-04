@@ -79,6 +79,7 @@ import { GlassesModeScreen } from "./screens/GlassesModeScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
+import { applyWatchMatches, findWatchMatches } from "./watchAlerts";
 import {
   AiEnginePreference,
   FleetRunResult,
@@ -1415,42 +1416,22 @@ export default function AppShell() {
         return;
       }
 
-      let changed = false;
-      const nextRules: Record<string, WatchRule> = { ...currentRules };
-
-      Object.entries(currentRules).forEach(([session, rule]) => {
-        if (!rule?.enabled || !rule.pattern.trim()) {
-          return;
-        }
-
-        let regex: RegExp;
-        try {
-          regex = new RegExp(rule.pattern, "i");
-        } catch {
-          return;
-        }
-
-        const lines = (connection.tails[session] || "").split("\n").slice(-240);
-        const matchedLine = [...lines].reverse().find((line) => regex.test(line.trim()));
-        const match = matchedLine?.trim() || "";
-        if (!match || match === (rule.lastMatch || "")) {
-          return;
-        }
-
-        changed = true;
-        nextRules[session] = {
-          ...rule,
-          lastMatch: match,
-        };
-        void notify("Watch alert", `[${server.name}] Watch alert on session ${session}: ${match.slice(0, 120)}`);
-      });
-
-      if (!changed) {
+      const matches = findWatchMatches(currentRules, connection.tails);
+      if (matches.length === 0) {
         return;
       }
 
-      crossServerWatchRulesRef.current[server.id] = nextRules;
-      void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${server.id}`, JSON.stringify(nextRules)).catch(
+      const applied = applyWatchMatches(currentRules, matches);
+      if (!applied.changed) {
+        return;
+      }
+
+      matches.forEach(({ session, match }) => {
+        void notify("Watch alert", `[${server.name}] Watch alert on session ${session}: ${match.slice(0, 120)}`);
+      });
+
+      crossServerWatchRulesRef.current[server.id] = applied.nextRules;
+      void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${server.id}`, JSON.stringify(applied.nextRules)).catch(
         () => {}
       );
     });
