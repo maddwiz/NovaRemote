@@ -88,6 +88,50 @@ function findPanelByTarget(panels: SpatialVoicePanel[], rawTarget: string): Spat
   return winnerScore > 0 ? winner : null;
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function parseExplicitSendWithoutColon(
+  transcript: string,
+  panels: SpatialVoicePanel[]
+): { panelId: string; command: string } | null {
+  const candidates = new Map<string, string>();
+
+  panels.forEach((panel) => {
+    [panel.serverName, panel.session, panel.sessionLabel].forEach((value) => {
+      const target = value?.trim();
+      if (!target) {
+        return;
+      }
+      const key = normalizeForMatch(target);
+      if (!key || candidates.has(key)) {
+        return;
+      }
+      candidates.set(key, target);
+    });
+  });
+
+  const orderedTargets = Array.from(candidates.values()).sort((a, b) => b.length - a.length);
+  for (const target of orderedTargets) {
+    const pattern = new RegExp(`^(?:send|route)\\s+to\\s+${escapeRegex(target)}\\s+(.+)$`, "i");
+    const match = transcript.match(pattern);
+    if (!match) {
+      continue;
+    }
+
+    const command = match[1]?.trim() || "";
+    if (!command) {
+      continue;
+    }
+
+    const panel = findPanelByTarget(panels, target) ?? panels[0];
+    return { panelId: panel.id, command };
+  }
+
+  return null;
+}
+
 function resolveFocusedPanelId(panels: SpatialVoicePanel[], focusedPanelId: string | null): string | null {
   if (focusedPanelId && panels.some((panel) => panel.id === focusedPanelId)) {
     return focusedPanelId;
@@ -144,6 +188,15 @@ export function resolveSpatialVoiceRoute({
       const targetPanel = findPanelByTarget(panels, target) ?? panels[0];
       return { kind: "send_command", panelId: targetPanel.id, command };
     }
+  }
+
+  const explicitSendWithoutColon = parseExplicitSendWithoutColon(cleaned, panels);
+  if (explicitSendWithoutColon) {
+    return {
+      kind: "send_command",
+      panelId: explicitSendWithoutColon.panelId,
+      command: explicitSendWithoutColon.command,
+    };
   }
 
   const focusMatch = cleaned.match(/^focus(?:\s+(?:on|server|session|panel))?\s+(.+)$/i);

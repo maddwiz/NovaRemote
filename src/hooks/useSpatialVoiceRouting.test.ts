@@ -41,6 +41,20 @@ describe("resolveSpatialVoiceRoute", () => {
     });
   });
 
+  it("routes explicit send-to syntax without a colon delimiter", () => {
+    const route = resolveSpatialVoiceRoute({
+      transcript: "send to Cloud VM deploy now",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+
+    expect(route).toEqual({
+      kind: "send_command",
+      panelId: "cloud::deploy",
+      command: "deploy now",
+    });
+  });
+
   it("routes focus commands by session name", () => {
     const route = resolveSpatialVoiceRoute({
       transcript: "focus deploy",
