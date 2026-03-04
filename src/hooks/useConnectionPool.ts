@@ -87,6 +87,7 @@ type ConnectionPool = {
   setFocusedServerId: (id: string | null) => void;
   refreshSessions: (serverId: string) => Promise<void>;
   reconnectServer: (serverId: string, forceProbe?: boolean) => Promise<void>;
+  reconnectServers: (serverIds: string[], forceProbe?: boolean) => Promise<void>;
   createSession: (
     serverId: string,
     cwd: string,
@@ -1358,6 +1359,23 @@ export function useConnectionPool({
     [onError, probeCapabilities, refreshSessions]
   );
 
+  const reconnectServer = useCallback(
+    async (serverId: string, forceProbe: boolean = true) => {
+      lifecyclePausedRef.current = false;
+      await connectServer(serverId, forceProbe);
+    },
+    [connectServer]
+  );
+
+  const reconnectServers = useCallback(
+    async (serverIds: string[], forceProbe: boolean = true) => {
+      const uniqueServerIds = Array.from(new Set(serverIds.map((value) => value.trim()).filter(Boolean)));
+      lifecyclePausedRef.current = false;
+      await Promise.all(uniqueServerIds.map((serverId) => connectServer(serverId, forceProbe)));
+    },
+    [connectServer]
+  );
+
   const fetchTail = useCallback(
     async (serverId: string, session: string, showErrors: boolean) => {
       const key = `${serverId}::${session}`;
@@ -1966,7 +1984,8 @@ export function useConnectionPool({
     focusedConnection,
     setFocusedServerId,
     refreshSessions,
-    reconnectServer: connectServer,
+    reconnectServer,
+    reconnectServers,
     createSession,
     createLocalAiSession,
     sendCommand,

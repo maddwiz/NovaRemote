@@ -716,6 +716,7 @@ export default function AppShell() {
     focusedConnection: poolFocusedConnection,
     setFocusedServerId: setPoolFocusedServerId,
     reconnectServer: reconnectPoolServer,
+    reconnectServers: reconnectPoolServers,
     refreshSessions: refreshPoolSessions,
     createSession: createPoolSession,
     createLocalAiSession: createPoolLocalAiSession,
@@ -872,12 +873,11 @@ export default function AppShell() {
 
   const reconnectServers = useCallback(
     (serverIds: string[]) => {
-      const uniqueIds = Array.from(new Set(serverIds.map((value) => value.trim()).filter(Boolean)));
-      uniqueIds.forEach((serverId) => {
-        reconnectServer(serverId);
+      void reconnectPoolServers(serverIds, true).catch((error) => {
+        setError(error);
       });
     },
-    [reconnectServer]
+    [reconnectPoolServers, setError]
   );
 
   const [startCwd, setStartCwd] = useState<string>(DEFAULT_CWD);

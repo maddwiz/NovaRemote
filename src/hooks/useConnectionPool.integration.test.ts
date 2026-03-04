@@ -554,6 +554,33 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("reconnects multiple servers in one bulk pool call", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    const firstWave = FakeWebSocket.instances.slice();
+
+    await harness.act(async () => {
+      harness.getPool().disconnectAll();
+    });
+    expect(firstWave.every((ws) => ws.readyState === FakeWebSocket.CLOSED)).toBe(true);
+
+    const beforeBulkReconnectCount = FakeWebSocket.instances.length;
+    await harness.act(async () => {
+      await harness.getPool().reconnectServers(["dgx", "cloud", "dgx", "missing", " "], true);
+    });
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= beforeBulkReconnectCount + 2,
+      "bulk reconnect websocket recreation"
+    );
+
+    const secondWave = FakeWebSocket.instances.slice(beforeBulkReconnectCount);
+    expect(secondWave.some((ws) => ws.url.includes("dgx.novaremote.test"))).toBe(true);
+    expect(secondWave.some((ws) => ws.url.includes("cloud.novaremote.test"))).toBe(true);
+
+    await harness.unmount();
+  });
+
   it("cleans up only the target server stream when a session_closed message arrives", async () => {
     const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
 
