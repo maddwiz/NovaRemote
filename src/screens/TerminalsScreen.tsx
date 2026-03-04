@@ -14,6 +14,7 @@ import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import { styles } from "../theme/styles";
 import { getWorkspacePermissions } from "../workspacePermissions";
+import { buildVmHostTargetGroups } from "../fleetTargets";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
   TERMINAL_FONT_OPTIONS,
@@ -387,6 +388,7 @@ export function TerminalsScreen() {
     });
     return grouped;
   }, [voiceChannels]);
+  const vmHostTargetGroups = useMemo(() => buildVmHostTargetGroups(servers), [servers]);
 
   const queueAgentCommand = (session: string, command: string) => {
     if (!focusedServerId || !session || !command.trim()) {
@@ -837,6 +839,28 @@ export function TerminalsScreen() {
           );
         })}
       </ScrollView>
+
+      {vmHostTargetGroups.length > 0 ? (
+        <>
+          <Text style={styles.serverSubtitle}>VM Host Targets</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {vmHostTargetGroups.map((group) => {
+              const active = group.serverIds.length > 0 && sameIdSet(fleetTargets, group.serverIds);
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Apply VM host ${group.label} as fleet targets`}
+                  key={`fleet-vmhost-${group.key}`}
+                  style={[styles.chip, active ? styles.chipActive : null]}
+                  onPress={() => onSetFleetTargets(group.serverIds)}
+                >
+                  <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{`${group.label} (${group.serverIds.length})`}</Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        </>
+      ) : null}
 
       {sharedWorkspaces.length > 0 ? (
         <>
