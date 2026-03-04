@@ -1,6 +1,5 @@
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useState } from "react";
-import { Platform } from "react-native";
 
 import { normalizeBaseUrl } from "../api/client";
 import { STORAGE_ANALYTICS_ANON_ID, STORAGE_ANALYTICS_ENABLED, makeId } from "../constants";
@@ -39,6 +38,16 @@ function sanitizeProps(props: AnalyticsProps | undefined): Record<string, string
     next[cleanKey] = value;
   });
   return next;
+}
+
+function resolvePlatformOs(): string {
+  try {
+    const reactNative = require("react-native") as { Platform?: { OS?: string } };
+    const os = reactNative?.Platform?.OS;
+    return typeof os === "string" && os.trim() ? os : "unknown";
+  } catch {
+    return "unknown";
+  }
 }
 
 export function useAnalytics({ activeServer, connected }: UseAnalyticsArgs) {
@@ -91,12 +100,18 @@ export function useAnalytics({ activeServer, connected }: UseAnalyticsArgs) {
         return;
       }
 
+      const normalizedProps = sanitizeProps(props);
+      if (activeServer) {
+        normalizedProps.server_id = activeServer.id;
+        normalizedProps.server_name = activeServer.name;
+      }
+
       const payload = {
         event: cleanEvent,
         at: new Date().toISOString(),
         anon_id: anonId,
-        platform: Platform.OS,
-        props: sanitizeProps(props),
+        platform: resolvePlatformOs(),
+        props: normalizedProps,
       };
 
       if (!activeServer || !connected) {
