@@ -131,13 +131,14 @@ function makeServer(id: string, name: string): ServerProfile {
 type PoolHarness = {
   getPool: () => ReturnType<HookModule["useConnectionPool"]>;
   updateServers: (nextServers: ServerProfile[]) => Promise<void>;
+  updateEnabled: (nextEnabled: boolean) => Promise<void>;
   act: TestRendererModule["act"];
   flush: () => Promise<void>;
   waitFor: (predicate: () => boolean, label: string) => Promise<void>;
   unmount: () => Promise<void>;
 };
 
-async function mountPool(servers: ServerProfile[]): Promise<PoolHarness> {
+async function mountPool(servers: ServerProfile[], initialEnabled: boolean = true): Promise<PoolHarness> {
   vi.resetModules();
 
   const React = await import("react");
@@ -146,11 +147,12 @@ async function mountPool(servers: ServerProfile[]): Promise<PoolHarness> {
 
   let latestPool: ReturnType<HookModule["useConnectionPool"]> | null = null;
   let latestServers = servers;
+  let latestEnabled = initialEnabled;
 
-  function Harness({ list }: { list: ServerProfile[] }) {
+  function Harness({ list, enabled }: { list: ServerProfile[]; enabled: boolean }) {
     latestPool = useConnectionPool({
       servers: list,
-      enabled: true,
+      enabled,
       initialFocusedServerId: list[0]?.id ?? null,
     });
     return null;
@@ -158,7 +160,7 @@ async function mountPool(servers: ServerProfile[]): Promise<PoolHarness> {
 
   let renderer: ReturnType<TestRendererModule["create"]> | null = null;
   await testRenderer.act(async () => {
-    renderer = testRenderer.create(React.createElement(Harness, { list: servers }));
+    renderer = testRenderer.create(React.createElement(Harness, { list: servers, enabled: initialEnabled }));
   });
 
   const flush = async () => {
@@ -199,13 +201,21 @@ async function mountPool(servers: ServerProfile[]): Promise<PoolHarness> {
   const updateServers = async (nextServers: ServerProfile[]) => {
     latestServers = nextServers;
     await testRenderer.act(async () => {
-      renderer?.update(React.createElement(Harness, { list: latestServers }));
+      renderer?.update(React.createElement(Harness, { list: latestServers, enabled: latestEnabled }));
+    });
+  };
+
+  const updateEnabled = async (nextEnabled: boolean) => {
+    latestEnabled = nextEnabled;
+    await testRenderer.act(async () => {
+      renderer?.update(React.createElement(Harness, { list: latestServers, enabled: latestEnabled }));
     });
   };
 
   return {
     getPool,
     updateServers,
+    updateEnabled,
     act: testRenderer.act,
     flush,
     waitFor,
@@ -341,6 +351,33 @@ describe("useConnectionPool websocket integration", () => {
     await harness.updateServers([dgx]);
     await harness.waitFor(() => !harness.getPool().connections.has(lab.id), "removed server pool entry");
     expect(labWs?.readyState).toBe(FakeWebSocket.CLOSED);
+
+    await harness.unmount();
+  });
+
+  it("closes and recreates streams when enabled toggles off and back on", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")], true);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    const firstWave = FakeWebSocket.instances.slice();
+
+    await harness.updateEnabled(false);
+    expect(firstWave.every((ws) => ws.readyState === FakeWebSocket.CLOSED)).toBe(true);
+    const countAfterDisable = FakeWebSocket.instances.length;
+
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(FakeWebSocket.instances.length).toBe(countAfterDisable);
+
+    await harness.updateEnabled(true);
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= countAfterDisable + 2,
+      "websocket recreation after enabling"
+    );
+
+    const secondWave = FakeWebSocket.instances.slice(countAfterDisable);
+    expect(secondWave.every((ws) => ws.readyState === FakeWebSocket.CONNECTING)).toBe(true);
 
     await harness.unmount();
   });
