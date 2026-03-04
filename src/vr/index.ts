@@ -3,6 +3,7 @@ export * from "./sessionClient";
 export * from "./layoutPresets";
 export * from "./voiceRouting";
 export * from "./inputGestures";
+export * from "./streamPool";
 export * from "./useVrWorkspace";
 export * from "./useVrWorkspacePrefs";
 export * from "./useVrInputRouter";
