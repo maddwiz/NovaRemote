@@ -408,4 +408,68 @@ describe("useVrWorkspace", () => {
       renderer?.unmount();
     });
   });
+
+  it("applies gestures to move, resize, and rotate panels", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 4, initialPreset: "grid" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const dgxPanel = buildVrPanelId("dgx", "main");
+    const firstOrder = current().panels.map((panel) => panel.id);
+
+    await act(async () => {
+      const focusAction = current().applyGesture({ kind: "point_trigger", panelId: dgxPanel });
+      expect(focusAction).toEqual({ kind: "focus", panelId: dgxPanel });
+    });
+    expect(current().focusedPanelId).toBe(dgxPanel);
+
+    await act(async () => {
+      const moveAction = current().applyGesture({ kind: "grab_move", panelId: dgxPanel, deltaX: 0.4, deltaYaw: 9 });
+      expect(moveAction.kind).toBe("move");
+    });
+    expect(current().preset).toBe("custom");
+    expect(current().panels.find((panel) => panel.id === dgxPanel)?.transform.x).toBeCloseTo(0.4);
+    expect(current().panels.find((panel) => panel.id === dgxPanel)?.transform.yaw).toBeCloseTo(9);
+
+    await act(async () => {
+      const resizeAction = current().applyGesture({ kind: "pinch_resize", panelId: dgxPanel, scale: 1.2 });
+      expect(resizeAction.kind).toBe("resize");
+    });
+    expect((current().panels.find((panel) => panel.id === dgxPanel)?.transform.width || 0) > 1.0).toBe(true);
+
+    await act(async () => {
+      const rotateAction = current().applyGesture({ kind: "fist_pull_rotate", direction: "left" });
+      expect(rotateAction).toEqual({ kind: "rotate_workspace", direction: "left" });
+    });
+    const rotatedOrder = current().panels.map((panel) => panel.id);
+    expect(rotatedOrder).toEqual(vrWorkspaceTestUtils.rotateOrder(firstOrder, "left"));
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

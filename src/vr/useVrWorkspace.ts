@@ -8,6 +8,7 @@ import {
   VrPanelTransform,
   VrWorkspaceSnapshot,
 } from "./contracts";
+import { resolveVrGestureAction, VrGestureAction, VrGestureEvent } from "./inputGestures";
 import { buildPresetLayout } from "./layoutPresets";
 import { useVrWorkspacePrefs } from "./useVrWorkspacePrefs";
 import { parseVrVoiceIntent, VrRoutePanel } from "./voiceRouting";
@@ -30,6 +31,8 @@ export type VrWorkspaceVoiceAction =
       command: string;
     };
 
+export type VrWorkspaceGestureAction = VrGestureAction;
+
 export type UseVrWorkspaceArgs = {
   connections: Map<string, ServerConnection>;
   maxPanels?: number;
@@ -49,6 +52,7 @@ export type UseVrWorkspaceResult = {
   updatePanelTransform: (panelId: string, patch: Partial<VrPanelTransform>) => void;
   exportSnapshot: () => VrWorkspaceSnapshot;
   restoreSnapshot: (snapshot: VrWorkspaceSnapshot | null | undefined) => void;
+  applyGesture: (event: VrGestureEvent) => VrWorkspaceGestureAction;
   applyVoiceTranscript: (transcript: string) => VrWorkspaceVoiceAction;
 };
 
@@ -492,6 +496,35 @@ export function useVrWorkspace({
     [focusPanel, focusedPanelId, rotateWorkspace, routePanels, universeById]
   );
 
+  const applyGesture = useCallback(
+    (event: VrGestureEvent): VrWorkspaceGestureAction => {
+      const action = resolveVrGestureAction({
+        event,
+        panels,
+        focusedPanelId,
+      });
+
+      if (action.kind === "focus") {
+        focusPanel(action.panelId);
+        return action;
+      }
+      if (action.kind === "move") {
+        updatePanelTransform(action.panelId, action.patch);
+        return action;
+      }
+      if (action.kind === "resize") {
+        updatePanelTransform(action.panelId, action.patch);
+        return action;
+      }
+      if (action.kind === "rotate_workspace") {
+        rotateWorkspace(action.direction);
+        return action;
+      }
+      return action;
+    },
+    [focusPanel, focusedPanelId, panels, rotateWorkspace, updatePanelTransform]
+  );
+
   return {
     preset,
     panels,
@@ -505,6 +538,7 @@ export function useVrWorkspace({
     updatePanelTransform,
     exportSnapshot,
     restoreSnapshot,
+    applyGesture,
     applyVoiceTranscript,
   };
 }
