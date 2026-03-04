@@ -626,6 +626,8 @@ export function VrCommandCenterScreen() {
           const workspaceChannels = voiceChannelsByWorkspace.get(workspace.id) || [];
           const joinedChannel = workspaceChannels.find((channel) => channel.joined);
           const permissions = getWorkspacePermissions(workspace);
+          const localMember = workspace.members.find((member) => member.id === "local-user") || workspace.members[0] || null;
+          const localRoleLabel = localMember ? `${localMember.name} (${localMember.role})` : "No local workspace role";
           return (
             <View key={`vr-workspace-channel-${workspace.id}`} style={styles.vrRuntimePanelCard}>
               <View style={styles.rowInlineSpace}>
@@ -634,6 +636,19 @@ export function VrCommandCenterScreen() {
                   {joinedChannel ? (joinedChannel.muted ? "MUTED" : "LIVE") : "IDLE"}
                 </Text>
               </View>
+              <Text style={styles.emptyText}>{`${workspace.members.length} member${workspace.members.length === 1 ? "" : "s"} • Local ${localRoleLabel}`}</Text>
+              {workspace.members.length > 0 ? (
+                <View style={styles.vrRuntimeActionRow}>
+                  {workspace.members.map((member) => {
+                    const memberStyle = member.role === "owner" ? styles.livePillOn : member.role === "editor" ? styles.livePillWarn : styles.livePillOff;
+                    return (
+                      <Text key={`vr-workspace-member-${workspace.id}-${member.id}`} style={[styles.livePill, memberStyle]}>
+                        {`${member.name} • ${member.role}`}
+                      </Text>
+                    );
+                  })}
+                </View>
+              ) : null}
               {workspaceChannels.length === 0 ? <Text style={styles.emptyText}>No channels configured.</Text> : null}
               {workspaceChannels.length > 0 ? (
                 <View style={styles.vrRuntimeActionRow}>

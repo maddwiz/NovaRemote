@@ -376,6 +376,9 @@ describe("VrCommandCenterScreen", () => {
 
     const renderer = await renderScreen(runtime, { workspaces });
 
+    expect(() => renderer.root.findByProps({ children: "1 member • Local Local User (owner)" })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Local User • owner" })).not.toThrow();
+
     act(() => {
       renderer.root.findByProps({ accessibilityLabel: "Scope VR panels to workspace Platform Ops" }).props.onPress();
     });
