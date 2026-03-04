@@ -326,6 +326,86 @@ describe("VrCommandCenterScreen", () => {
     });
   });
 
+  it("handles voice channel join and mute commands before runtime voice routing", async () => {
+    const runtime = makeRuntime();
+    const joinChannel = vi.fn();
+    const leaveChannel = vi.fn();
+    const toggleMute = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    const channels: VoiceChannel[] = [
+      {
+        id: "voice-1",
+        workspaceId: "workspace-1",
+        name: "incident",
+        joined: false,
+        muted: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "voice-2",
+        workspaceId: "workspace-1",
+        name: "release",
+        joined: true,
+        muted: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    useVoiceChannelsMock.mockReturnValue({
+      channels,
+      loading: false,
+      createChannel: vi.fn(),
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel,
+      leaveChannel,
+      toggleMute,
+    });
+
+    const renderer = await renderScreen(runtime, { workspaces });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("join channel incident");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(joinChannel).toHaveBeenCalledWith("voice-1");
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("unmute channel release");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(toggleMute).toHaveBeenCalledWith("voice-2");
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("leave channel release");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(leaveChannel).toHaveBeenCalledWith("voice-2");
+    expect(runtime.dispatchVoice).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("scopes panels to workspace and manages voice channel actions", async () => {
     const runtime = makeRuntime();
     const createChannel = vi.fn();

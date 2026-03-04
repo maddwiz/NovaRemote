@@ -27,6 +27,14 @@ function transformLabel(panel: {
   return `x ${x} • y ${y} • z ${z} • yaw ${yaw}`;
 }
 
+function normalizeToken(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
 export function VrCommandCenterScreen() {
   const {
     connections,
@@ -43,6 +51,7 @@ export function VrCommandCenterScreen() {
     onDisconnectAllServers,
   } = useAppContext().terminals;
   const [voiceInput, setVoiceInput] = useState<string>("");
+  const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
   const [commandInput, setCommandInput] = useState<string>("");
   const [activeVmHostScope, setActiveVmHostScope] = useState<string | null>(null);
   const [agentScope, setAgentScope] = useState<"focused" | "visible" | "all">("visible");
@@ -193,6 +202,9 @@ export function VrCommandCenterScreen() {
     });
     return grouped;
   }, [voiceChannels]);
+  const workspaceById = useMemo(() => {
+    return new Map(sharedWorkspaces.map((workspace) => [workspace.id, workspace]));
+  }, [sharedWorkspaces]);
   const [snapshot, setSnapshot] = useState(() => runtime.getStreamPoolSnapshot());
 
   useEffect(() => {
@@ -244,11 +256,73 @@ export function VrCommandCenterScreen() {
     if (!transcript) {
       return;
     }
+    const channelMatch = transcript.match(/^(join|leave|mute|unmute)\s+(?:vr\s+)?(?:voice\s+)?channel(?:\s+(.+))?$/i);
+    if (channelMatch) {
+      const action = (channelMatch[1] || "").toLowerCase();
+      const targetName = normalizeToken(channelMatch[2] || "");
+      const scopedChannels = activeWorkspaceId
+        ? voiceChannels.filter((channel) => channel.workspaceId === activeWorkspaceId)
+        : voiceChannels;
+      const candidates = scopedChannels.length > 0 ? scopedChannels : voiceChannels;
+      const joinedChannels = candidates.filter((channel) => channel.joined);
+      const resolveChannel = () => {
+        if (targetName) {
+          const exact = candidates.find((channel) => normalizeToken(channel.name) === targetName);
+          if (exact) {
+            return exact;
+          }
+          return (
+            candidates.find((channel) => normalizeToken(channel.name).includes(targetName)) ||
+            candidates.find((channel) => targetName.includes(normalizeToken(channel.name))) ||
+            null
+          );
+        }
+        if (action === "join") {
+          return candidates[0] || null;
+        }
+        return joinedChannels[0] || null;
+      };
+
+      const target = resolveChannel();
+      if (!target) {
+        setVoiceStatus(targetName ? `No channel found for "${targetName}".` : "No matching channel available.");
+        setVoiceInput("");
+        return;
+      }
+      const workspace = workspaceById.get(target.workspaceId);
+      if (workspace && !getWorkspacePermissions(workspace).canJoinChannels) {
+        setVoiceStatus(`Channel access blocked for ${workspace.name}.`);
+        setVoiceInput("");
+        return;
+      }
+
+      if (action === "join") {
+        joinChannel(target.id);
+        setVoiceStatus(`Joined #${target.name}`);
+      } else if (action === "leave") {
+        leaveChannel(target.id);
+        setVoiceStatus(`Left #${target.name}`);
+      } else if (action === "mute") {
+        if (!target.muted) {
+          toggleMute(target.id);
+        }
+        setVoiceStatus(`Muted #${target.name}`);
+      } else if (action === "unmute") {
+        if (target.muted) {
+          toggleMute(target.id);
+        }
+        setVoiceStatus(`Unmuted #${target.name}`);
+      }
+      setVoiceInput("");
+      return;
+    }
+
+    setVoiceStatus(null);
     void runtime.dispatchVoice(transcript, {
       targetPanelId: runtime.workspace.focusedPanelId,
     });
     setVoiceInput("");
-  }, [runtime, voiceInput]);
+  }, [activeWorkspaceId, joinChannel, leaveChannel, runtime, toggleMute, voiceChannels, voiceInput, workspaceById]);
 
   const sendFocusedCommand = useCallback(() => {
     const command = commandInput.trim();
@@ -569,7 +643,12 @@ export function VrCommandCenterScreen() {
         <TextInput
           accessibilityLabel="VR voice command"
           value={voiceInput}
-          onChangeText={setVoiceInput}
+          onChangeText={(value) => {
+            setVoiceInput(value);
+            if (voiceStatus) {
+              setVoiceStatus(null);
+            }
+          }}
           style={styles.input}
           placeholder="Example: send to DGX: npm run build"
           placeholderTextColor="#7f7aa8"
@@ -585,6 +664,7 @@ export function VrCommandCenterScreen() {
             <Text style={styles.buttonPrimaryText}>Dispatch Voice</Text>
           </Pressable>
         </View>
+        {voiceStatus ? <Text style={styles.emptyText}>{voiceStatus}</Text> : null}
       </View>
 
       <View style={styles.vrRuntimeInputCard}>
