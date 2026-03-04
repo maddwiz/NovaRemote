@@ -484,4 +484,50 @@ describe("VrCommandCenterScreen", () => {
       renderer.unmount();
     });
   });
+
+  it("passes scoped auto-sync panel ids into vr runtime args", async () => {
+    const runtime = makeRuntime();
+    const dgx = makeServer("dgx", "DGX", { vmHost: "Rack A" });
+    const home = makeServer("home", "Home", { vmHost: "Rack B" });
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main", "build"])],
+      [home.id, makeConnection(home, ["ops"])],
+    ]);
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    const renderer = await renderScreen(runtime, { connections, workspaces });
+
+    const initialArgs = useVrLiveRuntimeMock.mock.calls.at(-1)?.[0] as { autoSyncWorkspacePanelIds?: string[] };
+    expect(initialArgs.autoSyncWorkspacePanelIds).toEqual(expect.arrayContaining(["dgx::main", "dgx::build", "home::ops"]));
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Scope VR panels to workspace Platform Ops" }).props.onPress();
+    });
+    const workspaceScopedArgs = useVrLiveRuntimeMock.mock.calls.at(-1)?.[0] as { autoSyncWorkspacePanelIds?: string[] };
+    expect(workspaceScopedArgs.autoSyncWorkspacePanelIds).toEqual(expect.arrayContaining(["dgx::main", "dgx::build"]));
+    expect(workspaceScopedArgs.autoSyncWorkspacePanelIds).not.toContain("home::ops");
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Show VR panels for all servers" }).props.onPress();
+    });
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Scope VR panels to VM host Rack B" }).props.onPress();
+    });
+    const vmScopedArgs = useVrLiveRuntimeMock.mock.calls.at(-1)?.[0] as { autoSyncWorkspacePanelIds?: string[] };
+    expect(vmScopedArgs.autoSyncWorkspacePanelIds).toEqual(["home::ops"]);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });
