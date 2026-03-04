@@ -84,7 +84,7 @@ import { GlassesModeScreen } from "./screens/GlassesModeScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
-import { applyWatchMatches, findWatchMatches, formatWatchAlertMessage } from "./watchAlerts";
+import { evaluateCrossServerWatchAlerts } from "./crossServerWatchAlerts";
 import {
   AiEnginePreference,
   FleetRunResult,
@@ -1428,41 +1428,29 @@ export default function AppShell() {
   }, [scopedServerId, watchRules]);
 
   useEffect(() => {
-    if (!isPro) {
+    const result = evaluateCrossServerWatchAlerts({
+      isPro,
+      focusedServerId,
+      servers,
+      connections: poolConnections,
+      rulesByServer: crossServerWatchRulesRef.current,
+    });
+
+    if (result.changedServerIds.length === 0) {
       return;
     }
 
-    servers.forEach((server) => {
-      if (server.id === focusedServerId) {
+    result.notifications.forEach((item) => {
+      void notify(item.title, item.body);
+    });
+
+    result.changedServerIds.forEach((serverId) => {
+      const nextRules = result.nextRulesByServer[serverId];
+      if (!nextRules) {
         return;
       }
-
-      const connection = poolConnections.get(server.id);
-      if (!connection) {
-        return;
-      }
-
-      const currentRules = crossServerWatchRulesRef.current[server.id];
-      if (!currentRules) {
-        return;
-      }
-
-      const matches = findWatchMatches(currentRules, connection.tails);
-      if (matches.length === 0) {
-        return;
-      }
-
-      const applied = applyWatchMatches(currentRules, matches);
-      if (!applied.changed) {
-        return;
-      }
-
-      matches.forEach(({ session, match }) => {
-        void notify("Watch alert", formatWatchAlertMessage(session, match, server.name));
-      });
-
-      crossServerWatchRulesRef.current[server.id] = applied.nextRules;
-      void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${server.id}`, JSON.stringify(applied.nextRules)).catch(
+      crossServerWatchRulesRef.current[serverId] = nextRules;
+      void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${serverId}`, JSON.stringify(nextRules)).catch(
         () => {}
       );
     });
