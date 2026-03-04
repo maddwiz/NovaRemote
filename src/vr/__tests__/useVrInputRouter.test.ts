@@ -116,6 +116,43 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("calls workspace.setOverviewMode(false) for minimize voice actions", async () => {
+    const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({ kind: "minimize" }));
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const setOverviewMode = vi.fn();
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture, setOverviewMode },
+        onSendCommand: async () => undefined,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("focus mode");
+    });
+
+    expect(setOverviewMode).toHaveBeenCalledWith(false);
+    expect(current().hudStatus?.message).toContain("Focus mode");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("records rotate HUD status for gesture rotation actions", async () => {
     const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({ kind: "none" }));
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({
