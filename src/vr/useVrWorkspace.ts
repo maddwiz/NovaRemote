@@ -117,6 +117,33 @@ function uniqueOrdered(values: string[]): string[] {
   return next;
 }
 
+function applyPanelLimit(
+  panelIds: string[],
+  pinnedPanelIds: string[],
+  panelLimit: number,
+  preferredPanelId?: string
+): string[] {
+  const ordered = uniqueOrdered(panelIds);
+  if (ordered.length <= panelLimit) {
+    return ordered;
+  }
+
+  const pinnedSet = new Set(pinnedPanelIds);
+  const pinned = ordered.filter((panelId) => pinnedSet.has(panelId));
+  const unpinned = ordered.filter((panelId) => !pinnedSet.has(panelId));
+  if (preferredPanelId && !pinnedSet.has(preferredPanelId)) {
+    const preferredIndex = unpinned.indexOf(preferredPanelId);
+    if (preferredIndex > 0) {
+      unpinned.splice(preferredIndex, 1);
+      unpinned.unshift(preferredPanelId);
+    }
+  }
+  if (pinned.length >= panelLimit) {
+    return pinned.slice(0, panelLimit);
+  }
+  return [...pinned, ...unpinned.slice(0, panelLimit - pinned.length)];
+}
+
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
 }
@@ -219,11 +246,12 @@ export function useVrWorkspace({
   useEffect(() => {
     const availableIds = universe.map((panel) => panel.id);
     const availableSet = new Set(availableIds);
+    const nextPinnedForLimit = pinnedPanelIds.filter((panelId) => availableSet.has(panelId));
 
     setPanelIds((prev) => {
       const kept = prev.filter((panelId) => availableSet.has(panelId));
       const appended = availableIds.filter((panelId) => !kept.includes(panelId));
-      const merged = [...kept, ...appended].slice(0, panelLimit);
+      const merged = applyPanelLimit([...kept, ...appended], nextPinnedForLimit, panelLimit);
       if (merged.length === prev.length && merged.every((id, index) => id === prev[index])) {
         return prev;
       }
@@ -252,7 +280,7 @@ export function useVrWorkspace({
       }
       return Object.fromEntries(filtered);
     });
-  }, [panelLimit, universe]);
+  }, [panelLimit, pinnedPanelIds, universe]);
 
   const panels = useMemo(() => {
     const pinnedSet = new Set(pinnedPanelIds);
@@ -320,14 +348,11 @@ export function useVrWorkspace({
           return prev;
         }
         const next = [...prev, panelId];
-        if (next.length <= panelLimit) {
-          return next;
-        }
-        return next.slice(next.length - panelLimit);
+        return applyPanelLimit(next, pinnedPanelIds, panelLimit, panelId);
       });
       setFocusedPanelId(panelId);
     },
-    [panelLimit, universeById]
+    [panelLimit, pinnedPanelIds, universeById]
   );
 
   const removePanel = useCallback((panelId: string) => {
@@ -435,7 +460,14 @@ export function useVrWorkspace({
       const restoredPanelIds = uniqueOrdered(
         (Array.isArray(snapshot.panelIds) ? snapshot.panelIds : []).filter((panelId) => availableSet.has(panelId))
       );
-      const nextPanelIds = restoredPanelIds.length > 0 ? restoredPanelIds.slice(0, panelLimit) : availableIds.slice(0, panelLimit);
+      const requestedPinnedPanelIds = uniqueOrdered(
+        (Array.isArray(snapshot.pinnedPanelIds) ? snapshot.pinnedPanelIds : []).filter((panelId) =>
+          restoredPanelIds.includes(panelId) || availableIds.includes(panelId)
+        )
+      );
+      const nextPanelIds = restoredPanelIds.length > 0
+        ? applyPanelLimit(restoredPanelIds, requestedPinnedPanelIds, panelLimit)
+        : applyPanelLimit(availableIds, requestedPinnedPanelIds, panelLimit);
 
       const nextFocusedPanelId =
         typeof snapshot.focusedPanelId === "string" && nextPanelIds.includes(snapshot.focusedPanelId)
@@ -443,9 +475,7 @@ export function useVrWorkspace({
           : nextPanelIds[0] || null;
 
       const nextPinnedPanelIds = uniqueOrdered(
-        (Array.isArray(snapshot.pinnedPanelIds) ? snapshot.pinnedPanelIds : []).filter((panelId) =>
-          nextPanelIds.includes(panelId)
-        )
+        requestedPinnedPanelIds.filter((panelId) => nextPanelIds.includes(panelId))
       );
 
       const nextPreset = isVrLayoutPreset(snapshot.preset) ? snapshot.preset : DEFAULT_PRESET;
@@ -562,6 +592,7 @@ export function useVrWorkspace({
 }
 
 export const vrWorkspaceTestUtils = {
+  applyPanelLimit,
   uniqueOrdered,
   sanitizeTransform,
   rotateOrder,

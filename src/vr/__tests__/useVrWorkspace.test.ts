@@ -97,6 +97,11 @@ describe("vrWorkspaceTestUtils", () => {
     expect(vrWorkspaceTestUtils.rotateOrder(["a", "b", "c"], "left")).toEqual(["b", "c", "a"]);
     expect(vrWorkspaceTestUtils.rotateOrder(["a", "b", "c"], "right")).toEqual(["c", "a", "b"]);
   });
+
+  it("keeps pinned panels when enforcing limits", () => {
+    expect(vrWorkspaceTestUtils.applyPanelLimit(["a", "b", "c"], ["c"], 2)).toEqual(["c", "a"]);
+    expect(vrWorkspaceTestUtils.applyPanelLimit(["a", "b", "c"], ["a"], 2)).toEqual(["a", "b"]);
+  });
 });
 
 describe("useVrWorkspace", () => {
@@ -314,7 +319,7 @@ describe("useVrWorkspace", () => {
         version: "1.0.0",
         preset: "custom",
         focusedPanelId: homePanel,
-        panelIds: [homePanel, dgxPanel],
+        panelIds: [homePanel, dgxPanel, "extra::session"],
         pinnedPanelIds: [homePanel],
         customTransforms: {
           [homePanel]: { x: 0.4, y: 1.82, z: -1.5, yaw: 18, width: 1.3, height: 0.75 },
@@ -340,6 +345,55 @@ describe("useVrWorkspace", () => {
     expect(exported.focusedPanelId).toBe(homePanel);
     expect(exported.pinnedPanelIds).toEqual([homePanel]);
     expect(exported.customTransforms?.[homePanel]?.x).toBe(0.4);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("preserves pinned panels when adding beyond limit", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main", "logs"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 2, initialPreset: "grid" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const mainPanel = buildVrPanelId("dgx", "main");
+    const buildPanel = buildVrPanelId("home", "build");
+    expect(current().panels.map((panel) => panel.id)).toEqual([mainPanel, buildVrPanelId("dgx", "logs")]);
+
+    await act(async () => {
+      current().togglePinPanel(mainPanel);
+    });
+
+    await act(async () => {
+      current().addPanel("home", "build");
+    });
+
+    expect(current().panels.map((panel) => panel.id)).toEqual([mainPanel, buildPanel]);
+    expect(current().panels.find((panel) => panel.id === mainPanel)?.pinned).toBe(true);
 
     await act(async () => {
       renderer?.unmount();
