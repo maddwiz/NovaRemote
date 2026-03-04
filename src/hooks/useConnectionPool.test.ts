@@ -164,4 +164,99 @@ describe("useConnectionPool multi-server reducer flows", () => {
     expect(deltaLines[0]).toBe("line-115");
     expect(deltaLines[deltaLines.length - 1]).toBe("line-1314");
   });
+
+  it("keeps reducer identity stable for repeated no-op high-frequency actions", () => {
+    const dgx = makeServer("dgx", "DGX");
+    const initial = makeReadyPoolState(dgx);
+
+    const withBusy = connectionPoolTestUtils.reducer(initial, {
+      type: "SET_SEND_BUSY",
+      serverId: dgx.id,
+      session: "main",
+      busy: true,
+    });
+    const sameBusy = connectionPoolTestUtils.reducer(withBusy, {
+      type: "SET_SEND_BUSY",
+      serverId: dgx.id,
+      session: "main",
+      busy: true,
+    });
+    expect(sameBusy).toBe(withBusy);
+
+    const withMode = connectionPoolTestUtils.reducer(withBusy, {
+      type: "SET_SEND_MODE",
+      serverId: dgx.id,
+      session: "main",
+      mode: "shell",
+    });
+    const sameMode = connectionPoolTestUtils.reducer(withMode, {
+      type: "SET_SEND_MODE",
+      serverId: dgx.id,
+      session: "main",
+      mode: "shell",
+    });
+    expect(sameMode).toBe(withMode);
+
+    const withStream = connectionPoolTestUtils.reducer(withMode, {
+      type: "SET_STREAM_LIVE",
+      serverId: dgx.id,
+      session: "main",
+      live: true,
+    });
+    const sameStream = connectionPoolTestUtils.reducer(withStream, {
+      type: "SET_STREAM_LIVE",
+      serverId: dgx.id,
+      session: "main",
+      live: true,
+    });
+    expect(sameStream).toBe(withStream);
+
+    const withMeta = connectionPoolTestUtils.reducer(withStream, {
+      type: "SET_CONNECTION_META",
+      serverId: dgx.id,
+      session: "main",
+      meta: {
+        state: "connected",
+        retryCount: 0,
+        lastMessageAt: 100,
+      },
+    });
+    const sameMeta = connectionPoolTestUtils.reducer(withMeta, {
+      type: "SET_CONNECTION_META",
+      serverId: dgx.id,
+      session: "main",
+      meta: {
+        state: "connected",
+        retryCount: 0,
+        lastMessageAt: 100,
+      },
+    });
+    expect(sameMeta).toBe(withMeta);
+
+    const withHealth = connectionPoolTestUtils.reducer(withMeta, {
+      type: "SET_HEALTH",
+      serverId: dgx.id,
+      lastPingAt: 200,
+      latencyMs: 12,
+    });
+    const sameHealth = connectionPoolTestUtils.reducer(withHealth, {
+      type: "SET_HEALTH",
+      serverId: dgx.id,
+      lastPingAt: 200,
+      latencyMs: 12,
+    });
+    expect(sameHealth).toBe(withHealth);
+
+    const withError = connectionPoolTestUtils.reducer(withHealth, {
+      type: "SET_ERROR",
+      serverId: dgx.id,
+      error: "stream error",
+    });
+    const sameError = connectionPoolTestUtils.reducer(withError, {
+      type: "SET_ERROR",
+      serverId: dgx.id,
+      error: "stream error",
+    });
+    expect(sameError).toBe(withError);
+  });
 });

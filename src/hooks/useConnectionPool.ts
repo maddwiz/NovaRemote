@@ -240,6 +240,10 @@ function pruneToSessions<T>(record: Record<string, T>, allowed: Set<string>): Re
   return next;
 }
 
+function sameConnectionMeta(a: SessionConnectionMeta | undefined, b: SessionConnectionMeta): boolean {
+  return Boolean(a && a.state === b.state && a.retryCount === b.retryCount && a.lastMessageAt === b.lastMessageAt);
+}
+
 function deriveStatus(connection: ServerConnection, remoteOpenCount: number, activeStreams: number): ServerConnection["status"] {
   if (!connection.connected) {
     return "disconnected";
@@ -272,17 +276,28 @@ function deriveStatus(connection: ServerConnection, remoteOpenCount: number, act
 function recalculateConnection(connection: ServerConnection): ServerConnection {
   const remoteOpenSessions = connection.openSessions.filter((session) => !connection.localAiSessions.includes(session));
   const activeStreamCount = remoteOpenSessions.filter((session) => Boolean(connection.streamLive[session])).length;
-  const nextHealth: HealthMetrics = {
-    ...connection.health,
-    activeStreams: activeStreamCount,
-    openSessions: remoteOpenSessions.length,
-  };
+  const openSessions = remoteOpenSessions.length;
+  const status = deriveStatus(connection, openSessions, activeStreamCount);
+  const healthChanged =
+    connection.health.activeStreams !== activeStreamCount || connection.health.openSessions !== openSessions;
+
+  if (!healthChanged && connection.activeStreamCount === activeStreamCount && connection.status === status) {
+    return connection;
+  }
+
+  const nextHealth: HealthMetrics = healthChanged
+    ? {
+        ...connection.health,
+        activeStreams: activeStreamCount,
+        openSessions,
+      }
+    : connection.health;
 
   return {
     ...connection,
     health: nextHealth,
     activeStreamCount,
-    status: deriveStatus(connection, remoteOpenSessions.length, activeStreamCount),
+    status,
   };
 }
 
@@ -793,62 +808,97 @@ function reducer(state: ConnectionPoolState, action: PoolAction): ConnectionPool
   }
 
   if (action.type === "SET_SEND_BUSY") {
-    return updateConnection(state, action.serverId, (connection) => ({
-      ...connection,
-      sendBusy: {
-        ...connection.sendBusy,
-        [action.session]: action.busy,
-      },
-    }));
+    return updateConnection(state, action.serverId, (connection) => {
+      if (connection.sendBusy[action.session] === action.busy) {
+        return connection;
+      }
+      return {
+        ...connection,
+        sendBusy: {
+          ...connection.sendBusy,
+          [action.session]: action.busy,
+        },
+      };
+    });
   }
 
   if (action.type === "SET_SEND_MODE") {
-    return updateConnection(state, action.serverId, (connection) => ({
-      ...connection,
-      sendModes: {
-        ...connection.sendModes,
-        [action.session]: action.mode,
-      },
-    }));
+    return updateConnection(state, action.serverId, (connection) => {
+      if (connection.sendModes[action.session] === action.mode) {
+        return connection;
+      }
+      return {
+        ...connection,
+        sendModes: {
+          ...connection.sendModes,
+          [action.session]: action.mode,
+        },
+      };
+    });
   }
 
   if (action.type === "SET_STREAM_LIVE") {
-    return updateConnection(state, action.serverId, (connection) => ({
-      ...connection,
-      streamLive: {
-        ...connection.streamLive,
-        [action.session]: action.live,
-      },
-    }));
+    return updateConnection(state, action.serverId, (connection) => {
+      if (connection.streamLive[action.session] === action.live) {
+        return connection;
+      }
+      return {
+        ...connection,
+        streamLive: {
+          ...connection.streamLive,
+          [action.session]: action.live,
+        },
+      };
+    });
   }
 
   if (action.type === "SET_CONNECTION_META") {
-    return updateConnection(state, action.serverId, (connection) => ({
-      ...connection,
-      connectionMeta: {
-        ...connection.connectionMeta,
-        [action.session]: action.meta,
-      },
-    }));
+    return updateConnection(state, action.serverId, (connection) => {
+      const previousMeta = connection.connectionMeta[action.session];
+      if (sameConnectionMeta(previousMeta, action.meta)) {
+        return connection;
+      }
+      return {
+        ...connection,
+        connectionMeta: {
+          ...connection.connectionMeta,
+          [action.session]: action.meta,
+        },
+      };
+    });
   }
 
   if (action.type === "SET_HEALTH") {
-    return updateConnection(state, action.serverId, (connection) => ({
-      ...connection,
-      health: {
-        ...connection.health,
-        lastPingAt: action.lastPingAt === undefined ? connection.health.lastPingAt : action.lastPingAt,
-        latencyMs: action.latencyMs === undefined ? connection.health.latencyMs : action.latencyMs,
-      },
-    }));
+    return updateConnection(state, action.serverId, (connection) => {
+      const nextLastPingAt =
+        action.lastPingAt === undefined ? connection.health.lastPingAt : action.lastPingAt;
+      const nextLatencyMs = action.latencyMs === undefined ? connection.health.latencyMs : action.latencyMs;
+      if (connection.health.lastPingAt === nextLastPingAt && connection.health.latencyMs === nextLatencyMs) {
+        return connection;
+      }
+      return {
+        ...connection,
+        health: {
+          ...connection.health,
+          lastPingAt: nextLastPingAt,
+          latencyMs: nextLatencyMs,
+        },
+      };
+    });
   }
 
   if (action.type === "SET_ERROR") {
-    return updateConnection(state, action.serverId, (connection) => ({
-      ...connection,
-      lastError: action.error,
-      capabilitiesLoading: action.error ? false : connection.capabilitiesLoading,
-    }));
+    return updateConnection(state, action.serverId, (connection) => {
+      const nextCapabilitiesLoading = action.error ? false : connection.capabilitiesLoading;
+      if (connection.lastError === action.error && connection.capabilitiesLoading === nextCapabilitiesLoading) {
+        return connection;
+      }
+      return {
+        ...connection,
+        lastError: action.error,
+        capabilitiesLoading: nextCapabilitiesLoading,
+      };
+    });
   }
 
   return state;
