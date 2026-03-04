@@ -43,6 +43,7 @@ export function VrCommandCenterScreen() {
   } = useAppContext().terminals;
   const [voiceInput, setVoiceInput] = useState<string>("");
   const [commandInput, setCommandInput] = useState<string>("");
+  const [activeVmHostScope, setActiveVmHostScope] = useState<string | null>(null);
   const [agentScope, setAgentScope] = useState<"focused" | "visible" | "all">("visible");
   const [agentNameInput, setAgentNameInput] = useState<string>("");
   const [agentGoalInput, setAgentGoalInput] = useState<string>("");
@@ -71,6 +72,39 @@ export function VrCommandCenterScreen() {
     () => runtime.workspace.panels.find((panel) => panel.id === runtime.workspace.focusedPanelId) || null,
     [runtime.workspace.focusedPanelId, runtime.workspace.panels]
   );
+  const vmHostScopeOptions = useMemo(() => {
+    const labels = new Map<string, string>();
+    let hasUnassigned = false;
+    connections.forEach((connection) => {
+      const host = (connection.server.vmHost || "").trim();
+      if (!host) {
+        hasUnassigned = true;
+        return;
+      }
+      labels.set(host.toLowerCase(), host);
+    });
+    const options = Array.from(labels.entries())
+      .map(([key, label]) => ({ key, label }))
+      .sort((a, b) => a.label.localeCompare(b.label));
+    if (hasUnassigned) {
+      options.push({ key: "__none__", label: "Standalone" });
+    }
+    return options;
+  }, [connections]);
+  const matchesVmHostScope = useCallback(
+    (serverId: string) => {
+      if (!activeVmHostScope) {
+        return true;
+      }
+      const connection = connections.get(serverId);
+      const host = (connection?.server.vmHost || "").trim().toLowerCase();
+      if (activeVmHostScope === "__none__") {
+        return !host;
+      }
+      return host === activeVmHostScope;
+    },
+    [activeVmHostScope, connections]
+  );
   const workspaceScope = useMemo(() => {
     if (!activeWorkspaceId) {
       return null;
@@ -86,15 +120,23 @@ export function VrCommandCenterScreen() {
     };
   }, [activeWorkspaceId, sharedWorkspaces]);
   const visiblePanels = useMemo(() => {
-    if (!workspaceScope) {
-      return runtime.workspace.panels;
-    }
-    return runtime.workspace.panels.filter((panel) => workspaceScope.serverIds.has(panel.serverId));
-  }, [runtime.workspace.panels, workspaceScope]);
+    return runtime.workspace.panels.filter((panel) => {
+      if (!matchesVmHostScope(panel.serverId)) {
+        return false;
+      }
+      if (!workspaceScope) {
+        return true;
+      }
+      return workspaceScope.serverIds.has(panel.serverId);
+    });
+  }, [matchesVmHostScope, runtime.workspace.panels, workspaceScope]);
   const availablePanels = useMemo(() => {
     const visible = new Set(runtime.workspace.panels.map((panel) => panel.id));
     const next: Array<{ id: string; serverId: string; session: string; label: string }> = [];
     connections.forEach((connection, serverId) => {
+      if (!matchesVmHostScope(serverId)) {
+        return;
+      }
       if (workspaceScope && !workspaceScope.serverIds.has(serverId)) {
         return;
       }
@@ -112,7 +154,7 @@ export function VrCommandCenterScreen() {
       });
     });
     return next;
-  }, [connections, runtime.workspace.panels, workspaceScope]);
+  }, [connections, matchesVmHostScope, runtime.workspace.panels, workspaceScope]);
   const voiceChannelsByWorkspace = useMemo(() => {
     const grouped = new Map<string, typeof voiceChannels>();
     voiceChannels.forEach((channel) => {
@@ -145,6 +187,15 @@ export function VrCommandCenterScreen() {
       setActiveWorkspaceId(null);
     }
   }, [activeWorkspaceId, sharedWorkspaces]);
+
+  useEffect(() => {
+    if (!activeVmHostScope) {
+      return;
+    }
+    if (!vmHostScopeOptions.some((option) => option.key === activeVmHostScope)) {
+      setActiveVmHostScope(null);
+    }
+  }, [activeVmHostScope, vmHostScopeOptions]);
 
   const agentTargetServerIds = useMemo(() => {
     if (agentScope === "all") {
@@ -257,6 +308,33 @@ export function VrCommandCenterScreen() {
             >
               <Text style={[styles.chipText, activeWorkspaceId === workspace.id ? styles.chipTextActive : null]}>
                 {workspace.name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+      </View>
+
+      <View style={styles.vrRuntimeInputCard}>
+        <Text style={styles.serverSubtitle}>VM host scope</Text>
+        <View style={styles.vrRuntimeActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show VR panels for all VM hosts"
+            style={[styles.chip, activeVmHostScope === null ? styles.chipActive : null]}
+            onPress={() => setActiveVmHostScope(null)}
+          >
+            <Text style={[styles.chipText, activeVmHostScope === null ? styles.chipTextActive : null]}>All hosts</Text>
+          </Pressable>
+          {vmHostScopeOptions.map((option) => (
+            <Pressable
+              key={`vr-vmhost-${option.key}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Scope VR panels to VM host ${option.label}`}
+              style={[styles.chip, activeVmHostScope === option.key ? styles.chipActive : null]}
+              onPress={() => setActiveVmHostScope(option.key)}
+            >
+              <Text style={[styles.chipText, activeVmHostScope === option.key ? styles.chipTextActive : null]}>
+                {option.label}
               </Text>
             </Pressable>
           ))}

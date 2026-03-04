@@ -29,13 +29,14 @@ import { AppProvider } from "../context/AppContext";
 import { ServerConnection, ServerProfile, SharedWorkspace, VoiceChannel } from "../types";
 import { VrCommandCenterScreen } from "./VrCommandCenterScreen";
 
-function makeServer(id: string, name: string): ServerProfile {
+function makeServer(id: string, name: string, overrides: Partial<ServerProfile> = {}): ServerProfile {
   return {
     id,
     name,
     baseUrl: `https://${id}.novaremote.test`,
     token: `${id}-token`,
     defaultCwd: "/workspace",
+    ...overrides,
   };
 }
 
@@ -427,6 +428,57 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Deny VR pending agents" }).props.onPress();
     });
     expect(denyPending).toHaveBeenCalledWith(["dgx", "home"]);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("filters visible panels by selected VM host scope", async () => {
+    const baseRuntime = makeRuntime();
+    const runtime = {
+      ...baseRuntime,
+      workspace: {
+        ...baseRuntime.workspace,
+        focusedPanelId: "dgx::main",
+        panels: [
+          ...baseRuntime.workspace.panels,
+          {
+            id: "home::ops",
+            serverId: "home",
+            serverName: "Home",
+            session: "ops",
+            sessionLabel: "ops",
+            connected: true,
+            output: "ops output",
+            pinned: false,
+            mini: false,
+            transform: {
+              x: 0.4,
+              y: 1.45,
+              z: -1.8,
+              yaw: 0,
+            },
+          },
+        ],
+      },
+    };
+    const dgx = makeServer("dgx", "DGX", { vmHost: "Rack A" });
+    const home = makeServer("home", "Home", { vmHost: "Rack B" });
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main", "build"])],
+      [home.id, makeConnection(home, ["ops"])],
+    ]);
+    const renderer = await renderScreen(runtime, { connections });
+
+    expect(renderer.root.findByProps({ accessibilityLabel: "Focus panel ops" })).toBeDefined();
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Scope VR panels to VM host Rack A" }).props.onPress();
+    });
+
+    expect(renderer.root.findByProps({ accessibilityLabel: "Focus panel main" })).toBeDefined();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Focus panel ops" })).toThrow();
 
     await act(async () => {
       renderer.unmount();
