@@ -54,19 +54,26 @@ jobs:
 
       - name: Configure Pages
         if: steps.pages_check.outputs.enabled == 'true'
+        id: configure_pages
         uses: actions/configure-pages@v5
+        continue-on-error: true
 
       - name: Upload Pages Artifact
-        if: steps.pages_check.outputs.enabled == 'true'
+        if: steps.pages_check.outputs.enabled == 'true' && steps.configure_pages.outcome == 'success'
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/public
 
       - name: Deploy to GitHub Pages
-        if: steps.pages_check.outputs.enabled == 'true'
+        if: steps.pages_check.outputs.enabled == 'true' && steps.configure_pages.outcome == 'success'
         id: deployment
         uses: actions/deploy-pages@v4
 
       - name: Pages deploy skipped
-        if: steps.pages_check.outputs.enabled != 'true'
-        run: echo "Skipped Pages deploy because GitHub Pages is not enabled for this repository."
+        if: steps.pages_check.outputs.enabled != 'true' || steps.configure_pages.outcome != 'success'
+        run: |
+          if [[ "${{ steps.pages_check.outputs.enabled }}" != "true" ]]; then
+            echo "Skipped Pages deploy because GitHub Pages is not enabled for this repository."
+            exit 0
+          fi
+          echo "Skipped Pages deploy because Configure Pages failed (non-blocking)."
