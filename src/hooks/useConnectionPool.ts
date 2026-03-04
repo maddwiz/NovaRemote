@@ -230,6 +230,22 @@ function uniqueSessions(sessions: string[]): string[] {
   return next;
 }
 
+function sameStringArray(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  return a.every((value, index) => value === b[index]);
+}
+
+function sameRecordShallow<T>(a: Record<string, T>, b: Record<string, T>): boolean {
+  const aKeys = Object.keys(a);
+  const bKeys = Object.keys(b);
+  if (aKeys.length !== bKeys.length) {
+    return false;
+  }
+  return aKeys.every((key) => b[key] === a[key]);
+}
+
 function pruneToSessions<T>(record: Record<string, T>, allowed: Set<string>): Record<string, T> {
   const next: Record<string, T> = {};
   Object.entries(record).forEach(([session, value]) => {
@@ -638,23 +654,62 @@ function reducer(state: ConnectionPoolState, action: PoolAction): ConnectionPool
       const mergedAll = uniqueSessions(action.allSessions);
       const mergedOpen = uniqueSessions(action.openSessions).filter((session) => mergedAll.includes(session));
       const allowed = new Set<string>(mergedAll);
-      const sendModes = pruneToSessions(connection.sendModes, allowed);
+
+      const nextTails = pruneToSessions(connection.tails, allowed);
+      const nextDrafts = pruneToSessions(connection.drafts, allowed);
+      const nextSendBusy = pruneToSessions(connection.sendBusy, allowed);
+      const nextStreamLive = pruneToSessions(connection.streamLive, allowed);
+      const nextConnectionMeta = pruneToSessions(connection.connectionMeta, allowed);
+
+      let sendModes = pruneToSessions(connection.sendModes, allowed);
+      let sendModesChanged = !sameRecordShallow(sendModes, connection.sendModes);
       mergedAll.forEach((session) => {
         if (!sendModes[session]) {
+          if (!sendModesChanged) {
+            sendModes = { ...sendModes };
+            sendModesChanged = true;
+          }
           sendModes[session] = connection.localAiSessions.includes(session) || isLikelyAiSession(session) ? "ai" : "shell";
         }
       });
 
+      if (!sendModesChanged) {
+        sendModes = connection.sendModes;
+      }
+
+      const allSessionsChanged = !sameStringArray(connection.allSessions, mergedAll);
+      const openSessionsChanged = !sameStringArray(connection.openSessions, mergedOpen);
+      const tailsChanged = !sameRecordShallow(nextTails, connection.tails);
+      const draftsChanged = !sameRecordShallow(nextDrafts, connection.drafts);
+      const sendBusyChanged = !sameRecordShallow(nextSendBusy, connection.sendBusy);
+      const streamLiveChanged = !sameRecordShallow(nextStreamLive, connection.streamLive);
+      const connectionMetaChanged = !sameRecordShallow(nextConnectionMeta, connection.connectionMeta);
+      const lastErrorChanged = connection.lastError !== null;
+
+      if (
+        !allSessionsChanged &&
+        !openSessionsChanged &&
+        !tailsChanged &&
+        !draftsChanged &&
+        !sendBusyChanged &&
+        !sendModesChanged &&
+        !streamLiveChanged &&
+        !connectionMetaChanged &&
+        !lastErrorChanged
+      ) {
+        return connection;
+      }
+
       return {
         ...connection,
-        allSessions: mergedAll,
-        openSessions: mergedOpen,
-        tails: pruneToSessions(connection.tails, allowed),
-        drafts: pruneToSessions(connection.drafts, allowed),
-        sendBusy: pruneToSessions(connection.sendBusy, allowed),
+        allSessions: allSessionsChanged ? mergedAll : connection.allSessions,
+        openSessions: openSessionsChanged ? mergedOpen : connection.openSessions,
+        tails: tailsChanged ? nextTails : connection.tails,
+        drafts: draftsChanged ? nextDrafts : connection.drafts,
+        sendBusy: sendBusyChanged ? nextSendBusy : connection.sendBusy,
         sendModes,
-        streamLive: pruneToSessions(connection.streamLive, allowed),
-        connectionMeta: pruneToSessions(connection.connectionMeta, allowed),
+        streamLive: streamLiveChanged ? nextStreamLive : connection.streamLive,
+        connectionMeta: connectionMetaChanged ? nextConnectionMeta : connection.connectionMeta,
         lastError: null,
       };
     });

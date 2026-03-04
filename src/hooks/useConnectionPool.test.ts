@@ -259,4 +259,17 @@ describe("useConnectionPool multi-server reducer flows", () => {
     });
     expect(sameError).toBe(withError);
   });
+
+  it("keeps reducer identity stable when session refresh returns identical data", () => {
+    const dgx = makeServer("dgx", "DGX");
+    const initial = makeReadyPoolState(dgx);
+
+    const sameSessions = connectionPoolTestUtils.reducer(initial, {
+      type: "SET_SESSIONS",
+      serverId: dgx.id,
+      allSessions: ["main"],
+      openSessions: ["main"],
+    });
+    expect(sameSessions).toBe(initial);
+  });
 });
