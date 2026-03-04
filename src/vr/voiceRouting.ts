@@ -36,6 +36,18 @@ function resolvePanelId(panels: VrRoutePanel[], focusedPanelId: string | null, t
   return panels[0]?.id ?? null;
 }
 
+function ctrlKeyFromChar(char: string): string {
+  if (!char || char.length !== 1) {
+    return "C-c";
+  }
+  const code = char.charCodeAt(0);
+  if (code < 1 || code > 26) {
+    return "C-c";
+  }
+  const letter = String.fromCharCode(code + 96);
+  return `C-${letter}`;
+}
+
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
   const cleaned = transcript.trim();
   if (cleaned) {
@@ -176,6 +188,28 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
   }
   if (route.kind === "focus_panel") {
     return { kind: "focus", panelId: route.panelId };
+  }
+  if (route.kind === "control_char") {
+    return {
+      kind: "control",
+      panelId: route.panelId,
+      char: ctrlKeyFromChar(route.char),
+    };
+  }
+  if (route.kind === "stop_session") {
+    return {
+      kind: "stop_session",
+      panelId: route.panelId,
+    };
+  }
+  if (route.kind === "open_on_mac") {
+    return {
+      kind: "open_on_mac",
+      panelId: route.panelId,
+    };
+  }
+  if (route.kind !== "send_command") {
+    return { kind: "none" };
   }
   return { kind: "send", panelId: route.panelId, command: route.command };
 }

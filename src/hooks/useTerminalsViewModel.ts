@@ -111,6 +111,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     isLocalSession,
     setSessionMode,
     handleOpenOnMac,
+    openServerSessionOnMac,
     fetchTail,
     createSpectateLink,
     terminalApiBasePath,
@@ -370,6 +371,18 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         }
         if (!capabilities.macAttach) {
           throw new Error("Active server does not support mac attach.");
+        }
+        await handleOpenOnMac(session);
+      });
+    },
+    onOpenServerSessionOnMac: (serverId, session) => {
+      void runWithStatus(`Opening ${session} on Mac`, async () => {
+        if (typeof openServerSessionOnMac === "function") {
+          await openServerSessionOnMac(serverId, session);
+          return;
+        }
+        if (activeServer?.id !== serverId) {
+          throw new Error("Focus the target server before opening on Mac.");
         }
         await handleOpenOnMac(session);
       });

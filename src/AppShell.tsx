@@ -1028,6 +1028,13 @@ export default function AppShell() {
     [focusedServerId, openPoolOnMac]
   );
 
+  const openServerSessionOnMac = useCallback(
+    async (serverId: string, session: string) => {
+      await openPoolOnMac(serverId, session);
+    },
+    [openPoolOnMac]
+  );
+
   const fetchTail = useCallback(
     async (session: string, showErrors: boolean) => {
       if (!focusedServerId) {
@@ -2343,6 +2350,7 @@ export default function AppShell() {
     isLocalSession,
     setSessionMode,
     handleOpenOnMac,
+    openServerSessionOnMac,
     fetchTail,
     createSpectateLink,
     terminalApiBasePath,

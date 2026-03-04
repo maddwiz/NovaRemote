@@ -147,6 +147,7 @@ export function GlassesModeScreen() {
     onSetServerSessionDraft,
     onSendServerSessionDraft,
     onSendServerSessionCommand,
+    onOpenServerSessionOnMac,
     onClearServerSessionDraft,
     onSendServerSessionControlChar,
     onHistoryPrev,
@@ -351,6 +352,30 @@ export function GlassesModeScreen() {
         setFocusedPanelId(panelIds[nextIndex]);
         return;
       }
+      if (route.kind === "control_char") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        onSendServerSessionControlChar(target.serverId, target.session, route.char);
+        return;
+      }
+      if (route.kind === "stop_session") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        onSendServerSessionControlChar(target.serverId, target.session, "\u0003");
+        return;
+      }
+      if (route.kind === "open_on_mac") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        onOpenServerSessionOnMac(target.serverId, target.session);
+        return;
+      }
       if (route.kind !== "send_command") {
         return;
       }
@@ -363,7 +388,16 @@ export function GlassesModeScreen() {
         onSendServerSessionCommand(target.serverId, target.session, route.command, "ai");
       }
     },
-    [focusedPanelId, onSendServerSessionCommand, onSetServerSessionDraft, panelIds, panelMap, routeTranscript]
+    [
+      focusedPanelId,
+      onOpenServerSessionOnMac,
+      onSendServerSessionCommand,
+      onSendServerSessionControlChar,
+      onSetServerSessionDraft,
+      panelIds,
+      panelMap,
+      routeTranscript,
+    ]
   );
 
   const stopVoiceForActivePanel = useCallback(() => {

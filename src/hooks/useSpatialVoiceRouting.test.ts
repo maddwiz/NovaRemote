@@ -119,6 +119,48 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(rotateRight).toEqual({ kind: "rotate_workspace", direction: "right" });
   });
 
+  it("recognizes control and lifecycle commands", () => {
+    const interrupt = resolveSpatialVoiceRoute({
+      transcript: "interrupt for homelab",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const ctrlZ = resolveSpatialVoiceRoute({
+      transcript: "ctrl z for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const stopSession = resolveSpatialVoiceRoute({
+      transcript: "stop session for deploy",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const openOnMac = resolveSpatialVoiceRoute({
+      transcript: "open on mac for homelab",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+
+    expect(interrupt).toEqual({
+      kind: "control_char",
+      panelId: "home::build-01",
+      char: "\u0003",
+    });
+    expect(ctrlZ).toEqual({
+      kind: "control_char",
+      panelId: "cloud::deploy",
+      char: "\u001a",
+    });
+    expect(stopSession).toEqual({
+      kind: "stop_session",
+      panelId: "cloud::deploy",
+    });
+    expect(openOnMac).toEqual({
+      kind: "open_on_mac",
+      panelId: "home::build-01",
+    });
+  });
+
   it("defaults to sending on the focused panel", () => {
     const route = resolveSpatialVoiceRoute({
       transcript: "git status",

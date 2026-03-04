@@ -12,6 +12,9 @@ export type VoiceRoute =
   | { kind: "minimize" }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | { kind: "focus_panel"; panelId: string }
+  | { kind: "control_char"; panelId: string; char: string }
+  | { kind: "stop_session"; panelId: string }
+  | { kind: "open_on_mac"; panelId: string }
   | { kind: "send_command"; panelId: string; command: string };
 
 type ResolveVoiceRouteArgs = {
@@ -88,6 +91,15 @@ export function findPanelByTarget(panels: VoiceRoutePanel[], rawTarget: string):
 
 function escapeRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function ctrlCharForLetter(letter: string): string | null {
+  const normalized = letter.trim().toLowerCase();
+  if (!/^[a-z]$/.test(normalized)) {
+    return null;
+  }
+  const code = normalized.charCodeAt(0);
+  return String.fromCharCode(code - 96);
 }
 
 function parseExplicitSendWithoutColon(
@@ -183,6 +195,63 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
 
   if (normalized === "rotate right" || normalized === "rotate workspace right" || normalized === "next panel") {
     return { kind: "rotate_workspace", direction: "right" };
+  }
+
+  const stopSessionMatch = cleaned.match(
+    /^(?:stop|terminate|halt)\s+(?:session|terminal)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+  );
+  if (stopSessionMatch) {
+    const target = stopSessionMatch[1]?.trim() || stopSessionMatch[2]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    if (!panelId) {
+      return { kind: "none" };
+    }
+    return { kind: "stop_session", panelId };
+  }
+
+  const openOnMacMatch = cleaned.match(/^open(?:\s+(.+?))?\s+on\s+mac$/i);
+  if (openOnMacMatch) {
+    const target = openOnMacMatch[1]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    if (!panelId) {
+      return { kind: "none" };
+    }
+    return { kind: "open_on_mac", panelId };
+  }
+
+  const openOnMacForMatch = cleaned.match(/^open\s+on\s+mac(?:\s+(?:for|on)\s+(.+))?$/i);
+  if (openOnMacForMatch) {
+    const target = openOnMacForMatch[1]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    if (!panelId) {
+      return { kind: "none" };
+    }
+    return { kind: "open_on_mac", panelId };
+  }
+
+  const interruptMatch = cleaned.match(
+    /^(?:interrupt|stop command|cancel command)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+  );
+  if (interruptMatch) {
+    const target = interruptMatch[1]?.trim() || interruptMatch[2]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    if (!panelId) {
+      return { kind: "none" };
+    }
+    return { kind: "control_char", panelId, char: "\u0003" };
+  }
+
+  const controlMatch = cleaned.match(
+    /^(?:ctrl\s*\+?|control\s+)([a-z])(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+  );
+  if (controlMatch) {
+    const target = controlMatch[2]?.trim() || controlMatch[3]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    const char = ctrlCharForLetter(controlMatch[1] || "");
+    if (!panelId || !char) {
+      return { kind: "none" };
+    }
+    return { kind: "control_char", panelId, char };
   }
 
   const explicitSendMatch = cleaned.match(/^(?:send|route)\s+to\s+(.+?)\s*:\s*(.+)$/i);
