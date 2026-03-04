@@ -33,7 +33,7 @@ Updated: 2026-03-04
 
 ## v1.4 VR Command Center
 
-- [~] In this repo: VR preview route/screen + pooled multi-server controls + tests
+- [x] In this repo: VR preview route/screen + pooled multi-server controls + tests
 - [ ] Separate production VR native app (`NovaRemoteVR`) still a broader standalone track
 
 ## v1.5 VM Grouping
