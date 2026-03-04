@@ -24,6 +24,8 @@ export type UseVrInputRouterArgs = {
   workspace: WorkspaceInputBridge;
   onSendCommand: (serverId: string, session: string, command: string) => Promise<void> | void;
   onSendControlChar?: (serverId: string, session: string, char: string) => Promise<void> | void;
+  onReconnectServer?: (serverId: string) => Promise<void> | void;
+  onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
   onStopSession?: (serverId: string, session: string) => Promise<void> | void;
   onOpenOnMac?: (serverId: string, session: string) => Promise<void> | void;
   onSetOverviewMode?: (enabled: boolean) => void;
@@ -50,6 +52,8 @@ export function useVrInputRouter({
   workspace,
   onSendCommand,
   onSendControlChar,
+  onReconnectServer,
+  onReconnectServers,
   onStopSession,
   onOpenOnMac,
   onSetOverviewMode,
@@ -139,6 +143,75 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to send control character",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+      if (action.kind === "reconnect_server") {
+        if (!onReconnectServer) {
+          publishHudStatus({
+            message: "Reconnect is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          await onReconnectServer(action.serverId);
+          publishHudStatus({
+            message: `Reconnect queued for ${action.serverId}`,
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to reconnect server",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+      if (action.kind === "reconnect_all") {
+        if (onReconnectServers) {
+          try {
+            await onReconnectServers(action.serverIds);
+            publishHudStatus({
+              message: `Reconnect queued for ${action.serverIds.length} servers`,
+              severity: "success",
+              at: now(),
+            });
+          } catch (error) {
+            publishHudStatus({
+              message: error instanceof Error ? error.message : "Failed to reconnect all servers",
+              severity: "error",
+              at: now(),
+            });
+          }
+          return action;
+        }
+        if (!onReconnectServer) {
+          publishHudStatus({
+            message: "Reconnect is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          for (const serverId of action.serverIds) {
+            await onReconnectServer(serverId);
+          }
+          publishHudStatus({
+            message: `Reconnect queued for ${action.serverIds.length} servers`,
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to reconnect all servers",
             severity: "error",
             at: now(),
           });
@@ -267,7 +340,17 @@ export function useVrInputRouter({
       });
       return action;
     },
-    [onOpenOnMac, onSendCommand, onSendControlChar, onSetOverviewMode, onStopSession, publishHudStatus, workspace]
+    [
+      onOpenOnMac,
+      onReconnectServer,
+      onReconnectServers,
+      onSendCommand,
+      onSendControlChar,
+      onSetOverviewMode,
+      onStopSession,
+      publishHudStatus,
+      workspace,
+    ]
   );
 
   const dispatchGesture = useCallback(

@@ -11,6 +11,8 @@ export type UseVrLiveRuntimeArgs = {
   maxPanels?: number;
   initialPreset?: VrLayoutPreset;
   sessionClient?: VrSessionClient;
+  onReconnectServer?: (serverId: string) => Promise<void> | void;
+  onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
 };
 
 export function useVrLiveRuntime({
@@ -18,6 +20,8 @@ export function useVrLiveRuntime({
   maxPanels,
   initialPreset,
   sessionClient,
+  onReconnectServer,
+  onReconnectServers,
 }: UseVrLiveRuntimeArgs) {
   const workspace = useVrWorkspace({
     connections,
@@ -116,6 +120,8 @@ export function useVrLiveRuntime({
     onSetOverviewMode: workspace.setOverviewMode,
     onSendCommand: sendServerCommand,
     onSendControlChar: sendServerControlChar,
+    onReconnectServer,
+    onReconnectServers,
     onStopSession: stopServerSession,
     onOpenOnMac: openServerOnMac,
   });

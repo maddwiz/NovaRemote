@@ -317,6 +317,8 @@ describe("useVrLiveRuntime", () => {
         session: string
       ) => Promise<void>
     >(async () => undefined);
+    const onReconnectServer = vi.fn(async () => undefined);
+    const onReconnectServers = vi.fn(async () => undefined);
 
     let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
     const current = () => {
@@ -331,6 +333,8 @@ describe("useVrLiveRuntime", () => {
         connections,
         sessionClient: buildSessionClient({ sendMock, ctrlMock, stopSessionMock, openOnMacMock }),
         maxPanels: 3,
+        onReconnectServer,
+        onReconnectServers,
       });
       return null;
     }
@@ -389,6 +393,18 @@ describe("useVrLiveRuntime", () => {
       "main"
     );
     expect(current().hudStatus?.message).toContain("Opened dgx/main on Mac");
+
+    await act(async () => {
+      await current().dispatchVoice("reconnect dgx");
+    });
+    expect(onReconnectServer).toHaveBeenCalledWith("dgx");
+    expect(current().hudStatus?.message).toContain("Reconnect queued for dgx");
+
+    await act(async () => {
+      await current().dispatchVoice("reconnect all");
+    });
+    expect(onReconnectServers).toHaveBeenCalledWith(["dgx"]);
+    expect(current().hudStatus?.message).toContain("Reconnect queued for 1 servers");
 
     await act(async () => {
       renderer?.unmount();

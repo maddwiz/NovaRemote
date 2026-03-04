@@ -119,6 +119,25 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(rotateRight).toEqual({ kind: "rotate_workspace", direction: "right" });
   });
 
+  it("recognizes reconnect server and reconnect all commands", () => {
+    const reconnectServer = resolveSpatialVoiceRoute({
+      transcript: "reconnect homelab",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const reconnectAll = resolveSpatialVoiceRoute({
+      transcript: "reconnect all",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+
+    expect(reconnectServer).toEqual({
+      kind: "reconnect_server",
+      panelId: "home::build-01",
+    });
+    expect(reconnectAll).toEqual({ kind: "reconnect_all" });
+  });
+
   it("recognizes control and lifecycle commands", () => {
     const interrupt = resolveSpatialVoiceRoute({
       transcript: "interrupt for homelab",

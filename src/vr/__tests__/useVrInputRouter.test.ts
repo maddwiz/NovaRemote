@@ -232,6 +232,61 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches reconnect actions through reconnect callbacks", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({
+        kind: "reconnect_server",
+        panelId: "home::build",
+        serverId: "home",
+      })
+      .mockReturnValueOnce({
+        kind: "reconnect_all",
+        serverIds: ["dgx", "home"],
+      });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onReconnectServer = vi.fn(async () => undefined);
+    const onReconnectServers = vi.fn(async () => undefined);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onReconnectServer,
+        onReconnectServers,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("reconnect homelab");
+    });
+    expect(onReconnectServer).toHaveBeenCalledWith("home");
+    expect(current().hudStatus?.message).toContain("Reconnect queued for home");
+
+    await act(async () => {
+      await current().dispatchVoice("reconnect all");
+    });
+    expect(onReconnectServers).toHaveBeenCalledWith(["dgx", "home"]);
+    expect(current().hudStatus?.message).toContain("Reconnect queued for 2 servers");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("toggles overview mode from voice and gesture actions", async () => {
     const applyVoiceTranscript = vi.fn<
       (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction

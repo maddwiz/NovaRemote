@@ -210,6 +210,19 @@ describe("useVrWorkspace", () => {
       session: "build-01",
     });
 
+    const reconnectServerAction = current().applyVoiceTranscript("reconnect homelab");
+    expect(reconnectServerAction).toEqual({
+      kind: "reconnect_server",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+    });
+
+    const reconnectAllAction = current().applyVoiceTranscript("reconnect all");
+    expect(reconnectAllAction).toEqual({
+      kind: "reconnect_all",
+      serverIds: ["dgx", "home"],
+    });
+
     await act(async () => {
       renderer?.unmount();
     });

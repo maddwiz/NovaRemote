@@ -136,6 +136,7 @@ export function GlassesModeScreen() {
     connections,
     focusedServerId,
     onFocusServer,
+    onReconnectServer,
     sessionAliases,
     sessionReadOnly,
     glassesMode,
@@ -352,6 +353,19 @@ export function GlassesModeScreen() {
         setFocusedPanelId(panelIds[nextIndex]);
         return;
       }
+      if (route.kind === "reconnect_all") {
+        const uniqueServerIds = Array.from(new Set(allPanels.map((panel) => panel.serverId)));
+        uniqueServerIds.forEach((serverId) => onReconnectServer(serverId));
+        return;
+      }
+      if (route.kind === "reconnect_server") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        onReconnectServer(target.serverId);
+        return;
+      }
       if (route.kind === "control_char") {
         const target = panelMap.get(route.panelId);
         if (!target) {
@@ -389,7 +403,9 @@ export function GlassesModeScreen() {
       }
     },
     [
+      allPanels,
       focusedPanelId,
+      onReconnectServer,
       onOpenServerSessionOnMac,
       onSendServerSessionCommand,
       onSendServerSessionControlChar,

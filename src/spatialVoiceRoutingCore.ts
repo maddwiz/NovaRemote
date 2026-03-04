@@ -12,6 +12,8 @@ export type VoiceRoute =
   | { kind: "minimize" }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | { kind: "focus_panel"; panelId: string }
+  | { kind: "reconnect_server"; panelId: string }
+  | { kind: "reconnect_all" }
   | { kind: "control_char"; panelId: string; char: string }
   | { kind: "stop_session"; panelId: string }
   | { kind: "open_on_mac"; panelId: string }
@@ -195,6 +197,19 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
 
   if (normalized === "rotate right" || normalized === "rotate workspace right" || normalized === "next panel") {
     return { kind: "rotate_workspace", direction: "right" };
+  }
+
+  const reconnectMatch = cleaned.match(/^reconnect(?:\s+server)?(?:\s+(.+))?$/i);
+  if (reconnectMatch) {
+    const target = reconnectMatch[1]?.trim() || "";
+    if (!target || normalizeForMatch(target) === "all" || normalizeForMatch(target) === "all servers") {
+      return { kind: "reconnect_all" };
+    }
+    const panel = findPanelByTarget(panels, target);
+    if (panel) {
+      return { kind: "reconnect_server", panelId: panel.id };
+    }
+    return { kind: "none" };
   }
 
   const stopSessionMatch = cleaned.match(

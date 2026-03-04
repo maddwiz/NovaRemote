@@ -6,6 +6,8 @@ export type VrRoutePanel = VoiceRoutePanel;
 export type VrVoiceIntent =
   | { kind: "none" }
   | { kind: "focus"; panelId: string }
+  | { kind: "reconnect_server"; panelId: string }
+  | { kind: "reconnect_all" }
   | { kind: "send"; panelId: string; command: string }
   | { kind: "control"; panelId: string; char: string }
   | { kind: "stop_session"; panelId: string }
@@ -188,6 +190,17 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
   }
   if (route.kind === "focus_panel") {
     return { kind: "focus", panelId: route.panelId };
+  }
+  if (route.kind === "reconnect_server") {
+    return {
+      kind: "reconnect_server",
+      panelId: route.panelId,
+    };
+  }
+  if (route.kind === "reconnect_all") {
+    return {
+      kind: "reconnect_all",
+    };
   }
   if (route.kind === "control_char") {
     return {

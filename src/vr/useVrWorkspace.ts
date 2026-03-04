@@ -22,6 +22,8 @@ export type VrWorkspacePanel = VrPanelState & {
 export type VrWorkspaceVoiceAction =
   | { kind: "none" }
   | { kind: "focus"; panelId: string }
+  | { kind: "reconnect_server"; panelId: string; serverId: string }
+  | { kind: "reconnect_all"; serverIds: string[] }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | {
       kind: "stop_session";
@@ -657,6 +659,23 @@ export function useVrWorkspace({
         focusPanel(intent.panelId);
         return { kind: "focus", panelId: intent.panelId };
       }
+      if (intent.kind === "reconnect_server") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "reconnect_server",
+          panelId: panel.id,
+          serverId: panel.serverId,
+        };
+      }
+      if (intent.kind === "reconnect_all") {
+        return {
+          kind: "reconnect_all",
+          serverIds: serverScopeIds.slice(),
+        };
+      }
       if (intent.kind === "rotate_workspace") {
         rotateWorkspace(intent.direction);
         return { kind: "rotate_workspace", direction: intent.direction };
@@ -737,7 +756,7 @@ export function useVrWorkspace({
       }
       return { kind: "none" };
     },
-    [focusPanel, focusedPanelId, rotateWorkspace, routePanels, setPanelMini, setPanelOpacity, universeById]
+    [focusPanel, focusedPanelId, rotateWorkspace, routePanels, serverScopeIds, setPanelMini, setPanelOpacity, universeById]
   );
 
   const applyGesture = useCallback(

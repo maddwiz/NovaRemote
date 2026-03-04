@@ -85,6 +85,13 @@ describe("parseVrVoiceIntent", () => {
       kind: "open_on_mac",
       panelId: "dgx-main",
     });
+    expect(parseVrVoiceIntent("reconnect homelab", PANELS, "dgx-main")).toEqual({
+      kind: "reconnect_server",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("reconnect all", PANELS, "dgx-main")).toEqual({
+      kind: "reconnect_all",
+    });
   });
 
   it("focuses target panels for natural show-logs phrasing", () => {
