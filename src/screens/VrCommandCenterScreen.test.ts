@@ -820,6 +820,50 @@ describe("VrCommandCenterScreen", () => {
     });
   });
 
+  it("blocks voice channel management commands for viewer workspaces", async () => {
+    const runtime = makeRuntime();
+    const createChannel = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-viewer",
+        name: "Viewer Space",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "viewer" }],
+        channelId: "channel-workspace-viewer",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [],
+      loading: false,
+      createChannel,
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    const renderer = await renderScreen(runtime, { workspaces });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("create channel triage");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+
+    expect(createChannel).not.toHaveBeenCalled();
+    expect(() => renderer.root.findByProps({ children: "Channel management is blocked for Viewer Space." })).not.toThrow();
+    expect(runtime.dispatchVoice).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("runs manual VR agent controls against scoped targets", async () => {
     const runtime = makeRuntime();
     const createAgent = vi.fn(async () => ["agent-a"]);
