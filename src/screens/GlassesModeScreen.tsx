@@ -191,6 +191,7 @@ export function GlassesModeScreen() {
     onSetServerSessionDraft,
     onSendServerSessionDraft,
     onSendServerSessionCommand,
+    onShareServerSessionLive,
     onOpenServerSessionOnMac,
     onClearServerSessionDraft,
     onSendServerSessionControlChar,
@@ -838,6 +839,15 @@ export function GlassesModeScreen() {
         onOpenServerSessionOnMac(target.serverId, target.session);
         return;
       }
+      if (route.kind === "share_live") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        onShareServerSessionLive(target.serverId, target.session);
+        setRouteStatus(`Requested live link for ${target.serverName} ${target.sessionLabel}`);
+        return;
+      }
       if (route.kind !== "send_command") {
         return;
       }
@@ -870,6 +880,7 @@ export function GlassesModeScreen() {
       onReconnectServer,
       onReconnectServers,
       onOpenServerSessionOnMac,
+      onShareServerSessionLive,
       onSendServerSessionCommand,
       onSendServerSessionControlChar,
       onSetServerSessionDraft,

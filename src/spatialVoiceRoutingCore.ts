@@ -28,6 +28,7 @@ export type VoiceRoute =
   | { kind: "control_char"; panelId: string; char: string }
   | { kind: "stop_session"; panelId: string }
   | { kind: "open_on_mac"; panelId: string }
+  | { kind: "share_live"; panelId: string }
   | { kind: "send_command"; panelId: string; command: string };
 
 type ResolveVoiceRouteArgs = {
@@ -428,6 +429,18 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
       return { kind: "none" };
     }
     return { kind: "open_on_mac", panelId };
+  }
+
+  const shareLiveMatch = cleaned.match(
+    /^(?:share|create|generate)\s+(?:live|spectate|spectator)(?:\s+session)?(?:\s+link)?(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+  );
+  if (shareLiveMatch) {
+    const target = shareLiveMatch[1]?.trim() || shareLiveMatch[2]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    if (!panelId) {
+      return { kind: "none" };
+    }
+    return { kind: "share_live", panelId };
   }
 
   const interruptMatch = cleaned.match(

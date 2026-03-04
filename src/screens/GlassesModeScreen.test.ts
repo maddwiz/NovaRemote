@@ -158,6 +158,7 @@ function makeTerminalsBase(connections: Map<string, ServerConnection>) {
     onSetServerSessionDraft: vi.fn(),
     onSendServerSessionDraft: vi.fn(),
     onSendServerSessionCommand: vi.fn(),
+    onShareServerSessionLive: vi.fn(),
     onOpenServerSessionOnMac: vi.fn(),
     onClearServerSessionDraft: vi.fn(),
     onSendServerSessionControlChar: vi.fn(),
@@ -479,6 +480,47 @@ describe("GlassesModeScreen", () => {
     expect(joinChannel).toHaveBeenCalledWith("voice-1");
     expect(routeTranscript).not.toHaveBeenCalled();
     expect(() => screen.root.findByProps({ children: "Joined #incident" })).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("routes spatial share-live voice commands to server session sharing", async () => {
+    const routeTranscript = vi.fn(() => ({ kind: "share_live", panelId: "home::build" }));
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "share live for home",
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(terminals.onShareServerSessionLive).toHaveBeenCalledWith("home", "build");
+    expect(() => screen.root.findByProps({ children: "Requested live link for Home build" })).not.toThrow();
+    expect(routeTranscript).toHaveBeenCalledWith("share live for home");
 
     await act(async () => {
       screen.unmount();

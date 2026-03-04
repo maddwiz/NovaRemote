@@ -362,6 +362,12 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
       panelId: route.panelId,
     };
   }
+  if (route.kind === "share_live") {
+    return {
+      kind: "share_live",
+      panelId: route.panelId,
+    };
+  }
   if (route.kind !== "send_command") {
     return { kind: "none" };
   }

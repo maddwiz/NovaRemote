@@ -191,6 +191,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const shareLive = resolveSpatialVoiceRoute({
+      transcript: "share live for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const shareSpectateFallback = resolveSpatialVoiceRoute({
+      transcript: "create spectate link",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
     const pausePool = resolveSpatialVoiceRoute({
       transcript: "pause all streams",
       panels: PANELS,
@@ -303,6 +313,14 @@ describe("resolveSpatialVoiceRoute", () => {
     });
     expect(openOnMac).toEqual({
       kind: "open_on_mac",
+      panelId: "home::build-01",
+    });
+    expect(shareLive).toEqual({
+      kind: "share_live",
+      panelId: "cloud::deploy",
+    });
+    expect(shareSpectateFallback).toEqual({
+      kind: "share_live",
       panelId: "home::build-01",
     });
     expect(pausePool).toEqual({
