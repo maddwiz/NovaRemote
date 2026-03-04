@@ -236,6 +236,13 @@ function countHealthFetchCalls(): number {
   }).length;
 }
 
+function countHealthFetchCallsFor(serverId: string): number {
+  return fetchMock.mock.calls.filter(([input]) => {
+    const url = typeof input === "string" ? input : String(input);
+    return url.includes(`${serverId}.novaremote.test/health`);
+  }).length;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   FakeWebSocket.reset();
@@ -361,6 +368,21 @@ describe("useConnectionPool websocket integration", () => {
     await harness.updateServers([dgx]);
     await harness.waitFor(() => !harness.getPool().connections.has(lab.id), "removed server pool entry");
     expect(labWs?.readyState).toBe(FakeWebSocket.CLOSED);
+
+    await harness.unmount();
+  });
+
+  it("pings health immediately for a newly added connected server", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const lab = makeServer("lab", "Lab");
+    const harness = await mountPool([dgx], true);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 1, "initial single websocket");
+    expect(countHealthFetchCallsFor("lab")).toBe(0);
+
+    await harness.updateServers([dgx, lab]);
+    await harness.waitFor(() => FakeWebSocket.instances.length >= 2, "websocket for newly added server");
+    await harness.waitFor(() => countHealthFetchCallsFor("lab") >= 1, "health ping for newly added server");
 
     await harness.unmount();
   });
