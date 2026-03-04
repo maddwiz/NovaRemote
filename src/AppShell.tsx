@@ -718,6 +718,7 @@ export default function AppShell() {
     reconnectServer: reconnectPoolServer,
     reconnectServers: reconnectPoolServers,
     refreshSessions: refreshPoolSessions,
+    refreshAll: refreshPoolAll,
     createSession: createPoolSession,
     createLocalAiSession: createPoolLocalAiSession,
     sendCommand: sendPoolCommand,
@@ -891,6 +892,10 @@ export default function AppShell() {
       setError(error);
     });
   }, [allConnectedServers, reconnectPoolServers, setError]);
+
+  const refreshAllServers = useCallback(async () => {
+    await refreshPoolAll();
+  }, [refreshPoolAll]);
 
   const [startCwd, setStartCwd] = useState<string>(DEFAULT_CWD);
   const [startPrompt, setStartPrompt] = useState<string>("");
@@ -2346,6 +2351,7 @@ export default function AppShell() {
     runWithStatus,
     refreshCapabilities,
     refreshSessions,
+    refreshAllServers,
     setRoute,
     focusServer,
     reconnectServer,

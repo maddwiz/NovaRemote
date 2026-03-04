@@ -97,6 +97,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     runWithStatus,
     refreshCapabilities,
     refreshSessions,
+    refreshAllServers,
     setRoute,
     focusServer,
     reconnectServer,
@@ -271,6 +272,11 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onRefreshSessions: () => {
       void runWithStatus("Refreshing sessions", async () => {
         await refreshSessions();
+      });
+    },
+    onRefreshAllServers: () => {
+      void runWithStatus("Refreshing all servers", async () => {
+        await refreshAllServers();
       });
     },
     onOpenServers: () => setRoute("servers"),

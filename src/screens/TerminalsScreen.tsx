@@ -266,6 +266,7 @@ export function TerminalsScreen() {
     onSetStartAiEngine,
     onRefreshCapabilities,
     onRefreshSessions,
+    onRefreshAllServers,
     onOpenServers,
     onFocusServer,
     onReconnectServer,
@@ -981,15 +982,26 @@ export function TerminalsScreen() {
           <Text style={styles.serverSubtitle}>
             {disconnectedServerCount > 0 ? `${disconnectedServerCount} server(s) disconnected` : "All configured servers are connected"}
           </Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Reconnect all connected servers"
-            style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
-            disabled={connectedServerCount === 0}
-            onPress={onReconnectAllServers}
-          >
-            <Text style={styles.actionButtonText}>Reconnect All</Text>
-          </Pressable>
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Refresh sessions for all connected servers"
+              style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
+              disabled={connectedServerCount === 0}
+              onPress={onRefreshAllServers}
+            >
+              <Text style={styles.actionButtonText}>Refresh All</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Reconnect all connected servers"
+              style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
+              disabled={connectedServerCount === 0}
+              onPress={onReconnectAllServers}
+            >
+              <Text style={styles.actionButtonText}>Reconnect All</Text>
+            </Pressable>
+          </View>
         </View>
       </View>
 

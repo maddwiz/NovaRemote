@@ -134,6 +134,7 @@ function makeBaseArgs() {
     }),
     refreshCapabilities: vi.fn(async () => undefined),
     refreshSessions: vi.fn(async () => undefined),
+    refreshAllServers: vi.fn(async () => undefined),
     setRoute: vi.fn(),
     focusServer: vi.fn(),
     reconnectServer: vi.fn(),
@@ -261,5 +262,24 @@ describe("useTerminalsViewModel", () => {
 
     expect(runWithStatus).toHaveBeenCalledTimes(1);
     expect(refreshCapabilities).toHaveBeenCalledWith(true);
+  });
+
+  it("runs refresh-all through runWithStatus", async () => {
+    const refreshAllServers = vi.fn(async () => undefined);
+    const runWithStatus = vi.fn(async (_label: string, action: () => Promise<void>) => {
+      await action();
+    });
+
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      refreshAllServers,
+      runWithStatus,
+    });
+
+    model.onRefreshAllServers();
+    await Promise.resolve();
+
+    expect(runWithStatus).toHaveBeenCalledTimes(1);
+    expect(refreshAllServers).toHaveBeenCalledTimes(1);
   });
 });

@@ -98,6 +98,7 @@ export type TerminalsViewModel = {
   onSetStartAiEngine: (value: AiEnginePreference) => void;
   onRefreshCapabilities: () => void;
   onRefreshSessions: () => void;
+  onRefreshAllServers: () => void;
   onOpenServers: () => void;
   onFocusServer: (serverId: string) => void;
   onReconnectServer: (serverId: string) => void;
