@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { makeId, STORAGE_SHARED_WORKSPACES } from "../constants";
 import { SharedWorkspace, WorkspaceMember, WorkspaceRole } from "../types";
+import { getWorkspacePermissions } from "../workspacePermissions";
 
 type CreateWorkspaceInput = {
   name: string;
@@ -172,7 +173,20 @@ export function useSharedWorkspaces(): UseSharedWorkspacesResult {
   }, []);
 
   const deleteWorkspace = useCallback((workspaceId: string) => {
-    setWorkspaces((prev) => prev.filter((workspace) => workspace.id !== workspaceId));
+    setWorkspaces((prev) => {
+      let changed = false;
+      const next = prev.filter((workspace) => {
+        if (workspace.id !== workspaceId) {
+          return true;
+        }
+        if (!getWorkspacePermissions(workspace).canDeleteWorkspace) {
+          return true;
+        }
+        changed = true;
+        return false;
+      });
+      return changed ? next : prev;
+    });
   }, []);
 
   const renameWorkspace = useCallback((workspaceId: string, name: string) => {
@@ -184,7 +198,7 @@ export function useSharedWorkspaces(): UseSharedWorkspacesResult {
     setWorkspaces((prev) =>
       sortWorkspaces(
         prev.map((workspace) =>
-          workspace.id === workspaceId
+          workspace.id === workspaceId && getWorkspacePermissions(workspace).canManageWorkspace
             ? {
                 ...workspace,
                 name: nextName,
@@ -201,7 +215,7 @@ export function useSharedWorkspaces(): UseSharedWorkspacesResult {
     setWorkspaces((prev) =>
       sortWorkspaces(
         prev.map((workspace) =>
-          workspace.id === workspaceId
+          workspace.id === workspaceId && getWorkspacePermissions(workspace).canManageWorkspace
             ? {
                 ...workspace,
                 serverIds: nextServerIds,
@@ -218,6 +232,9 @@ export function useSharedWorkspaces(): UseSharedWorkspacesResult {
       sortWorkspaces(
         prev.map((workspace) => {
           if (workspace.id !== workspaceId) {
+            return workspace;
+          }
+          if (!getWorkspacePermissions(workspace).canManageMembers) {
             return workspace;
           }
           const members = workspace.members.map((member) => (member.id === memberId ? { ...member, role } : member));

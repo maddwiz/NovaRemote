@@ -137,4 +137,56 @@ describe("useSharedWorkspaces", () => {
       renderer?.unmount();
     });
   });
+
+  it("blocks viewer role from mutating workspace state", async () => {
+    let latest: UseSharedWorkspacesResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useSharedWorkspaces();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      current().createWorkspace({
+        name: "Viewer Space",
+        serverIds: ["dgx"],
+        members: [
+          { id: "local-user", name: "Local User", role: "viewer" },
+          { id: "owner-user", name: "Owner", role: "owner" },
+        ],
+      });
+    });
+
+    const workspaceId = current().workspaces[0]?.id || "";
+    const before = current().workspaces[0];
+    expect(before?.serverIds).toEqual(["dgx"]);
+
+    await act(async () => {
+      current().setWorkspaceServers(workspaceId, ["dgx", "cloud"]);
+      current().renameWorkspace(workspaceId, "Should Not Change");
+      current().setMemberRole(workspaceId, "local-user", "owner");
+      current().deleteWorkspace(workspaceId);
+    });
+
+    const after = current().workspaces[0];
+    expect(after?.name).toBe("Viewer Space");
+    expect(after?.serverIds).toEqual(["dgx"]);
+    expect(after?.members.find((member) => member.id === "local-user")?.role).toBe("viewer");
+    expect(current().workspaces).toHaveLength(1);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
