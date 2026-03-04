@@ -1,5 +1,5 @@
 import * as SecureStore from "expo-secure-store";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { makeId, STORAGE_VOICE_CHANNELS } from "../constants";
 import { VoiceChannel } from "../types";
@@ -91,6 +91,7 @@ function joinWorkspaceChannel(channels: VoiceChannel[], channelId: string): Voic
 export function useVoiceChannels(): UseVoiceChannelsResult {
   const [channels, setChannels] = useState<VoiceChannel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
+  const channelsRef = useRef<VoiceChannel[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -109,8 +110,10 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
           const normalized = Array.isArray(parsed)
             ? sortChannels(parsed.map((entry) => normalizeVoiceChannel(entry)).filter((entry): entry is VoiceChannel => Boolean(entry)))
             : [];
+          channelsRef.current = normalized;
           setChannels(normalized);
         } catch {
+          channelsRef.current = [];
           setChannels([]);
         }
       })
@@ -126,6 +129,10 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
   }, []);
 
   useEffect(() => {
+    channelsRef.current = channels;
+  }, [channels]);
+
+  useEffect(() => {
     if (loading) {
       return;
     }
@@ -139,6 +146,15 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
       return null;
     }
 
+    const existing = channelsRef.current.find(
+      (channel) =>
+        channel.workspaceId === workspaceId &&
+        channel.name.trim().toLowerCase() === name.toLowerCase()
+    );
+    if (existing) {
+      return existing;
+    }
+
     const now = new Date().toISOString();
     const channel: VoiceChannel = {
       id: `voice-${makeId()}`,
@@ -149,8 +165,21 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
       createdAt: now,
       updatedAt: now,
     };
-
-    setChannels((previous) => sortChannels([channel, ...previous]));
+    channelsRef.current = sortChannels([channel, ...channelsRef.current]);
+    setChannels((previous) => {
+      const duplicate = previous.find(
+        (channel) =>
+          channel.workspaceId === workspaceId &&
+          channel.name.trim().toLowerCase() === name.toLowerCase()
+      );
+      if (duplicate) {
+        channelsRef.current = previous;
+        return previous;
+      }
+      const next = sortChannels([channel, ...previous]);
+      channelsRef.current = next;
+      return next;
+    });
     return channel;
   }, []);
 

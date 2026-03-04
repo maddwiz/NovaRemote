@@ -215,4 +215,39 @@ describe("useVoiceChannels", () => {
       renderer?.unmount();
     });
   });
+
+  it("deduplicates channel creation by workspace and normalized name", async () => {
+    let latest: UseVoiceChannelsResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVoiceChannels();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    let firstId = "";
+    await act(async () => {
+      const first = current().createChannel({ workspaceId: "workspace-a", name: "Incident Room" });
+      const duplicate = current().createChannel({ workspaceId: "workspace-a", name: "  incident   room " });
+      firstId = first?.id || "";
+      expect(duplicate?.id).toBe(first?.id);
+    });
+
+    expect(current().channels).toHaveLength(1);
+    expect(current().channels[0]?.id).toBe(firstId);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

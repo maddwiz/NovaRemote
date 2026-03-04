@@ -328,6 +328,8 @@ describe("VrCommandCenterScreen", () => {
 
   it("scopes panels to workspace and manages voice channel actions", async () => {
     const runtime = makeRuntime();
+    const createChannel = vi.fn();
+    const deleteChannel = vi.fn();
     const joinChannel = vi.fn();
     const toggleMute = vi.fn();
     const leaveChannel = vi.fn();
@@ -366,8 +368,8 @@ describe("VrCommandCenterScreen", () => {
     useVoiceChannelsMock.mockReturnValue({
       channels,
       loading: false,
-      createChannel: vi.fn(),
-      deleteChannel: vi.fn(),
+      createChannel,
+      deleteChannel,
       pruneWorkspaceChannels: vi.fn(),
       joinChannel,
       leaveChannel,
@@ -384,6 +386,17 @@ describe("VrCommandCenterScreen", () => {
     });
 
     act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "New VR voice channel for Platform Ops" }).props.onChangeText("triage");
+    });
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Create VR voice channel for Platform Ops" }).props.onPress();
+    });
+    expect(createChannel).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      name: "triage",
+    });
+
+    act(() => {
       renderer.root.findByProps({ accessibilityLabel: "Join VR voice channel incident" }).props.onPress();
     });
     expect(joinChannel).toHaveBeenCalledWith("voice-1");
@@ -397,6 +410,68 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Leave VR joined channel release" }).props.onPress();
     });
     expect(leaveChannel).toHaveBeenCalledWith("voice-2");
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Delete VR voice channel incident" }).props.onPress();
+    });
+    expect(deleteChannel).toHaveBeenCalledWith("voice-1");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("keeps channel management disabled for viewer workspaces", async () => {
+    const runtime = makeRuntime();
+    const createChannel = vi.fn();
+    const deleteChannel = vi.fn();
+    const joinChannel = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-viewer",
+        name: "Viewer Space",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "viewer" }],
+        channelId: "channel-workspace-viewer",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    const channels: VoiceChannel[] = [
+      {
+        id: "voice-viewer-1",
+        workspaceId: "workspace-viewer",
+        name: "ops",
+        joined: false,
+        muted: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    useVoiceChannelsMock.mockReturnValue({
+      channels,
+      loading: false,
+      createChannel,
+      deleteChannel,
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel,
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    const renderer = await renderScreen(runtime, { workspaces });
+
+    expect(() => renderer.root.findByProps({ children: "Only owners or editors can manage channels." })).not.toThrow();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Create VR voice channel for Viewer Space" })).toThrow();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Delete VR voice channel ops" })).toThrow();
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Join VR voice channel ops" }).props.onPress();
+    });
+    expect(joinChannel).toHaveBeenCalledWith("voice-viewer-1");
+    expect(createChannel).not.toHaveBeenCalled();
+    expect(deleteChannel).not.toHaveBeenCalled();
 
     await act(async () => {
       renderer.unmount();

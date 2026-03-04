@@ -52,7 +52,16 @@ export function VrCommandCenterScreen() {
   const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
-  const { channels: voiceChannels, loading: voiceChannelsLoading, joinChannel, leaveChannel, toggleMute } = useVoiceChannels();
+  const [newChannelNamesByWorkspace, setNewChannelNamesByWorkspace] = useState<Record<string, string>>({});
+  const {
+    channels: voiceChannels,
+    loading: voiceChannelsLoading,
+    createChannel,
+    deleteChannel,
+    joinChannel,
+    leaveChannel,
+    toggleMute,
+  } = useVoiceChannels();
   const vmHostScopeOptions = useMemo(() => {
     const labels = new Map<string, string>();
     let hasUnassigned = false;
@@ -271,6 +280,24 @@ export function VrCommandCenterScreen() {
     },
     [agentTargetServerIds]
   );
+
+  const setWorkspaceChannelDraft = useCallback((workspaceId: string, value: string) => {
+    setNewChannelNamesByWorkspace((previous) => ({
+      ...previous,
+      [workspaceId]: value,
+    }));
+  }, []);
+
+  const clearWorkspaceChannelDraft = useCallback((workspaceId: string) => {
+    setNewChannelNamesByWorkspace((previous) => {
+      if (!(workspaceId in previous)) {
+        return previous;
+      }
+      const next = { ...previous };
+      delete next[workspaceId];
+      return next;
+    });
+  }, []);
 
   return (
     <View style={styles.panel}>
@@ -628,6 +655,7 @@ export function VrCommandCenterScreen() {
           const permissions = getWorkspacePermissions(workspace);
           const localMember = workspace.members.find((member) => member.id === "local-user") || workspace.members[0] || null;
           const localRoleLabel = localMember ? `${localMember.name} (${localMember.role})` : "No local workspace role";
+          const draftChannelName = newChannelNamesByWorkspace[workspace.id] || "";
           return (
             <View key={`vr-workspace-channel-${workspace.id}`} style={styles.vrRuntimePanelCard}>
               <View style={styles.rowInlineSpace}>
@@ -649,6 +677,40 @@ export function VrCommandCenterScreen() {
                   })}
                 </View>
               ) : null}
+              {permissions.canManageChannels ? (
+                <View style={styles.vrRuntimeActionRow}>
+                  <TextInput
+                    accessibilityLabel={`New VR voice channel for ${workspace.name}`}
+                    value={draftChannelName}
+                    onChangeText={(value) => setWorkspaceChannelDraft(workspace.id, value)}
+                    style={styles.input}
+                    placeholder="New channel name"
+                    placeholderTextColor="#7f7aa8"
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Create VR voice channel for ${workspace.name}`}
+                    style={[
+                      styles.actionButton,
+                      !draftChannelName.trim() ? styles.buttonDisabled : null,
+                    ]}
+                    disabled={!draftChannelName.trim()}
+                    onPress={() => {
+                      const created = createChannel({
+                        workspaceId: workspace.id,
+                        name: draftChannelName,
+                      });
+                      if (created) {
+                        clearWorkspaceChannelDraft(workspace.id);
+                      }
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Create Channel</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.emptyText}>Only owners or editors can manage channels.</Text>
+              )}
               {workspaceChannels.length === 0 ? <Text style={styles.emptyText}>No channels configured.</Text> : null}
               {workspaceChannels.length > 0 ? (
                 <View style={styles.vrRuntimeActionRow}>
@@ -682,6 +744,21 @@ export function VrCommandCenterScreen() {
                       </Pressable>
                     );
                   })}
+                </View>
+              ) : null}
+              {permissions.canManageChannels && workspaceChannels.length > 0 ? (
+                <View style={styles.vrRuntimeActionRow}>
+                  {workspaceChannels.map((channel) => (
+                    <Pressable
+                      key={`vr-channel-delete-${channel.id}`}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete VR voice channel ${channel.name}`}
+                      style={styles.actionDangerButton}
+                      onPress={() => deleteChannel(channel.id)}
+                    >
+                      <Text style={styles.actionDangerText}>{`Delete #${channel.name}`}</Text>
+                    </Pressable>
+                  ))}
                 </View>
               ) : null}
               {joinedChannel ? (
