@@ -987,6 +987,7 @@ export function useConnectionPool({
   const autoconnectFingerprintRef = useRef<Record<string, string>>({});
   const serverFingerprintRef = useRef<Record<string, string>>({});
   const lifecyclePausedRef = useRef(false);
+  const healthPingInFlightRef = useRef(false);
   const pollInFlightRef = useRef<Set<string>>(new Set());
   const sendInFlightRef = useRef<Set<string>>(new Set());
 
@@ -1814,40 +1815,49 @@ export function useConnectionPool({
     let cancelled = false;
 
     const pingAll = async () => {
+      if (healthPingInFlightRef.current) {
+        return;
+      }
+      healthPingInFlightRef.current = true;
+
       const snapshot = stateRef.current;
-      await Promise.all(
-        Object.values(snapshot).map(async (connection) => {
-          if (!connection.connected) {
-            dispatch({ type: "SET_HEALTH", serverId: connection.server.id, latencyMs: null });
-            return;
-          }
-
-          const startedAt = Date.now();
-          try {
-            const response = await fetch(`${normalizeBaseUrl(connection.server.baseUrl)}/health`, {
-              method: "GET",
-              headers: {
-                Authorization: `Bearer ${connection.server.token}`,
-              },
-            });
-
-            if (cancelled || !response.ok) {
+      try {
+        await Promise.all(
+          Object.values(snapshot).map(async (connection) => {
+            if (!connection.connected) {
+              dispatch({ type: "SET_HEALTH", serverId: connection.server.id, latencyMs: null });
               return;
             }
 
-            dispatch({
-              type: "SET_HEALTH",
-              serverId: connection.server.id,
-              lastPingAt: Date.now(),
-              latencyMs: Date.now() - startedAt,
-            });
-          } catch {
-            if (!cancelled) {
-              dispatch({ type: "SET_HEALTH", serverId: connection.server.id, latencyMs: null });
+            const startedAt = Date.now();
+            try {
+              const response = await fetch(`${normalizeBaseUrl(connection.server.baseUrl)}/health`, {
+                method: "GET",
+                headers: {
+                  Authorization: `Bearer ${connection.server.token}`,
+                },
+              });
+
+              if (cancelled || !response.ok) {
+                return;
+              }
+
+              dispatch({
+                type: "SET_HEALTH",
+                serverId: connection.server.id,
+                lastPingAt: Date.now(),
+                latencyMs: Date.now() - startedAt,
+              });
+            } catch {
+              if (!cancelled) {
+                dispatch({ type: "SET_HEALTH", serverId: connection.server.id, latencyMs: null });
+              }
             }
-          }
-        })
-      );
+          })
+        );
+      } finally {
+        healthPingInFlightRef.current = false;
+      }
     };
 
     void pingAll();
@@ -1857,6 +1867,7 @@ export function useConnectionPool({
 
     return () => {
       cancelled = true;
+      healthPingInFlightRef.current = false;
       clearInterval(interval);
     };
   }, [enabled]);

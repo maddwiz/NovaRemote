@@ -85,7 +85,7 @@ class FakeWebSocket {
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
-const fetchMock = vi.fn(async (input: unknown) => {
+const defaultFetchImpl = async (input: unknown) => {
   const url = typeof input === "string" ? input : String(input);
 
   if (url.endsWith("/capabilities")) {
@@ -107,7 +107,9 @@ const fetchMock = vi.fn(async (input: unknown) => {
   }
 
   return jsonResponse({ detail: `Unhandled URL: ${url}` }, 404, "Not Found");
-});
+};
+
+const fetchMock = vi.fn(defaultFetchImpl);
 
 function jsonResponse(payload: unknown, status: number = 200, statusText: string = "OK"): Response {
   return {
@@ -227,10 +229,18 @@ function wsFor(serverId: string): FakeWebSocket | undefined {
   return FakeWebSocket.instances.find((ws) => ws.url.includes(`${serverId}.novaremote.test`));
 }
 
+function countHealthFetchCalls(): number {
+  return fetchMock.mock.calls.filter(([input]) => {
+    const url = typeof input === "string" ? input : String(input);
+    return url.endsWith("/health");
+  }).length;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   FakeWebSocket.reset();
   fetchMock.mockClear();
+  fetchMock.mockImplementation(defaultFetchImpl);
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const joined = args.map((value) => String(value)).join(" ");
     if (joined.includes("react-test-renderer is deprecated")) {
@@ -402,6 +412,59 @@ describe("useConnectionPool websocket integration", () => {
       "recreated websocket instances after enable cycle"
     );
 
+    await harness.unmount();
+  });
+
+  it("does not stack health ping loops while a previous ping cycle is in flight", async () => {
+    const pendingHealthResolvers: Array<() => void> = [];
+
+    fetchMock.mockImplementation(async (input: unknown) => {
+      const url = typeof input === "string" ? input : String(input);
+      if (url.endsWith("/health")) {
+        await new Promise<void>((resolve) => {
+          pendingHealthResolvers.push(resolve);
+        });
+        return jsonResponse({ ok: true });
+      }
+      return await defaultFetchImpl(input);
+    });
+
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")], true);
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
+    await harness.waitFor(() => countHealthFetchCalls() >= 2, "initial health ping requests");
+    const baselineHealthCalls = countHealthFetchCalls();
+    expect(baselineHealthCalls).toBe(2);
+    expect(pendingHealthResolvers.length).toBe(2);
+
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(8100);
+    });
+    await harness.flush();
+
+    expect(countHealthFetchCalls()).toBe(baselineHealthCalls);
+    expect(pendingHealthResolvers.length).toBe(2);
+
+    while (pendingHealthResolvers.length > 0) {
+      pendingHealthResolvers.shift()?.();
+    }
+    await harness.flush();
+
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(8000);
+    });
+    await harness.waitFor(
+      () => countHealthFetchCalls() === baselineHealthCalls + 2,
+      "second non-overlapping health ping cycle"
+    );
+    expect(pendingHealthResolvers.length).toBe(2);
+
+    while (pendingHealthResolvers.length > 0) {
+      pendingHealthResolvers.shift()?.();
+    }
+    await harness.flush();
     await harness.unmount();
   });
 
