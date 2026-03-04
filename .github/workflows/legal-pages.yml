@@ -28,14 +28,45 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Detect Pages configuration
+        id: pages_check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          response_file="$(mktemp)"
+          status_code="$(
+            curl -sS \
+              -o "${response_file}" \
+              -w "%{http_code}" \
+              -H "Authorization: Bearer ${GH_TOKEN}" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPO}/pages"
+          )"
+          if [[ "${status_code}" == "200" ]]; then
+            echo "enabled=true" >> "${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "enabled=false" >> "${GITHUB_OUTPUT}"
+          echo "GitHub Pages is not configured for ${REPO}; skipping deploy."
+          cat "${response_file}" || true
+
       - name: Configure Pages
+        if: steps.pages_check.outputs.enabled == 'true'
         uses: actions/configure-pages@v5
 
       - name: Upload Pages Artifact
+        if: steps.pages_check.outputs.enabled == 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/public
 
       - name: Deploy to GitHub Pages
+        if: steps.pages_check.outputs.enabled == 'true'
         id: deployment
         uses: actions/deploy-pages@v4
+
+      - name: Pages deploy skipped
+        if: steps.pages_check.outputs.enabled != 'true'
+        run: echo "Skipped Pages deploy because GitHub Pages is not enabled for this repository."
