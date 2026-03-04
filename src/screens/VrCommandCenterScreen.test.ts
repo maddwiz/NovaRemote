@@ -186,7 +186,12 @@ afterEach(() => {
 describe("VrCommandCenterScreen", () => {
   async function renderScreen(
     runtime: ReturnType<typeof makeRuntime>,
-    options?: { workspaces?: SharedWorkspace[]; channels?: VoiceChannel[] }
+    options?: {
+      workspaces?: SharedWorkspace[];
+      channels?: VoiceChannel[];
+      connections?: Map<string, ServerConnection>;
+      terminalsOverrides?: Record<string, unknown>;
+    }
   ) {
     useVrLiveRuntimeMock.mockReturnValue(runtime);
     if (options?.workspaces) {
@@ -214,8 +219,9 @@ describe("VrCommandCenterScreen", () => {
     }
     const dgx = makeServer("dgx", "DGX");
     const connection = makeConnection(dgx, ["main", "build"]);
+    const defaultConnections = new Map<string, ServerConnection>([[dgx.id, connection]]);
     const terminals = {
-      connections: new Map<string, ServerConnection>([[dgx.id, connection]]),
+      connections: options?.connections || defaultConnections,
       focusedServerId: dgx.id,
       onReconnectServer: vi.fn(),
       onReconnectServers: vi.fn(),
@@ -226,6 +232,7 @@ describe("VrCommandCenterScreen", () => {
       onDenyAllPendingAgentsForServers: vi.fn(async () => []),
       onConnectAllServers: vi.fn(),
       onDisconnectAllServers: vi.fn(),
+      ...(options?.terminalsOverrides || {}),
     } as any;
 
     let renderer: TestRenderer.ReactTestRenderer | null = null;
@@ -352,6 +359,74 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Leave VR joined channel release" }).props.onPress();
     });
     expect(leaveChannel).toHaveBeenCalledWith("voice-2");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("runs manual VR agent controls against scoped targets", async () => {
+    const runtime = makeRuntime();
+    const createAgent = vi.fn(async () => ["agent-a"]);
+    const setGoal = vi.fn(async () => ["agent-a"]);
+    const queueCommand = vi.fn(async () => ["agent-a"]);
+    const approveReady = vi.fn(async () => ["agent-a"]);
+    const denyPending = vi.fn(async () => ["agent-a"]);
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main", "build"])],
+      [home.id, makeConnection(home, ["ops"])],
+    ]);
+
+    const renderer = await renderScreen(runtime, {
+      connections,
+      terminalsOverrides: {
+        onCreateAgentForServers: createAgent,
+        onSetAgentGoalForServers: setGoal,
+        onQueueAgentCommandForServers: queueCommand,
+        onApproveReadyAgentsForServers: approveReady,
+        onDenyAllPendingAgentsForServers: denyPending,
+      },
+    });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR agent name" }).props.onChangeText("deploy bot");
+    });
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR agent goal" }).props.onChangeText("keep deploy green");
+    });
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR agent command" }).props.onChangeText("npm run deploy");
+    });
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Target all servers for VR agent actions" }).props.onPress();
+    });
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Create VR agent" }).props.onPress();
+    });
+    expect(createAgent).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Set VR agent goal" }).props.onPress();
+    });
+    expect(setGoal).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "keep deploy green");
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Queue VR agent command" }).props.onPress();
+    });
+    expect(queueCommand).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "npm run deploy");
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Approve VR ready agents" }).props.onPress();
+    });
+    expect(approveReady).toHaveBeenCalledWith(["dgx", "home"]);
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Deny VR pending agents" }).props.onPress();
+    });
+    expect(denyPending).toHaveBeenCalledWith(["dgx", "home"]);
 
     await act(async () => {
       renderer.unmount();

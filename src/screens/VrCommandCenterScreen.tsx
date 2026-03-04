@@ -43,6 +43,11 @@ export function VrCommandCenterScreen() {
   } = useAppContext().terminals;
   const [voiceInput, setVoiceInput] = useState<string>("");
   const [commandInput, setCommandInput] = useState<string>("");
+  const [agentScope, setAgentScope] = useState<"focused" | "visible" | "all">("visible");
+  const [agentNameInput, setAgentNameInput] = useState<string>("");
+  const [agentGoalInput, setAgentGoalInput] = useState<string>("");
+  const [agentCommandInput, setAgentCommandInput] = useState<string>("");
+  const [agentStatus, setAgentStatus] = useState<string | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
   const { channels: voiceChannels, loading: voiceChannelsLoading, joinChannel, leaveChannel, toggleMute } = useVoiceChannels();
@@ -141,6 +146,22 @@ export function VrCommandCenterScreen() {
     }
   }, [activeWorkspaceId, sharedWorkspaces]);
 
+  const agentTargetServerIds = useMemo(() => {
+    if (agentScope === "all") {
+      return Array.from(connections.keys());
+    }
+    if (agentScope === "focused") {
+      if (focusedPanel?.serverId) {
+        return [focusedPanel.serverId];
+      }
+      if (focusedServerId) {
+        return [focusedServerId];
+      }
+      return [];
+    }
+    return Array.from(new Set(visiblePanels.map((panel) => panel.serverId)));
+  }, [agentScope, connections, focusedPanel?.serverId, focusedServerId, visiblePanels]);
+
   const sendVoiceInput = useCallback(() => {
     const transcript = voiceInput.trim();
     if (!transcript) {
@@ -162,6 +183,26 @@ export function VrCommandCenterScreen() {
     });
     setCommandInput("");
   }, [commandInput, focusedPanel, runtime]);
+
+  const runAgentAction = useCallback(
+    async (
+      label: string,
+      fn: (serverIds: string[]) => Promise<string[]>
+    ) => {
+      if (agentTargetServerIds.length === 0) {
+        setAgentStatus("No target servers selected for agent action.");
+        return;
+      }
+      try {
+        const changed = await fn(agentTargetServerIds);
+        const count = Array.isArray(changed) ? changed.length : 0;
+        setAgentStatus(`${label} on ${agentTargetServerIds.length} server(s)${count ? ` • affected ${count}` : ""}.`);
+      } catch (error) {
+        setAgentStatus(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [agentTargetServerIds]
+  );
 
   return (
     <View style={styles.panel}>
@@ -220,6 +261,142 @@ export function VrCommandCenterScreen() {
             </Pressable>
           ))}
         </View>
+      </View>
+
+      <View style={styles.vrRuntimeInputCard}>
+        <Text style={styles.serverSubtitle}>NovaAdapt agent controls</Text>
+        <Text style={styles.emptyText}>{`Targets ${agentTargetServerIds.length} server(s)`}</Text>
+        <View style={styles.vrRuntimeActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Target focused server for VR agent actions"
+            style={[styles.chip, agentScope === "focused" ? styles.chipActive : null]}
+            onPress={() => setAgentScope("focused")}
+          >
+            <Text style={[styles.chipText, agentScope === "focused" ? styles.chipTextActive : null]}>Focused</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Target visible panel servers for VR agent actions"
+            style={[styles.chip, agentScope === "visible" ? styles.chipActive : null]}
+            onPress={() => setAgentScope("visible")}
+          >
+            <Text style={[styles.chipText, agentScope === "visible" ? styles.chipTextActive : null]}>Visible</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Target all servers for VR agent actions"
+            style={[styles.chip, agentScope === "all" ? styles.chipActive : null]}
+            onPress={() => setAgentScope("all")}
+          >
+            <Text style={[styles.chipText, agentScope === "all" ? styles.chipTextActive : null]}>All</Text>
+          </Pressable>
+        </View>
+        <TextInput
+          accessibilityLabel="VR agent name"
+          value={agentNameInput}
+          onChangeText={setAgentNameInput}
+          style={styles.input}
+          placeholder="Agent name (example: Build Watcher)"
+          placeholderTextColor="#7f7aa8"
+        />
+        <TextInput
+          accessibilityLabel="VR agent goal"
+          value={agentGoalInput}
+          onChangeText={setAgentGoalInput}
+          style={styles.input}
+          placeholder="Goal (example: keep deploy green)"
+          placeholderTextColor="#7f7aa8"
+        />
+        <TextInput
+          accessibilityLabel="VR agent command"
+          value={agentCommandInput}
+          onChangeText={setAgentCommandInput}
+          style={styles.input}
+          placeholder="Command (example: npm run deploy)"
+          placeholderTextColor="#7f7aa8"
+        />
+        <View style={styles.vrRuntimeActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Create VR agent"
+            style={[
+              styles.actionButton,
+              !agentNameInput.trim() || agentTargetServerIds.length === 0 ? styles.buttonDisabled : null,
+            ]}
+            disabled={!agentNameInput.trim() || agentTargetServerIds.length === 0}
+            onPress={() => {
+              void runAgentAction("Created agent", (serverIds) =>
+                onCreateAgentForServers(serverIds, agentNameInput.trim())
+              );
+            }}
+          >
+            <Text style={styles.actionButtonText}>Create</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Set VR agent goal"
+            style={[
+              styles.actionButton,
+              !agentNameInput.trim() || !agentGoalInput.trim() || agentTargetServerIds.length === 0
+                ? styles.buttonDisabled
+                : null,
+            ]}
+            disabled={!agentNameInput.trim() || !agentGoalInput.trim() || agentTargetServerIds.length === 0}
+            onPress={() => {
+              void runAgentAction("Updated agent goal", (serverIds) =>
+                onSetAgentGoalForServers(serverIds, agentNameInput.trim(), agentGoalInput.trim())
+              );
+            }}
+          >
+            <Text style={styles.actionButtonText}>Goal</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Queue VR agent command"
+            style={[
+              styles.actionButton,
+              !agentNameInput.trim() || !agentCommandInput.trim() || agentTargetServerIds.length === 0
+                ? styles.buttonDisabled
+                : null,
+            ]}
+            disabled={!agentNameInput.trim() || !agentCommandInput.trim() || agentTargetServerIds.length === 0}
+            onPress={() => {
+              void runAgentAction("Queued agent command", (serverIds) =>
+                onQueueAgentCommandForServers(serverIds, agentNameInput.trim(), agentCommandInput.trim())
+              );
+            }}
+          >
+            <Text style={styles.actionButtonText}>Queue</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Approve VR ready agents"
+            style={[styles.actionButton, agentTargetServerIds.length === 0 ? styles.buttonDisabled : null]}
+            disabled={agentTargetServerIds.length === 0}
+            onPress={() => {
+              void runAgentAction("Approved ready agents", (serverIds) =>
+                onApproveReadyAgentsForServers(serverIds)
+              );
+            }}
+          >
+            <Text style={styles.actionButtonText}>Approve</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Deny VR pending agents"
+            style={[styles.actionButton, agentTargetServerIds.length === 0 ? styles.buttonDisabled : null]}
+            disabled={agentTargetServerIds.length === 0}
+            onPress={() => {
+              void runAgentAction("Denied pending agents", (serverIds) =>
+                onDenyAllPendingAgentsForServers(serverIds)
+              );
+            }}
+          >
+            <Text style={styles.actionButtonText}>Deny</Text>
+          </Pressable>
+        </View>
+        {agentStatus ? <Text style={styles.emptyText}>{agentStatus}</Text> : null}
       </View>
 
       <View style={styles.vrRuntimeActionRow}>
