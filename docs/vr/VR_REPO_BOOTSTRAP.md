@@ -24,6 +24,16 @@ Source files in `NovaRemote`:
 
 `NovaRemoteVR` should sync these files and pin to a commit SHA from `NovaRemote`.
 
+Recommended sync command from `NovaRemote`:
+
+```bash
+npm run vr:sync-contracts -- /absolute/path/to/NovaRemoteVR
+```
+
+This command copies both source files and writes a provenance stamp at:
+
+- `contracts/NOVAREMOTE_CONTRACT_SOURCE.txt`
+
 ## 3. Runtime Components
 
 - SessionService:
@@ -72,4 +82,3 @@ Release gate checks before public beta:
 - JSON schema checked in for client generation.
 - Bootstrap structure agreed and documented.
 - A sync workflow from `NovaRemote` contract files to `NovaRemoteVR` defined.
-
