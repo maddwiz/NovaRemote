@@ -1,8 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
-import { useNovaAgents } from "../hooks/useNovaAgents";
-import { useNovaMemory } from "../hooks/useNovaMemory";
+import { useNovaAgentRuntime } from "../hooks/useNovaAgentRuntime";
 import { NovaAgent, NovaAgentStatus, NovaMemoryEntry } from "../types";
 import { styles } from "../theme/styles";
 
@@ -222,9 +221,23 @@ export function NovaAgentPanel({
   onShowPaywall,
   onQueueCommand,
 }: NovaAgentPanelProps) {
-  const { agents, loading, addAgent, removeAgent, requestApproval, resolveApproval, setAgentCapabilities, setAgentGoal, setAgentStatus } =
-    useNovaAgents({ serverId });
-  const { entries: memoryEntries, loading: memoryLoading, addEntry: addMemoryEntry } = useNovaMemory({ serverId });
+  const {
+    agents,
+    loading,
+    memoryEntries,
+    memoryLoading,
+    addRuntimeAgent,
+    removeRuntimeAgent,
+    setRuntimeAgentStatus,
+    setRuntimeAgentGoal,
+    setRuntimeAgentCapabilities,
+    requestAgentApproval,
+    approveAgentApproval,
+    denyAgentApproval,
+  } = useNovaAgentRuntime({
+    serverId,
+    onDispatchCommand: onQueueCommand,
+  });
 
   const [newAgentName, setNewAgentName] = useState<string>("");
   const [newAgentCapabilities, setNewAgentCapabilities] = useState<string>("watch,tool-calling");
@@ -243,7 +256,7 @@ export function NovaAgentPanel({
       return;
     }
     const capabilities = parseCapabilities(newAgentCapabilities);
-    const created = addAgent(newAgentName, capabilities);
+    const created = addRuntimeAgent(newAgentName, capabilities);
     if (!created) {
       return;
     }
@@ -252,12 +265,6 @@ export function NovaAgentPanel({
     if (defaultSession) {
       setSessionByAgent((prev) => ({ ...prev, [created.agentId]: defaultSession }));
     }
-    addMemoryEntry({
-      memoryContextId: created.memoryContextId,
-      agentId: created.agentId,
-      kind: "agent_created",
-      summary: `${created.name} created`,
-    });
     setNewAgentName("");
   };
 
@@ -326,87 +333,37 @@ export function NovaAgentPanel({
             onCommandChange={(value) => setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: value }))}
             onGoalChange={(value) => setGoalDrafts((prev) => ({ ...prev, [agent.agentId]: value }))}
             onGoalBlur={() => {
-              const nextGoal = draftGoal.trim();
-              if (nextGoal === agent.currentGoal.trim()) {
-                return;
-              }
-              setAgentGoal(agent.agentId, draftGoal);
-              addMemoryEntry({
-                memoryContextId: agent.memoryContextId,
-                agentId: agent.agentId,
-                kind: "goal_updated",
-                summary: `${agent.name} goal updated`,
-                command: nextGoal,
-              });
+              setRuntimeAgentGoal(agent.agentId, draftGoal);
             }}
             onCapabilitiesChange={(value) => setCapabilityDrafts((prev) => ({ ...prev, [agent.agentId]: value }))}
-            onCapabilitiesBlur={() => setAgentCapabilities(agent.agentId, parseCapabilities(draftCapabilities))}
+            onCapabilitiesBlur={() => setRuntimeAgentCapabilities(agent.agentId, parseCapabilities(draftCapabilities))}
             onSelectSession={(value) => setSessionByAgent((prev) => ({ ...prev, [agent.agentId]: value }))}
-            onSetStatus={(status) => setAgentStatus(agent.agentId, status)}
+            onSetStatus={(status) => setRuntimeAgentStatus(agent.agentId, status)}
             onRequestApproval={() => {
               if (!selectedSession || !command.trim()) {
                 return;
               }
-              requestApproval(agent.agentId, {
+              requestAgentApproval(agent.agentId, {
                 summary: `${agent.name} requests command approval`,
-                command,
-                session: selectedSession,
-              });
-              addMemoryEntry({
-                memoryContextId: agent.memoryContextId,
-                agentId: agent.agentId,
-                kind: "approval_requested",
-                summary: `${agent.name} requested approval`,
                 command,
                 session: selectedSession,
               });
             }}
             onApprove={() => {
-              const pendingCommand = agent.pendingApproval?.command || command;
-              const targetSession = agent.pendingApproval?.session || selectedSession;
-              if (!targetSession || !pendingCommand.trim()) {
-                return;
+              const approved = approveAgentApproval(agent.agentId, {
+                commandOverride: command.trim() ? command : undefined,
+                sessionOverride: selectedSession || undefined,
+                nextStatus: "executing",
+              });
+              if (approved) {
+                setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: "" }));
               }
-              setAgentGoal(agent.agentId, pendingCommand);
-              onQueueCommand(targetSession, pendingCommand);
-              resolveApproval(agent.agentId, true, { nextStatus: "executing" });
-              addMemoryEntry({
-                memoryContextId: agent.memoryContextId,
-                agentId: agent.agentId,
-                kind: "approval_approved",
-                summary: `${agent.name} approval granted`,
-                command: pendingCommand,
-                session: targetSession,
-              });
-              addMemoryEntry({
-                memoryContextId: agent.memoryContextId,
-                agentId: agent.agentId,
-                kind: "command_dispatched",
-                summary: `${agent.name} dispatched command`,
-                command: pendingCommand,
-                session: targetSession,
-              });
-              setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: "" }));
             }}
             onDeny={() => {
-              resolveApproval(agent.agentId, false, { nextStatus: "idle" });
-              addMemoryEntry({
-                memoryContextId: agent.memoryContextId,
-                agentId: agent.agentId,
-                kind: "approval_denied",
-                summary: `${agent.name} approval denied`,
-                command: agent.pendingApproval?.command,
-                session: agent.pendingApproval?.session,
-              });
+              denyAgentApproval(agent.agentId);
             }}
             onRemove={() => {
-              addMemoryEntry({
-                memoryContextId: agent.memoryContextId,
-                agentId: agent.agentId,
-                kind: "agent_removed",
-                summary: `${agent.name} removed`,
-              });
-              removeAgent(agent.agentId);
+              removeRuntimeAgent(agent.agentId);
             }}
           />
         );
