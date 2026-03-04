@@ -4,7 +4,25 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
-TARGET_REPO="${1:-${NOVAREMOTE_VR_REPO:-${ROOT_DIR}/../NovaRemoteVR}}"
+TARGET_REPO="${NOVAREMOTE_VR_REPO:-${ROOT_DIR}/../NovaRemoteVR}"
+REMOTE_URL=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --remote)
+      if [[ $# -lt 2 ]]; then
+        echo "Missing URL after --remote"
+        exit 1
+      fi
+      REMOTE_URL="$2"
+      shift 2
+      ;;
+    *)
+      TARGET_REPO="$1"
+      shift
+      ;;
+  esac
+done
 
 mkdir -p "${TARGET_REPO}"
 TARGET_REPO="$(cd "${TARGET_REPO}" && pwd)"
@@ -80,10 +98,54 @@ This directory receives protocol contracts from NovaRemote and stores VR-specifi
 DOC
 fi
 
+if [[ ! -f "${TARGET_REPO}/clients/quest-unity/README.md" ]]; then
+  cat > "${TARGET_REPO}/clients/quest-unity/README.md" <<'DOC'
+# Quest Unity Client
+
+Initial scope:
+- OpenXR scene bootstrap
+- Session stream panel rendering
+- Voice route command dispatch
+
+Add Unity project files in this directory.
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/clients/visionos/README.md" ]]; then
+  cat > "${TARGET_REPO}/clients/visionos/README.md" <<'DOC'
+# visionOS Client
+
+Initial scope:
+- SwiftUI + RealityKit shell
+- Protocol client integration
+- Spatial panel focus and command routing
+
+Add Xcode project files in this directory.
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/shared/README.md" ]]; then
+  cat > "${TARGET_REPO}/shared/README.md" <<'DOC'
+# Shared Models
+
+Use this directory for generated protocol models and shared message contracts consumed by clients.
+DOC
+fi
+
 "${ROOT_DIR}/scripts/sync-vr-contracts.sh" "${TARGET_REPO}"
 
-echo "Bootstrapped NovaRemoteVR repository scaffold at: ${TARGET_REPO}"
-echo "Next steps:"
-echo "1. Create initial Quest and Vision Pro app skeletons inside clients/."
-echo "2. Commit scaffold + synced contracts in the NovaRemoteVR repo."
+if [[ -n "${REMOTE_URL}" ]]; then
+  if git -C "${TARGET_REPO}" remote get-url origin >/dev/null 2>&1; then
+    git -C "${TARGET_REPO}" remote set-url origin "${REMOTE_URL}"
+  else
+    git -C "${TARGET_REPO}" remote add origin "${REMOTE_URL}"
+  fi
+fi
 
+echo "Bootstrapped NovaRemoteVR repository scaffold at: ${TARGET_REPO}"
+if [[ -n "${REMOTE_URL}" ]]; then
+  echo "Configured origin remote: ${REMOTE_URL}"
+fi
+echo "Next steps:"
+echo "1. Build client projects in clients/quest-unity and clients/visionos."
+echo "2. Commit scaffold + synced contracts in the NovaRemoteVR repo."
