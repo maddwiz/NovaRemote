@@ -44,6 +44,7 @@ export function VrCommandCenterScreen() {
     onReconnectServers,
     onShareServerSessionLive,
     onCreateAgentForServers,
+    onRemoveAgentForServers,
     onSetAgentGoalForServers,
     onQueueAgentCommandForServers,
     onApproveReadyAgentsForServers,
@@ -143,6 +144,7 @@ export function VrCommandCenterScreen() {
     onReconnectServer,
     onReconnectServers,
     onCreateAgent: onCreateAgentForServers,
+    onRemoveAgent: onRemoveAgentForServers,
     onSetAgentGoal: onSetAgentGoalForServers,
     onQueueAgentCommand: onQueueAgentCommandForServers,
     onApproveReadyAgents: onApproveReadyAgentsForServers,
@@ -659,6 +661,27 @@ export function VrCommandCenterScreen() {
             }}
           >
             <Text style={styles.actionButtonText}>Goal</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Remove VR agent"
+            style={[
+              styles.actionButton,
+              !agentNameInput.trim() || agentTargetServerIds.length === 0 || !onRemoveAgentForServers
+                ? styles.buttonDisabled
+                : null,
+            ]}
+            disabled={!agentNameInput.trim() || agentTargetServerIds.length === 0 || !onRemoveAgentForServers}
+            onPress={() => {
+              if (!onRemoveAgentForServers) {
+                return;
+              }
+              void runAgentAction("Removed agent", (serverIds) =>
+                onRemoveAgentForServers(serverIds, agentNameInput.trim())
+              );
+            }}
+          >
+            <Text style={styles.actionButtonText}>Remove</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"

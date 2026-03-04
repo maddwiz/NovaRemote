@@ -127,6 +127,8 @@ function makeTerminalsBase(connections: Map<string, ServerConnection>) {
     onSetAgentGoalForServer: vi.fn(async () => []),
     onCreateAgentForServers: vi.fn(async () => []),
     onSetAgentGoalForServers: vi.fn(async () => []),
+    onRemoveAgentForServer: vi.fn(async () => []),
+    onRemoveAgentForServers: vi.fn(async () => []),
     onQueueAgentCommandForServer: vi.fn(async () => []),
     onQueueAgentCommandForServers: vi.fn(async () => []),
     onApproveReadyAgentsForServer: vi.fn(async () => []),
@@ -647,6 +649,70 @@ describe("GlassesModeScreen", () => {
     expect(() => screen.root.findByProps({ children: "Added Home build to HUD" })).not.toThrow();
     expect(routeTranscript).toHaveBeenNthCalledWith(1, "hide panel for home");
     expect(routeTranscript).toHaveBeenNthCalledWith(2, "add panel for home");
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("routes remove-agent voice commands to server-scoped and all-server handlers", async () => {
+    const routeTranscript = vi
+      .fn<(transcript: string) => { kind: string; name?: string; panelId?: string; allServers?: boolean }>()
+      .mockReturnValueOnce({ kind: "remove_agent", name: "build watcher", panelId: "home::build" })
+      .mockReturnValueOnce({ kind: "remove_agent", name: "deploy bot", allServers: true });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const onRemoveAgentForServer = vi.fn(async () => []);
+    const onRemoveAgentForServers = vi.fn(async () => []);
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "remove agent build watcher for home",
+      onRemoveAgentForServer,
+      onRemoveAgentForServers,
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(onRemoveAgentForServer).toHaveBeenCalledWith("home", "build watcher");
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "remove agent deploy bot for all servers",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(onRemoveAgentForServers).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
 
     await act(async () => {
       screen.unmount();

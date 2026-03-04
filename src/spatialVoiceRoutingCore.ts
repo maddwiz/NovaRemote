@@ -15,6 +15,7 @@ export type VoiceRoute =
   | { kind: "show_all" }
   | { kind: "minimize" }
   | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
+  | { kind: "remove_agent"; name: string; panelId?: string; allServers?: boolean }
   | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string; allServers?: boolean }
   | { kind: "queue_agent_command"; name: string; command: string; panelId?: string; allServers?: boolean }
   | { kind: "approve_ready_agents"; panelId?: string }
@@ -309,6 +310,28 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
       return { kind: "create_agent", name: `${name} for ${target}`.trim() };
     }
     return { kind: "create_agent", name, panelId: targetPanel.id };
+  }
+
+  const removeAgentMatch = cleaned.match(
+    /^(?:remove|delete)\s+agent\s+(.+?)(?:\s+(?:for|on)\s+(.+))?$/i
+  );
+  if (removeAgentMatch) {
+    const name = removeAgentMatch[1]?.trim() || "";
+    if (!name) {
+      return { kind: "none" };
+    }
+    const target = removeAgentMatch[2]?.trim() || "";
+    if (!target) {
+      return { kind: "remove_agent", name };
+    }
+    if (isAllServersTarget(target)) {
+      return { kind: "remove_agent", name, allServers: true };
+    }
+    const targetPanel = findPanelByTarget(panels, target);
+    if (!targetPanel) {
+      return { kind: "remove_agent", name: `${name} for ${target}`.trim() };
+    }
+    return { kind: "remove_agent", name, panelId: targetPanel.id };
   }
 
   const setGoalMatch = cleaned.match(

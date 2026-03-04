@@ -308,6 +308,27 @@ describe("useVrWorkspace", () => {
       name: "watch for errors",
     });
 
+    const removeAgentAction = current().applyVoiceTranscript("remove agent build watcher");
+    expect(removeAgentAction).toEqual({
+      kind: "remove_agent",
+      serverIds: ["dgx"],
+      name: "build watcher",
+    });
+
+    const removeAgentForHomeAction = current().applyVoiceTranscript("delete agent deploy bot for homelab");
+    expect(removeAgentForHomeAction).toEqual({
+      kind: "remove_agent",
+      serverIds: ["home"],
+      name: "deploy bot",
+    });
+
+    const removeAgentForAllAction = current().applyVoiceTranscript("remove agent deploy bot for all servers");
+    expect(removeAgentForAllAction).toEqual({
+      kind: "remove_agent",
+      serverIds: ["dgx", "home"],
+      name: "deploy bot",
+    });
+
     const setAgentGoalAction = current().applyVoiceTranscript("set agent deploy bot goal npm run deploy");
     expect(setAgentGoalAction).toEqual({
       kind: "set_agent_goal",

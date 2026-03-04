@@ -276,6 +276,21 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const removeAgent = resolveSpatialVoiceRoute({
+      transcript: "remove agent build watcher",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const removeAgentForCloud = resolveSpatialVoiceRoute({
+      transcript: "delete agent deploy bot for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const removeAgentForAllServers = resolveSpatialVoiceRoute({
+      transcript: "remove agent deploy bot for all servers",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
     const createAgentWithForPhrase = resolveSpatialVoiceRoute({
       transcript: "create agent watch for errors",
       panels: PANELS,
@@ -396,6 +411,20 @@ describe("resolveSpatialVoiceRoute", () => {
     });
     expect(createAgentForAllServers).toEqual({
       kind: "create_agent",
+      name: "deploy bot",
+      allServers: true,
+    });
+    expect(removeAgent).toEqual({
+      kind: "remove_agent",
+      name: "build watcher",
+    });
+    expect(removeAgentForCloud).toEqual({
+      kind: "remove_agent",
+      name: "deploy bot",
+      panelId: "cloud::deploy",
+    });
+    expect(removeAgentForAllServers).toEqual({
+      kind: "remove_agent",
       name: "deploy bot",
       allServers: true,
     });

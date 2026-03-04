@@ -1675,6 +1675,7 @@ export default function AppShell() {
     | { kind: "approve" }
     | { kind: "deny" }
     | { kind: "create"; name: string }
+    | { kind: "remove"; name: string }
     | { kind: "set_goal"; name: string; goal: string }
     | { kind: "queue_command"; name: string; command: string };
   type PendingAgentServerAction = {
@@ -1698,6 +1699,7 @@ export default function AppShell() {
   const {
     agents: focusedServerAgents,
     addRuntimeAgent: addFocusedServerRuntimeAgent,
+    removeRuntimeAgent: removeFocusedServerRuntimeAgent,
     setRuntimeAgentGoal: setFocusedServerRuntimeAgentGoal,
     requestAgentApproval: requestFocusedServerAgentApproval,
     approveReadyApprovals: approveReadyAgentsForFocusedServer,
@@ -1727,6 +1729,17 @@ export default function AppShell() {
         }
         const created = addFocusedServerRuntimeAgent(name);
         return created ? [created.agentId] : [];
+      }
+      if (action.kind === "remove") {
+        const name = action.name.trim();
+        if (!name) {
+          return [];
+        }
+        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
+        matchingAgentIds.forEach((agentId) => {
+          removeFocusedServerRuntimeAgent(agentId);
+        });
+        return matchingAgentIds;
       }
       if (action.kind === "set_goal") {
         const name = action.name.trim();
@@ -1787,6 +1800,7 @@ export default function AppShell() {
       focusedServerAgents,
       poolConnections,
       requestFocusedServerAgentApproval,
+      removeFocusedServerRuntimeAgent,
       setFocusedServerRuntimeAgentGoal,
     ]
   );
@@ -1874,6 +1888,12 @@ export default function AppShell() {
     [runAgentServerAction]
   );
 
+  const removeAgentForServer = useCallback(
+    async (serverId: string, name: string): Promise<string[]> =>
+      await runAgentServerAction(serverId, { kind: "remove", name }),
+    [runAgentServerAction]
+  );
+
   const queueAgentCommandForServer = useCallback(
     async (serverId: string, name: string, command: string): Promise<string[]> =>
       await runAgentServerAction(serverId, { kind: "queue_command", name, command }),
@@ -1926,6 +1946,18 @@ export default function AppShell() {
       return updated;
     },
     [setAgentGoalForServer]
+  );
+
+  const removeAgentForServers = useCallback(
+    async (serverIds: string[], name: string): Promise<string[]> => {
+      const removed: string[] = [];
+      for (const serverId of uniqueServerIds(serverIds)) {
+        const next = await removeAgentForServer(serverId, name);
+        removed.push(...next);
+      }
+      return removed;
+    },
+    [removeAgentForServer]
   );
 
   const queueAgentCommandForServers = useCallback(
@@ -2660,6 +2692,8 @@ export default function AppShell() {
     setAgentGoalForServer,
     createAgentForServers,
     setAgentGoalForServers,
+    removeAgentForServer,
+    removeAgentForServers,
     queueAgentCommandForServer,
     queueAgentCommandForServers,
     approveReadyAgentsForFocusedServer,

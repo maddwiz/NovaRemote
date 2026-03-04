@@ -174,6 +174,8 @@ export function GlassesModeScreen() {
     onSetAgentGoalForServer,
     onCreateAgentForServers,
     onSetAgentGoalForServers,
+    onRemoveAgentForServer,
+    onRemoveAgentForServers,
     onQueueAgentCommandForServer,
     onQueueAgentCommandForServers,
     onApproveReadyAgentsForServer,
@@ -806,6 +808,38 @@ export function GlassesModeScreen() {
         void onSetAgentGoalForServers(serverIds, route.name, route.goal).catch(() => {});
         return;
       }
+      if (route.kind === "remove_agent") {
+        if (!onRemoveAgentForServer && !onRemoveAgentForServers) {
+          setRouteStatus("Agent removal routing is unavailable.");
+          return;
+        }
+        if (route.allServers) {
+          const serverIds = Array.from(connections.keys());
+          if (serverIds.length === 0) {
+            return;
+          }
+          if (onRemoveAgentForServers) {
+            void onRemoveAgentForServers(serverIds, route.name).catch(() => {});
+          } else if (onRemoveAgentForServer) {
+            void Promise.all(serverIds.map((serverId) => onRemoveAgentForServer(serverId, route.name))).catch(() => {});
+          }
+          return;
+        }
+        const serverIds = resolveAgentTargetServerIds(route.panelId);
+        if (serverIds.length === 0) {
+          return;
+        }
+        if (serverIds.length === 1 && onRemoveAgentForServer) {
+          void onRemoveAgentForServer(serverIds[0], route.name).catch(() => {});
+          return;
+        }
+        if (onRemoveAgentForServers) {
+          void onRemoveAgentForServers(serverIds, route.name).catch(() => {});
+        } else if (onRemoveAgentForServer) {
+          void Promise.all(serverIds.map((serverId) => onRemoveAgentForServer(serverId, route.name))).catch(() => {});
+        }
+        return;
+      }
       if (route.kind === "queue_agent_command") {
         if (route.allServers) {
           const serverIds = Array.from(connections.keys());
@@ -981,6 +1015,8 @@ export function GlassesModeScreen() {
       onSetAgentGoalForServer,
       onCreateAgentForServers,
       onSetAgentGoalForServers,
+      onRemoveAgentForServer,
+      onRemoveAgentForServers,
       onQueueAgentCommandForServer,
       onQueueAgentCommandForServers,
       onDisconnectAllServers,

@@ -27,6 +27,7 @@ export type UseVrInputRouterArgs = {
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
   onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onRemoveAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onSetAgentGoal?: (
     serverIds: string[],
     name: string,
@@ -84,6 +85,7 @@ export function useVrInputRouter({
   onReconnectServer,
   onReconnectServers,
   onCreateAgent,
+  onRemoveAgent,
   onSetAgentGoal,
   onQueueAgentCommand,
   onApproveReadyAgents,
@@ -317,6 +319,38 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to update agent goal",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "remove_agent") {
+        if (!onRemoveAgent) {
+          publishHudStatus({
+            message: "Agent removal routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const result = await onRemoveAgent(action.serverIds, action.name);
+          const count = resolveActionCount(result);
+          publishHudStatus({
+            message:
+              count === 0
+                ? `No agents were removed for ${action.name}`
+                : count === null
+                  ? `Removed agent ${action.name}`
+                  : `Removed ${count} agent${count === 1 ? "" : "s"} named ${action.name}`,
+            severity: count === 0 ? "warning" : "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to remove agent",
             severity: "error",
             at: now(),
           });
@@ -674,6 +708,7 @@ export function useVrInputRouter({
       onReconnectServer,
       onReconnectServers,
       onCreateAgent,
+      onRemoveAgent,
       onSetAgentGoal,
       onQueueAgentCommand,
       onSendCommand,

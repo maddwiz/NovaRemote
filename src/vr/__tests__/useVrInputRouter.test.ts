@@ -369,6 +369,16 @@ describe("useVrInputRouter", () => {
         name: "deploy bot",
       })
       .mockReturnValueOnce({
+        kind: "remove_agent",
+        serverIds: ["dgx"],
+        name: "build watcher",
+      })
+      .mockReturnValueOnce({
+        kind: "remove_agent",
+        serverIds: ["dgx", "home"],
+        name: "deploy bot",
+      })
+      .mockReturnValueOnce({
         kind: "set_agent_goal",
         serverIds: ["dgx"],
         name: "build watcher",
@@ -397,6 +407,10 @@ describe("useVrInputRouter", () => {
       .fn<(serverIds: string[], name: string) => Promise<boolean | number>>()
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(2);
+    const onRemoveAgent = vi
+      .fn<(serverIds: string[], name: string) => Promise<number>>()
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2);
     const onSetAgentGoal = vi
       .fn<(serverIds: string[], name: string, goal: string) => Promise<number>>()
       .mockResolvedValueOnce(1)
@@ -418,6 +432,7 @@ describe("useVrInputRouter", () => {
         workspace: { applyVoiceTranscript, applyGesture },
         onSendCommand: async () => undefined,
         onCreateAgent,
+        onRemoveAgent,
         onSetAgentGoal,
         onQueueAgentCommand,
       });
@@ -440,6 +455,18 @@ describe("useVrInputRouter", () => {
     });
     expect(onCreateAgent).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
     expect(current().hudStatus?.message).toContain("Created 2 agents named deploy bot");
+
+    await act(async () => {
+      await current().dispatchVoice("remove agent build watcher");
+    });
+    expect(onRemoveAgent).toHaveBeenCalledWith(["dgx"], "build watcher");
+    expect(current().hudStatus?.message).toContain("Removed 1 agent named build watcher");
+
+    await act(async () => {
+      await current().dispatchVoice("remove agent deploy bot for all servers");
+    });
+    expect(onRemoveAgent).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
+    expect(current().hudStatus?.message).toContain("Removed 2 agents named deploy bot");
 
     await act(async () => {
       await current().dispatchVoice("set agent build watcher goal npm run test");

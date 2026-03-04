@@ -21,6 +21,7 @@ export type UseVrLiveRuntimeArgs = {
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
   onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onRemoveAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onSetAgentGoal?: (
     serverIds: string[],
     name: string,
@@ -68,6 +69,7 @@ export function useVrLiveRuntime({
   onReconnectServer,
   onReconnectServers,
   onCreateAgent,
+  onRemoveAgent,
   onSetAgentGoal,
   onQueueAgentCommand,
   onApproveReadyAgents,
@@ -327,6 +329,7 @@ export function useVrLiveRuntime({
     onReconnectServer,
     onReconnectServers,
     onCreateAgent,
+    onRemoveAgent,
     onSetAgentGoal,
     onQueueAgentCommand,
     onApproveReadyAgents,

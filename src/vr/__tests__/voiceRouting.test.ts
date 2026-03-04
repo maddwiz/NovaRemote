@@ -148,6 +148,20 @@ describe("parseVrVoiceIntent", () => {
       name: "deploy bot",
       allServers: true,
     });
+    expect(parseVrVoiceIntent("remove agent build watcher", PANELS, "dgx-main")).toEqual({
+      kind: "remove_agent",
+      name: "build watcher",
+    });
+    expect(parseVrVoiceIntent("delete agent deploy bot for homelab", PANELS, "dgx-main")).toEqual({
+      kind: "remove_agent",
+      name: "deploy bot",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("remove agent deploy bot for all servers", PANELS, "dgx-main")).toEqual({
+      kind: "remove_agent",
+      name: "deploy bot",
+      allServers: true,
+    });
     expect(parseVrVoiceIntent("create agent watch for errors", PANELS, "dgx-main")).toEqual({
       kind: "create_agent",
       name: "watch for errors",

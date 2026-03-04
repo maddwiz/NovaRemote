@@ -110,6 +110,8 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     setAgentGoalForServer,
     createAgentForServers,
     setAgentGoalForServers,
+    removeAgentForServer,
+    removeAgentForServers,
     queueAgentCommandForServer,
     queueAgentCommandForServers,
     approveReadyAgentsForFocusedServer,
@@ -299,6 +301,28 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     return updated;
   };
 
+  const runRemoveAgentForServer = async (serverId: string, name: string): Promise<string[]> => {
+    if (typeof removeAgentForServer === "function") {
+      const removed = await removeAgentForServer(serverId, name);
+      return Array.isArray(removed) ? removed : [];
+    }
+    return [];
+  };
+
+  const runRemoveAgentForServers = async (serverIds: string[], name: string): Promise<string[]> => {
+    const uniqueIds = uniqueServerIds(serverIds);
+    if (typeof removeAgentForServers === "function") {
+      const removed = await removeAgentForServers(uniqueIds, name);
+      return Array.isArray(removed) ? removed : [];
+    }
+    const removed: string[] = [];
+    for (const serverId of uniqueIds) {
+      const next = await runRemoveAgentForServer(serverId, name);
+      removed.push(...next);
+    }
+    return removed;
+  };
+
   const runQueueAgentCommandForServer = async (
     serverId: string,
     name: string,
@@ -476,6 +500,8 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onSetAgentGoalForServer: runSetAgentGoalForServer,
     onCreateAgentForServers: runCreateAgentForServers,
     onSetAgentGoalForServers: runSetAgentGoalForServers,
+    onRemoveAgentForServer: runRemoveAgentForServer,
+    onRemoveAgentForServers: runRemoveAgentForServers,
     onQueueAgentCommandForServer: runQueueAgentCommandForServer,
     onQueueAgentCommandForServers: runQueueAgentCommandForServers,
     onApproveReadyAgentsForFocusedServer: () => {
