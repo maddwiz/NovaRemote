@@ -2,7 +2,8 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { useNovaAgents } from "../hooks/useNovaAgents";
-import { NovaAgent, NovaAgentStatus } from "../types";
+import { useNovaMemory } from "../hooks/useNovaMemory";
+import { NovaAgent, NovaAgentStatus, NovaMemoryEntry } from "../types";
 import { styles } from "../theme/styles";
 
 type NovaAgentPanelProps = {
@@ -42,6 +43,7 @@ function AgentCard({
   command,
   goalDraft,
   capabilitiesDraft,
+  memoryEntries,
   selectedSession,
   onCommandChange,
   onGoalChange,
@@ -60,6 +62,7 @@ function AgentCard({
   command: string;
   goalDraft: string;
   capabilitiesDraft: string;
+  memoryEntries: NovaMemoryEntry[];
   selectedSession: string | null;
   onCommandChange: (value: string) => void;
   onGoalChange: (value: string) => void;
@@ -73,6 +76,8 @@ function AgentCard({
   onDeny: () => void;
   onRemove: () => void;
 }) {
+  const recentMemory = memoryEntries.slice(0, 4);
+
   return (
     <View style={styles.terminalCard}>
       <View style={styles.terminalNameRow}>
@@ -192,6 +197,19 @@ function AgentCard({
           </Pressable>
         </View>
       )}
+
+      <View style={styles.panel}>
+        <Text style={styles.panelLabel}>Memory Timeline</Text>
+        {recentMemory.length === 0 ? (
+          <Text style={styles.emptyText}>No memory events yet.</Text>
+        ) : (
+          recentMemory.map((entry) => (
+            <Text key={entry.id} style={styles.emptyText}>
+              {`${new Date(entry.createdAt).toLocaleTimeString()} • ${entry.summary}`}
+            </Text>
+          ))
+        )}
+      </View>
     </View>
   );
 }
@@ -206,6 +224,7 @@ export function NovaAgentPanel({
 }: NovaAgentPanelProps) {
   const { agents, loading, addAgent, removeAgent, requestApproval, resolveApproval, setAgentCapabilities, setAgentGoal, setAgentStatus } =
     useNovaAgents({ serverId });
+  const { entries: memoryEntries, loading: memoryLoading, addEntry: addMemoryEntry } = useNovaMemory({ serverId });
 
   const [newAgentName, setNewAgentName] = useState<string>("");
   const [newAgentCapabilities, setNewAgentCapabilities] = useState<string>("watch,tool-calling");
@@ -233,6 +252,12 @@ export function NovaAgentPanel({
     if (defaultSession) {
       setSessionByAgent((prev) => ({ ...prev, [created.agentId]: defaultSession }));
     }
+    addMemoryEntry({
+      memoryContextId: created.memoryContextId,
+      agentId: created.agentId,
+      kind: "agent_created",
+      summary: `${created.name} created`,
+    });
     setNewAgentName("");
   };
 
@@ -278,14 +303,15 @@ export function NovaAgentPanel({
         <Text style={styles.emptyText}>Free tier supports one agent per server. Upgrade to add more.</Text>
       ) : null}
 
-      {loading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
-      {!loading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
+      {loading || memoryLoading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
+      {!loading && !memoryLoading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
 
       {agents.map((agent) => {
         const draftGoal = goalDrafts[agent.agentId] ?? agent.currentGoal;
         const draftCapabilities = capabilityDrafts[agent.agentId] ?? agent.capabilities.join(",");
         const selectedSession = sessionByAgent[agent.agentId] || agent.pendingApproval?.session || defaultSession;
         const command = commandByAgent[agent.agentId] || "";
+        const agentMemory = memoryEntries.filter((entry) => entry.memoryContextId === agent.memoryContextId);
 
         return (
           <AgentCard
@@ -295,10 +321,24 @@ export function NovaAgentPanel({
             command={command}
             goalDraft={draftGoal}
             capabilitiesDraft={draftCapabilities}
+            memoryEntries={agentMemory}
             selectedSession={selectedSession}
             onCommandChange={(value) => setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: value }))}
             onGoalChange={(value) => setGoalDrafts((prev) => ({ ...prev, [agent.agentId]: value }))}
-            onGoalBlur={() => setAgentGoal(agent.agentId, draftGoal)}
+            onGoalBlur={() => {
+              const nextGoal = draftGoal.trim();
+              if (nextGoal === agent.currentGoal.trim()) {
+                return;
+              }
+              setAgentGoal(agent.agentId, draftGoal);
+              addMemoryEntry({
+                memoryContextId: agent.memoryContextId,
+                agentId: agent.agentId,
+                kind: "goal_updated",
+                summary: `${agent.name} goal updated`,
+                command: nextGoal,
+              });
+            }}
             onCapabilitiesChange={(value) => setCapabilityDrafts((prev) => ({ ...prev, [agent.agentId]: value }))}
             onCapabilitiesBlur={() => setAgentCapabilities(agent.agentId, parseCapabilities(draftCapabilities))}
             onSelectSession={(value) => setSessionByAgent((prev) => ({ ...prev, [agent.agentId]: value }))}
@@ -312,6 +352,14 @@ export function NovaAgentPanel({
                 command,
                 session: selectedSession,
               });
+              addMemoryEntry({
+                memoryContextId: agent.memoryContextId,
+                agentId: agent.agentId,
+                kind: "approval_requested",
+                summary: `${agent.name} requested approval`,
+                command,
+                session: selectedSession,
+              });
             }}
             onApprove={() => {
               const pendingCommand = agent.pendingApproval?.command || command;
@@ -322,12 +370,44 @@ export function NovaAgentPanel({
               setAgentGoal(agent.agentId, pendingCommand);
               onQueueCommand(targetSession, pendingCommand);
               resolveApproval(agent.agentId, true, { nextStatus: "executing" });
+              addMemoryEntry({
+                memoryContextId: agent.memoryContextId,
+                agentId: agent.agentId,
+                kind: "approval_approved",
+                summary: `${agent.name} approval granted`,
+                command: pendingCommand,
+                session: targetSession,
+              });
+              addMemoryEntry({
+                memoryContextId: agent.memoryContextId,
+                agentId: agent.agentId,
+                kind: "command_dispatched",
+                summary: `${agent.name} dispatched command`,
+                command: pendingCommand,
+                session: targetSession,
+              });
               setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: "" }));
             }}
             onDeny={() => {
               resolveApproval(agent.agentId, false, { nextStatus: "idle" });
+              addMemoryEntry({
+                memoryContextId: agent.memoryContextId,
+                agentId: agent.agentId,
+                kind: "approval_denied",
+                summary: `${agent.name} approval denied`,
+                command: agent.pendingApproval?.command,
+                session: agent.pendingApproval?.session,
+              });
             }}
-            onRemove={() => removeAgent(agent.agentId)}
+            onRemove={() => {
+              addMemoryEntry({
+                memoryContextId: agent.memoryContextId,
+                agentId: agent.agentId,
+                kind: "agent_removed",
+                summary: `${agent.name} removed`,
+              });
+              removeAgent(agent.agentId);
+            }}
           />
         );
       })}

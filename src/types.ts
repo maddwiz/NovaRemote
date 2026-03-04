@@ -193,6 +193,28 @@ export type NovaAgent = {
   lastActionAt: string | null;
 };
 
+export type NovaMemoryKind =
+  | "agent_created"
+  | "goal_updated"
+  | "approval_requested"
+  | "approval_approved"
+  | "approval_denied"
+  | "command_dispatched"
+  | "agent_removed"
+  | "note";
+
+export type NovaMemoryEntry = {
+  id: string;
+  serverId: string;
+  memoryContextId: string;
+  agentId: string | null;
+  kind: NovaMemoryKind;
+  summary: string;
+  command?: string;
+  session?: string;
+  createdAt: string;
+};
+
 export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";
 
 export type AiEnginePreference = "auto" | "server" | "external";
