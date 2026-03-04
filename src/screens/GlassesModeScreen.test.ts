@@ -99,7 +99,17 @@ function makeConnection(server: ServerProfile, openSessions: string[]): ServerCo
   };
 }
 
-function makeTerminals(connections: Map<string, ServerConnection>) {
+function makeTerminals(
+  connections: Map<string, ServerConnection>,
+  overrides?: Partial<ReturnType<typeof makeTerminalsBase>>
+) {
+  return {
+    ...makeTerminalsBase(connections),
+    ...(overrides || {}),
+  } as any;
+}
+
+function makeTerminalsBase(connections: Map<string, ServerConnection>) {
   return {
     connections,
     focusedServerId: "dgx",
@@ -165,7 +175,7 @@ function makeTerminals(connections: Map<string, ServerConnection>) {
     onVoiceStopCaptureForServer: vi.fn(),
     onVoiceSendTranscriptForServer: vi.fn(),
     onCloseGlassesMode: vi.fn(),
-  } as any;
+  };
 }
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
@@ -272,6 +282,106 @@ describe("GlassesModeScreen", () => {
     });
     await act(async () => {
       screen.root.findByProps({ accessibilityLabel: "Scope glasses panels to VM host Rack B" }).props.onPress();
+    });
+
+    expect(() => screen.root.findByProps({ accessibilityLabel: "Focus DGX main" })).toThrow();
+    expect(screen.root.findByProps({ accessibilityLabel: "Focus Home build" })).toBeDefined();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("routes transcript commands to workspace scope changes", async () => {
+    const dgx = makeServer("dgx", "DGX", { vmHost: "Rack A" });
+    const home = makeServer("home", "Home", { vmHost: "Rack B" });
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    useSharedWorkspacesMock.mockReturnValue({
+      workspaces,
+      loading: false,
+      createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(),
+      renameWorkspace: vi.fn(),
+      setWorkspaceServers: vi.fn(),
+      setMemberRole: vi.fn(),
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections, {
+              voiceTranscript: "scope workspace platform ops",
+            }),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.root.findByProps({ accessibilityLabel: "Focus DGX main" })).toBeDefined();
+    expect(screen.root.findByProps({ accessibilityLabel: "Focus Home build" })).toBeDefined();
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(screen.root.findByProps({ accessibilityLabel: "Focus DGX main" })).toBeDefined();
+    expect(() => screen.root.findByProps({ accessibilityLabel: "Focus Home build" })).toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("routes transcript commands to vm host scope changes", async () => {
+    const dgx = makeServer("dgx", "DGX", { vmHost: "Rack A" });
+    const home = makeServer("home", "Home", { vmHost: "Rack B" });
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections, {
+              voiceTranscript: "scope host rack b",
+            }),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(screen.root.findByProps({ accessibilityLabel: "Focus DGX main" })).toBeDefined();
+    expect(screen.root.findByProps({ accessibilityLabel: "Focus Home build" })).toBeDefined();
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
     });
 
     expect(() => screen.root.findByProps({ accessibilityLabel: "Focus DGX main" })).toThrow();
