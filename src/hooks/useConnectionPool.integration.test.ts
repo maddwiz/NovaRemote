@@ -415,6 +415,80 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("does not auto-reconnect streams after disconnectAll until connectAll is called", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    const initialWave = FakeWebSocket.instances.slice();
+
+    await harness.act(async () => {
+      harness.getPool().disconnectAll();
+    });
+    expect(initialWave.every((ws) => ws.readyState === FakeWebSocket.CLOSED)).toBe(true);
+    const countAfterDisconnect = FakeWebSocket.instances.length;
+    expect(countAfterDisconnect).toBe(initialWave.length);
+
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(1200);
+    });
+    await harness.flush();
+
+    expect(FakeWebSocket.instances.length).toBe(countAfterDisconnect);
+
+    await harness.act(async () => {
+      harness.getPool().connectAll();
+    });
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= countAfterDisconnect + 2,
+      "connectAll should recreate server streams"
+    );
+
+    await harness.unmount();
+  });
+
+  it("cleans up only the target server stream when a session_closed message arrives", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    const dgxWs = wsFor("dgx");
+    const cloudWs = wsFor("cloud");
+    expect(dgxWs).toBeDefined();
+    expect(cloudWs).toBeDefined();
+
+    await harness.act(async () => {
+      dgxWs?.emitOpen();
+      cloudWs?.emitOpen();
+    });
+    await harness.act(async () => {
+      dgxWs?.emitMessage({ type: "snapshot", session: "main", data: "dgx baseline\n" });
+      cloudWs?.emitMessage({ type: "snapshot", session: "main", data: "cloud baseline\n" });
+    });
+
+    await harness.act(async () => {
+      dgxWs?.emitMessage({ type: "session_closed", session: "main", data: "" });
+    });
+    await harness.flush();
+
+    const pool = harness.getPool();
+    expect(pool.connections.get("dgx")?.allSessions.includes("main")).toBe(false);
+    expect(pool.connections.get("dgx")?.openSessions.includes("main")).toBe(false);
+    expect(pool.connections.get("dgx")?.streamLive.main).toBeFalsy();
+    expect(pool.connections.get("cloud")?.allSessions.includes("main")).toBe(true);
+    expect(pool.connections.get("cloud")?.openSessions.includes("main")).toBe(true);
+    expect(pool.connections.get("cloud")?.streamLive.main).toBe(true);
+
+    const countAfterSessionClosed = FakeWebSocket.instances.length;
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    await harness.flush();
+    expect(FakeWebSocket.instances.length).toBe(countAfterSessionClosed);
+    expect(dgxWs?.readyState).toBe(FakeWebSocket.CLOSED);
+    expect(cloudWs?.readyState).toBe(FakeWebSocket.OPEN);
+
+    await harness.unmount();
+  });
+
   it("switches focused server without additional network requests or websocket reconnects", async () => {
     const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("homelab", "Homelab")]);
 

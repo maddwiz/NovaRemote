@@ -986,6 +986,7 @@ export function useConnectionPool({
   const capabilityCacheRef = useRef<Map<string, CachedCapabilityProbe>>(new Map());
   const autoconnectFingerprintRef = useRef<Record<string, string>>({});
   const serverFingerprintRef = useRef<Record<string, string>>({});
+  const lifecyclePausedRef = useRef(false);
   const pollInFlightRef = useRef<Set<string>>(new Set());
   const sendInFlightRef = useRef<Set<string>>(new Set());
 
@@ -1062,7 +1063,7 @@ export function useConnectionPool({
   const connectStream = useCallback(
     (serverId: string, session: string) => {
       const connection = stateRef.current[serverId];
-      if (!enabled || !connection || !connection.connected) {
+      if (lifecyclePausedRef.current || !enabled || !connection || !connection.connected) {
         return;
       }
       if (connection.localAiSessions.includes(session)) {
@@ -1195,7 +1196,13 @@ export function useConnectionPool({
         }
 
         const latest = stateRef.current[serverId];
-        if (!enabled || !latest || !latest.connected || !latest.openSessions.includes(session)) {
+        if (
+          lifecyclePausedRef.current ||
+          !enabled ||
+          !latest ||
+          !latest.connected ||
+          !latest.openSessions.includes(session)
+        ) {
           dispatch({
             type: "SET_CONNECTION_META",
             serverId,
@@ -1657,6 +1664,7 @@ export function useConnectionPool({
   }, []);
 
   const connectAll = useCallback(() => {
+    lifecyclePausedRef.current = false;
     Object.values(stateRef.current).forEach((connection) => {
       if (connection.connected) {
         void connectServer(connection.server.id, false);
@@ -1665,6 +1673,7 @@ export function useConnectionPool({
   }, [connectServer]);
 
   const disconnectAll = useCallback(() => {
+    lifecyclePausedRef.current = true;
     closeAllStreams();
     Object.keys(stateRef.current).forEach((serverId) => {
       dispatch({ type: "SET_STATUS", serverId, status: "disconnected" });
@@ -1713,6 +1722,9 @@ export function useConnectionPool({
       closeAllStreams();
       return;
     }
+    if (lifecyclePausedRef.current) {
+      return;
+    }
 
     Object.values(state).forEach((connection) => {
       const server = connection.server;
@@ -1734,6 +1746,9 @@ export function useConnectionPool({
   useEffect(() => {
     if (!enabled) {
       closeAllStreams();
+      return;
+    }
+    if (lifecyclePausedRef.current) {
       return;
     }
 
