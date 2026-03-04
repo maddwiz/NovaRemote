@@ -237,6 +237,13 @@ describe("useVrWorkspace", () => {
       name: "deploy bot",
     });
 
+    const createAgentForAllServersAction = current().applyVoiceTranscript("create agent deploy bot for all servers");
+    expect(createAgentForAllServersAction).toEqual({
+      kind: "create_agent",
+      serverIds: ["dgx", "home"],
+      name: "deploy bot",
+    });
+
     const setAgentGoalAction = current().applyVoiceTranscript("set agent deploy bot goal npm run deploy");
     expect(setAgentGoalAction).toEqual({
       kind: "set_agent_goal",
@@ -251,6 +258,14 @@ describe("useVrWorkspace", () => {
       serverIds: ["home"],
       name: "build watcher",
       goal: "tail -f logs",
+    });
+
+    const setAgentGoalForAllServersAction = current().applyVoiceTranscript("set agent build watcher goal npm run lint for all");
+    expect(setAgentGoalForAllServersAction).toEqual({
+      kind: "set_agent_goal",
+      serverIds: ["dgx", "home"],
+      name: "build watcher",
+      goal: "npm run lint",
     });
 
     const approveReadyAction = current().applyVoiceTranscript("approve ready agents");

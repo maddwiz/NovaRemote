@@ -388,6 +388,14 @@ export function GlassesModeScreen() {
         return;
       }
       if (route.kind === "create_agent") {
+        if (route.allServers) {
+          const serverIds = Array.from(connections.keys());
+          if (serverIds.length === 0) {
+            return;
+          }
+          void onCreateAgentForServers(serverIds, route.name).catch(() => {});
+          return;
+        }
         const serverIds = resolveAgentTargetServerIds(route.panelId);
         if (serverIds.length === 0) {
           return;
@@ -400,6 +408,14 @@ export function GlassesModeScreen() {
         return;
       }
       if (route.kind === "set_agent_goal") {
+        if (route.allServers) {
+          const serverIds = Array.from(connections.keys());
+          if (serverIds.length === 0) {
+            return;
+          }
+          void onSetAgentGoalForServers(serverIds, route.name, route.goal).catch(() => {});
+          return;
+        }
         const serverIds = resolveAgentTargetServerIds(route.panelId);
         if (serverIds.length === 0) {
           return;

@@ -616,4 +616,67 @@ describe("useVrLiveRuntime", () => {
       renderer?.unmount();
     });
   });
+
+  it("fans out all-server agent lifecycle voice actions across pooled targets", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Homelab");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build-01"])],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string
+      ) => Promise<void>
+    >(async () => undefined);
+    const onCreateAgent = vi.fn(async () => 2);
+    const onSetAgentGoal = vi.fn(async () => 2);
+
+    let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Runtime not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({ sendMock }),
+        maxPanels: 4,
+        onCreateAgent,
+        onSetAgentGoal,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("create agent deploy bot for all servers");
+    });
+    expect(onCreateAgent).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
+    expect(current().hudStatus?.message).toContain("Created 2 agents named deploy bot");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent deploy bot goal npm run deploy for all servers");
+    });
+    expect(onSetAgentGoal).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "npm run deploy");
+    expect(current().hudStatus?.message).toContain("Updated goal for 2 agents");
+    expect(sendMock).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

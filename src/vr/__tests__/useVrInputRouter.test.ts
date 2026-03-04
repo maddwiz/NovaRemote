@@ -350,14 +350,31 @@ describe("useVrInputRouter", () => {
         name: "build watcher",
       })
       .mockReturnValueOnce({
+        kind: "create_agent",
+        serverIds: ["dgx", "home"],
+        name: "deploy bot",
+      })
+      .mockReturnValueOnce({
         kind: "set_agent_goal",
         serverIds: ["dgx"],
         name: "build watcher",
         goal: "npm run test",
+      })
+      .mockReturnValueOnce({
+        kind: "set_agent_goal",
+        serverIds: ["dgx", "home"],
+        name: "deploy bot",
+        goal: "npm run deploy",
       });
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
-    const onCreateAgent = vi.fn(async () => true);
-    const onSetAgentGoal = vi.fn(async () => 1);
+    const onCreateAgent = vi
+      .fn<(serverIds: string[], name: string) => Promise<boolean | number>>()
+      .mockResolvedValueOnce(true)
+      .mockResolvedValueOnce(2);
+    const onSetAgentGoal = vi
+      .fn<(serverIds: string[], name: string, goal: string) => Promise<number>>()
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2);
 
     let latest: UseVrInputRouterResult | null = null;
     const current = () => {
@@ -388,10 +405,22 @@ describe("useVrInputRouter", () => {
     expect(current().hudStatus?.message).toContain("Created 1 agent named build watcher");
 
     await act(async () => {
+      await current().dispatchVoice("create agent deploy bot for all servers");
+    });
+    expect(onCreateAgent).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
+    expect(current().hudStatus?.message).toContain("Created 2 agents named deploy bot");
+
+    await act(async () => {
       await current().dispatchVoice("set agent build watcher goal npm run test");
     });
     expect(onSetAgentGoal).toHaveBeenCalledWith(["dgx"], "build watcher", "npm run test");
     expect(current().hudStatus?.message).toContain("Updated goal for 1 agent");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent deploy bot goal npm run deploy for all servers");
+    });
+    expect(onSetAgentGoal).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "npm run deploy");
+    expect(current().hudStatus?.message).toContain("Updated goal for 2 agents");
 
     await act(async () => {
       renderer?.unmount();

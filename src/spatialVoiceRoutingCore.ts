@@ -10,8 +10,8 @@ export type VoiceRoute =
   | { kind: "none" }
   | { kind: "show_all" }
   | { kind: "minimize" }
-  | { kind: "create_agent"; name: string; panelId?: string }
-  | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string }
+  | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
+  | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string; allServers?: boolean }
   | { kind: "approve_ready_agents"; panelId?: string }
   | { kind: "deny_all_pending_agents"; panelId?: string }
   | { kind: "pause_pool" }
@@ -157,6 +157,18 @@ function resolveFocusedPanelId(panels: VoiceRoutePanel[], focusedPanelId: string
   return panels[0]?.id ?? null;
 }
 
+function isAllServersTarget(target: string): boolean {
+  const normalized = normalizeForMatch(target);
+  return (
+    normalized === "all" ||
+    normalized === "all server" ||
+    normalized === "all servers" ||
+    normalized === "every server" ||
+    normalized === "every servers" ||
+    normalized === "everywhere"
+  );
+}
+
 export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }: ResolveVoiceRouteArgs): VoiceRoute {
   const cleaned = transcript.trim();
   if (!cleaned || panels.length === 0) {
@@ -251,6 +263,9 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     if (!target) {
       return { kind: "create_agent", name };
     }
+    if (isAllServersTarget(target)) {
+      return { kind: "create_agent", name, allServers: true };
+    }
     const targetPanel = findPanelByTarget(panels, target);
     if (!targetPanel) {
       return { kind: "none" };
@@ -270,6 +285,9 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     }
     if (!target) {
       return { kind: "set_agent_goal", name, goal };
+    }
+    if (isAllServersTarget(target)) {
+      return { kind: "set_agent_goal", name, goal, allServers: true };
     }
     const targetPanel = findPanelByTarget(panels, target);
     if (!targetPanel) {

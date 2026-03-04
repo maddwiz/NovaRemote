@@ -8,8 +8,8 @@ export type VrVoiceIntent =
   | { kind: "focus"; panelId: string }
   | { kind: "reconnect_server"; panelId: string }
   | { kind: "reconnect_all" }
-  | { kind: "create_agent"; name: string; panelId?: string }
-  | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string }
+  | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
+  | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string; allServers?: boolean }
   | { kind: "approve_ready_agents"; panelId?: string }
   | { kind: "deny_all_pending_agents"; panelId?: string }
   | { kind: "pause_pool" }
@@ -238,10 +238,12 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
           kind: "create_agent",
           name: route.name,
           panelId: route.panelId,
+          allServers: route.allServers,
         }
       : {
           kind: "create_agent",
           name: route.name,
+          allServers: route.allServers,
         };
   }
   if (route.kind === "set_agent_goal") {
@@ -251,11 +253,13 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
           name: route.name,
           goal: route.goal,
           panelId: route.panelId,
+          allServers: route.allServers,
         }
       : {
           kind: "set_agent_goal",
           name: route.name,
           goal: route.goal,
+          allServers: route.allServers,
         };
   }
   if (route.kind === "approve_ready_agents") {

@@ -697,7 +697,7 @@ export function useVrWorkspace({
       }
       if (intent.kind === "create_agent") {
         const targetPanel = resolveTargetPanel(intent.panelId);
-        const serverIds = targetPanel ? [targetPanel.serverId] : serverScopeIds.slice(0, 1);
+        const serverIds = intent.allServers ? serverScopeIds.slice() : targetPanel ? [targetPanel.serverId] : serverScopeIds.slice(0, 1);
         if (serverIds.length === 0) {
           return { kind: "none" };
         }
@@ -709,7 +709,7 @@ export function useVrWorkspace({
       }
       if (intent.kind === "set_agent_goal") {
         const targetPanel = resolveTargetPanel(intent.panelId);
-        const serverIds = targetPanel ? [targetPanel.serverId] : serverScopeIds.slice(0, 1);
+        const serverIds = intent.allServers ? serverScopeIds.slice() : targetPanel ? [targetPanel.serverId] : serverScopeIds.slice(0, 1);
         if (serverIds.length === 0) {
           return { kind: "none" };
         }
