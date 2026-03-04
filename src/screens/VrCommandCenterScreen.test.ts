@@ -471,6 +471,118 @@ describe("VrCommandCenterScreen", () => {
     });
   });
 
+  it("supports voice channel creation with explicit workspace name targeting", async () => {
+    const runtime = makeRuntime();
+    const createChannel = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "workspace-2",
+        name: "Release Hub",
+        serverIds: ["home"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-2",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [],
+      loading: false,
+      createChannel,
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    const renderer = await renderScreen(runtime, { workspaces });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText(
+        "create channel war-room in release hub"
+      );
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+
+    expect(createChannel).toHaveBeenCalledWith({
+      workspaceId: "workspace-2",
+      name: "war-room",
+    });
+    expect(runtime.dispatchVoice).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("requires workspace targeting for channel management when multiple workspaces are visible", async () => {
+    const runtime = makeRuntime();
+    const createChannel = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "workspace-2",
+        name: "Release Hub",
+        serverIds: ["home"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-2",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [],
+      loading: false,
+      createChannel,
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    const renderer = await renderScreen(runtime, { workspaces });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("create channel triage");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+
+    expect(createChannel).not.toHaveBeenCalled();
+    expect(() =>
+      renderer.root.findByProps({
+        children: "Specify a workspace or scope to one workspace before channel management.",
+      })
+    ).not.toThrow();
+    expect(runtime.dispatchVoice).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("scopes panels to workspace and manages voice channel actions", async () => {
     const runtime = makeRuntime();
     const createChannel = vi.fn();
