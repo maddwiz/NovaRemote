@@ -71,6 +71,9 @@ export function WorkspaceVoiceChannelsPanel({
         const workspaceChannels = voiceChannelsByWorkspace.get(workspace.id) || [];
         const joinedChannel = workspaceChannels.find((channel) => channel.joined);
         const permissions = getWorkspacePermissions(workspace);
+        const memberSummary = workspace.members
+          .map((member) => `${member.name} (${member.role})`)
+          .join(", ");
 
         return (
           <View key={`voice-workspace-${workspace.id}`} style={styles.serverCard}>
@@ -81,6 +84,7 @@ export function WorkspaceVoiceChannelsPanel({
               </Text>
             </View>
             <Text style={styles.emptyText}>{`Role: ${permissions.role}`}</Text>
+            {memberSummary ? <Text style={styles.emptyText}>{`Members: ${memberSummary}`}</Text> : null}
             {permissions.canManageChannels ? (
               <View style={styles.modeRow}>
                 <TextInput
@@ -200,4 +204,3 @@ export function WorkspaceVoiceChannelsPanel({
     </View>
   );
 }
-

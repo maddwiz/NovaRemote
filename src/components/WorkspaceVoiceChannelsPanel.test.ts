@@ -74,6 +74,7 @@ describe("WorkspaceVoiceChannelsPanel", () => {
         })
       );
     });
+    expect(() => renderer.root.findByProps({ children: "Members: Local User (owner)" })).not.toThrow();
 
     act(() => {
       renderer.root.findByProps({ accessibilityLabel: "New voice channel for Platform Ops" }).props.onChangeText("triage");
@@ -179,4 +180,3 @@ describe("WorkspaceVoiceChannelsPanel", () => {
     });
   });
 });
-
