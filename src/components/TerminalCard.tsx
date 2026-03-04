@@ -128,6 +128,8 @@ type KeyPressEventWithModifiers = TextInputKeyPressEventData & {
 type TerminalCardProps = {
   session: string;
   sessionAlias: string;
+  serverLabel?: string;
+  showServerLabel?: boolean;
   output: string;
   draft: string;
   isSending: boolean;
@@ -207,6 +209,8 @@ type TerminalCardProps = {
 export function TerminalCard({
   session,
   sessionAlias,
+  serverLabel,
+  showServerLabel = false,
   output,
   draft,
   isSending,
@@ -399,6 +403,8 @@ export function TerminalCard({
       <TerminalCardHeader
         session={session}
         sessionAlias={sessionAlias}
+        serverLabel={serverLabel}
+        showServerLabel={showServerLabel}
         mode={mode}
         aiAvailable={aiAvailable}
         shellAvailable={shellAvailable}

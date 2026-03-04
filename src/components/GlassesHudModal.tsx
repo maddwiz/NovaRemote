@@ -44,6 +44,15 @@ function brandTitle(brand: GlassesBrand): string {
   if (brand === "halo") {
     return "Halo HUD";
   }
+  if (brand === "meta_orion") {
+    return "Meta Orion HUD";
+  }
+  if (brand === "meta_ray_ban") {
+    return "Meta Ray-Ban HUD";
+  }
+  if (brand === "viture_pro") {
+    return "VITURE Pro HUD";
+  }
   return "Glasses HUD";
 }
 
@@ -53,6 +62,15 @@ function brandAccent(brand: GlassesBrand): string {
   }
   if (brand === "halo") {
     return "#ffd36b";
+  }
+  if (brand === "meta_orion") {
+    return "#6cf2a2";
+  }
+  if (brand === "meta_ray_ban") {
+    return "#6bd5ff";
+  }
+  if (brand === "viture_pro") {
+    return "#f7c76a";
   }
   return "#87ffa4";
 }

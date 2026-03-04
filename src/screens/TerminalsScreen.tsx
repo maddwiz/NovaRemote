@@ -5,6 +5,7 @@ import { NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, T
 import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
 import { AnsiText } from "../components/AnsiText";
+import { ServerSwitcherRail } from "../components/ServerSwitcherRail";
 import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
 import { GlassesHudModal } from "../components/GlassesHudModal";
@@ -92,6 +93,15 @@ function glassesBrandLabel(brand: GlassesBrand): string {
   if (brand === "halo") {
     return "Halo";
   }
+  if (brand === "meta_orion") {
+    return "Meta Orion";
+  }
+  if (brand === "meta_ray_ban") {
+    return "Meta Ray-Ban";
+  }
+  if (brand === "viture_pro") {
+    return "VITURE Pro";
+  }
   return "Custom";
 }
 
@@ -120,6 +130,33 @@ function glassesBrandPreset(brand: GlassesBrand): {
       wakePhrase: "nova",
     };
   }
+  if (brand === "meta_orion") {
+    return {
+      textScale: 1,
+      loopCaptureMs: 6200,
+      vadSilenceMs: 750,
+      vadSensitivityDb: 7,
+      wakePhrase: "orion",
+    };
+  }
+  if (brand === "meta_ray_ban") {
+    return {
+      textScale: 1.1,
+      loopCaptureMs: 7000,
+      vadSilenceMs: 950,
+      vadSensitivityDb: 8,
+      wakePhrase: "meta",
+    };
+  }
+  if (brand === "viture_pro") {
+    return {
+      textScale: 1.05,
+      loopCaptureMs: 6600,
+      vadSilenceMs: 850,
+      vadSensitivityDb: 7,
+      wakePhrase: "viture",
+    };
+  }
   return {
     textScale: 1.05,
     loopCaptureMs: 6400,
@@ -144,6 +181,9 @@ export function TerminalsScreen() {
   const {
     activeServer,
     connected,
+    focusedServerId,
+    connections,
+    unreadServers,
     servers,
     allSessions,
     openSessions,
@@ -212,6 +252,9 @@ export function TerminalsScreen() {
     onRefreshCapabilities,
     onRefreshSessions,
     onOpenServers,
+    onFocusServer,
+    onReconnectServer,
+    onEditServer,
     onOpenSshFallback,
     onStartSession,
     onToggleSessionVisible,
@@ -311,6 +354,11 @@ export function TerminalsScreen() {
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
+  const connectedServerCount = useMemo(
+    () => Array.from(connections.values()).filter((connection) => connection.connected).length,
+    [connections]
+  );
+  const showServerBadge = connectedServerCount > 1;
   const onStartPromptKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     const native = event.nativeEvent as TextInputKeyPressEventData & { ctrlKey?: boolean; metaKey?: boolean };
     const key = (native.key || "").toLowerCase();
@@ -472,6 +520,8 @@ export function TerminalsScreen() {
           key={session}
           session={session}
           sessionAlias={sessionAliases[session] || ""}
+          serverLabel={activeServer?.name || ""}
+          showServerLabel={showServerBadge}
           output={output}
           draft={draft}
           isSending={isSending}
@@ -620,6 +670,8 @@ export function TerminalsScreen() {
     tails,
     watchRules,
     activeBackend,
+    activeServer?.name,
+    showServerBadge,
   ]);
 
   const tabActiveIndex = activeTabSession ? sortedOpenSessions.indexOf(activeTabSession) : -1;
@@ -780,6 +832,17 @@ export function TerminalsScreen() {
 
   const topPanels = (
     <>
+      <ServerSwitcherRail
+        servers={servers}
+        connections={connections}
+        focusedServerId={focusedServerId}
+        onFocusServer={onFocusServer}
+        onReconnectServer={onReconnectServer}
+        onEditServer={onEditServer}
+        onAddServer={onOpenServers}
+        unreadServers={unreadServers}
+      />
+
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Connection Health</Text>
         <View style={styles.rowInlineSpace}>
@@ -814,7 +877,9 @@ export function TerminalsScreen() {
         </View>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {(["xreal_x1", "halo", "custom"] as GlassesBrand[]).map((brand) => (
+          {(
+            ["xreal_x1", "halo", "meta_orion", "meta_ray_ban", "viture_pro", "custom"] as GlassesBrand[]
+          ).map((brand) => (
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={`Set glasses brand to ${glassesBrandLabel(brand)}`}

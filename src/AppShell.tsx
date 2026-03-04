@@ -1,5 +1,6 @@
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
+import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
@@ -35,7 +36,7 @@ import {
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
-  POLL_INTERVAL_MS,
+  STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
 } from "./constants";
 import { useAiAssist } from "./hooks/useAiAssist";
@@ -43,7 +44,8 @@ import { useBiometricLock } from "./hooks/useBiometricLock";
 import { useCommandHistory } from "./hooks/useCommandHistory";
 import { commandQueueStatus, useCommandQueue } from "./hooks/useCommandQueue";
 import { useCollaboration } from "./hooks/useCollaboration";
-import { useConnectionHealth } from "./hooks/useConnectionHealth";
+import { useConnectionPool } from "./hooks/useConnectionPool";
+import { useServerConnection } from "./hooks/useServerConnection";
 import { useProcessManager } from "./hooks/useProcessManager";
 import { useSessionRecordings } from "./hooks/useSessionRecordings";
 import { useNotifications } from "./hooks/useNotifications";
@@ -53,13 +55,11 @@ import { useSafetyPolicy } from "./hooks/useSafetyPolicy";
 import { useServers } from "./hooks/useServers";
 import { useSessionTags } from "./hooks/useSessionTags";
 import { useSessionAliases } from "./hooks/useSessionAliases";
-import { useServerCapabilities } from "./hooks/useServerCapabilities";
 import { useSnippets } from "./hooks/useSnippets";
-import { useTerminalSessions } from "./hooks/useTerminalSessions";
 import { useTerminalTheme } from "./hooks/useTerminalTheme";
 import { useTutorial } from "./hooks/useTutorial";
+import { useUnreadServers } from "./hooks/useUnreadServers";
 import { useWatchAlerts } from "./hooks/useWatchAlerts";
-import { useWebSocket } from "./hooks/useWebSocket";
 import { useFilesBrowser } from "./hooks/useFilesBrowser";
 import { usePinnedSessions } from "./hooks/usePinnedSessions";
 import { useLlmProfiles } from "./hooks/useLlmProfiles";
@@ -94,6 +94,7 @@ import {
   TerminalBackendKind,
   TerminalSendMode,
   TmuxTailResponse,
+  WatchRule,
 } from "./types";
 
 function parseCommaTags(raw: string): string[] {
@@ -131,6 +132,18 @@ function toServerShareLink(server: ServerProfile): string {
     cwd: server.defaultCwd,
     backend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
   };
+  if (server.vmHost) {
+    queryParams.vm_host = server.vmHost;
+  }
+  if (server.vmType) {
+    queryParams.vm_type = server.vmType;
+  }
+  if (server.vmName) {
+    queryParams.vm_name = server.vmName;
+  }
+  if (server.vmId) {
+    queryParams.vm_id = server.vmId;
+  }
   if (server.sshHost) {
     queryParams.ssh_host = server.sshHost;
   }
@@ -604,6 +617,7 @@ export default function AppShell() {
   const voiceLoopRetryCountRef = useRef<Record<string, number>>({});
   const voiceLoopRestartTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
   const appOpenTrackedRef = useRef<boolean>(false);
+  const crossServerWatchRulesRef = useRef<Record<string, Record<string, WatchRule>>>({});
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -637,7 +651,7 @@ export default function AppShell() {
 
   const {
     servers,
-    activeServer,
+    activeServer: selectedServer,
     activeServerId,
     loadingSettings,
     serverNameInput,
@@ -648,6 +662,10 @@ export default function AppShell() {
     serverSshHostInput,
     serverSshUserInput,
     serverSshPortInput,
+    serverVmHostInput,
+    serverVmTypeInput,
+    serverVmNameInput,
+    serverVmIdInput,
     serverPortainerUrlInput,
     serverProxmoxUrlInput,
     serverGrafanaUrlInput,
@@ -661,6 +679,10 @@ export default function AppShell() {
     setServerSshHostInput,
     setServerSshUserInput,
     setServerSshPortInput,
+    setServerVmHostInput,
+    setServerVmTypeInput,
+    setServerVmNameInput,
+    setServerVmIdInput,
     setServerPortainerUrlInput,
     setServerProxmoxUrlInput,
     setServerGrafanaUrlInput,
@@ -674,28 +696,359 @@ export default function AppShell() {
     useServer,
   } = useServers({ onError: setError, enabled: unlocked });
 
-  const connected = useMemo(() => {
-    if (!activeServer) {
-      return false;
+  const { shellRunWaitMs, parsedShellRunWaitMs, setShellRunWaitMsInput } = useShellRunWait(activeServerId);
+  const pool = useConnectionPool({
+    servers,
+    enabled: unlocked,
+    initialFocusedServerId: activeServerId,
+    shellRunWaitMs: parsedShellRunWaitMs,
+    onError: setError,
+  });
+  const {
+    connections: poolConnections,
+    focusedServerId: poolFocusedServerId,
+    focusedConnection: poolFocusedConnection,
+    setFocusedServerId: setPoolFocusedServerId,
+    reconnectServer: reconnectPoolServer,
+    refreshSessions: refreshPoolSessions,
+    createSession: createPoolSession,
+    createLocalAiSession: createPoolLocalAiSession,
+    sendCommand: sendPoolCommand,
+    sendControlChar: sendPoolControlChar,
+    stopSession: stopPoolSession,
+    openOnMac: openPoolOnMac,
+    toggleSessionVisible: togglePoolSessionVisible,
+    removeOpenSession: removePoolOpenSession,
+    setDrafts: setPoolDrafts,
+    setTails: setPoolTails,
+    setSessionMode: setPoolSessionMode,
+    fetchTail: fetchPoolTail,
+    closeStream: closePoolStream,
+    connectAll: connectPoolAll,
+  } = pool;
+
+  useEffect(() => {
+    if (!activeServerId) {
+      return;
     }
-    return Boolean(normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
-  }, [activeServer]);
+    if (poolFocusedServerId === activeServerId) {
+      return;
+    }
+    setPoolFocusedServerId(activeServerId);
+  }, [activeServerId, poolFocusedServerId, setPoolFocusedServerId]);
+
+  const focusedServerId = poolFocusedServerId ?? activeServerId ?? null;
+  const focusedConnection = useServerConnection(pool, focusedServerId) ?? poolFocusedConnection;
+  const activeServer = focusedConnection?.server ?? selectedServer ?? null;
+  const connected = focusedConnection?.connected ?? Boolean(activeServer && normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
+  const defaultCapabilities = useMemo(
+    () => ({
+      terminal: false,
+      tmux: false,
+      codex: false,
+      files: false,
+      shellRun: false,
+      macAttach: false,
+      stream: false,
+      sysStats: false,
+      processes: false,
+      collaboration: false,
+      spectate: false,
+    }),
+    []
+  );
+  const defaultHealth = useMemo(
+    () => ({
+      lastPingAt: null,
+      latencyMs: null,
+      activeStreams: 0,
+      openSessions: 0,
+    }),
+    []
+  );
+  const capabilities = focusedConnection?.capabilities ?? defaultCapabilities;
+  const terminalApiBasePath = focusedConnection?.terminalApiBasePath ?? "/tmux";
+  const capabilitiesLoading = focusedConnection?.capabilitiesLoading ?? false;
+  const allSessions = focusedConnection?.allSessions ?? [];
+  const localAiSessions = focusedConnection?.localAiSessions ?? [];
+  const openSessions = focusedConnection?.openSessions ?? [];
+  const tails = focusedConnection?.tails ?? {};
+  const drafts = focusedConnection?.drafts ?? {};
+  const sendBusy = focusedConnection?.sendBusy ?? {};
+  const sendModes = focusedConnection?.sendModes ?? {};
+  const streamLive = focusedConnection?.streamLive ?? {};
+  const connectionMeta = focusedConnection?.connectionMeta ?? {};
+  const health = focusedConnection?.health ?? defaultHealth;
+  const supportedFeatures = useMemo(() => {
+    const features: string[] = [];
+    if (activeServer?.terminalBackend) {
+      features.push(`backend:${activeServer.terminalBackend}`);
+    }
+    if (capabilities.terminal) {
+      features.push(`terminal:${terminalApiBasePath === "/terminal" ? "terminal" : "tmux"}`);
+    }
+    if (capabilities.codex) {
+      features.push("codex");
+    }
+    if (capabilities.files) {
+      features.push("files");
+    }
+    if (capabilities.shellRun) {
+      features.push("shell-run");
+    }
+    if (capabilities.macAttach) {
+      features.push("mac-attach");
+    }
+    if (capabilities.stream) {
+      features.push("stream");
+    }
+    if (capabilities.sysStats) {
+      features.push("sys-stats");
+    }
+    if (capabilities.processes) {
+      features.push("proc");
+    }
+    if (capabilities.collaboration) {
+      features.push("collab");
+    }
+    if (capabilities.spectate) {
+      features.push("spectate");
+    }
+    return features.join(", ");
+  }, [activeServer?.terminalBackend, capabilities, terminalApiBasePath]);
+  const unreadServers = useUnreadServers({
+    connections: poolConnections,
+    focusedServerId,
+  });
+
+  const focusServer = useCallback(
+    (serverId: string) => {
+      setPoolFocusedServerId(serverId);
+      void useServer(serverId).catch((error) => {
+        setError(error);
+      });
+    },
+    [setError, setPoolFocusedServerId, useServer]
+  );
+
+  const editServer = useCallback(
+    (serverId: string) => {
+      const target = servers.find((server) => server.id === serverId);
+      if (target) {
+        beginEditServer(target);
+      } else {
+        beginCreateServer();
+      }
+      setRoute("servers");
+    },
+    [beginCreateServer, beginEditServer, servers, setRoute]
+  );
+
+  const refreshCapabilities = useCallback(
+    async (_force: boolean = false) => {
+      if (!focusedServerId) {
+        return;
+      }
+      await reconnectPoolServer(focusedServerId, true);
+    },
+    [focusedServerId, reconnectPoolServer]
+  );
+
+  const reconnectServer = useCallback(
+    (serverId: string) => {
+      void reconnectPoolServer(serverId, true).catch((error) => {
+        setError(error);
+      });
+    },
+    [reconnectPoolServer, setError]
+  );
+
+  const [startCwd, setStartCwd] = useState<string>(DEFAULT_CWD);
+  const [startPrompt, setStartPrompt] = useState<string>("");
+  const [startOpenOnMac, setStartOpenOnMac] = useState<boolean>(true);
+  const [startKind, setStartKind] = useState<TerminalSendMode>("ai");
+  const [focusedSession, setFocusedSession] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!activeServer) {
+      return;
+    }
+    setStartCwd(activeServer.defaultCwd || DEFAULT_CWD);
+  }, [activeServer?.defaultCwd, focusedServerId]);
+
+  const setTails = useCallback(
+    (updater: React.SetStateAction<Record<string, string>>) => {
+      if (!focusedServerId) {
+        return;
+      }
+      setPoolTails(focusedServerId, updater);
+    },
+    [focusedServerId, setPoolTails]
+  );
+
+  const setDrafts = useCallback(
+    (updater: React.SetStateAction<Record<string, string>>) => {
+      if (!focusedServerId) {
+        return;
+      }
+      setPoolDrafts(focusedServerId, updater);
+    },
+    [focusedServerId, setPoolDrafts]
+  );
+
+  const refreshSessions = useCallback(async () => {
+    if (!focusedServerId) {
+      throw new Error("Select a server first.");
+    }
+    await refreshPoolSessions(focusedServerId);
+  }, [focusedServerId, refreshPoolSessions]);
+
+  const toggleSessionVisible = useCallback(
+    (session: string) => {
+      if (!focusedServerId) {
+        return;
+      }
+      togglePoolSessionVisible(focusedServerId, session);
+    },
+    [focusedServerId, togglePoolSessionVisible]
+  );
+
+  const removeOpenSession = useCallback(
+    (session: string) => {
+      if (!focusedServerId) {
+        return;
+      }
+      removePoolOpenSession(focusedServerId, session);
+      setFocusedSession((current) => (current === session ? null : current));
+    },
+    [focusedServerId, removePoolOpenSession]
+  );
+
+  const setSessionMode = useCallback(
+    (session: string, mode: TerminalSendMode) => {
+      if (!focusedServerId) {
+        return;
+      }
+      setPoolSessionMode(focusedServerId, session, mode);
+    },
+    [focusedServerId, setPoolSessionMode]
+  );
+
+  const createLocalAiSession = useCallback(
+    (initialPrompt: string = "") => {
+      if (!focusedServerId) {
+        throw new Error("Connect to a server first.");
+      }
+      return createPoolLocalAiSession(focusedServerId, initialPrompt);
+    },
+    [createPoolLocalAiSession, focusedServerId]
+  );
+
+  const handleStartSession = useCallback(async () => {
+    if (!focusedServerId || !activeServer || !connected) {
+      throw new Error("Connect to a server first.");
+    }
+
+    const trimmedPrompt = startPrompt.trim();
+    const session = await createPoolSession(
+      focusedServerId,
+      startCwd,
+      startKind,
+      trimmedPrompt,
+      startOpenOnMac
+    );
+    if (trimmedPrompt) {
+      setStartPrompt("");
+    }
+    return session;
+  }, [activeServer, connected, createPoolSession, focusedServerId, startCwd, startKind, startOpenOnMac, startPrompt]);
+
+  const sendCommand = useCallback(
+    async (session: string, command: string, mode: TerminalSendMode, clearDraft: boolean = false) => {
+      if (!focusedServerId) {
+        throw new Error("Connect to a server first.");
+      }
+      await sendPoolCommand(focusedServerId, session, command, mode, clearDraft);
+    },
+    [focusedServerId, sendPoolCommand]
+  );
+
+  const handleSend = useCallback(
+    async (session: string) => {
+      if (!activeServer || !connected) {
+        throw new Error("Connect to a server first.");
+      }
+
+      const currentDraft = (drafts[session] || "").trim();
+      if (!currentDraft) {
+        return "";
+      }
+
+      const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+      await sendCommand(session, currentDraft, mode, true);
+      return currentDraft;
+    },
+    [activeServer, connected, drafts, sendCommand, sendModes]
+  );
+
+  const handleStop = useCallback(
+    async (session: string) => {
+      if (!focusedServerId) {
+        throw new Error("Connect to a server first.");
+      }
+      await stopPoolSession(focusedServerId, session);
+    },
+    [focusedServerId, stopPoolSession]
+  );
+
+  const sendControlChar = useCallback(
+    async (session: string, controlChar: string) => {
+      if (!focusedServerId) {
+        throw new Error("Connect to a server first.");
+      }
+      await sendPoolControlChar(focusedServerId, session, controlChar);
+    },
+    [focusedServerId, sendPoolControlChar]
+  );
+
+  const handleOpenOnMac = useCallback(
+    async (session: string) => {
+      if (!focusedServerId) {
+        throw new Error("Connect to a server first.");
+      }
+      await openPoolOnMac(focusedServerId, session);
+    },
+    [focusedServerId, openPoolOnMac]
+  );
+
+  const fetchTail = useCallback(
+    async (session: string, showErrors: boolean) => {
+      if (!focusedServerId) {
+        return;
+      }
+      await fetchPoolTail(focusedServerId, session, showErrors);
+    },
+    [focusedServerId, fetchPoolTail]
+  );
+
+  const closeStream = useCallback(
+    (session: string) => {
+      if (!focusedServerId) {
+        return;
+      }
+      closePoolStream(focusedServerId, session);
+    },
+    [closePoolStream, focusedServerId]
+  );
 
   const { analyticsEnabled, analyticsAnonId, setAnalyticsEnabled, track } = useAnalytics({
     activeServer,
     connected,
   });
-  const { myReferralCode, claimedReferralCode, buildReferralLink, claimReferralCode, extractReferralCodeFromUrl } = useReferrals();
+  const { myReferralCode, claimedReferralCode, buildReferralLink, claimReferralCode, extractReferralCodeFromUrl } =
+    useReferrals();
   const { sharedTemplates, exportTemplatesFromServers, importTemplates, deleteTemplate } = useSharedProfiles();
 
-  const {
-    capabilities,
-    terminalApiBasePath,
-    supportedFeatures,
-    loading: capabilitiesLoading,
-    refresh: refreshCapabilities,
-  } = useServerCapabilities({ activeServer, connected });
-  const { shellRunWaitMs, parsedShellRunWaitMs, setShellRunWaitMsInput } = useShellRunWait(activeServerId);
   const {
     settings: glassesMode,
     setEnabled: setGlassesEnabled,
@@ -726,55 +1079,16 @@ export default function AppShell() {
     setLastTranscript: setVoiceTranscript,
   } = useVoiceCapture({ activeServer, connected });
 
-  const {
-    allSessions,
-    localAiSessions,
-    openSessions,
-    tails,
-    drafts,
-    sendBusy,
-    sendModes,
-    startCwd,
-    startPrompt,
-    startOpenOnMac,
-    startKind,
-    focusedSession,
-    setTails,
-    setDrafts,
-    setStartCwd,
-    setStartPrompt,
-    setStartOpenOnMac,
-    setStartKind,
-    setFocusedSession,
-    resetTerminalState,
-    refreshSessions,
-    toggleSessionVisible,
-    removeOpenSession,
-    setSessionMode,
-    createLocalAiSession,
-    handleStartSession,
-    handleSend,
-    sendCommand,
-    handleStop,
-    sendControlChar,
-    handleOpenOnMac,
-  } = useTerminalSessions({
-    activeServer,
-    connected,
-    terminalApiBasePath,
-    supportsShellRun: capabilities.shellRun,
-    shellRunWaitMs: parsedShellRunWaitMs,
-  });
-
   const remoteOpenSessions = useMemo(
     () => openSessions.filter((session) => !localAiSessions.includes(session)),
     [localAiSessions, openSessions]
   );
 
-  const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(activeServerId);
-  const { sessionAliases, setAliasForSession, removeMissingAliases } = useSessionAliases(activeServerId);
-  const { sessionTags, allTags, setTagsForSession, removeMissingSessions } = useSessionTags(activeServerId);
-  const { pinnedSessions, togglePinnedSession, removeMissingPins } = usePinnedSessions(activeServerId);
+  const scopedServerId = focusedServerId ?? activeServerId;
+  const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(scopedServerId);
+  const { sessionAliases, setAliasForSession, removeMissingAliases } = useSessionAliases(scopedServerId);
+  const { sessionTags, allTags, setTagsForSession, removeMissingSessions } = useSessionTags(scopedServerId);
+  const { pinnedSessions, togglePinnedSession, removeMissingPins } = usePinnedSessions(scopedServerId);
   const {
     currentPath,
     setCurrentPath,
@@ -797,41 +1111,14 @@ export default function AppShell() {
     goUp,
   } = useFilesBrowser({ activeServer, connected });
 
-  const { streamLive, connectionMeta, fetchTail, connectStream, closeStream, closeAllStreams, closeStreamsNotIn } = useWebSocket({
-    activeServer,
-    connected,
-    terminalApiBasePath,
-    openSessions: remoteOpenSessions,
-    setTails,
-    onError: setError,
-    onSessionClosed: (session) => {
-      removeOpenSession(session);
-      if (isPro) {
-        void notify("Session closed", `${session} ended on the server.`);
-      }
-    },
-    onStreamError: (session, message) => {
-      if (isPro) {
-        void notify("Session error", `${session}: ${message}`);
-      }
-    },
-  });
-
-  const health = useConnectionHealth({
-    activeServer,
-    connected,
-    streamLive,
-    openSessions: remoteOpenSessions,
-  });
-
   const filteredSnippets = useMemo(() => {
     return snippets.filter((snippet) => {
       if (!snippet.serverId) {
         return true;
       }
-      return activeServerId ? snippet.serverId === activeServerId : false;
+      return focusedServerId ? snippet.serverId === focusedServerId : false;
     });
-  }, [activeServerId, snippets]);
+  }, [focusedServerId, snippets]);
 
   useEffect(() => {
     if (servers.length === 0) {
@@ -840,17 +1127,17 @@ export default function AppShell() {
     }
 
     setFleetTargets((prev) => {
-      if (prev.length === 0 && activeServerId) {
-        return [activeServerId];
+      if (prev.length === 0 && focusedServerId) {
+        return [focusedServerId];
       }
       const available = new Set(servers.map((server) => server.id));
       const filtered = prev.filter((id) => available.has(id));
       if (filtered.length > 0) {
         return filtered;
       }
-      return activeServerId ? [activeServerId] : [servers[0].id];
+      return focusedServerId ? [focusedServerId] : [servers[0].id];
     });
-  }, [activeServerId, servers]);
+  }, [focusedServerId, servers]);
 
   const isLocalSession = useCallback((session: string) => localAiSessions.includes(session), [localAiSessions]);
 
@@ -910,17 +1197,6 @@ export default function AppShell() {
     [activeServer]
   );
 
-  const shouldPollRemoteSession = useCallback(
-    (session: string) => {
-      if (streamLive[session]) {
-        return false;
-      }
-      const state = connectionMeta[session]?.state;
-      return state !== "connecting" && state !== "reconnecting";
-    },
-    [connectionMeta, streamLive]
-  );
-
   const runFleetCommand = useCallback(async () => {
     const command = fleetCommand.trim();
     if (!command) {
@@ -941,7 +1217,8 @@ export default function AppShell() {
           const cwd = fleetCwd.trim() || server.defaultCwd || DEFAULT_CWD;
           const session = makeFleetSessionName();
           try {
-            const terminalBasePath = await detectTerminalApiBasePath(server);
+            const pooledConnection = poolConnections.get(server.id);
+            const terminalBasePath = pooledConnection?.terminalApiBasePath ?? (await detectTerminalApiBasePath(server));
 
             await apiRequest(server.baseUrl, server.token, `${terminalBasePath}/session`, {
               method: "POST",
@@ -998,7 +1275,7 @@ export default function AppShell() {
     } finally {
       setFleetBusy(false);
     }
-  }, [fleetCommand, fleetCwd, fleetTargets, fleetWaitMs, servers]);
+  }, [fleetCommand, fleetCwd, fleetTargets, fleetWaitMs, poolConnections, servers]);
 
   const sendViaExternalLlm = useCallback(
     async (session: string, prompt: string) => {
@@ -1040,12 +1317,133 @@ export default function AppShell() {
   });
 
   const { watchRules, watchAlertHistoryBySession, setWatchEnabled, setWatchPattern, clearWatchAlerts } = useWatchAlerts({
-    activeServerId,
+    activeServerId: scopedServerId,
+    activeServerName: activeServer?.name || null,
     allSessions,
     tails,
     isPro,
     notify,
   });
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadRules = async () => {
+      const nextByServer: Record<string, Record<string, WatchRule>> = {};
+      const validIds = new Set(servers.map((server) => server.id));
+
+      const entries = await Promise.all(
+        servers.map(async (server) => {
+          try {
+            const raw = await SecureStore.getItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${server.id}`);
+            return [server.id, raw] as const;
+          } catch {
+            return [server.id, null] as const;
+          }
+        })
+      );
+
+      if (cancelled) {
+        return;
+      }
+
+      entries.forEach(([serverId, raw]) => {
+        if (!raw) {
+          nextByServer[serverId] = {};
+          return;
+        }
+        try {
+          const parsed = JSON.parse(raw) as Record<string, WatchRule>;
+          nextByServer[serverId] = parsed && typeof parsed === "object" ? parsed : {};
+        } catch {
+          nextByServer[serverId] = {};
+        }
+      });
+
+      Object.keys(crossServerWatchRulesRef.current).forEach((serverId) => {
+        if (!validIds.has(serverId)) {
+          delete crossServerWatchRulesRef.current[serverId];
+        }
+      });
+      crossServerWatchRulesRef.current = {
+        ...crossServerWatchRulesRef.current,
+        ...nextByServer,
+      };
+    };
+
+    void loadRules();
+    return () => {
+      cancelled = true;
+    };
+  }, [servers]);
+
+  useEffect(() => {
+    if (!scopedServerId) {
+      return;
+    }
+    crossServerWatchRulesRef.current[scopedServerId] = watchRules;
+  }, [scopedServerId, watchRules]);
+
+  useEffect(() => {
+    if (!isPro) {
+      return;
+    }
+
+    servers.forEach((server) => {
+      if (server.id === focusedServerId) {
+        return;
+      }
+
+      const connection = poolConnections.get(server.id);
+      if (!connection) {
+        return;
+      }
+
+      const currentRules = crossServerWatchRulesRef.current[server.id];
+      if (!currentRules) {
+        return;
+      }
+
+      let changed = false;
+      const nextRules: Record<string, WatchRule> = { ...currentRules };
+
+      Object.entries(currentRules).forEach(([session, rule]) => {
+        if (!rule?.enabled || !rule.pattern.trim()) {
+          return;
+        }
+
+        let regex: RegExp;
+        try {
+          regex = new RegExp(rule.pattern, "i");
+        } catch {
+          return;
+        }
+
+        const lines = (connection.tails[session] || "").split("\n").slice(-240);
+        const matchedLine = [...lines].reverse().find((line) => regex.test(line.trim()));
+        const match = matchedLine?.trim() || "";
+        if (!match || match === (rule.lastMatch || "")) {
+          return;
+        }
+
+        changed = true;
+        nextRules[session] = {
+          ...rule,
+          lastMatch: match,
+        };
+        void notify("Watch alert", `[${server.name}] Watch alert on session ${session}: ${match.slice(0, 120)}`);
+      });
+
+      if (!changed) {
+        return;
+      }
+
+      crossServerWatchRulesRef.current[server.id] = nextRules;
+      void SecureStore.setItemAsync(`${STORAGE_WATCH_RULES_PREFIX}.${server.id}`, JSON.stringify(nextRules)).catch(
+        () => {}
+      );
+    });
+  }, [focusedServerId, isPro, notify, poolConnections, servers]);
 
   const { recordings, toggleRecording, deleteRecording } = useSessionRecordings({
     allSessions,
@@ -1063,7 +1461,7 @@ export default function AppShell() {
 
   const { sessionPresence, sessionReadOnly, refreshSessionPresence, setSessionReadOnlyValue } = useCollaboration({
     activeServer,
-    activeServerId,
+    activeServerId: scopedServerId,
     connected,
     enabled: capabilities.collaboration,
     terminalApiBasePath,
@@ -1074,7 +1472,7 @@ export default function AppShell() {
   });
 
   const { commandQueue, queueSessionCommand, flushSessionQueue, removeQueuedCommand } = useCommandQueue({
-    activeServerId,
+    activeServerId: scopedServerId,
     allSessions,
     connected,
     sessionReadOnly,
@@ -1317,13 +1715,17 @@ export default function AppShell() {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") {
         lock();
+        return;
+      }
+      if (unlocked) {
+        connectPoolAll();
       }
     });
 
     return () => {
       sub.remove();
     };
-  }, [lock]);
+  }, [connectPoolAll, lock, unlocked]);
 
   useEffect(() => {
     if (glassesMode.voiceLoop) {
@@ -1415,6 +1817,30 @@ export default function AppShell() {
           : typeof parsed.queryParams?.sshPort === "string"
             ? parsed.queryParams.sshPort
             : "";
+      const vmHost =
+        typeof parsed.queryParams?.vm_host === "string"
+          ? parsed.queryParams.vm_host
+          : typeof parsed.queryParams?.vmHost === "string"
+            ? parsed.queryParams.vmHost
+            : "";
+      const vmType =
+        typeof parsed.queryParams?.vm_type === "string"
+          ? parsed.queryParams.vm_type
+          : typeof parsed.queryParams?.vmType === "string"
+            ? parsed.queryParams.vmType
+            : "";
+      const vmName =
+        typeof parsed.queryParams?.vm_name === "string"
+          ? parsed.queryParams.vm_name
+          : typeof parsed.queryParams?.vmName === "string"
+            ? parsed.queryParams.vmName
+            : "";
+      const vmId =
+        typeof parsed.queryParams?.vm_id === "string"
+          ? parsed.queryParams.vm_id
+          : typeof parsed.queryParams?.vmId === "string"
+            ? parsed.queryParams.vmId
+            : "";
       const portainerUrl =
         typeof parsed.queryParams?.portainer_url === "string"
           ? parsed.queryParams.portainer_url
@@ -1433,7 +1859,22 @@ export default function AppShell() {
           : typeof parsed.queryParams?.grafanaUrl === "string"
             ? parsed.queryParams.grafanaUrl
             : "";
-      importServerConfig({ name, url: baseUrl, cwd, backend, sshHost, sshUser, sshPort, portainerUrl, proxmoxUrl, grafanaUrl });
+      importServerConfig({
+        name,
+        url: baseUrl,
+        cwd,
+        backend,
+        vmHost,
+        vmType,
+        vmName,
+        vmId,
+        sshHost,
+        sshUser,
+        sshPort,
+        portainerUrl,
+        proxmoxUrl,
+        grafanaUrl,
+      });
       setRoute("servers");
       setReady("Imported server config. Add your token and save.");
       track("server_config_imported", { via: "deep_link" });
@@ -1470,46 +1911,6 @@ export default function AppShell() {
   }, [analyticsAnonId, analyticsEnabled, track, unlocked]);
 
   useEffect(() => {
-    if (!activeServerId) {
-      return;
-    }
-
-    const serverNameForSync = activeServer?.name || "server";
-    setStartCwd(activeServer?.defaultCwd || DEFAULT_CWD);
-    resetTerminalState();
-    closeAllStreams();
-
-    if (!loadingSettings && connected) {
-      void runWithStatus(`Syncing ${serverNameForSync}`, async () => {
-        await refreshSessions();
-      });
-    }
-  }, [
-    activeServerId,
-    activeServer?.defaultCwd,
-    activeServer?.name,
-    closeAllStreams,
-    connected,
-    loadingSettings,
-    refreshSessions,
-    resetTerminalState,
-    runWithStatus,
-    setStartCwd,
-  ]);
-
-  useEffect(() => {
-    if (!connected) {
-      closeAllStreams();
-      return;
-    }
-
-    closeStreamsNotIn(remoteOpenSessions);
-    remoteOpenSessions.forEach((session) => {
-      connectStream(session);
-    });
-  }, [closeAllStreams, closeStreamsNotIn, connectStream, connected, remoteOpenSessions]);
-
-  useEffect(() => {
     if (!connected) {
       return;
     }
@@ -1527,44 +1928,6 @@ export default function AppShell() {
   }, [commandQueue, connected, flushSessionQueue, runWithStatus, sessionReadOnly]);
 
   useEffect(() => {
-    return () => {
-      closeAllStreams();
-    };
-  }, [closeAllStreams]);
-
-  useEffect(() => {
-    if (!connected || remoteOpenSessions.length === 0) {
-      return;
-    }
-
-    const id = setInterval(() => {
-      remoteOpenSessions.forEach((session) => {
-        if (shouldPollRemoteSession(session)) {
-          void fetchTail(session, false);
-        }
-      });
-    }, POLL_INTERVAL_MS);
-
-    return () => clearInterval(id);
-  }, [connected, fetchTail, remoteOpenSessions, shouldPollRemoteSession]);
-
-  useEffect(() => {
-    if (!connected || remoteOpenSessions.length === 0) {
-      return;
-    }
-
-    const id = setTimeout(() => {
-      remoteOpenSessions.forEach((session) => {
-        if (shouldPollRemoteSession(session)) {
-          void fetchTail(session, false);
-        }
-      });
-    }, 1200);
-
-    return () => clearTimeout(id);
-  }, [connected, fetchTail, remoteOpenSessions, shouldPollRemoteSession]);
-
-  useEffect(() => {
     void removeMissingSessions(allSessions);
   }, [allSessions, removeMissingSessions]);
 
@@ -1577,32 +1940,32 @@ export default function AppShell() {
   }, [allSessions, removeMissingPins]);
 
   useEffect(() => {
-    if (!activeServerId) {
+    if (!focusedServerId) {
       autoOpenedPinsServerRef.current = null;
       return;
     }
 
-    if (!connected || autoOpenedPinsServerRef.current === activeServerId) {
+    if (!connected || autoOpenedPinsServerRef.current === focusedServerId) {
       return;
     }
 
     const missingPinned = pinnedSessions.filter((session) => allSessions.includes(session) && !openSessions.includes(session));
     if (missingPinned.length === 0) {
-      autoOpenedPinsServerRef.current = activeServerId;
+      autoOpenedPinsServerRef.current = focusedServerId;
       return;
     }
 
     const freeSlots = isPro ? Number.POSITIVE_INFINITY : Math.max(0, FREE_SESSION_LIMIT - openSessions.length);
     if (freeSlots <= 0) {
-      autoOpenedPinsServerRef.current = activeServerId;
+      autoOpenedPinsServerRef.current = focusedServerId;
       return;
     }
 
     missingPinned.slice(0, freeSlots).forEach((session) => {
       toggleSessionVisible(session);
     });
-    autoOpenedPinsServerRef.current = activeServerId;
-  }, [activeServerId, allSessions, connected, isPro, openSessions, pinnedSessions, toggleSessionVisible]);
+    autoOpenedPinsServerRef.current = focusedServerId;
+  }, [focusedServerId, allSessions, connected, isPro, openSessions, pinnedSessions, toggleSessionVisible]);
 
   useEffect(() => {
     setSessionAiEngine((prev) => {
@@ -1721,7 +2084,7 @@ export default function AppShell() {
     void runWithStatus("Loading files", async () => {
       await listDirectory();
     });
-  }, [activeServerId, capabilities.files, connected, includeHidden, listDirectory, route, runWithStatus]);
+  }, [focusedServerId, capabilities.files, connected, includeHidden, listDirectory, route, runWithStatus]);
 
   const onRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -1752,6 +2115,9 @@ export default function AppShell() {
   const terminalsViewModel = useTerminalsViewModel({
     activeServer,
     connected,
+    focusedServerId,
+    connections: poolConnections,
+    unreadServers,
     servers,
     allSessions,
     openSessions,
@@ -1821,6 +2187,9 @@ export default function AppShell() {
     refreshCapabilities,
     refreshSessions,
     setRoute,
+    focusServer,
+    reconnectServer,
+    editServer,
     openSshFallback,
     createLocalAiSession,
     setSessionAiEngine,
@@ -1982,6 +2351,10 @@ export default function AppShell() {
               serverSshHostInput={serverSshHostInput}
               serverSshUserInput={serverSshUserInput}
               serverSshPortInput={serverSshPortInput}
+              serverVmHostInput={serverVmHostInput}
+              serverVmTypeInput={serverVmTypeInput || ""}
+              serverVmNameInput={serverVmNameInput}
+              serverVmIdInput={serverVmIdInput}
               serverPortainerUrlInput={serverPortainerUrlInput}
               serverProxmoxUrlInput={serverProxmoxUrlInput}
               serverGrafanaUrlInput={serverGrafanaUrlInput}
@@ -2002,6 +2375,7 @@ export default function AppShell() {
               onUseServer={(serverId) => {
                 void runWithStatus("Switching server", async () => {
                   await useServer(serverId);
+                  setPoolFocusedServerId(serverId);
                   setRoute("terminals");
                 });
               }}
@@ -2032,6 +2406,10 @@ export default function AppShell() {
               onSetServerSshHost={setServerSshHostInput}
               onSetServerSshUser={setServerSshUserInput}
               onSetServerSshPort={setServerSshPortInput}
+              onSetServerVmHost={setServerVmHostInput}
+              onSetServerVmType={setServerVmTypeInput}
+              onSetServerVmName={setServerVmNameInput}
+              onSetServerVmId={setServerVmIdInput}
               onSetServerPortainerUrl={setServerPortainerUrlInput}
               onSetServerProxmoxUrl={setServerProxmoxUrlInput}
               onSetServerGrafanaUrl={setServerGrafanaUrlInput}
@@ -2096,6 +2474,10 @@ export default function AppShell() {
                   url: template.baseUrl,
                   cwd: template.defaultCwd,
                   backend: template.terminalBackend,
+                  vmHost: template.vmHost,
+                  vmType: template.vmType,
+                  vmName: template.vmName,
+                  vmId: template.vmId,
                   sshHost: template.sshHost,
                   sshUser: template.sshUser,
                   sshPort: template.sshPort,
@@ -2157,7 +2539,7 @@ export default function AppShell() {
           {route === "snippets" ? (
             <SnippetsScreen
               snippets={filteredSnippets}
-              activeServerId={activeServerId}
+              activeServerId={scopedServerId}
               openSessions={openSessions}
               isPro={isPro}
               syncStatus={snippetSyncStatus}

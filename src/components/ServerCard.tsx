@@ -18,12 +18,15 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare,
   const sshTarget = server.sshHost
     ? `${server.sshUser ? `${server.sshUser}@` : ""}${server.sshHost}${server.sshPort ? `:${server.sshPort}` : ""}`
     : null;
+  const vmMeta = [server.vmType, server.vmName || server.vmId].filter(Boolean).join(" • ");
   return (
     <View style={[styles.serverCard, isActive ? styles.serverCardActive : null]}>
       <View style={styles.serverCardHeader}>
         <Text style={styles.serverName}>{server.name}</Text>
         <Text style={styles.serverUrl}>{server.baseUrl}</Text>
         <Text style={styles.emptyText}>{`Backend: ${server.terminalBackend || "auto"}`}</Text>
+        {server.vmHost ? <Text style={styles.emptyText}>{`VM Host: ${server.vmHost}`}</Text> : null}
+        {vmMeta ? <Text style={styles.emptyText}>{`VM: ${vmMeta}`}</Text> : null}
         {sshTarget ? <Text style={styles.emptyText}>{`SSH: ${sshTarget}`}</Text> : null}
       </View>
       <View style={styles.actionsWrap}>

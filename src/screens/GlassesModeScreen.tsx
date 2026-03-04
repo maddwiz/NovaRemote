@@ -10,75 +10,197 @@ import {
   View,
 } from "react-native";
 
-import { AnsiText } from "../components/AnsiText";
+import { SpatialPanel, SpatialTerminalLayout } from "../components/SpatialTerminalLayout";
 import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
+import { useSpatialVoiceRouting } from "../hooks/useSpatialVoiceRouting";
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
 
-function glassesBrandLabel(brand: GlassesBrand): string {
-  if (brand === "xreal_x1") {
-    return "XREAL X1";
-  }
-  if (brand === "halo") {
-    return "Halo";
-  }
-  return "Custom";
-}
+type SpatialPanelCandidate = {
+  id: string;
+  serverId: string;
+  serverName: string;
+  session: string;
+  sessionLabel: string;
+  output: string;
+  draft: string;
+  sending: boolean;
+  readOnly: boolean;
+};
 
-function glassesAccent(brand: GlassesBrand): string {
-  if (brand === "xreal_x1") {
-    return "#27d9ff";
-  }
-  if (brand === "halo") {
-    return "#ffd36b";
-  }
-  return "#87ffa4";
-}
-
-function brandPreset(brand: GlassesBrand): {
+type BrandProfile = {
+  label: string;
+  accent: string;
   textScale: number;
   loopCaptureMs: number;
   vadSilenceMs: number;
   vadSensitivityDb: number;
   wakePhrase: string;
-} {
-  if (brand === "halo") {
-    return {
-      textScale: 1.15,
-      loopCaptureMs: 7600,
-      vadSilenceMs: 1100,
-      vadSensitivityDb: 9,
-      wakePhrase: "halo",
-    };
-  }
-  if (brand === "custom") {
-    return {
-      textScale: 1,
-      loopCaptureMs: 6800,
-      vadSilenceMs: 900,
-      vadSensitivityDb: 8,
-      wakePhrase: "nova",
-    };
-  }
-  return {
+  maxPanels: number;
+  spatialLayout: "balanced" | "wide";
+  supportsGaze: boolean;
+  supportsHandTracking: boolean;
+  displayAspect: string;
+};
+
+const BRAND_PROFILES: Record<GlassesBrand, BrandProfile> = {
+  xreal_x1: {
+    label: "XREAL X1",
+    accent: "#27d9ff",
     textScale: 1.05,
     loopCaptureMs: 6400,
     vadSilenceMs: 800,
     vadSensitivityDb: 7,
     wakePhrase: "xreal",
-  };
+    maxPanels: 4,
+    spatialLayout: "balanced",
+    supportsGaze: false,
+    supportsHandTracking: false,
+    displayAspect: "16:9",
+  },
+  halo: {
+    label: "Halo",
+    accent: "#ffd36b",
+    textScale: 1.15,
+    loopCaptureMs: 7600,
+    vadSilenceMs: 1100,
+    vadSensitivityDb: 9,
+    wakePhrase: "halo",
+    maxPanels: 5,
+    spatialLayout: "wide",
+    supportsGaze: false,
+    supportsHandTracking: true,
+    displayAspect: "21:9",
+  },
+  meta_orion: {
+    label: "Meta Orion",
+    accent: "#6cf2a2",
+    textScale: 1,
+    loopCaptureMs: 6200,
+    vadSilenceMs: 750,
+    vadSensitivityDb: 7,
+    wakePhrase: "orion",
+    maxPanels: 6,
+    spatialLayout: "wide",
+    supportsGaze: true,
+    supportsHandTracking: true,
+    displayAspect: "22:9",
+  },
+  meta_ray_ban: {
+    label: "Meta Ray-Ban",
+    accent: "#6bd5ff",
+    textScale: 1.1,
+    loopCaptureMs: 7000,
+    vadSilenceMs: 950,
+    vadSensitivityDb: 8,
+    wakePhrase: "meta",
+    maxPanels: 3,
+    spatialLayout: "balanced",
+    supportsGaze: false,
+    supportsHandTracking: false,
+    displayAspect: "16:9",
+  },
+  viture_pro: {
+    label: "VITURE Pro",
+    accent: "#f7c76a",
+    textScale: 1.05,
+    loopCaptureMs: 6600,
+    vadSilenceMs: 850,
+    vadSensitivityDb: 7,
+    wakePhrase: "viture",
+    maxPanels: 5,
+    spatialLayout: "wide",
+    supportsGaze: false,
+    supportsHandTracking: true,
+    displayAspect: "21:9",
+  },
+  custom: {
+    label: "Custom",
+    accent: "#87ffa4",
+    textScale: 1,
+    loopCaptureMs: 6800,
+    vadSilenceMs: 900,
+    vadSensitivityDb: 8,
+    wakePhrase: "nova",
+    maxPanels: 4,
+    spatialLayout: "balanced",
+    supportsGaze: false,
+    supportsHandTracking: false,
+    displayAspect: "16:9",
+  },
+};
+
+const GLASSES_BRANDS: GlassesBrand[] = [
+  "xreal_x1",
+  "halo",
+  "meta_orion",
+  "meta_ray_ban",
+  "viture_pro",
+  "custom",
+];
+
+function normalizePanelOrder(a: SpatialPanelCandidate, b: SpatialPanelCandidate, focusedServerId: string | null) {
+  if (focusedServerId) {
+    const aFocused = a.serverId === focusedServerId ? 1 : 0;
+    const bFocused = b.serverId === focusedServerId ? 1 : 0;
+    if (aFocused !== bFocused) {
+      return bFocused - aFocused;
+    }
+  }
+  if (a.serverName !== b.serverName) {
+    return a.serverName.localeCompare(b.serverName);
+  }
+  return a.session.localeCompare(b.session);
+}
+
+function cyclicalIndex(index: number, size: number): number {
+  if (size <= 0) {
+    return 0;
+  }
+  return ((index % size) + size) % size;
+}
+
+function buildSpatialPanels(
+  allPanels: SpatialPanelCandidate[],
+  focusedPanelId: string | null,
+  panelIds: string[],
+  pinnedPanelIds: string[],
+  overviewMode: boolean
+): SpatialPanel[] {
+  if (panelIds.length === 0) {
+    return [];
+  }
+
+  const panelMap = new Map(allPanels.map((panel) => [panel.id, panel]));
+  const focusId = focusedPanelId && panelIds.includes(focusedPanelId) ? focusedPanelId : panelIds[0];
+  const ordered = [focusId, ...panelIds.filter((panelId) => panelId !== focusId)].map((panelId) => panelMap.get(panelId)).filter(Boolean) as SpatialPanelCandidate[];
+
+  const positions: Array<SpatialPanel["position"]> = overviewMode
+    ? ["center", "left", "right", "above", "below"]
+    : ["center"];
+
+  return ordered.slice(0, positions.length).map((panel, index) => ({
+    id: panel.id,
+    serverId: panel.serverId,
+    serverName: panel.serverName,
+    session: panel.session,
+    sessionLabel: panel.sessionLabel,
+    position: positions[index],
+    pinned: pinnedPanelIds.includes(panel.id),
+    focused: panel.id === focusId,
+    output: panel.output,
+  }));
 }
 
 export function GlassesModeScreen() {
   const {
-    openSessions,
+    connections,
+    focusedServerId,
+    onFocusServer,
     sessionAliases,
     sessionReadOnly,
-    tails,
-    drafts,
-    sendBusy,
     glassesMode,
     voiceRecording,
     voiceBusy,
@@ -91,6 +213,7 @@ export function GlassesModeScreen() {
     onSendControlChar,
     onHistoryPrev,
     onHistoryNext,
+    onSetGlassesBrand,
     onSetGlassesVoiceAutoSend,
     onSetGlassesVoiceLoop,
     onSetGlassesWakePhraseEnabled,
@@ -108,8 +231,13 @@ export function GlassesModeScreen() {
     onCloseGlassesMode,
   } = useAppContext().terminals;
 
-  const [activeSession, setActiveSession] = useState<string | null>(null);
-  const outputRef = useRef<ScrollView | null>(null);
+  const brandProfile = BRAND_PROFILES[glassesMode.brand] || BRAND_PROFILES.custom;
+  const [panelIds, setPanelIds] = useState<string[]>([]);
+  const [pinnedPanelIds, setPinnedPanelIds] = useState<string[]>([]);
+  const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
+  const [overviewMode, setOverviewMode] = useState<boolean>(true);
+  const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
+
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
   const localStopPendingRef = useRef<boolean>(false);
@@ -117,6 +245,7 @@ export function GlassesModeScreen() {
   const voiceStartRef = useRef(onVoiceStartCapture);
   const ambientFloorDbRef = useRef<number | null>(null);
   const dynamicThresholdDbRef = useRef<number | null>(null);
+  const pendingPanelActionRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     voiceStopRef.current = onVoiceStopCapture;
@@ -126,57 +255,162 @@ export function GlassesModeScreen() {
     voiceStartRef.current = onVoiceStartCapture;
   }, [onVoiceStartCapture]);
 
+  const allPanels = useMemo(() => {
+    const next: SpatialPanelCandidate[] = [];
+    connections.forEach((connection, serverId) => {
+      connection.openSessions.forEach((session) => {
+        const alias = serverId === focusedServerId ? sessionAliases[session]?.trim() : "";
+        next.push({
+          id: `${serverId}::${session}`,
+          serverId,
+          serverName: connection.server.name,
+          session,
+          sessionLabel: alias || session,
+          output: connection.tails[session] || "",
+          draft: connection.drafts[session] || "",
+          sending: Boolean(connection.sendBusy[session]),
+          readOnly: serverId === focusedServerId ? Boolean(sessionReadOnly[session]) : false,
+        });
+      });
+    });
+
+    return next.sort((a, b) => normalizePanelOrder(a, b, focusedServerId));
+  }, [connections, focusedServerId, sessionAliases, sessionReadOnly]);
+
+  const panelMap = useMemo(() => new Map(allPanels.map((panel) => [panel.id, panel])), [allPanels]);
+
   useEffect(() => {
-    if (openSessions.length === 0) {
-      if (activeSession !== null) {
-        setActiveSession(null);
+    const availableSet = new Set(allPanels.map((panel) => panel.id));
+    setPinnedPanelIds((previous) => previous.filter((panelId) => availableSet.has(panelId)));
+    setPanelIds((previous) => {
+      const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
+      let next = previous.filter((panelId) => availableSet.has(panelId));
+      if (next.length === 0 && allPanels[0]) {
+        next = [allPanels[0].id];
       }
+
+      allPanels.forEach((panel) => {
+        if (next.length >= maxPanels) {
+          return;
+        }
+        if (!next.includes(panel.id)) {
+          next.push(panel.id);
+        }
+      });
+
+      if (next.length > maxPanels) {
+        const pinned = next.filter((panelId) => pinnedPanelIds.includes(panelId));
+        const rest = next.filter((panelId) => !pinnedPanelIds.includes(panelId));
+        next = [...pinned, ...rest].slice(0, maxPanels);
+      }
+
+      return next;
+    });
+  }, [allPanels, brandProfile.maxPanels, pinnedPanelIds]);
+
+  useEffect(() => {
+    setFocusedPanelId((previous) => {
+      if (previous && panelIds.includes(previous)) {
+        return previous;
+      }
+      return panelIds[0] || null;
+    });
+  }, [panelIds]);
+
+  useEffect(() => {
+    if (!focusedPanelId) {
       return;
     }
-    if (!activeSession || !openSessions.includes(activeSession)) {
-      setActiveSession(openSessions[0]);
+    const panel = panelMap.get(focusedPanelId);
+    if (!panel) {
+      return;
     }
-  }, [activeSession, openSessions]);
+    if (focusedServerId !== panel.serverId) {
+      onFocusServer(panel.serverId);
+    }
+  }, [focusedPanelId, focusedServerId, onFocusServer, panelMap]);
 
-  const accent = useMemo(() => glassesAccent(glassesMode.brand), [glassesMode.brand]);
-  const sessionLabel = activeSession ? sessionAliases[activeSession]?.trim() || activeSession : "No session";
-  const output = activeSession ? tails[activeSession] || "" : "";
-  const draft = activeSession ? drafts[activeSession] || "" : "";
-  const activeReadOnly = activeSession ? Boolean(sessionReadOnly[activeSession]) : false;
-  const keyboardEditingDisabled = !activeSession || activeReadOnly || (activeSession ? Boolean(sendBusy[activeSession]) : true);
+  useEffect(() => {
+    if (!pendingPanelActionRef.current) {
+      return;
+    }
+    const action = pendingPanelActionRef.current;
+    pendingPanelActionRef.current = null;
+    action();
+  }, [focusedServerId]);
+
+  const activePanel = focusedPanelId ? panelMap.get(focusedPanelId) || null : null;
+  const activeSession = activePanel?.session || null;
   const transcriptReady = voiceTranscript.trim().length > 0;
-  const dynamicTextStyle = useMemo(
-    () => ({
-      fontSize: Math.max(15, Math.round(16 * glassesMode.textScale)),
-      lineHeight: Math.max(21, Math.round(22 * glassesMode.textScale)),
-      color: "#d9f4ff",
-    }),
-    [glassesMode.textScale]
-  );
 
-  const onDraftChangeForActiveSession = useCallback(
-    (value: string) => {
-      if (!activeSession) {
+  const runOnPanel = useCallback(
+    (panelId: string, action: (panel: SpatialPanelCandidate) => void) => {
+      const panel = panelMap.get(panelId);
+      if (!panel) {
         return;
       }
-      onSetDraft(activeSession, value);
+      if (focusedServerId !== panel.serverId) {
+        pendingPanelActionRef.current = () => action(panel);
+        setFocusedPanelId(panel.id);
+        onFocusServer(panel.serverId);
+        return;
+      }
+      action(panel);
     },
-    [activeSession, onSetDraft]
+    [focusedServerId, onFocusServer, panelMap]
   );
 
-  const onHistoryPrevForActiveSession = useCallback(() => {
-    if (!activeSession || activeReadOnly) {
-      return;
-    }
-    onHistoryPrev(activeSession);
-  }, [activeSession, activeReadOnly, onHistoryPrev]);
+  const arrangedPanels = useMemo(
+    () => buildSpatialPanels(allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode),
+    [allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode]
+  );
 
-  const onHistoryNextForActiveSession = useCallback(() => {
-    if (!activeSession || activeReadOnly) {
+  const availablePanelChoices = useMemo(() => {
+    return allPanels.filter((panel) => !panelIds.includes(panel.id));
+  }, [allPanels, panelIds]);
+
+  const { routeTranscript } = useSpatialVoiceRouting({
+    panels: allPanels.map((panel) => ({
+      id: panel.id,
+      serverId: panel.serverId,
+      serverName: panel.serverName,
+      session: panel.session,
+      sessionLabel: panel.sessionLabel,
+    })),
+    focusedPanelId,
+  });
+
+  const onDraftChangeForActivePanel = useCallback(
+    (value: string) => {
+      if (!activePanel) {
+        return;
+      }
+      if (focusedServerId !== activePanel.serverId) {
+        onFocusServer(activePanel.serverId);
+        return;
+      }
+      onSetDraft(activePanel.session, value);
+    },
+    [activePanel, focusedServerId, onFocusServer, onSetDraft]
+  );
+
+  const onHistoryPrevForActivePanel = useCallback(() => {
+    if (!activePanel || activePanel.readOnly) {
       return;
     }
-    onHistoryNext(activeSession);
-  }, [activeSession, activeReadOnly, onHistoryNext]);
+    runOnPanel(activePanel.id, (panel) => {
+      onHistoryPrev(panel.session);
+    });
+  }, [activePanel, onHistoryPrev, runOnPanel]);
+
+  const onHistoryNextForActivePanel = useCallback(() => {
+    if (!activePanel || activePanel.readOnly) {
+      return;
+    }
+    runOnPanel(activePanel.id, (panel) => {
+      onHistoryNext(panel.session);
+    });
+  }, [activePanel, onHistoryNext, runOnPanel]);
 
   const {
     selection: draftSelection,
@@ -184,25 +418,26 @@ export function GlassesModeScreen() {
     insertTextAtCursor: onKeyboardInsertText,
     handleAction: onKeyboardAction,
   } = useTextEditing({
-    value: draft,
-    onChange: onDraftChangeForActiveSession,
-    disabled: keyboardEditingDisabled,
-    onHistoryPrev: onHistoryPrevForActiveSession,
-    onHistoryNext: onHistoryNextForActiveSession,
+    value: activePanel?.draft || "",
+    onChange: onDraftChangeForActivePanel,
+    disabled: !activePanel || activePanel.readOnly || activePanel.sending,
+    onHistoryPrev: onHistoryPrevForActivePanel,
+    onHistoryNext: onHistoryNextForActivePanel,
   });
 
-  const goToNextSession = () => {
-    if (openSessions.length === 0) {
-      return;
-    }
-    if (!activeSession) {
-      setActiveSession(openSessions[0]);
-      return;
-    }
-    const currentIndex = openSessions.indexOf(activeSession);
-    const nextIndex = currentIndex < 0 ? 0 : (currentIndex + 1) % openSessions.length;
-    setActiveSession(openSessions[nextIndex]);
-  };
+  const cyclePanels = useCallback(
+    (direction: "next" | "prev") => {
+      if (panelIds.length < 2) {
+        return;
+      }
+      const current = focusedPanelId && panelIds.includes(focusedPanelId) ? focusedPanelId : panelIds[0];
+      const currentIndex = panelIds.indexOf(current);
+      const step = direction === "next" ? 1 : -1;
+      const nextIndex = cyclicalIndex(currentIndex + step, panelIds.length);
+      setFocusedPanelId(panelIds[nextIndex]);
+    },
+    [focusedPanelId, panelIds]
+  );
 
   const onPttKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     if (!glassesMode.headsetPttEnabled || !activeSession || voiceBusy) {
@@ -229,10 +464,12 @@ export function GlassesModeScreen() {
       localStopPendingRef.current = false;
       return;
     }
+
     if (loopTimeoutRef.current) {
       clearTimeout(loopTimeoutRef.current);
       loopTimeoutRef.current = null;
     }
+
     loopTimeoutRef.current = setTimeout(() => {
       voiceStopRef.current(activeSession);
     }, glassesMode.loopCaptureMs);
@@ -256,6 +493,7 @@ export function GlassesModeScreen() {
     if (typeof voiceMeteringDb !== "number") {
       return;
     }
+
     const now = Date.now();
     const existingFloor = ambientFloorDbRef.current;
     const floor = existingFloor === null ? voiceMeteringDb : existingFloor;
@@ -271,13 +509,16 @@ export function GlassesModeScreen() {
       localStopPendingRef.current = false;
       return;
     }
+
     if (silenceSinceRef.current === null) {
       silenceSinceRef.current = now;
       return;
     }
+
     if (localStopPendingRef.current) {
       return;
     }
+
     if (now - silenceSinceRef.current >= glassesMode.vadSilenceMs) {
       localStopPendingRef.current = true;
       voiceStopRef.current(activeSession);
@@ -308,77 +549,164 @@ export function GlassesModeScreen() {
 
   return (
     <View style={styles.glassesRoutePanel}>
-      <View style={[styles.glassesRouteHeader, { borderColor: accent }]}>
-        <View style={styles.rowInlineSpace}>
-          <Text style={[styles.glassesRouteTitle, { color: accent }]}>{`${glassesBrandLabel(glassesMode.brand)} On-the-Go`}</Text>
-          <Pressable accessibilityRole="button" accessibilityLabel="Exit on-the-go glasses mode" style={[styles.buttonGhost, styles.glassesRouteExit]} onPress={onCloseGlassesMode}>
-            <Text style={styles.buttonGhostText}>Exit</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.serverSubtitle}>{`Active session: ${sessionLabel}`}</Text>
-        <View style={styles.rowInlineSpace}>
-          <Text style={styles.switchLabel}>Minimal HUD layout</Text>
-          <Switch
-            accessibilityLabel="Toggle minimal HUD layout"
-            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
-            thumbColor={glassesMode.minimalMode ? "#d4fdff" : "#d3dee5"}
-            value={glassesMode.minimalMode}
-            onValueChange={onSetGlassesMinimalMode}
-          />
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Apply ${glassesBrandLabel(glassesMode.brand)} glasses preset`}
-          accessibilityHint="Sets recommended text scale and voice timing defaults for this glasses brand."
-          style={styles.glassesRouteButton}
-          onPress={() => {
-            const preset = brandPreset(glassesMode.brand);
-            onSetGlassesTextScale(preset.textScale);
-            onSetGlassesLoopCaptureMs(preset.loopCaptureMs);
-            onSetGlassesVadSilenceMs(preset.vadSilenceMs);
-            onSetGlassesVadSensitivityDb(preset.vadSensitivityDb);
-            if (!glassesMode.wakePhraseEnabled || !glassesMode.wakePhrase.trim()) {
-              onSetGlassesWakePhrase(preset.wakePhrase);
-            }
-          }}
-        >
-          <Text style={styles.glassesRouteButtonText}>{`Apply ${glassesBrandLabel(glassesMode.brand)} preset`}</Text>
-        </Pressable>
-      </View>
-
-      {openSessions.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {openSessions.map((session) => (
+      <View style={[styles.glassesRouteHeader, { borderColor: brandProfile.accent }]}> 
+        <View style={styles.glassesSpatialHeader}>
+          <Text style={[styles.glassesRouteTitle, { color: brandProfile.accent }]}>{`${brandProfile.label} Spatial HUD`}</Text>
+          <View style={styles.modeRow}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`Select session ${sessionAliases[session]?.trim() || session}`}
-              key={`glasses-route-${session}`}
-              style={[styles.chip, session === activeSession ? styles.chipActive : null]}
-              onPress={() => setActiveSession(session)}
+              accessibilityLabel={settingsVisible ? "Hide spatial settings" : "Show spatial settings"}
+              style={styles.glassesRouteButton}
+              onPress={() => setSettingsVisible((current) => !current)}
             >
-              <Text style={[styles.chipText, session === activeSession ? styles.chipTextActive : null]}>
-                {sessionAliases[session]?.trim() || session}
-              </Text>
+              <Text style={styles.glassesRouteButtonText}>{settingsVisible ? "Hide Settings" : "Settings"}</Text>
             </Pressable>
-          ))}
-        </ScrollView>
-      ) : (
-        <Text style={styles.emptyText}>Open a terminal session and return to on-the-go mode.</Text>
-      )}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Exit on-the-go glasses mode"
+              style={[styles.buttonGhost, styles.glassesRouteExit]}
+              onPress={onCloseGlassesMode}
+            >
+              <Text style={styles.buttonGhostText}>Exit</Text>
+            </Pressable>
+          </View>
+        </View>
 
-      <View style={[styles.glassesRouteTerminalFrame, { borderColor: accent }]}>
-        <ScrollView
-          ref={outputRef}
-          style={styles.glassesRouteTerminalScroll}
-          onContentSizeChange={() => outputRef.current?.scrollToEnd({ animated: true })}
-        >
-          <AnsiText text={output || "Waiting for terminal output..."} style={[styles.terminalText, dynamicTextStyle]} />
-        </ScrollView>
+        <Text style={styles.serverSubtitle}>
+          {`Panels ${panelIds.length}/${Math.min(6, brandProfile.maxPanels)} • Layout ${overviewMode ? "overview" : "focus"} • Aspect ${brandProfile.displayAspect}`}
+        </Text>
+
+        <View style={styles.modeRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show panel overview"
+            style={[styles.modeButton, overviewMode ? styles.modeButtonOn : null]}
+            onPress={() => setOverviewMode(true)}
+          >
+            <Text style={[styles.modeButtonText, overviewMode ? styles.modeButtonTextOn : null]}>Show All</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Minimize to focused panel"
+            style={[styles.modeButton, !overviewMode ? styles.modeButtonOn : null]}
+            onPress={() => setOverviewMode(false)}
+          >
+            <Text style={[styles.modeButtonText, !overviewMode ? styles.modeButtonTextOn : null]}>Minimize</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Cycle to next panel"
+            style={[styles.modeButton, panelIds.length < 2 ? styles.buttonDisabled : null]}
+            onPress={() => cyclePanels("next")}
+            disabled={panelIds.length < 2}
+          >
+            <Text style={styles.modeButtonText}>Next</Text>
+          </Pressable>
+        </View>
+
+        <View style={settingsVisible ? styles.glassesSpatialSettings : styles.glassesSpatialSettingsHidden}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {GLASSES_BRANDS.map((brand) => (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Set glasses brand to ${BRAND_PROFILES[brand].label}`}
+                key={`spatial-brand-${brand}`}
+                style={[styles.chip, glassesMode.brand === brand ? styles.chipActive : null]}
+                onPress={() => onSetGlassesBrand(brand)}
+              >
+                <Text style={[styles.chipText, glassesMode.brand === brand ? styles.chipTextActive : null]}>
+                  {BRAND_PROFILES[brand].label}
+                </Text>
+              </Pressable>
+            ))}
+          </ScrollView>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`Apply ${brandProfile.label} glasses preset`}
+            style={styles.glassesRouteButton}
+            onPress={() => {
+              onSetGlassesTextScale(brandProfile.textScale);
+              onSetGlassesLoopCaptureMs(brandProfile.loopCaptureMs);
+              onSetGlassesVadSilenceMs(brandProfile.vadSilenceMs);
+              onSetGlassesVadSensitivityDb(brandProfile.vadSensitivityDb);
+              if (!glassesMode.wakePhraseEnabled || !glassesMode.wakePhrase.trim()) {
+                onSetGlassesWakePhrase(brandProfile.wakePhrase);
+              }
+            }}
+          >
+            <Text style={styles.glassesRouteButtonText}>{`Apply ${brandProfile.label} preset`}</Text>
+          </Pressable>
+
+          <Text style={styles.emptyText}>
+            {`Gaze ${brandProfile.supportsGaze ? "on" : "off"} • Hand tracking ${brandProfile.supportsHandTracking ? "on" : "off"}`}
+          </Text>
+
+          {availablePanelChoices.length > 0 ? (
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+              {availablePanelChoices.map((panel) => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Add panel ${panel.serverName} ${panel.sessionLabel}`}
+                  key={`add-panel-${panel.id}`}
+                  style={styles.chip}
+                  onPress={() => {
+                    setPanelIds((previous) => {
+                      if (previous.includes(panel.id)) {
+                        return previous;
+                      }
+                      const limit = Math.max(1, Math.min(brandProfile.maxPanels, 6));
+                      if (previous.length < limit) {
+                        return [...previous, panel.id];
+                      }
+                      const removable = previous.find(
+                        (panelId) => panelId !== focusedPanelId && !pinnedPanelIds.includes(panelId)
+                      );
+                      if (!removable) {
+                        return previous;
+                      }
+                      return previous.map((panelId) => (panelId === removable ? panel.id : panelId));
+                    });
+                    setFocusedPanelId(panel.id);
+                  }}
+                >
+                  <Text style={styles.chipText}>{`+ ${panel.serverName} / ${panel.sessionLabel}`}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
+          ) : (
+            <Text style={styles.emptyText}>All open sessions are already pinned to the spatial HUD.</Text>
+          )}
+        </View>
       </View>
 
+      {panelIds.length > 0 ? (
+        <SpatialTerminalLayout
+          panels={arrangedPanels}
+          onFocusPanel={(panelId) => {
+            setFocusedPanelId(panelId);
+          }}
+          onTogglePinPanel={(panelId) => {
+            setPinnedPanelIds((previous) =>
+              previous.includes(panelId)
+                ? previous.filter((entry) => entry !== panelId)
+                : [...previous, panelId]
+            );
+          }}
+          onRemovePanel={(panelId) => {
+            setPinnedPanelIds((previous) => previous.filter((entry) => entry !== panelId));
+            setPanelIds((previous) => previous.filter((entry) => entry !== panelId));
+          }}
+          onCyclePanel={cyclePanels}
+        />
+      ) : (
+        <Text style={styles.emptyText}>Open terminal sessions on one or more servers to build your spatial layout.</Text>
+      )}
+
       <View style={styles.glassesRouteControls}>
-        <Text style={styles.glassesHudStatus}>
-          {voiceRecording ? "Listening..." : voiceBusy ? "Transcribing..." : "Voice idle"}
+        <Text style={styles.glassesHudStatus}>{voiceRecording ? "Listening..." : voiceBusy ? "Transcribing..." : "Voice idle"}</Text>
+        <Text style={styles.serverSubtitle}>
+          {`Focused panel: ${activePanel ? `${activePanel.serverName} / ${activePanel.sessionLabel}` : "none"}`}
         </Text>
         {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}
         {transcriptReady ? <Text style={styles.serverSubtitle}>{`Transcript: ${voiceTranscript}`}</Text> : null}
@@ -396,6 +724,7 @@ export function GlassesModeScreen() {
             onValueChange={onSetGlassesVoiceAutoSend}
           />
         </View>
+
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Continuous voice loop</Text>
           <Switch
@@ -406,14 +735,18 @@ export function GlassesModeScreen() {
             onValueChange={onSetGlassesVoiceLoop}
           />
         </View>
-        <TextInput
-          style={styles.input}
-          value={String(glassesMode.loopCaptureMs)}
-          onChangeText={(value) => onSetGlassesLoopCaptureMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
-          placeholder="Loop capture ms (1500-30000)"
-          placeholderTextColor="#7f7aa8"
-          keyboardType="number-pad"
-        />
+
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Minimal HUD layout</Text>
+          <Switch
+            accessibilityLabel="Toggle minimal HUD layout"
+            trackColor={{ false: "#33596c", true: "#0ea8c8" }}
+            thumbColor={glassesMode.minimalMode ? "#d4fdff" : "#d3dee5"}
+            value={glassesMode.minimalMode}
+            onValueChange={onSetGlassesMinimalMode}
+          />
+        </View>
+
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Require wake phrase</Text>
           <Switch
@@ -424,6 +757,7 @@ export function GlassesModeScreen() {
             onValueChange={onSetGlassesWakePhraseEnabled}
           />
         </View>
+
         {glassesMode.wakePhraseEnabled ? (
           <TextInput
             style={styles.input}
@@ -435,6 +769,7 @@ export function GlassesModeScreen() {
             autoCorrect={false}
           />
         ) : null}
+
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Server VAD assist</Text>
           <Switch
@@ -445,6 +780,16 @@ export function GlassesModeScreen() {
             onValueChange={onSetGlassesVadEnabled}
           />
         </View>
+
+        <TextInput
+          style={styles.input}
+          value={String(glassesMode.loopCaptureMs)}
+          onChangeText={(value) => onSetGlassesLoopCaptureMs(Number.parseInt(value.replace(/[^0-9]/g, ""), 10) || 0)}
+          placeholder="Loop capture ms (1500-30000)"
+          placeholderTextColor="#7f7aa8"
+          keyboardType="number-pad"
+        />
+
         {glassesMode.vadEnabled ? (
           <>
             <TextInput
@@ -465,6 +810,7 @@ export function GlassesModeScreen() {
             />
           </>
         ) : null}
+
         <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>BT remote push-to-talk keys</Text>
           <Switch
@@ -475,6 +821,7 @@ export function GlassesModeScreen() {
             onValueChange={onSetGlassesHeadsetPttEnabled}
           />
         </View>
+
         {glassesMode.headsetPttEnabled ? (
           <TextInput
             style={styles.input}
@@ -485,9 +832,11 @@ export function GlassesModeScreen() {
             onKeyPress={onPttKeyPress}
           />
         ) : null}
+
         <Text style={styles.emptyText}>
           {`Loop ${glassesMode.loopCaptureMs}ms • VAD ${glassesMode.vadEnabled ? `${glassesMode.vadSilenceMs}ms` : "off"}`}
         </Text>
+
         {glassesMode.vadEnabled && typeof dynamicThresholdDbRef.current === "number" ? (
           <Text style={styles.emptyText}>
             {`Adaptive threshold ${Math.round(dynamicThresholdDbRef.current)} dB (ambient ${Math.round(ambientFloorDbRef.current || 0)} dB)`}
@@ -498,26 +847,28 @@ export function GlassesModeScreen() {
           <>
             <TextInput
               style={[styles.input, styles.multilineInput]}
-              value={draft}
+              value={activePanel?.draft || ""}
               selection={draftSelection}
-              onChangeText={onDraftChangeForActiveSession}
+              onChangeText={onDraftChangeForActivePanel}
               onSelectionChange={onDraftSelectionChange}
               placeholder="Optional manual draft"
               placeholderTextColor="#7f7aa8"
               autoCapitalize="none"
               autoCorrect={false}
-              editable={!activeReadOnly}
+              editable={Boolean(activePanel && !activePanel.readOnly)}
               multiline
             />
             <TerminalKeyboardBar
-              visible={!activeReadOnly}
+              visible={Boolean(activePanel && !activePanel.readOnly)}
               compact
               onInsertText={onKeyboardInsertText}
               onControlChar={(value) => {
-                if (!activeSession || activeReadOnly) {
+                if (!activePanel || activePanel.readOnly) {
                   return;
                 }
-                onSendControlChar(activeSession, value);
+                runOnPanel(activePanel.id, (panel) => {
+                  onSendControlChar(panel.session, value);
+                });
               }}
               onAction={(action) => onKeyboardAction(action as TextEditingAction)}
             />
@@ -528,17 +879,16 @@ export function GlassesModeScreen() {
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Start voice recording"
-            accessibilityHint="Starts listening for your spoken command."
-            style={[styles.glassesRouteButton, voiceRecording || voiceBusy ? styles.buttonDisabled : null]}
+            style={[styles.glassesRouteButton, voiceRecording || voiceBusy || !activeSession ? styles.buttonDisabled : null]}
             disabled={voiceRecording || voiceBusy || !activeSession}
             onPress={onVoiceStartCapture}
           >
             <Text style={styles.glassesRouteButtonText}>Start Voice</Text>
           </Pressable>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Stop voice and transcribe"
-            accessibilityHint="Stops recording and sends audio for transcription."
             style={[styles.glassesRouteButton, !voiceRecording || voiceBusy || !activeSession ? styles.buttonDisabled : null]}
             disabled={!voiceRecording || voiceBusy || !activeSession}
             onPress={() => {
@@ -550,10 +900,59 @@ export function GlassesModeScreen() {
           >
             <Text style={styles.glassesRouteButtonText}>{voiceBusy ? "Transcribing..." : "Stop + Transcribe"}</Text>
           </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Route transcript"
+            style={[styles.glassesRouteButton, !transcriptReady ? styles.buttonDisabled : null]}
+            disabled={!transcriptReady}
+            onPress={() => {
+              const route = routeTranscript(voiceTranscript);
+              if (route.kind === "focus_panel") {
+                setFocusedPanelId(route.panelId);
+                return;
+              }
+              if (route.kind === "show_all") {
+                setOverviewMode(true);
+                return;
+              }
+              if (route.kind === "minimize") {
+                setOverviewMode(false);
+                return;
+              }
+              if (route.kind === "send_command") {
+                runOnPanel(route.panelId, (panel) => {
+                  onSetDraft(panel.session, route.command);
+                  if (glassesMode.voiceAutoSend) {
+                    onSend(panel.session);
+                  }
+                });
+              }
+            }}
+          >
+            <Text style={styles.glassesRouteButtonText}>Route Transcript</Text>
+          </Pressable>
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send transcript"
+            style={[styles.glassesRouteButton, !transcriptReady || voiceBusy || !activeSession ? styles.buttonDisabled : null]}
+            disabled={!transcriptReady || voiceBusy || !activeSession}
+            onPress={() => {
+              if (!activePanel) {
+                return;
+              }
+              runOnPanel(activePanel.id, (panel) => {
+                onVoiceSendTranscript(panel.session);
+              });
+            }}
+          >
+            <Text style={styles.glassesRouteButtonText}>Send Transcript</Text>
+          </Pressable>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Hold to talk"
-            accessibilityHint="Press and hold to record. Releasing stops recording and transcribes."
             style={[styles.glassesRouteButton, voiceBusy || !activeSession ? styles.buttonDisabled : null]}
             disabled={voiceBusy || !activeSession}
             onPressIn={() => {
@@ -571,58 +970,35 @@ export function GlassesModeScreen() {
           >
             <Text style={styles.glassesRouteButtonText}>Hold to Talk</Text>
           </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Send transcript"
-            accessibilityHint="Sends the latest transcript to the active session."
-            style={[styles.glassesRouteButton, !transcriptReady || voiceBusy || !activeSession ? styles.buttonDisabled : null]}
-            disabled={!transcriptReady || voiceBusy || !activeSession}
-            onPress={() => {
-              if (!activeSession) {
-                return;
-              }
-              onVoiceSendTranscript(activeSession);
-            }}
-          >
-            <Text style={styles.glassesRouteButtonText}>Send Transcript</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Switch to next session"
-            accessibilityHint="Cycles to the next open terminal session."
-            style={styles.glassesRouteButton}
-            onPress={goToNextSession}
-            disabled={openSessions.length < 2}
-          >
-            <Text style={styles.glassesRouteButtonText}>Next Session</Text>
-          </Pressable>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Send current draft"
-            accessibilityHint="Sends the current draft text to the active session."
-            style={[styles.glassesRoutePrimary, !activeSession || Boolean(activeSession && sendBusy[activeSession]) ? styles.buttonDisabled : null]}
-            disabled={!activeSession || Boolean(activeSession && sendBusy[activeSession])}
+            style={[styles.glassesRoutePrimary, !activePanel || activePanel.sending ? styles.buttonDisabled : null]}
+            disabled={!activePanel || activePanel.sending}
             onPress={() => {
-              if (!activeSession) {
+              if (!activePanel) {
                 return;
               }
-              onSend(activeSession);
+              runOnPanel(activePanel.id, (panel) => {
+                onSend(panel.session);
+              });
             }}
           >
-            <Text style={styles.glassesRoutePrimaryText}>
-              {activeSession && sendBusy[activeSession] ? "Sending..." : "Send Draft"}
-            </Text>
+            <Text style={styles.glassesRoutePrimaryText}>{activePanel?.sending ? "Sending..." : "Send Draft"}</Text>
           </Pressable>
+
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Clear current draft"
-            accessibilityHint="Clears the draft input for the active session."
             style={styles.glassesRouteButton}
             onPress={() => {
-              if (!activeSession) {
+              if (!activePanel) {
                 return;
               }
-              onClearDraft(activeSession);
+              runOnPanel(activePanel.id, (panel) => {
+                onClearDraft(panel.session);
+              });
             }}
           >
             <Text style={styles.glassesRouteButtonText}>Clear Draft</Text>

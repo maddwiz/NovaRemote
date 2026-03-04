@@ -11,6 +11,7 @@ import {
   QueuedCommand,
   SessionCollaborator,
   SessionRecording,
+  ServerConnection,
   ServerCapabilities,
   ServerProfile,
   SessionConnectionMeta,
@@ -25,6 +26,9 @@ import {
 export type TerminalsViewModel = {
   activeServer: ServerProfile | null;
   connected: boolean;
+  focusedServerId: string | null;
+  connections: Map<string, ServerConnection>;
+  unreadServers: Set<string>;
   servers: ServerProfile[];
   allSessions: string[];
   openSessions: string[];
@@ -93,6 +97,9 @@ export type TerminalsViewModel = {
   onRefreshCapabilities: () => void;
   onRefreshSessions: () => void;
   onOpenServers: () => void;
+  onFocusServer: (serverId: string) => void;
+  onReconnectServer: (serverId: string) => void;
+  onEditServer: (serverId: string) => void;
   onOpenSshFallback: () => void;
   onStartSession: () => void;
   onToggleSessionVisible: (session: string) => void;

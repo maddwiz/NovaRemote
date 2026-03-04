@@ -6,6 +6,7 @@ import { WatchRule } from "../types";
 
 type UseWatchAlertsArgs = {
   activeServerId: string | null;
+  activeServerName?: string | null;
   allSessions: string[];
   tails: Record<string, string>;
   isPro: boolean;
@@ -16,7 +17,7 @@ function defaultWatchRule(): WatchRule {
   return { enabled: false, pattern: "", lastMatch: null };
 }
 
-export function useWatchAlerts({ activeServerId, allSessions, tails, isPro, notify }: UseWatchAlertsArgs) {
+export function useWatchAlerts({ activeServerId, activeServerName, allSessions, tails, isPro, notify }: UseWatchAlertsArgs) {
   const [watchRules, setWatchRules] = useState<Record<string, WatchRule>>({});
   const [watchAlertHistoryBySession, setWatchAlertHistoryBySession] = useState<Record<string, string[]>>({});
 
@@ -174,10 +175,11 @@ export function useWatchAlerts({ activeServerId, allSessions, tails, isPro, noti
       return next;
     });
 
+    const serverPrefix = activeServerName?.trim() ? `[${activeServerName.trim()}] ` : "";
     pending.forEach(([session, match]) => {
-      void notify("Watch alert", `${session}: ${match.slice(0, 120)}`);
+      void notify("Watch alert", `${serverPrefix}${session}: ${match.slice(0, 120)}`);
     });
-  }, [isPro, notify, tails, watchRules]);
+  }, [activeServerName, isPro, notify, tails, watchRules]);
 
   return {
     watchRules,
@@ -187,4 +189,3 @@ export function useWatchAlerts({ activeServerId, allSessions, tails, isPro, noti
     clearWatchAlerts,
   };
 }
-

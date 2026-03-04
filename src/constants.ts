@@ -53,6 +53,8 @@ export const STREAM_RETRY_MAX_MS = 30000;
 
 export const POLL_INTERVAL_MS = 1800;
 export const HEALTH_PING_INTERVAL_MS = 15000;
+export const POOL_HEALTH_INTERVAL_MS = 15000;
+export const POOL_MAX_RECONNECT_DELAY_MS = 30000;
 export const COLLAB_POLL_INTERVAL_MS = 7000;
 export const HISTORY_MAX_ITEMS = 50;
 export const FREE_SERVER_LIMIT = 1;

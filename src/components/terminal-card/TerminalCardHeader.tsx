@@ -9,6 +9,8 @@ type StreamState = "live" | "reconnecting" | "polling" | "disconnected" | "local
 type TerminalCardHeaderProps = {
   session: string;
   sessionAlias: string;
+  serverLabel?: string;
+  showServerLabel?: boolean;
   mode: TerminalSendMode;
   aiAvailable: boolean;
   shellAvailable: boolean;
@@ -45,6 +47,8 @@ type TerminalCardHeaderProps = {
 export function TerminalCardHeader({
   session,
   sessionAlias,
+  serverLabel,
+  showServerLabel = false,
   mode,
   aiAvailable,
   shellAvailable,
@@ -83,6 +87,7 @@ export function TerminalCardHeader({
         <View style={styles.flexButton}>
           <Text style={styles.terminalName}>{sessionAlias.trim() || session}</Text>
           {sessionAlias.trim() ? <Text style={styles.serverSubtitle}>{session}</Text> : null}
+          {showServerLabel && serverLabel ? <Text style={[styles.livePill, styles.modePillShell]}>{serverLabel}</Text> : null}
         </View>
         <View style={styles.pillGroup}>
           <Text style={[styles.modePill, mode === "ai" ? styles.modePillAi : styles.modePillShell]}>{mode.toUpperCase()}</Text>

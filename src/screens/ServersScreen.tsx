@@ -3,7 +3,7 @@ import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER, SSH_HOST_PLACEHOLDER, SSH_USER_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
-import { ServerProfile, SharedServerTemplate, TerminalBackendKind } from "../types";
+import { ServerProfile, SharedServerTemplate, TerminalBackendKind, VmType } from "../types";
 import { ServerCard } from "../components/ServerCard";
 import { useQrSetup } from "../hooks/useQrSetup";
 import { QrScannerModal } from "../components/QrScannerModal";
@@ -19,6 +19,10 @@ type ServersScreenProps = {
   serverSshHostInput: string;
   serverSshUserInput: string;
   serverSshPortInput: string;
+  serverVmHostInput: string;
+  serverVmTypeInput: VmType | "";
+  serverVmNameInput: string;
+  serverVmIdInput: string;
   serverPortainerUrlInput: string;
   serverProxmoxUrlInput: string;
   serverGrafanaUrlInput: string;
@@ -47,9 +51,16 @@ type ServersScreenProps = {
     token?: string;
     cwd?: string;
     backend?: string;
+    vmHost?: string;
+    vmType?: string;
+    vmName?: string;
+    vmId?: string;
     sshHost?: string;
     sshUser?: string;
     sshPort?: string | number;
+    portainerUrl?: string;
+    proxmoxUrl?: string;
+    grafanaUrl?: string;
   }) => void;
   onSetServerName: (value: string) => void;
   onSetServerUrl: (value: string) => void;
@@ -59,6 +70,10 @@ type ServersScreenProps = {
   onSetServerSshHost: (value: string) => void;
   onSetServerSshUser: (value: string) => void;
   onSetServerSshPort: (value: string) => void;
+  onSetServerVmHost: (value: string) => void;
+  onSetServerVmType: (value: VmType | "") => void;
+  onSetServerVmName: (value: string) => void;
+  onSetServerVmId: (value: string) => void;
   onSetServerPortainerUrl: (value: string) => void;
   onSetServerProxmoxUrl: (value: string) => void;
   onSetServerGrafanaUrl: (value: string) => void;
@@ -91,6 +106,10 @@ export function ServersScreen({
   serverSshHostInput,
   serverSshUserInput,
   serverSshPortInput,
+  serverVmHostInput,
+  serverVmTypeInput,
+  serverVmNameInput,
+  serverVmIdInput,
   serverPortainerUrlInput,
   serverProxmoxUrlInput,
   serverGrafanaUrlInput,
@@ -122,6 +141,10 @@ export function ServersScreen({
   onSetServerSshHost,
   onSetServerSshUser,
   onSetServerSshPort,
+  onSetServerVmHost,
+  onSetServerVmType,
+  onSetServerVmName,
+  onSetServerVmId,
   onSetServerPortainerUrl,
   onSetServerProxmoxUrl,
   onSetServerGrafanaUrl,
@@ -142,6 +165,7 @@ export function ServersScreen({
   onSaveServer,
   onBackToTerminals,
 }: ServersScreenProps) {
+  const vmTypes: VmType[] = ["proxmox", "vmware", "hyper-v", "docker", "lxc", "qemu", "virtualbox", "cloud"];
   const [showQrScanner, setShowQrScanner] = useState<boolean>(false);
   const [qrError, setQrError] = useState<string>("");
   const { parseQrPayload } = useQrSetup();
@@ -249,6 +273,61 @@ export function ServersScreen({
           placeholder="22"
           placeholderTextColor="#7f7aa8"
           onChangeText={(value) => onSetServerSshPort(value.replace(/[^0-9]/g, ""))}
+        />
+      </View>
+
+      <View style={styles.serverCard}>
+        <Text style={styles.panelLabel}>VM Metadata (Optional)</Text>
+        <Text style={styles.serverSubtitle}>Group servers by host and track VM runtime details for orchestration workflows.</Text>
+        <TextInput
+          style={styles.input}
+          value={serverVmHostInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="VM host (example: homelab-r740)"
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerVmHost}
+        />
+        <View style={styles.actionsWrap}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Set VM type to none"
+            style={[styles.modeButton, serverVmTypeInput === "" ? styles.modeButtonOn : null]}
+            onPress={() => onSetServerVmType("")}
+          >
+            <Text style={[styles.modeButtonText, serverVmTypeInput === "" ? styles.modeButtonTextOn : null]}>none</Text>
+          </Pressable>
+          {vmTypes.map((vmType) => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Set VM type to ${vmType}`}
+              key={vmType}
+              style={[styles.modeButton, serverVmTypeInput === vmType ? styles.modeButtonOn : null]}
+              onPress={() => onSetServerVmType(vmType)}
+            >
+              <Text style={[styles.modeButtonText, serverVmTypeInput === vmType ? styles.modeButtonTextOn : null]}>
+                {vmType}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
+        <TextInput
+          style={styles.input}
+          value={serverVmNameInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="VM name (example: build-runner-01)"
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerVmName}
+        />
+        <TextInput
+          style={styles.input}
+          value={serverVmIdInput}
+          autoCapitalize="none"
+          autoCorrect={false}
+          placeholder="VM ID (example: 101)"
+          placeholderTextColor="#7f7aa8"
+          onChangeText={onSetServerVmId}
         />
       </View>
 
@@ -451,6 +530,10 @@ export function ServersScreen({
             token: parsed.token,
             cwd: parsed.cwd,
             backend: parsed.backend,
+            vmHost: parsed.vmHost,
+            vmType: parsed.vmType,
+            vmName: parsed.vmName,
+            vmId: parsed.vmId,
             sshHost: parsed.sshHost,
             sshUser: parsed.sshUser,
             sshPort: parsed.sshPort,

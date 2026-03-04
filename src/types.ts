@@ -68,6 +68,10 @@ export type ServerProfile = {
   token: string;
   defaultCwd: string;
   terminalBackend?: TerminalBackendKind;
+  vmHost?: string;
+  vmType?: VmType;
+  vmName?: string;
+  vmId?: string;
   sshHost?: string;
   sshUser?: string;
   sshPort?: number;
@@ -77,6 +81,7 @@ export type ServerProfile = {
 };
 
 export type TerminalBackendKind = "auto" | "tmux" | "screen" | "zellij" | "powershell" | "cmd" | "pty";
+export type VmType = "proxmox" | "vmware" | "hyper-v" | "docker" | "lxc" | "qemu" | "virtualbox" | "cloud";
 
 export type TerminalSendMode = "ai" | "shell";
 
@@ -108,6 +113,29 @@ export type HealthMetrics = {
   latencyMs: number | null;
   activeStreams: number;
   openSessions: number;
+};
+
+export type ConnectionPoolStatus = "disconnected" | "connecting" | "connected" | "degraded" | "error";
+
+export type ServerConnection = {
+  server: ServerProfile;
+  connected: boolean;
+  capabilities: ServerCapabilities;
+  terminalApiBasePath: "/tmux" | "/terminal";
+  capabilitiesLoading: boolean;
+  allSessions: string[];
+  localAiSessions: string[];
+  openSessions: string[];
+  tails: Record<string, string>;
+  drafts: Record<string, string>;
+  sendBusy: Record<string, boolean>;
+  sendModes: Record<string, TerminalSendMode>;
+  streamLive: Record<string, boolean>;
+  connectionMeta: Record<string, SessionConnectionMeta>;
+  health: HealthMetrics;
+  status: ConnectionPoolStatus;
+  lastError: string | null;
+  activeStreamCount: number;
 };
 
 export type RemoteFileEntry = {
@@ -213,7 +241,7 @@ export type TerminalThemeSettings = {
   backgroundOpacity: number;
 };
 
-export type GlassesBrand = "xreal_x1" | "halo" | "custom";
+export type GlassesBrand = "xreal_x1" | "halo" | "custom" | "meta_orion" | "meta_ray_ban" | "viture_pro";
 
 export type GlassesModeSettings = {
   enabled: boolean;
@@ -272,6 +300,10 @@ export type SharedServerTemplate = {
   baseUrl: string;
   defaultCwd: string;
   terminalBackend?: TerminalBackendKind;
+  vmHost?: string;
+  vmType?: VmType;
+  vmName?: string;
+  vmId?: string;
   sshHost?: string;
   sshUser?: string;
   sshPort?: number;

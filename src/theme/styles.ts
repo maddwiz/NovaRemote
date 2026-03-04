@@ -311,6 +311,74 @@ export const styles = StyleSheet.create({
   chipTextActive: {
     color: "#ffe0f5",
   },
+  serverRail: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderColor: "#1a1440",
+    backgroundColor: "rgba(6, 3, 18, 0.95)",
+    borderRadius: 12,
+  },
+  serverRailGroup: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    marginRight: 8,
+  },
+  serverRailGroupLabel: {
+    color: "#7f7aa8",
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
+  serverRailChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#342868",
+    backgroundColor: "rgba(24, 16, 49, 0.95)",
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  serverRailChipFocused: {
+    borderColor: "#0ea8c8",
+    backgroundColor: "rgba(14, 168, 200, 0.12)",
+  },
+  serverRailDot: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+  },
+  serverRailDotConnected: {
+    backgroundColor: "#22d68a",
+  },
+  serverRailDotConnecting: {
+    backgroundColor: "#f5a623",
+  },
+  serverRailDotDisconnected: {
+    backgroundColor: "#ff4466",
+  },
+  serverRailDotInactive: {
+    backgroundColor: "#444444",
+  },
+  serverRailName: {
+    color: "#aad6ff",
+    fontSize: 12,
+    fontWeight: "700",
+    maxWidth: 100,
+  },
+  serverRailUnreadBadge: {
+    position: "absolute",
+    top: -2,
+    right: -2,
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#ff8c42",
+  },
   terminalCard: {
     borderRadius: 14,
     borderWidth: 1,
@@ -657,6 +725,117 @@ export const styles = StyleSheet.create({
     color: "#e8f9ff",
     fontSize: 14,
     fontWeight: "800",
+  },
+  glassesSpatialHeader: {
+    flexDirection: "row",
+    gap: 8,
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  glassesSpatialSettings: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#2d4871",
+    backgroundColor: "rgba(4, 12, 24, 0.94)",
+    padding: 10,
+    gap: 8,
+  },
+  glassesSpatialSettingsHidden: {
+    display: "none",
+  },
+  spatialLayout: {
+    gap: 8,
+  },
+  spatialLayoutEdgeRow: {
+    minHeight: 86,
+  },
+  spatialLayoutMiddle: {
+    flexDirection: "row",
+    gap: 8,
+    minHeight: 220,
+  },
+  spatialLayoutWing: {
+    flex: 0.85,
+  },
+  spatialLayoutCore: {
+    flex: 1.6,
+  },
+  spatialPanel: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#3f5c89",
+    backgroundColor: "rgba(6, 13, 28, 0.96)",
+    overflow: "hidden",
+    minHeight: 86,
+  },
+  spatialPanelCenter: {
+    minHeight: 220,
+  },
+  spatialPanelSide: {
+    minHeight: 220,
+  },
+  spatialPanelEdge: {
+    minHeight: 86,
+  },
+  spatialPanelFocused: {
+    borderColor: "#3dd7ff",
+    backgroundColor: "rgba(13, 31, 60, 0.96)",
+  },
+  spatialPanelEmpty: {
+    borderStyle: "dashed",
+    borderColor: "#314665",
+    backgroundColor: "rgba(2, 8, 18, 0.62)",
+  },
+  spatialPanelHeader: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderBottomWidth: 1,
+    borderColor: "#2f4668",
+    gap: 6,
+  },
+  spatialPanelHeaderMeta: {
+    flex: 1,
+    gap: 1,
+  },
+  spatialPanelServer: {
+    color: "#8fd6ff",
+    fontSize: 10,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  spatialPanelSession: {
+    color: "#e8f8ff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  spatialPanelHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
+  spatialPanelAction: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#4b6b9b",
+    backgroundColor: "rgba(18, 31, 58, 0.96)",
+    width: 20,
+    height: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  spatialPanelActionText: {
+    color: "#d1ecff",
+    fontSize: 11,
+    fontWeight: "800",
+    lineHeight: 12,
+  },
+  spatialPanelOutput: {
+    flex: 1,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
   },
   emptyText: {
     color: "#8cb6db",

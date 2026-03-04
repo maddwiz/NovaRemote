@@ -15,7 +15,7 @@ import {
   STORAGE_SERVERS,
   makeId,
 } from "../constants";
-import { ServerProfile } from "../types";
+import { ServerProfile, VmType } from "../types";
 
 type UseServersArgs = {
   onError: (error: unknown) => void;
@@ -44,6 +44,26 @@ function sanitizeSshPort(value: string | number | undefined): number | undefined
   return parsed >= 1 && parsed <= 65535 ? parsed : undefined;
 }
 
+function normalizeVmType(value: unknown): VmType | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "proxmox" ||
+    normalized === "vmware" ||
+    normalized === "hyper-v" ||
+    normalized === "docker" ||
+    normalized === "lxc" ||
+    normalized === "qemu" ||
+    normalized === "virtualbox" ||
+    normalized === "cloud"
+  ) {
+    return normalized;
+  }
+  return undefined;
+}
+
 export function useServers({ onError, enabled = true }: UseServersArgs) {
   const [servers, setServers] = useState<ServerProfile[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
@@ -57,6 +77,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
   const [serverSshHostInput, setServerSshHostInput] = useState<string>("");
   const [serverSshUserInput, setServerSshUserInput] = useState<string>("");
   const [serverSshPortInput, setServerSshPortInput] = useState<string>(String(DEFAULT_SSH_PORT));
+  const [serverVmHostInput, setServerVmHostInput] = useState<string>("");
+  const [serverVmTypeInput, setServerVmTypeInput] = useState<VmType | "">("");
+  const [serverVmNameInput, setServerVmNameInput] = useState<string>("");
+  const [serverVmIdInput, setServerVmIdInput] = useState<string>("");
   const [serverPortainerUrlInput, setServerPortainerUrlInput] = useState<string>("");
   const [serverProxmoxUrlInput, setServerProxmoxUrlInput] = useState<string>("");
   const [serverGrafanaUrlInput, setServerGrafanaUrlInput] = useState<string>("");
@@ -87,6 +111,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerSshHostInput("");
     setServerSshUserInput("");
     setServerSshPortInput(String(DEFAULT_SSH_PORT));
+    setServerVmHostInput("");
+    setServerVmTypeInput("");
+    setServerVmNameInput("");
+    setServerVmIdInput("");
     setServerPortainerUrlInput("");
     setServerProxmoxUrlInput("");
     setServerGrafanaUrlInput("");
@@ -102,12 +130,16 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerSshHostInput(server.sshHost || "");
     setServerSshUserInput(server.sshUser || "");
     setServerSshPortInput(String(server.sshPort || DEFAULT_SSH_PORT));
+    setServerVmHostInput(server.vmHost || "");
+    setServerVmTypeInput(server.vmType || "");
+    setServerVmNameInput(server.vmName || "");
+    setServerVmIdInput(server.vmId || "");
     setServerPortainerUrlInput(server.portainerUrl || "");
     setServerProxmoxUrlInput(server.proxmoxUrl || "");
     setServerGrafanaUrlInput(server.grafanaUrl || "");
   }, []);
 
-  const importServerConfig = useCallback((config: { name?: string; url?: string; token?: string; cwd?: string; backend?: string; sshHost?: string; sshUser?: string; sshPort?: string | number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
+  const importServerConfig = useCallback((config: { name?: string; url?: string; token?: string; cwd?: string; backend?: string; vmHost?: string; vmType?: string; vmName?: string; vmId?: string; sshHost?: string; sshUser?: string; sshPort?: string | number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
     const importedPort = sanitizeSshPort(config.sshPort);
     setEditingServerId(null);
     setServerNameInput(config.name?.trim() || DEFAULT_SERVER_NAME);
@@ -124,6 +156,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         ? config.backend
         : DEFAULT_TERMINAL_BACKEND
     );
+    setServerVmHostInput(config.vmHost?.trim() || "");
+    setServerVmTypeInput(normalizeVmType(config.vmType) || "");
+    setServerVmNameInput(config.vmName?.trim() || "");
+    setServerVmIdInput(config.vmId?.trim() || "");
     setServerSshHostInput(config.sshHost?.trim() || "");
     setServerSshUserInput(config.sshUser?.trim() || "");
     setServerSshPortInput(String(importedPort || DEFAULT_SSH_PORT));
@@ -141,6 +177,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     const cleanedSshUser = serverSshUserInput.trim();
     const cleanedSshPort = sanitizeSshPort(serverSshPortInput);
     const enteredSshPort = serverSshPortInput.trim();
+    const cleanedVmHost = serverVmHostInput.trim();
+    const cleanedVmType = normalizeVmType(serverVmTypeInput);
+    const cleanedVmName = serverVmNameInput.trim();
+    const cleanedVmId = serverVmIdInput.trim();
     const cleanedPortainerUrl = serverPortainerUrlInput.trim();
     const cleanedProxmoxUrl = serverProxmoxUrlInput.trim();
     const cleanedGrafanaUrl = serverGrafanaUrlInput.trim();
@@ -170,6 +210,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
               token: cleanedToken,
               defaultCwd: cleanedCwd,
               terminalBackend: serverBackendInput || DEFAULT_TERMINAL_BACKEND,
+              vmHost: cleanedVmHost || undefined,
+              vmType: cleanedVmType,
+              vmName: cleanedVmName || undefined,
+              vmId: cleanedVmId || undefined,
               sshHost: cleanedSshHost || undefined,
               sshUser: cleanedSshUser || undefined,
               sshPort: cleanedSshHost ? cleanedSshPort : undefined,
@@ -188,6 +232,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         token: cleanedToken,
         defaultCwd: cleanedCwd,
         terminalBackend: serverBackendInput || DEFAULT_TERMINAL_BACKEND,
+        vmHost: cleanedVmHost || undefined,
+        vmType: cleanedVmType,
+        vmName: cleanedVmName || undefined,
+        vmId: cleanedVmId || undefined,
         sshHost: cleanedSshHost || undefined,
         sshUser: cleanedSshUser || undefined,
         sshPort: cleanedSshHost ? cleanedSshPort : undefined,
@@ -216,6 +264,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverSshHostInput,
     serverSshPortInput,
     serverSshUserInput,
+    serverVmHostInput,
+    serverVmIdInput,
+    serverVmNameInput,
+    serverVmTypeInput,
     serverPortainerUrlInput,
     serverProxmoxUrlInput,
     serverGrafanaUrlInput,
@@ -223,9 +275,13 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
   ]);
 
   const addServerDirect = useCallback(
-    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string; terminalBackend?: ServerProfile["terminalBackend"]; sshHost?: string; sshUser?: string; sshPort?: number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
+    async (server: { name: string; baseUrl: string; token: string; defaultCwd: string; terminalBackend?: ServerProfile["terminalBackend"]; vmHost?: string; vmType?: VmType | string; vmName?: string; vmId?: string; sshHost?: string; sshUser?: string; sshPort?: number; portainerUrl?: string; proxmoxUrl?: string; grafanaUrl?: string }) => {
       const cleanedBaseUrl = normalizeBaseUrl(server.baseUrl);
       const cleanedToken = server.token.trim();
+      const cleanedVmHost = server.vmHost?.trim() || "";
+      const cleanedVmType = normalizeVmType(server.vmType);
+      const cleanedVmName = server.vmName?.trim() || "";
+      const cleanedVmId = server.vmId?.trim() || "";
       const cleanedSshHost = server.sshHost?.trim() || "";
       const cleanedSshUser = server.sshUser?.trim() || "";
       const cleanedSshPort = sanitizeSshPort(server.sshPort);
@@ -243,6 +299,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         token: cleanedToken,
         defaultCwd: server.defaultCwd.trim(),
         terminalBackend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
+        vmHost: cleanedVmHost || undefined,
+        vmType: cleanedVmType,
+        vmName: cleanedVmName || undefined,
+        vmId: cleanedVmId || undefined,
         sshHost: cleanedSshHost || undefined,
         sshUser: cleanedSshUser || undefined,
         sshPort: cleanedSshHost ? cleanedSshPort : undefined,
@@ -317,6 +377,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
               ? parsed.map((entry) => ({
                   ...entry,
                   terminalBackend: entry.terminalBackend || DEFAULT_TERMINAL_BACKEND,
+                  vmHost: entry.vmHost?.trim() || undefined,
+                  vmType: normalizeVmType(entry.vmType),
+                  vmName: entry.vmName?.trim() || undefined,
+                  vmId: entry.vmId?.trim() || undefined,
                   sshHost: entry.sshHost?.trim() || undefined,
                   sshUser: entry.sshUser?.trim() || undefined,
                   sshPort: entry.sshHost ? sanitizeSshPort(entry.sshPort) : undefined,
@@ -378,6 +442,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     serverSshHostInput,
     serverSshUserInput,
     serverSshPortInput,
+    serverVmHostInput,
+    serverVmTypeInput,
+    serverVmNameInput,
+    serverVmIdInput,
     serverPortainerUrlInput,
     serverProxmoxUrlInput,
     serverGrafanaUrlInput,
@@ -391,6 +459,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     setServerSshHostInput,
     setServerSshUserInput,
     setServerSshPortInput,
+    setServerVmHostInput,
+    setServerVmTypeInput,
+    setServerVmNameInput,
+    setServerVmIdInput,
     setServerPortainerUrlInput,
     setServerProxmoxUrlInput,
     setServerGrafanaUrlInput,

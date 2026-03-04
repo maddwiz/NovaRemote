@@ -6,6 +6,10 @@ export type QrServerConfig = {
   token: string;
   cwd: string;
   backend: string;
+  vmHost: string;
+  vmType: string;
+  vmName: string;
+  vmId: string;
   sshHost: string;
   sshUser: string;
   sshPort: string;
@@ -70,6 +74,10 @@ export function parseQrPayload(raw: string): QrServerConfig | null {
         token: toStringValue(parsed.token),
         cwd: toStringValue(parsed.cwd ?? parsed.defaultCwd),
         backend: toStringValue(parsed.backend ?? parsed.terminalBackend),
+        vmHost: toStringValue(parsed.vmHost ?? parsed.vm_host),
+        vmType: toStringValue(parsed.vmType ?? parsed.vm_type),
+        vmName: toStringValue(parsed.vmName ?? parsed.vm_name),
+        vmId: toStringValue(parsed.vmId ?? parsed.vm_id),
         sshHost: toStringValue(parsed.sshHost ?? parsed.ssh_host),
         sshUser: toStringValue(parsed.sshUser ?? parsed.ssh_user),
         sshPort: toStringValue(parsed.sshPort ?? parsed.ssh_port),
@@ -103,6 +111,10 @@ export function parseQrPayload(raw: string): QrServerConfig | null {
     token: toStringValue(parsedLink.queryParams.token),
     cwd: toStringValue(parsedLink.queryParams.cwd),
     backend: toStringValue(parsedLink.queryParams.backend),
+    vmHost: toStringValue(parsedLink.queryParams.vm_host || parsedLink.queryParams.vmHost),
+    vmType: toStringValue(parsedLink.queryParams.vm_type || parsedLink.queryParams.vmType),
+    vmName: toStringValue(parsedLink.queryParams.vm_name || parsedLink.queryParams.vmName),
+    vmId: toStringValue(parsedLink.queryParams.vm_id || parsedLink.queryParams.vmId),
     sshHost: toStringValue(parsedLink.queryParams.ssh_host || parsedLink.queryParams.sshHost),
     sshUser: toStringValue(parsedLink.queryParams.ssh_user || parsedLink.queryParams.sshUser),
     sshPort: toStringValue(parsedLink.queryParams.ssh_port || parsedLink.queryParams.sshPort),

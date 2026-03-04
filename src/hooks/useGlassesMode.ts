@@ -21,7 +21,14 @@ const DEFAULT_GLASSES_MODE: GlassesModeSettings = {
 };
 
 function normalizeBrand(value: unknown): GlassesBrand {
-  if (value === "xreal_x1" || value === "halo" || value === "custom") {
+  if (
+    value === "xreal_x1" ||
+    value === "halo" ||
+    value === "custom" ||
+    value === "meta_orion" ||
+    value === "meta_ray_ban" ||
+    value === "viture_pro"
+  ) {
     return value;
   }
   return DEFAULT_GLASSES_MODE.brand;

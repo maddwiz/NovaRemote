@@ -2,7 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useState } from "react";
 
 import { STORAGE_SHARED_SERVER_TEMPLATES, makeId } from "../constants";
-import { ServerProfile, SharedServerTemplate } from "../types";
+import { ServerProfile, SharedServerTemplate, VmType } from "../types";
 
 type ImportSummary = {
   imported: number;
@@ -53,6 +53,26 @@ function normalizeOptionalHttpUrl(raw: string | undefined): string | undefined {
   return normalizeHttpUrl(raw) || undefined;
 }
 
+function normalizeVmType(raw: unknown): VmType | undefined {
+  if (typeof raw !== "string") {
+    return undefined;
+  }
+  const normalized = raw.trim().toLowerCase();
+  if (
+    normalized === "proxmox" ||
+    normalized === "vmware" ||
+    normalized === "hyper-v" ||
+    normalized === "docker" ||
+    normalized === "lxc" ||
+    normalized === "qemu" ||
+    normalized === "virtualbox" ||
+    normalized === "cloud"
+  ) {
+    return normalized;
+  }
+  return undefined;
+}
+
 function normalizeTemplate(input: Partial<SharedServerTemplate>): SharedServerTemplate | null {
   const name = (input.name || "").trim();
   const baseUrl = normalizeHttpUrl(input.baseUrl || "");
@@ -66,6 +86,10 @@ function normalizeTemplate(input: Partial<SharedServerTemplate>): SharedServerTe
     baseUrl,
     defaultCwd: (input.defaultCwd || "").trim(),
     terminalBackend: input.terminalBackend,
+    vmHost: input.vmHost?.trim() || undefined,
+    vmType: normalizeVmType(input.vmType),
+    vmName: input.vmName?.trim() || undefined,
+    vmId: input.vmId?.trim() || undefined,
     sshHost: input.sshHost?.trim() || undefined,
     sshUser: input.sshUser?.trim() || undefined,
     sshPort: sanitizeSshPort(input.sshPort),
@@ -82,6 +106,10 @@ function templateFingerprint(template: SharedServerTemplate): string {
     template.baseUrl.trim().toLowerCase(),
     template.defaultCwd.trim().toLowerCase(),
     (template.terminalBackend || "auto").trim().toLowerCase(),
+    (template.vmHost || "").trim().toLowerCase(),
+    (template.vmType || "").trim().toLowerCase(),
+    (template.vmName || "").trim().toLowerCase(),
+    (template.vmId || "").trim().toLowerCase(),
     (template.sshHost || "").trim().toLowerCase(),
     (template.sshUser || "").trim().toLowerCase(),
     String(template.sshPort || ""),
@@ -144,6 +172,10 @@ export function useSharedProfiles() {
           baseUrl: server.baseUrl,
           defaultCwd: server.defaultCwd,
           terminalBackend: server.terminalBackend,
+          vmHost: server.vmHost,
+          vmType: server.vmType,
+          vmName: server.vmName,
+          vmId: server.vmId,
           sshHost: server.sshHost,
           sshUser: server.sshUser,
           sshPort: sanitizeSshPort(server.sshPort),

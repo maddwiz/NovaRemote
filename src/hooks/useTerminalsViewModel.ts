@@ -10,6 +10,9 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
   const {
     activeServer,
     connected,
+    focusedServerId,
+    connections,
+    unreadServers,
     servers,
     allSessions,
     openSessions,
@@ -79,6 +82,9 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     refreshCapabilities,
     refreshSessions,
     setRoute,
+    focusServer,
+    reconnectServer,
+    editServer,
     openSshFallback,
     createLocalAiSession,
     setSessionAiEngine,
@@ -161,6 +167,9 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
   const terminalsViewModel: TerminalsViewModel = {
     activeServer,
     connected,
+    focusedServerId,
+    connections,
+    unreadServers,
     servers,
     allSessions,
     openSessions,
@@ -237,6 +246,9 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       });
     },
     onOpenServers: () => setRoute("servers"),
+    onFocusServer: focusServer,
+    onReconnectServer: reconnectServer,
+    onEditServer: editServer,
     onOpenSshFallback: () => {
       void runWithStatus("Opening SSH fallback", async () => {
         await openSshFallback(activeServer);
