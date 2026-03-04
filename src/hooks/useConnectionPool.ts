@@ -1719,6 +1719,7 @@ export function useConnectionPool({
 
   useEffect(() => {
     if (!enabled) {
+      lifecyclePausedRef.current = false;
       closeAllStreams();
       return;
     }
@@ -1745,6 +1746,7 @@ export function useConnectionPool({
 
   useEffect(() => {
     if (!enabled) {
+      lifecyclePausedRef.current = false;
       closeAllStreams();
       return;
     }

@@ -382,6 +382,29 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("reconnects when enabled toggles back on after a prior disconnectAll pause", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")], true);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    const firstWave = FakeWebSocket.instances.slice();
+
+    await harness.act(async () => {
+      harness.getPool().disconnectAll();
+    });
+    expect(firstWave.every((ws) => ws.readyState === FakeWebSocket.CLOSED)).toBe(true);
+    const countAfterDisconnect = FakeWebSocket.instances.length;
+
+    await harness.updateEnabled(false);
+    await harness.updateEnabled(true);
+
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= countAfterDisconnect + 2,
+      "recreated websocket instances after enable cycle"
+    );
+
+    await harness.unmount();
+  });
+
   it("recovers streams after disconnectAll and connectAll lifecycle events", async () => {
     const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
 
