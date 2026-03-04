@@ -547,6 +547,46 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("preserves per-server drafts and send modes across focus switches", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("homelab", "Homelab")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    await harness.waitFor(() => {
+      const pool = harness.getPool();
+      const dgxReady = Boolean(pool.connections.get("dgx")?.allSessions.includes("main"));
+      const homelabReady = Boolean(pool.connections.get("homelab")?.allSessions.includes("main"));
+      return dgxReady && homelabReady;
+    }, "session hydration for both servers");
+
+    await harness.act(async () => {
+      const pool = harness.getPool();
+      pool.setDraft("dgx", "main", "ls -la");
+      pool.setSessionMode("dgx", "main", "shell");
+      pool.setDraft("homelab", "main", "npm test");
+      pool.setSessionMode("homelab", "main", "ai");
+    });
+
+    await harness.act(async () => {
+      harness.getPool().setFocusedServerId("homelab");
+    });
+    await harness.flush();
+    expect(harness.getPool().focusedServerId).toBe("homelab");
+    expect(harness.getPool().connections.get("dgx")?.drafts.main).toBe("ls -la");
+    expect(harness.getPool().connections.get("dgx")?.sendModes.main).toBe("shell");
+    expect(harness.getPool().connections.get("homelab")?.drafts.main).toBe("npm test");
+    expect(harness.getPool().connections.get("homelab")?.sendModes.main).toBe("ai");
+
+    await harness.act(async () => {
+      harness.getPool().setFocusedServerId("dgx");
+    });
+    await harness.flush();
+    expect(harness.getPool().focusedServerId).toBe("dgx");
+    expect(harness.getPool().connections.get("dgx")?.drafts.main).toBe("ls -la");
+    expect(harness.getPool().connections.get("homelab")?.drafts.main).toBe("npm test");
+
+    await harness.unmount();
+  });
+
   it("reconnects a server when baseUrl/token fingerprint changes", async () => {
     const original = makeServer("dgx", "DGX");
     const changed: ServerProfile = {
