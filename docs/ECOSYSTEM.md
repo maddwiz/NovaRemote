@@ -75,3 +75,13 @@ Notes:
 2. Add Linux distro packages (`deb`/`rpm`) for companion server.
 3. Add desktop keychain-backed credential storage for web/desktop clients.
 4. Add file/image picker to LLM screen for on-device vision input (not URL-only).
+
+## 5) VR Track Contracts
+
+VR prep contracts and repo bootstrap docs are now versioned in this repo:
+
+- Protocol contract: `docs/vr/VR_PROTOCOL_CONTRACT.md`
+- VR bootstrap plan: `docs/vr/VR_REPO_BOOTSTRAP.md`
+- JSON schema: `docs/contracts/novaremote-client-protocol.v1.json`
+
+The intent is to keep `NovaRemoteVR` aligned to these files, pinned to a known NovaRemote commit SHA.

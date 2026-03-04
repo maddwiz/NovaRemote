@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://novaremote.dev/contracts/novaremote-client-protocol.v1.json",
+  "title": "NovaRemote Client Protocol v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "streamMessage"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "const": "1.0.0"
+    },
+    "streamMessage": {
+      "$ref": "#/$defs/streamMessage"
+    },
+    "sessionMeta": {
+      "$ref": "#/$defs/sessionMeta"
+    },
+    "capabilities": {
+      "$ref": "#/$defs/capabilities"
+    }
+  },
+  "$defs": {
+    "sessionMeta": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "created_at": { "type": "string" },
+        "attached": { "type": "boolean" },
+        "windows": { "type": "number" }
+      }
+    },
+    "capabilities": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "terminal": { "type": "boolean" },
+        "tmux": { "type": "boolean" },
+        "codex": { "type": "boolean" },
+        "files": { "type": "boolean" },
+        "shellRun": { "type": "boolean" },
+        "macAttach": { "type": "boolean" },
+        "stream": { "type": "boolean" },
+        "sysStats": { "type": "boolean" },
+        "processes": { "type": "boolean" },
+        "collaboration": { "type": "boolean" },
+        "spectate": { "type": "boolean" }
+      }
+    },
+    "streamMessage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "session", "data"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["snapshot", "delta", "session_closed", "error"]
+        },
+        "session": { "type": "string", "minLength": 1 },
+        "data": { "type": "string" }
+      }
+    }
+  }
+}
