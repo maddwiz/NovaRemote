@@ -1,10 +1,6 @@
-export type VrRoutePanel = {
-  id: string;
-  serverId: string;
-  serverName: string;
-  session: string;
-  sessionLabel: string;
-};
+import { findPanelByTarget, resolveSpatialVoiceRoute, VoiceRoutePanel } from "../spatialVoiceRoutingCore";
+
+export type VrRoutePanel = VoiceRoutePanel;
 
 export type VrVoiceIntent =
   | { kind: "none" }
@@ -14,139 +10,31 @@ export type VrVoiceIntent =
   | { kind: "minimize" }
   | { kind: "rotate_workspace"; direction: "left" | "right" };
 
-function normalize(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function escapeRegex(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
-function parseExplicitSendWithoutColon(
-  transcript: string,
-  panels: VrRoutePanel[]
-): { panelId: string; command: string } | null {
-  const candidates = new Map<string, string>();
-
-  panels.forEach((panel) => {
-    [panel.serverName, panel.session, panel.sessionLabel].forEach((value) => {
-      const target = value?.trim();
-      if (!target) {
-        return;
-      }
-      const key = normalize(target);
-      if (!key || candidates.has(key)) {
-        return;
-      }
-      candidates.set(key, target);
-    });
-  });
-
-  const orderedTargets = Array.from(candidates.values()).sort((a, b) => b.length - a.length);
-  for (const target of orderedTargets) {
-    const pattern = new RegExp(`^(?:send|route)\\s+to\\s+${escapeRegex(target)}\\s+(.+)$`, "i");
-    const match = transcript.match(pattern);
-    if (!match) {
-      continue;
-    }
-
-    const command = match[1]?.trim() || "";
-    if (!command) {
-      continue;
-    }
-
-    const panel = findVrPanelByTarget(panels, target) ?? panels[0];
-    if (!panel) {
-      continue;
-    }
-    return { panelId: panel.id, command };
-  }
-
-  return null;
-}
-
 export function findVrPanelByTarget(panels: VrRoutePanel[], target: string): VrRoutePanel | null {
-  const needle = normalize(target);
-  if (!needle) {
-    return null;
-  }
-
-  const exact = panels.find((panel) => {
-    return (
-      normalize(panel.serverName) === needle ||
-      normalize(panel.session) === needle ||
-      normalize(panel.sessionLabel) === needle
-    );
-  });
-  if (exact) {
-    return exact;
-  }
-
-  const tokens = needle.split(" ").filter(Boolean);
-  let best: VrRoutePanel | null = null;
-  let bestScore = 0;
-  panels.forEach((panel) => {
-    const haystack = `${normalize(panel.serverName)} ${normalize(panel.session)} ${normalize(panel.sessionLabel)}`;
-    const score = tokens.reduce((sum, token) => (haystack.includes(token) ? sum + 1 : sum), 0);
-    if (score > bestScore) {
-      best = panel;
-      bestScore = score;
-    }
-  });
-  return bestScore > 0 ? best : null;
+  return findPanelByTarget(panels, target);
 }
 
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
-  const raw = transcript.trim();
-  if (!raw || panels.length === 0) {
+  const route = resolveSpatialVoiceRoute({
+    transcript,
+    panels,
+    focusedPanelId,
+  });
+
+  if (route.kind === "none") {
     return { kind: "none" };
   }
-
-  const normalized = normalize(raw);
-  if (normalized === "overview" || normalized === "show all" || normalized === "show overview") {
+  if (route.kind === "show_all") {
     return { kind: "overview" };
   }
-  if (
-    normalized === "minimize" ||
-    normalized === "minimize panels" ||
-    normalized === "focus mode" ||
-    normalized === "single panel"
-  ) {
+  if (route.kind === "minimize") {
     return { kind: "minimize" };
   }
-  if (normalized === "rotate left") {
-    return { kind: "rotate_workspace", direction: "left" };
+  if (route.kind === "rotate_workspace") {
+    return route;
   }
-  if (normalized === "rotate right") {
-    return { kind: "rotate_workspace", direction: "right" };
+  if (route.kind === "focus_panel") {
+    return { kind: "focus", panelId: route.panelId };
   }
-
-  const sendMatch = raw.match(/^(?:send|route)\s+to\s+(.+?)\s*:\s*(.+)$/i);
-  if (sendMatch) {
-    const panel = findVrPanelByTarget(panels, sendMatch[1] || "");
-    const command = (sendMatch[2] || "").trim();
-    if (panel && command) {
-      return { kind: "send", panelId: panel.id, command };
-    }
-  }
-
-  const colonlessSend = parseExplicitSendWithoutColon(raw, panels);
-  if (colonlessSend) {
-    return { kind: "send", panelId: colonlessSend.panelId, command: colonlessSend.command };
-  }
-
-  const focusMatch = raw.match(/^focus\s+(.+)$/i);
-  if (focusMatch) {
-    const panel = findVrPanelByTarget(panels, focusMatch[1] || "");
-    if (panel) {
-      return { kind: "focus", panelId: panel.id };
-    }
-  }
-
-  const fallbackId = focusedPanelId && panels.some((panel) => panel.id === focusedPanelId) ? focusedPanelId : panels[0].id;
-  return { kind: "send", panelId: fallbackId, command: raw };
+  return { kind: "send", panelId: route.panelId, command: route.command };
 }
