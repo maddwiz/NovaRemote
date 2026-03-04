@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from "react";
-import { Pressable, Switch, Text, TextInput, View } from "react-native";
+import React, { useEffect, useMemo, useState } from "react";
+import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER, SSH_HOST_PLACEHOLDER, SSH_USER_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
@@ -7,6 +7,7 @@ import { ServerProfile, SharedServerTemplate, TerminalBackendKind, VmType } from
 import { ServerCard } from "../components/ServerCard";
 import { useQrSetup } from "../hooks/useQrSetup";
 import { QrScannerModal } from "../components/QrScannerModal";
+import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 
 type ServersScreenProps = {
   servers: ServerProfile[];
@@ -169,6 +170,27 @@ export function ServersScreen({
   const [showQrScanner, setShowQrScanner] = useState<boolean>(false);
   const [qrError, setQrError] = useState<string>("");
   const { parseQrPayload } = useQrSetup();
+  const {
+    workspaces,
+    loading: workspacesLoading,
+    createWorkspace,
+    deleteWorkspace,
+    setWorkspaceServers,
+    setMemberRole,
+  } = useSharedWorkspaces();
+  const [workspaceNameInput, setWorkspaceNameInput] = useState<string>("");
+  const [workspaceServerIds, setWorkspaceServerIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (workspaceServerIds.length > 0) {
+      return;
+    }
+    const seedId = activeServerId || servers[0]?.id;
+    if (!seedId) {
+      return;
+    }
+    setWorkspaceServerIds([seedId]);
+  }, [activeServerId, servers, workspaceServerIds.length]);
   const groupedServers = useMemo(() => {
     const groups = new Map<string, { label: string; servers: ServerProfile[] }>();
     servers.forEach((server) => {
@@ -209,6 +231,24 @@ export function ServersScreen({
       });
   }, [servers]);
 
+  const toggleWorkspaceServer = (serverId: string) => {
+    setWorkspaceServerIds((previous) =>
+      previous.includes(serverId) ? previous.filter((id) => id !== serverId) : [...previous, serverId]
+    );
+  };
+
+  const createTeamWorkspace = () => {
+    const created = createWorkspace({
+      name: workspaceNameInput,
+      serverIds: workspaceServerIds,
+    });
+    if (!created) {
+      return;
+    }
+    setWorkspaceNameInput("");
+    setWorkspaceServerIds(created.serverIds);
+  };
+
   return (
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Server Profiles</Text>
@@ -234,6 +274,107 @@ export function ServersScreen({
             </View>
           </View>
         ))}
+      </View>
+
+      <View style={styles.serverCard}>
+        <Text style={styles.panelLabel}>Team Workspaces (Preview)</Text>
+        <Text style={styles.serverSubtitle}>
+          Role-based shared workspace groups for cross-server collaboration channels.
+        </Text>
+        <TextInput
+          style={styles.input}
+          value={workspaceNameInput}
+          onChangeText={setWorkspaceNameInput}
+          placeholder="Workspace name (example: Platform Ops)"
+          placeholderTextColor="#7f7aa8"
+        />
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {servers.map((server) => {
+            const active = workspaceServerIds.includes(server.id);
+            return (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`${active ? "Remove" : "Add"} ${server.name} to workspace`}
+                key={`workspace-server-${server.id}`}
+                style={[styles.chip, active ? styles.chipActive : null]}
+                onPress={() => toggleWorkspaceServer(server.id)}
+              >
+                <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{server.name}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Create team workspace"
+          style={[styles.buttonPrimary, (!workspaceNameInput.trim() || workspaceServerIds.length === 0) ? styles.buttonDisabled : null]}
+          disabled={!workspaceNameInput.trim() || workspaceServerIds.length === 0}
+          onPress={createTeamWorkspace}
+        >
+          <Text style={styles.buttonPrimaryText}>Create Workspace</Text>
+        </Pressable>
+
+        {workspacesLoading ? <Text style={styles.emptyText}>Loading workspaces...</Text> : null}
+        {!workspacesLoading && workspaces.length === 0 ? (
+          <Text style={styles.emptyText}>No workspaces yet. Create one to group team servers.</Text>
+        ) : null}
+        <View style={styles.serverListWrap}>
+          {workspaces.map((workspace) => {
+            const localMember = workspace.members.find((member) => member.id === "local-user") || workspace.members[0];
+            const nextRole = localMember?.role === "owner" ? "editor" : localMember?.role === "editor" ? "viewer" : "owner";
+            const activeServerIncluded = activeServerId ? workspace.serverIds.includes(activeServerId) : false;
+
+            return (
+              <View key={workspace.id} style={styles.terminalCard}>
+                <Text style={styles.terminalName}>{workspace.name}</Text>
+                <Text style={styles.serverSubtitle}>
+                  {`${workspace.serverIds.length} servers • ${workspace.members.length} members • ${workspace.channelId}`}
+                </Text>
+                <Text style={styles.emptyText}>{`Servers: ${workspace.serverIds.join(", ") || "none"}`}</Text>
+                <Text style={styles.emptyText}>
+                  {`Local role: ${localMember?.role || "viewer"} • Updated ${new Date(workspace.updatedAt).toLocaleString()}`}
+                </Text>
+                <View style={styles.actionsWrap}>
+                  {activeServerId ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`${activeServerIncluded ? "Remove" : "Add"} active server from workspace`}
+                      style={styles.actionButton}
+                      onPress={() => {
+                        const nextServers = activeServerIncluded
+                          ? workspace.serverIds.filter((id) => id !== activeServerId)
+                          : [...workspace.serverIds, activeServerId];
+                        setWorkspaceServers(workspace.id, nextServers);
+                      }}
+                    >
+                      <Text style={styles.actionButtonText}>
+                        {activeServerIncluded ? "Remove Active Server" : "Add Active Server"}
+                      </Text>
+                    </Pressable>
+                  ) : null}
+                  {localMember ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel="Cycle local workspace role"
+                      style={styles.actionButton}
+                      onPress={() => setMemberRole(workspace.id, localMember.id, nextRole)}
+                    >
+                      <Text style={styles.actionButtonText}>{`Role -> ${nextRole}`}</Text>
+                    </Pressable>
+                  ) : null}
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Delete workspace ${workspace.name}`}
+                    style={styles.actionDangerButton}
+                    onPress={() => deleteWorkspace(workspace.id)}
+                  >
+                    <Text style={styles.actionDangerText}>Delete</Text>
+                  </Pressable>
+                </View>
+              </View>
+            );
+          })}
+        </View>
       </View>
 
       <View style={styles.formDivider} />

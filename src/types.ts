@@ -356,3 +356,21 @@ export type SharedServerTemplate = {
   grafanaUrl?: string;
   importedAt: string;
 };
+
+export type WorkspaceRole = "owner" | "editor" | "viewer";
+
+export type WorkspaceMember = {
+  id: string;
+  name: string;
+  role: WorkspaceRole;
+};
+
+export type SharedWorkspace = {
+  id: string;
+  name: string;
+  serverIds: string[];
+  members: WorkspaceMember[];
+  channelId: string;
+  createdAt: string;
+  updatedAt: string;
+};
