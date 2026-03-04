@@ -345,6 +345,39 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("recovers streams after disconnectAll and connectAll lifecycle events", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    const firstWave = FakeWebSocket.instances.slice();
+    await harness.act(async () => {
+      harness.getPool().disconnectAll();
+    });
+
+    expect(firstWave.every((ws) => ws.readyState === FakeWebSocket.CLOSED)).toBe(true);
+    expect(harness.getPool().connections.get("dgx")?.activeStreamCount).toBe(0);
+    expect(harness.getPool().connections.get("cloud")?.activeStreamCount).toBe(0);
+
+    await harness.act(async () => {
+      harness.getPool().connectAll();
+    });
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= firstWave.length + 2,
+      "reconnected websocket instances after connectAll"
+    );
+
+    const secondWave = FakeWebSocket.instances.slice(firstWave.length);
+    await harness.act(async () => {
+      secondWave.forEach((ws) => ws.emitOpen());
+    });
+
+    expect(harness.getPool().connections.get("dgx")?.status).not.toBe("disconnected");
+    expect(harness.getPool().connections.get("cloud")?.status).not.toBe("disconnected");
+    expect(secondWave.every((ws) => ws.readyState === FakeWebSocket.OPEN)).toBe(true);
+
+    await harness.unmount();
+  });
+
   it("switches focused server without additional network requests or websocket reconnects", async () => {
     const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("homelab", "Homelab")]);
 
