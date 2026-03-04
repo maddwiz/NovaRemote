@@ -250,6 +250,7 @@ describe("useVrLiveRuntime", () => {
       paused: false,
       tracked: 2,
       active: 1,
+      managed: 0,
     });
 
     await act(async () => {
@@ -318,6 +319,97 @@ describe("useVrLiveRuntime", () => {
       true
     );
     expect(current().hudStatus?.message).toContain("Sent to home/build");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("syncs and clears managed workspace panel streams", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string,
+        enter?: boolean
+      ) => Promise<void>
+    >(async () => undefined);
+    const openStream = vi.fn((args: { server: { id: string }; session: string }) => `${args.server.id}::${args.session}`);
+    const closeStream = vi.fn();
+    const closeServer = vi.fn();
+    const closeAll = vi.fn();
+    const pause = vi.fn();
+    const resume = vi.fn();
+    const trackedStreamCount = vi.fn(() => 4);
+    const activeStreamCount = vi.fn(() => 3);
+    const isPaused = vi.fn(() => false);
+
+    const streamPoolMock: VrStreamPool = {
+      openStream,
+      closeStream,
+      closeServer,
+      closeAll,
+      pause,
+      resume,
+      trackedStreamCount,
+      activeStreamCount,
+      isPaused,
+    };
+
+    let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Runtime not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({ sendMock }),
+        streamPool: streamPoolMock,
+        maxPanels: 4,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const onDelta = vi.fn();
+    current().syncWorkspacePanelStreams({ onDelta });
+    expect(openStream).toHaveBeenCalledTimes(2);
+    expect(current().getStreamPoolSnapshot()).toEqual({
+      paused: false,
+      tracked: 4,
+      active: 3,
+      managed: 2,
+    });
+
+    const firstPanelId = current().workspace.panels[0]?.id || null;
+    expect(firstPanelId).toBeTruthy();
+    if (firstPanelId) {
+      current().syncWorkspacePanelStreams({ onDelta }, [firstPanelId]);
+    }
+    expect(closeStream).toHaveBeenCalledTimes(1);
+    expect(current().getStreamPoolSnapshot().managed).toBe(1);
+
+    current().clearWorkspacePanelStreams();
+    expect(closeStream).toHaveBeenCalledTimes(2);
+    expect(current().getStreamPoolSnapshot().managed).toBe(0);
 
     await act(async () => {
       renderer?.unmount();

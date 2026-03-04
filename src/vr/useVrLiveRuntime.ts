@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 
 import { ServerConnection } from "../types";
 import { VrLayoutPreset } from "./contracts";
@@ -32,6 +32,23 @@ export type UseVrLiveRuntimeArgs = {
   onDisconnectAllServers?: () => Promise<void> | void;
 };
 
+export type VrWorkspaceStreamCallbacks = {
+  onSnapshot?: (serverId: string, session: string, output: string) => void;
+  onDelta?: (serverId: string, session: string, delta: string) => void;
+  onSessionClosed?: (serverId: string, session: string) => void;
+  onError?: (serverId: string, session: string, message: string) => void;
+  onStatus?: (
+    serverId: string,
+    session: string,
+    status: "connecting" | "connected" | "reconnecting" | "disconnected",
+    retryCount: number
+  ) => void;
+};
+
+function makePanelStreamKey(serverId: string, session: string): string {
+  return `${serverId}::${session}`;
+}
+
 export function useVrLiveRuntime({
   connections,
   maxPanels,
@@ -56,6 +73,7 @@ export function useVrLiveRuntime({
 
   const liveClient = useMemo(() => sessionClient || createVrSessionClient(), [sessionClient]);
   const liveStreamPool = useMemo(() => streamPool || createVrStreamPool(), [streamPool]);
+  const managedPanelStreamsRef = useRef<Map<string, { serverId: string; session: string }>>(new Map());
 
   useEffect(() => {
     return () => {
@@ -191,9 +209,51 @@ export function useVrLiveRuntime({
       paused: liveStreamPool.isPaused(),
       tracked: liveStreamPool.trackedStreamCount(),
       active: liveStreamPool.activeStreamCount(),
+      managed: managedPanelStreamsRef.current.size,
     }),
     [liveStreamPool]
   );
+
+  const syncWorkspacePanelStreams = useCallback(
+    (callbacks?: VrWorkspaceStreamCallbacks, panelIds?: string[]) => {
+      const allowedPanelIds = panelIds ? new Set(panelIds) : null;
+      const desired = workspace.panels.filter((panel) => (allowedPanelIds ? allowedPanelIds.has(panel.id) : true));
+      const desiredKeys = new Set<string>();
+
+      desired.forEach((panel) => {
+        const key = makePanelStreamKey(panel.serverId, panel.session);
+        desiredKeys.add(key);
+        subscribeServerSessionStream(panel.serverId, panel.session, {
+          onSnapshot: (output) => callbacks?.onSnapshot?.(panel.serverId, panel.session, output),
+          onDelta: (delta) => callbacks?.onDelta?.(panel.serverId, panel.session, delta),
+          onSessionClosed: () => callbacks?.onSessionClosed?.(panel.serverId, panel.session),
+          onError: (message) => callbacks?.onError?.(panel.serverId, panel.session, message),
+          onStatus: (status, retryCount) =>
+            callbacks?.onStatus?.(panel.serverId, panel.session, status, retryCount),
+        });
+        managedPanelStreamsRef.current.set(key, {
+          serverId: panel.serverId,
+          session: panel.session,
+        });
+      });
+
+      Array.from(managedPanelStreamsRef.current.entries()).forEach(([key, value]) => {
+        if (desiredKeys.has(key)) {
+          return;
+        }
+        unsubscribeServerSessionStream(value.serverId, value.session);
+        managedPanelStreamsRef.current.delete(key);
+      });
+    },
+    [subscribeServerSessionStream, unsubscribeServerSessionStream, workspace.panels]
+  );
+
+  const clearWorkspacePanelStreams = useCallback(() => {
+    Array.from(managedPanelStreamsRef.current.values()).forEach((value) => {
+      unsubscribeServerSessionStream(value.serverId, value.session);
+    });
+    managedPanelStreamsRef.current.clear();
+  }, [unsubscribeServerSessionStream]);
 
   const input = useVrInputRouter({
     workspace,
@@ -229,6 +289,8 @@ export function useVrLiveRuntime({
     closeServerStreams,
     closeAllServerStreams,
     getStreamPoolSnapshot,
+    syncWorkspacePanelStreams,
+    clearWorkspacePanelStreams,
     sendServerCommand,
     sendServerControlChar,
     hudStatus: input.hudStatus,
