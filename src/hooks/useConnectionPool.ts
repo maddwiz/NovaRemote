@@ -1878,6 +1878,9 @@ export function useConnectionPool({
     }
 
     const interval = setInterval(() => {
+      if (lifecyclePausedRef.current) {
+        return;
+      }
       const snapshot = stateRef.current;
       Object.values(snapshot).forEach((connection) => {
         if (!connection.connected) {
@@ -1919,6 +1922,9 @@ export function useConnectionPool({
     let cancelled = false;
 
     const pingAll = async () => {
+      if (lifecyclePausedRef.current) {
+        return;
+      }
       if (healthPingInFlightRef.current) {
         return;
       }

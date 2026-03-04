@@ -249,6 +249,13 @@ function countHealthFetchCallsFor(serverId: string): number {
   }).length;
 }
 
+function countTailFetchCalls(): number {
+  return fetchMock.mock.calls.filter(([input]) => {
+    const url = typeof input === "string" ? input : String(input);
+    return url.includes("/tmux/tail");
+  }).length;
+}
+
 beforeEach(() => {
   vi.useFakeTimers();
   FakeWebSocket.reset();
@@ -638,6 +645,45 @@ describe("useConnectionPool websocket integration", () => {
     await harness.waitFor(
       () => FakeWebSocket.instances.length >= countAfterDisconnect + 2,
       "connectAll should recreate server streams"
+    );
+
+    await harness.unmount();
+  });
+
+  it("suppresses health and tail polling while lifecycle is paused", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+
+    const healthBeforePause = countHealthFetchCalls();
+    const tailBeforePause = countTailFetchCalls();
+
+    await harness.act(async () => {
+      harness.getPool().disconnectAll();
+    });
+    expect(harness.getPool().lifecyclePaused).toBe(true);
+
+    const healthDuringPause = countHealthFetchCalls();
+    const tailDuringPause = countTailFetchCalls();
+
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(17_500);
+    });
+    await harness.flush();
+
+    expect(countHealthFetchCalls()).toBe(healthDuringPause);
+    expect(countTailFetchCalls()).toBe(tailDuringPause);
+    expect(healthDuringPause).toBeGreaterThanOrEqual(healthBeforePause);
+    expect(tailDuringPause).toBeGreaterThanOrEqual(tailBeforePause);
+
+    await harness.act(async () => {
+      harness.getPool().connectAll();
+    });
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(8_100);
+    });
+    await harness.waitFor(
+      () => countHealthFetchCalls() > healthDuringPause,
+      "health polling resumes after connectAll"
     );
 
     await harness.unmount();
