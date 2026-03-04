@@ -13,6 +13,7 @@ import {
 import { SpatialPanel, SpatialTerminalLayout } from "../components/SpatialTerminalLayout";
 import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
+import { SpatialLayoutSnapshot, useSpatialLayoutPrefs } from "../hooks/useSpatialLayoutPrefs";
 import { useSpatialVoiceRouting } from "../hooks/useSpatialVoiceRouting";
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
@@ -237,6 +238,7 @@ export function GlassesModeScreen() {
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
   const [overviewMode, setOverviewMode] = useState<boolean>(true);
   const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
+  const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
@@ -280,20 +282,15 @@ export function GlassesModeScreen() {
     const availableSet = new Set(allPanels.map((panel) => panel.id));
     setPinnedPanelIds((previous) => previous.filter((panelId) => availableSet.has(panelId)));
     setPanelIds((previous) => {
-      const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
+      const hadPanels = previous.length > 0;
       let next = previous.filter((panelId) => availableSet.has(panelId));
       if (next.length === 0 && allPanels[0]) {
-        next = [allPanels[0].id];
+        if (hadPanels) {
+          next = [allPanels[0].id];
+        } else {
+          next = allPanels.slice(0, maxPanels).map((panel) => panel.id);
+        }
       }
-
-      allPanels.forEach((panel) => {
-        if (next.length >= maxPanels) {
-          return;
-        }
-        if (!next.includes(panel.id)) {
-          next.push(panel.id);
-        }
-      });
 
       if (next.length > maxPanels) {
         const pinned = next.filter((panelId) => pinnedPanelIds.includes(panelId));
@@ -353,6 +350,37 @@ export function GlassesModeScreen() {
       sessionLabel: panel.sessionLabel,
     })),
     focusedPanelId,
+  });
+
+  const panelUniverseIds = useMemo(() => allPanels.map((panel) => panel.id), [allPanels]);
+  const serverScopeIds = useMemo(
+    () => Array.from(new Set(allPanels.map((panel) => panel.serverId))).sort(),
+    [allPanels]
+  );
+  const layoutSnapshot = useMemo<SpatialLayoutSnapshot>(
+    () => ({
+      panelIds,
+      pinnedPanelIds,
+      focusedPanelId,
+      overviewMode,
+    }),
+    [focusedPanelId, overviewMode, panelIds, pinnedPanelIds]
+  );
+
+  const restoreSpatialLayout = useCallback((snapshot: SpatialLayoutSnapshot) => {
+    setPanelIds(snapshot.panelIds);
+    setPinnedPanelIds(snapshot.pinnedPanelIds);
+    setFocusedPanelId(snapshot.focusedPanelId);
+    setOverviewMode(snapshot.overviewMode);
+  }, []);
+
+  useSpatialLayoutPrefs({
+    brand: glassesMode.brand,
+    serverScopeIds,
+    panelUniverseIds,
+    maxPanels,
+    value: layoutSnapshot,
+    onRestore: restoreSpatialLayout,
   });
 
   const applyTranscriptRoute = useCallback(
