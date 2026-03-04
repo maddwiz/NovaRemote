@@ -156,6 +156,12 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+async function emitAppState(nextState: "active" | "background" | "inactive") {
+  const { AppState } = await import("react-native");
+  const appStateMock = AppState as unknown as { __emit?: (state: string) => void };
+  appStateMock.__emit?.(nextState);
+}
+
 describe("useVrLiveRuntime", () => {
   it("routes runtime stream subscriptions through the VR stream pool with pooled base paths", async () => {
     const dgx = makeServer("dgx", "DGX");
@@ -414,6 +420,93 @@ describe("useVrLiveRuntime", () => {
     await act(async () => {
       renderer?.unmount();
     });
+  });
+
+  it("auto-syncs workspace streams and pauses/resumes with app lifecycle", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string,
+        enter?: boolean
+      ) => Promise<void>
+    >(async () => undefined);
+    const openStream = vi.fn((args: { server: { id: string }; session: string }) => `${args.server.id}::${args.session}`);
+    const closeStream = vi.fn();
+    const closeServer = vi.fn();
+    const closeAll = vi.fn();
+    const pause = vi.fn();
+    const resume = vi.fn();
+    const trackedStreamCount = vi.fn(() => 3);
+    const activeStreamCount = vi.fn(() => 2);
+    const isPaused = vi.fn(() => false);
+
+    const streamPoolMock: VrStreamPool = {
+      openStream,
+      closeStream,
+      closeServer,
+      closeAll,
+      pause,
+      resume,
+      trackedStreamCount,
+      activeStreamCount,
+      isPaused,
+    };
+
+    let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Runtime not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({ sendMock }),
+        streamPool: streamPoolMock,
+        autoSyncWorkspacePanelStreams: true,
+        pauseWorkspaceStreamsOnAppBackground: true,
+        maxPanels: 4,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(openStream).toHaveBeenCalledTimes(2);
+    expect(current().getStreamPoolSnapshot().managed).toBe(2);
+
+    await act(async () => {
+      await emitAppState("background");
+    });
+    expect(pause).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      await emitAppState("active");
+    });
+    expect(resume).toHaveBeenCalledTimes(1);
+    expect(openStream).toHaveBeenCalledTimes(4);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+    expect(closeStream).toHaveBeenCalledTimes(2);
+    expect(closeAll).toHaveBeenCalledTimes(1);
   });
 
   it("applies layout presets from voice and gesture dispatch without transport calls", async () => {

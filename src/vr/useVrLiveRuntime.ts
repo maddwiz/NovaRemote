@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef } from "react";
+import { AppState, AppStateStatus } from "react-native";
 
 import { ServerConnection } from "../types";
 import { VrLayoutPreset } from "./contracts";
@@ -13,6 +14,9 @@ export type UseVrLiveRuntimeArgs = {
   initialPreset?: VrLayoutPreset;
   sessionClient?: VrSessionClient;
   streamPool?: VrStreamPool;
+  autoSyncWorkspacePanelStreams?: boolean;
+  workspaceStreamCallbacks?: VrWorkspaceStreamCallbacks;
+  pauseWorkspaceStreamsOnAppBackground?: boolean;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
   onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
@@ -55,6 +59,9 @@ export function useVrLiveRuntime({
   initialPreset,
   sessionClient,
   streamPool,
+  autoSyncWorkspacePanelStreams = false,
+  workspaceStreamCallbacks,
+  pauseWorkspaceStreamsOnAppBackground = true,
   onReconnectServer,
   onReconnectServers,
   onCreateAgent,
@@ -254,6 +261,46 @@ export function useVrLiveRuntime({
     });
     managedPanelStreamsRef.current.clear();
   }, [unsubscribeServerSessionStream]);
+
+  useEffect(() => {
+    if (!autoSyncWorkspacePanelStreams) {
+      return;
+    }
+    syncWorkspacePanelStreams(workspaceStreamCallbacks);
+    return () => {
+      clearWorkspacePanelStreams();
+    };
+  }, [autoSyncWorkspacePanelStreams, clearWorkspacePanelStreams, syncWorkspacePanelStreams, workspaceStreamCallbacks]);
+
+  useEffect(() => {
+    if (!autoSyncWorkspacePanelStreams || !pauseWorkspaceStreamsOnAppBackground) {
+      return;
+    }
+
+    const handleAppState = (nextState: AppStateStatus) => {
+      if (nextState === "active") {
+        resumeServerStreams();
+        syncWorkspacePanelStreams(workspaceStreamCallbacks);
+        return;
+      }
+      pauseServerStreams();
+    };
+
+    const subscription = AppState.addEventListener("change", handleAppState);
+    if (AppState.currentState && AppState.currentState !== "active") {
+      handleAppState(AppState.currentState);
+    }
+    return () => {
+      subscription.remove();
+    };
+  }, [
+    autoSyncWorkspacePanelStreams,
+    pauseWorkspaceStreamsOnAppBackground,
+    pauseServerStreams,
+    resumeServerStreams,
+    syncWorkspacePanelStreams,
+    workspaceStreamCallbacks,
+  ]);
 
   const input = useVrInputRouter({
     workspace,
