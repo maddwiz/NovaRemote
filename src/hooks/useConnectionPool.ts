@@ -128,7 +128,13 @@ type ReactNativeWebSocketCtor = new (
   options?: { headers?: Record<string, string> }
 ) => WebSocket;
 
-const ReactNativeWebSocket = WebSocket as unknown as ReactNativeWebSocketCtor;
+const ReactNativeWebSocket =
+  typeof globalThis !== "undefined" && "WebSocket" in globalThis
+    ? (globalThis.WebSocket as unknown as ReactNativeWebSocketCtor)
+    : null;
+
+const WS_READY_STATE_CONNECTING = 0;
+const WS_READY_STATE_OPEN = 1;
 
 const EMPTY_CAPABILITIES: ServerCapabilities = {
   terminal: false,
@@ -1070,7 +1076,19 @@ export function useConnectionPool({
       }
 
       const existing = wsRefs.current.get(serverId)?.get(session);
-      if (existing && (existing.readyState === WebSocket.CONNECTING || existing.readyState === WebSocket.OPEN)) {
+      if (
+        existing &&
+        (existing.readyState === WS_READY_STATE_CONNECTING || existing.readyState === WS_READY_STATE_OPEN)
+      ) {
+        return;
+      }
+
+      if (!ReactNativeWebSocket) {
+        dispatch({
+          type: "SET_ERROR",
+          serverId,
+          error: "WebSocket transport is unavailable in this runtime.",
+        });
         return;
       }
 
