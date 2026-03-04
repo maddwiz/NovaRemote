@@ -268,7 +268,7 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     }
     const targetPanel = findPanelByTarget(panels, target);
     if (!targetPanel) {
-      return { kind: "none" };
+      return { kind: "create_agent", name: `${name} for ${target}`.trim() };
     }
     return { kind: "create_agent", name, panelId: targetPanel.id };
   }
@@ -291,7 +291,7 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     }
     const targetPanel = findPanelByTarget(panels, target);
     if (!targetPanel) {
-      return { kind: "none" };
+      return { kind: "set_agent_goal", name, goal: `${goal} for ${target}`.trim() };
     }
     return {
       kind: "set_agent_goal",

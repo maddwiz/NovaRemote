@@ -204,6 +204,11 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const createAgentWithForPhrase = resolveSpatialVoiceRoute({
+      transcript: "create agent watch for errors",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
     const setAgentGoal = resolveSpatialVoiceRoute({
       transcript: "set agent deploy bot goal npm run deploy",
       panels: PANELS,
@@ -216,6 +221,11 @@ describe("resolveSpatialVoiceRoute", () => {
     });
     const setAgentGoalForAllServers = resolveSpatialVoiceRoute({
       transcript: "set agent build watcher goal npm run lint for all",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const setAgentGoalWithForPhrase = resolveSpatialVoiceRoute({
+      transcript: "set agent deploy bot goal run deploy for staging",
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
@@ -272,6 +282,10 @@ describe("resolveSpatialVoiceRoute", () => {
       name: "deploy bot",
       allServers: true,
     });
+    expect(createAgentWithForPhrase).toEqual({
+      kind: "create_agent",
+      name: "watch for errors",
+    });
     expect(setAgentGoal).toEqual({
       kind: "set_agent_goal",
       name: "deploy bot",
@@ -288,6 +302,11 @@ describe("resolveSpatialVoiceRoute", () => {
       name: "build watcher",
       goal: "npm run lint",
       allServers: true,
+    });
+    expect(setAgentGoalWithForPhrase).toEqual({
+      kind: "set_agent_goal",
+      name: "deploy bot",
+      goal: "run deploy for staging",
     });
   });
 

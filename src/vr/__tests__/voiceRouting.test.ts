@@ -106,6 +106,10 @@ describe("parseVrVoiceIntent", () => {
       name: "deploy bot",
       allServers: true,
     });
+    expect(parseVrVoiceIntent("create agent watch for errors", PANELS, "dgx-main")).toEqual({
+      kind: "create_agent",
+      name: "watch for errors",
+    });
     expect(parseVrVoiceIntent("set agent deploy bot goal npm run deploy", PANELS, "dgx-main")).toEqual({
       kind: "set_agent_goal",
       name: "deploy bot",
@@ -124,6 +128,11 @@ describe("parseVrVoiceIntent", () => {
       name: "build watcher",
       goal: "npm run lint",
       allServers: true,
+    });
+    expect(parseVrVoiceIntent("set agent deploy bot goal run deploy for staging", PANELS, "dgx-main")).toEqual({
+      kind: "set_agent_goal",
+      name: "deploy bot",
+      goal: "run deploy for staging",
     });
     expect(parseVrVoiceIntent("approve ready agents", PANELS, "dgx-main")).toEqual({
       kind: "approve_ready_agents",
