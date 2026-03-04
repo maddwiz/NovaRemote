@@ -645,4 +645,65 @@ describe("GlassesModeScreen", () => {
       screen.unmount();
     });
   });
+
+  it("blocks glasses voice channel creation when workspace role cannot manage channels", async () => {
+    const createChannel = vi.fn();
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [],
+      loading: false,
+      createChannel,
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    useSharedWorkspacesMock.mockReturnValue({
+      workspaces: [
+        {
+          id: "workspace-viewer",
+          name: "Viewer Space",
+          serverIds: ["dgx"],
+          members: [{ id: "local-user", name: "Local User", role: "viewer" }],
+          channelId: "channel-workspace-viewer",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(),
+      renameWorkspace: vi.fn(),
+      setWorkspaceServers: vi.fn(),
+      setMemberRole: vi.fn(),
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([[dgx.id, makeConnection(dgx, ["main"])]]);
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections, {
+              voiceTranscript: "create channel triage",
+            }),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(createChannel).not.toHaveBeenCalled();
+    expect(() => screen.root.findByProps({ children: "Channel management is blocked for Viewer Space." })).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
 });
