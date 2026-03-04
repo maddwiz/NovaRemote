@@ -184,6 +184,7 @@ export function GlassesModeScreen() {
     onSetGlassesVadSensitivityDb,
     onSetGlassesLoopCaptureMs,
     onSetGlassesHeadsetPttEnabled,
+    onOpenVrCommandCenter,
     onVoiceStartCapture,
     onVoiceStopCaptureForServer,
     onVoiceSendTranscriptForServer,
@@ -788,6 +789,14 @@ export function GlassesModeScreen() {
               onPress={() => setSettingsVisible((current) => !current)}
             >
               <Text style={styles.glassesRouteButtonText}>{settingsVisible ? "Hide Settings" : "Settings"}</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open VR command center"
+              style={styles.glassesRouteButton}
+              onPress={onOpenVrCommandCenter}
+            >
+              <Text style={styles.glassesRouteButtonText}>Open VR</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
