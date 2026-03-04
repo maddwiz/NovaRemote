@@ -10,6 +10,7 @@ import { QrScannerModal } from "../components/QrScannerModal";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import { getWorkspaceLocalMember, getWorkspacePermissions } from "../workspacePermissions";
+import { groupServersByVmHost } from "../serverSwitcherRailModel";
 
 type ServersScreenProps = {
   servers: ServerProfile[];
@@ -204,45 +205,7 @@ export function ServersScreen({
     }
     setWorkspaceServerIds([seedId]);
   }, [activeServerId, servers, workspaceServerIds.length]);
-  const groupedServers = useMemo(() => {
-    const groups = new Map<string, { label: string; servers: ServerProfile[] }>();
-    servers.forEach((server) => {
-      const vmHost = server.vmHost?.trim() || "";
-      const key = vmHost ? `vmhost:${vmHost.toLowerCase()}` : "standalone";
-      const label = vmHost || "Standalone";
-      const existing = groups.get(key);
-      if (existing) {
-        existing.servers.push(server);
-        return;
-      }
-      groups.set(key, { label, servers: [server] });
-    });
-
-    return Array.from(groups.entries())
-      .map(([key, value]) => ({
-        key,
-        label: value.label,
-        servers: value.servers
-          .slice()
-          .sort((a, b) => {
-            const aVm = (a.vmName || a.name).toLowerCase();
-            const bVm = (b.vmName || b.name).toLowerCase();
-            if (aVm !== bVm) {
-              return aVm.localeCompare(bVm);
-            }
-            return a.name.localeCompare(b.name);
-          }),
-      }))
-      .sort((a, b) => {
-        if (a.key === "standalone") {
-          return -1;
-        }
-        if (b.key === "standalone") {
-          return 1;
-        }
-        return a.label.localeCompare(b.label);
-      });
-  }, [servers]);
+  const groupedServers = useMemo(() => groupServersByVmHost(servers), [servers]);
 
   const channelsByWorkspace = useMemo(() => {
     const grouped = new Map<string, typeof voiceChannels>();
@@ -304,17 +267,26 @@ export function ServersScreen({
           <View key={group.key} style={styles.serverCard}>
             <Text style={styles.panelLabel}>{`${group.label} (${group.servers.length})`}</Text>
             <View style={styles.serverListWrap}>
-              {group.servers.map((server) => (
-                <ServerCard
-                  key={server.id}
-                  server={server}
-                  isActive={server.id === activeServerId}
-                  onUse={onUseServer}
-                  onEdit={onBeginEditServer}
-                  onDelete={onDeleteServer}
-                  onShare={onShareServer}
-                  onOpenSsh={onOpenServerSsh}
-                />
+              {group.vmTypeGroups.map((vmTypeGroup) => (
+                <View key={`${group.key}-${vmTypeGroup.key}`} style={styles.serverCard}>
+                  {group.vmTypeGroups.length > 1 ? (
+                    <Text style={styles.serverSubtitle}>{`${vmTypeGroup.label} (${vmTypeGroup.servers.length})`}</Text>
+                  ) : null}
+                  <View style={styles.serverListWrap}>
+                    {vmTypeGroup.servers.map((server) => (
+                      <ServerCard
+                        key={server.id}
+                        server={server}
+                        isActive={server.id === activeServerId}
+                        onUse={onUseServer}
+                        onEdit={onBeginEditServer}
+                        onDelete={onDeleteServer}
+                        onShare={onShareServer}
+                        onOpenSsh={onOpenServerSsh}
+                      />
+                    ))}
+                  </View>
+                </View>
               ))}
             </View>
           </View>
