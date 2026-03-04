@@ -2,8 +2,10 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { useVrLiveRuntimeMock } = vi.hoisted(() => ({
+const { useVrLiveRuntimeMock, useSharedWorkspacesMock, useVoiceChannelsMock } = vi.hoisted(() => ({
   useVrLiveRuntimeMock: vi.fn(),
+  useSharedWorkspacesMock: vi.fn(),
+  useVoiceChannelsMock: vi.fn(),
 }));
 
 vi.mock("expo-secure-store", () => ({
@@ -15,8 +17,16 @@ vi.mock("../vr/useVrLiveRuntime", () => ({
   useVrLiveRuntime: (...args: unknown[]) => useVrLiveRuntimeMock(...args),
 }));
 
+vi.mock("../hooks/useSharedWorkspaces", () => ({
+  useSharedWorkspaces: (...args: unknown[]) => useSharedWorkspacesMock(...args),
+}));
+
+vi.mock("../hooks/useVoiceChannels", () => ({
+  useVoiceChannels: (...args: unknown[]) => useVoiceChannelsMock(...args),
+}));
+
 import { AppProvider } from "../context/AppContext";
-import { ServerConnection, ServerProfile } from "../types";
+import { ServerConnection, ServerProfile, SharedWorkspace, VoiceChannel } from "../types";
 import { VrCommandCenterScreen } from "./VrCommandCenterScreen";
 
 function makeServer(id: string, name: string): ServerProfile {
@@ -134,6 +144,27 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 beforeEach(() => {
   useVrLiveRuntimeMock.mockReset();
+  useSharedWorkspacesMock.mockReset();
+  useVoiceChannelsMock.mockReset();
+  useSharedWorkspacesMock.mockReturnValue({
+    workspaces: [],
+    loading: false,
+    createWorkspace: vi.fn(),
+    deleteWorkspace: vi.fn(),
+    renameWorkspace: vi.fn(),
+    setWorkspaceServers: vi.fn(),
+    setMemberRole: vi.fn(),
+  });
+  useVoiceChannelsMock.mockReturnValue({
+    channels: [],
+    loading: false,
+    createChannel: vi.fn(),
+    deleteChannel: vi.fn(),
+    pruneWorkspaceChannels: vi.fn(),
+    joinChannel: vi.fn(),
+    leaveChannel: vi.fn(),
+    toggleMute: vi.fn(),
+  });
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const joined = args.map((value) => String(value)).join(" ");
     if (joined.includes("react-test-renderer is deprecated")) {
@@ -153,8 +184,34 @@ afterEach(() => {
 });
 
 describe("VrCommandCenterScreen", () => {
-  async function renderScreen(runtime: ReturnType<typeof makeRuntime>) {
+  async function renderScreen(
+    runtime: ReturnType<typeof makeRuntime>,
+    options?: { workspaces?: SharedWorkspace[]; channels?: VoiceChannel[] }
+  ) {
     useVrLiveRuntimeMock.mockReturnValue(runtime);
+    if (options?.workspaces) {
+      useSharedWorkspacesMock.mockReturnValue({
+        workspaces: options.workspaces,
+        loading: false,
+        createWorkspace: vi.fn(),
+        deleteWorkspace: vi.fn(),
+        renameWorkspace: vi.fn(),
+        setWorkspaceServers: vi.fn(),
+        setMemberRole: vi.fn(),
+      });
+    }
+    if (options?.channels) {
+      useVoiceChannelsMock.mockReturnValue({
+        channels: options.channels,
+        loading: false,
+        createChannel: vi.fn(),
+        deleteChannel: vi.fn(),
+        pruneWorkspaceChannels: vi.fn(),
+        joinChannel: vi.fn(),
+        leaveChannel: vi.fn(),
+        toggleMute: vi.fn(),
+      });
+    }
     const dgx = makeServer("dgx", "DGX");
     const connection = makeConnection(dgx, ["main", "build"]);
     const terminals = {
@@ -221,6 +278,80 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Send command to focused panel" }).props.onPress();
     });
     expect(runtime.dispatchVoice).toHaveBeenCalledWith("npm run build", { targetPanelId: "dgx::main" });
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("scopes panels to workspace and manages voice channel actions", async () => {
+    const runtime = makeRuntime();
+    const joinChannel = vi.fn();
+    const toggleMute = vi.fn();
+    const leaveChannel = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    const channels: VoiceChannel[] = [
+      {
+        id: "voice-1",
+        workspaceId: "workspace-1",
+        name: "incident",
+        joined: false,
+        muted: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+      {
+        id: "voice-2",
+        workspaceId: "workspace-1",
+        name: "release",
+        joined: true,
+        muted: true,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    useVoiceChannelsMock.mockReturnValue({
+      channels,
+      loading: false,
+      createChannel: vi.fn(),
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel,
+      leaveChannel,
+      toggleMute,
+    });
+
+    const renderer = await renderScreen(runtime, { workspaces });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Scope VR panels to workspace Platform Ops" }).props.onPress();
+    });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Join VR voice channel incident" }).props.onPress();
+    });
+    expect(joinChannel).toHaveBeenCalledWith("voice-1");
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Unmute VR joined channel release" }).props.onPress();
+    });
+    expect(toggleMute).toHaveBeenCalledWith("voice-2");
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Leave VR joined channel release" }).props.onPress();
+    });
+    expect(leaveChannel).toHaveBeenCalledWith("voice-2");
 
     await act(async () => {
       renderer.unmount();

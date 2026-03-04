@@ -2,10 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { useAppContext } from "../context/AppContext";
+import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
+import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import { styles } from "../theme/styles";
 import { VrLayoutPreset } from "../vr/contracts";
 import { useVrLiveRuntime } from "../vr/useVrLiveRuntime";
 import { buildVrPanelId } from "../vr/useVrWorkspace";
+import { getWorkspacePermissions } from "../workspacePermissions";
 
 const VR_PRESETS: VrLayoutPreset[] = ["arc", "grid", "stacked", "cockpit", "custom"];
 
@@ -40,6 +43,9 @@ export function VrCommandCenterScreen() {
   } = useAppContext().terminals;
   const [voiceInput, setVoiceInput] = useState<string>("");
   const [commandInput, setCommandInput] = useState<string>("");
+  const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
+  const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
+  const { channels: voiceChannels, loading: voiceChannelsLoading, joinChannel, leaveChannel, toggleMute } = useVoiceChannels();
   const runtime = useVrLiveRuntime({
     connections,
     maxPanels: 12,
@@ -60,10 +66,33 @@ export function VrCommandCenterScreen() {
     () => runtime.workspace.panels.find((panel) => panel.id === runtime.workspace.focusedPanelId) || null,
     [runtime.workspace.focusedPanelId, runtime.workspace.panels]
   );
+  const workspaceScope = useMemo(() => {
+    if (!activeWorkspaceId) {
+      return null;
+    }
+    const workspace = sharedWorkspaces.find((entry) => entry.id === activeWorkspaceId);
+    if (!workspace) {
+      return null;
+    }
+    return {
+      id: workspace.id,
+      name: workspace.name,
+      serverIds: new Set(workspace.serverIds),
+    };
+  }, [activeWorkspaceId, sharedWorkspaces]);
+  const visiblePanels = useMemo(() => {
+    if (!workspaceScope) {
+      return runtime.workspace.panels;
+    }
+    return runtime.workspace.panels.filter((panel) => workspaceScope.serverIds.has(panel.serverId));
+  }, [runtime.workspace.panels, workspaceScope]);
   const availablePanels = useMemo(() => {
     const visible = new Set(runtime.workspace.panels.map((panel) => panel.id));
     const next: Array<{ id: string; serverId: string; session: string; label: string }> = [];
     connections.forEach((connection, serverId) => {
+      if (workspaceScope && !workspaceScope.serverIds.has(serverId)) {
+        return;
+      }
       connection.openSessions.forEach((session) => {
         const id = buildVrPanelId(serverId, session);
         if (visible.has(id)) {
@@ -78,7 +107,19 @@ export function VrCommandCenterScreen() {
       });
     });
     return next;
-  }, [connections, runtime.workspace.panels]);
+  }, [connections, runtime.workspace.panels, workspaceScope]);
+  const voiceChannelsByWorkspace = useMemo(() => {
+    const grouped = new Map<string, typeof voiceChannels>();
+    voiceChannels.forEach((channel) => {
+      const current = grouped.get(channel.workspaceId);
+      if (current) {
+        current.push(channel);
+      } else {
+        grouped.set(channel.workspaceId, [channel]);
+      }
+    });
+    return grouped;
+  }, [voiceChannels]);
   const [snapshot, setSnapshot] = useState(() => runtime.getStreamPoolSnapshot());
 
   useEffect(() => {
@@ -90,6 +131,15 @@ export function VrCommandCenterScreen() {
       clearInterval(timer);
     };
   }, [runtime.getStreamPoolSnapshot]);
+
+  useEffect(() => {
+    if (!activeWorkspaceId) {
+      return;
+    }
+    if (!sharedWorkspaces.some((workspace) => workspace.id === activeWorkspaceId)) {
+      setActiveWorkspaceId(null);
+    }
+  }, [activeWorkspaceId, sharedWorkspaces]);
 
   const sendVoiceInput = useCallback(() => {
     const transcript = voiceInput.trim();
@@ -117,7 +167,7 @@ export function VrCommandCenterScreen() {
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>VR Command Center (Preview)</Text>
       <Text style={styles.serverSubtitle}>
-        {`Focused server ${focusedServerId || "none"} • Panels ${runtime.workspace.panels.length} • Preset ${runtime.workspace.preset}`}
+        {`Focused server ${focusedServerId || "none"} • Panels ${visiblePanels.length}/${runtime.workspace.panels.length} • Preset ${runtime.workspace.preset}`}
       </Text>
 
       <View style={styles.vrRuntimeStatsRow}>
@@ -143,6 +193,33 @@ export function VrCommandCenterScreen() {
             </Text>
           </Pressable>
         ))}
+      </View>
+
+      <View style={styles.vrRuntimeInputCard}>
+        <Text style={styles.serverSubtitle}>Workspace scope</Text>
+        <View style={styles.vrRuntimeActionRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Show VR panels for all servers"
+            style={[styles.chip, activeWorkspaceId === null ? styles.chipActive : null]}
+            onPress={() => setActiveWorkspaceId(null)}
+          >
+            <Text style={[styles.chipText, activeWorkspaceId === null ? styles.chipTextActive : null]}>All servers</Text>
+          </Pressable>
+          {sharedWorkspaces.map((workspace) => (
+            <Pressable
+              key={`vr-scope-${workspace.id}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Scope VR panels to workspace ${workspace.name}`}
+              style={[styles.chip, activeWorkspaceId === workspace.id ? styles.chipActive : null]}
+              onPress={() => setActiveWorkspaceId(workspace.id)}
+            >
+              <Text style={[styles.chipText, activeWorkspaceId === workspace.id ? styles.chipTextActive : null]}>
+                {workspace.name}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
       </View>
 
       <View style={styles.vrRuntimeActionRow}>
@@ -238,7 +315,11 @@ export function VrCommandCenterScreen() {
         <Text style={styles.serverSubtitle}>Panel pool</Text>
         <View style={styles.vrRuntimeActionRow}>
           {availablePanels.length === 0 ? (
-            <Text style={styles.emptyText}>All open sessions are already in the workspace.</Text>
+            <Text style={styles.emptyText}>
+              {workspaceScope
+                ? `No additional open sessions for ${workspaceScope.name}.`
+                : "All open sessions are already in the workspace."}
+            </Text>
           ) : (
             availablePanels.map((entry) => (
               <Pressable
@@ -261,8 +342,90 @@ export function VrCommandCenterScreen() {
         </View>
       ) : null}
 
+      <View style={styles.vrRuntimeInputCard}>
+        <Text style={styles.serverSubtitle}>Workspace voice channels</Text>
+        <Text style={styles.emptyText}>
+          {voiceChannelsLoading ? "Loading channel state..." : "Join, leave, and mute workspace channels in VR mode."}
+        </Text>
+        {sharedWorkspaces.length === 0 ? (
+          <Text style={styles.emptyText}>No workspaces found. Create one from the Servers tab.</Text>
+        ) : null}
+        {sharedWorkspaces.map((workspace) => {
+          const workspaceChannels = voiceChannelsByWorkspace.get(workspace.id) || [];
+          const joinedChannel = workspaceChannels.find((channel) => channel.joined);
+          const permissions = getWorkspacePermissions(workspace);
+          return (
+            <View key={`vr-workspace-channel-${workspace.id}`} style={styles.vrRuntimePanelCard}>
+              <View style={styles.rowInlineSpace}>
+                <Text style={styles.serverName}>{workspace.name}</Text>
+                <Text style={[styles.livePill, joinedChannel ? styles.livePillOn : styles.livePillOff]}>
+                  {joinedChannel ? (joinedChannel.muted ? "MUTED" : "LIVE") : "IDLE"}
+                </Text>
+              </View>
+              {workspaceChannels.length === 0 ? <Text style={styles.emptyText}>No channels configured.</Text> : null}
+              {workspaceChannels.length > 0 ? (
+                <View style={styles.vrRuntimeActionRow}>
+                  {workspaceChannels.map((channel) => {
+                    const active = channel.joined;
+                    return (
+                      <Pressable
+                        key={`vr-channel-${channel.id}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`${active ? "Leave" : "Join"} VR voice channel ${channel.name}`}
+                        style={[
+                          styles.chip,
+                          active ? styles.chipActive : null,
+                          !permissions.canJoinChannels ? styles.buttonDisabled : null,
+                        ]}
+                        disabled={!permissions.canJoinChannels}
+                        onPress={() => {
+                          if (!permissions.canJoinChannels) {
+                            return;
+                          }
+                          if (active) {
+                            leaveChannel(channel.id);
+                            return;
+                          }
+                          joinChannel(channel.id);
+                        }}
+                      >
+                        <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
+                          {`#${channel.name}${channel.muted ? " (muted)" : ""}`}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              ) : null}
+              {joinedChannel ? (
+                <View style={styles.vrRuntimeActionRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${joinedChannel.muted ? "Unmute" : "Mute"} VR joined channel ${joinedChannel.name}`}
+                    style={[styles.actionButton, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                    disabled={!permissions.canJoinChannels}
+                    onPress={() => toggleMute(joinedChannel.id)}
+                  >
+                    <Text style={styles.actionButtonText}>{joinedChannel.muted ? "Unmute" : "Mute"}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Leave VR joined channel ${joinedChannel.name}`}
+                    style={[styles.actionButton, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                    disabled={!permissions.canJoinChannels}
+                    onPress={() => leaveChannel(joinedChannel.id)}
+                  >
+                    <Text style={styles.actionButtonText}>Leave</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
+      </View>
+
       <View style={styles.vrRuntimePanelList}>
-        {runtime.workspace.panels.map((panel) => {
+        {visiblePanels.map((panel) => {
           const focused = panel.id === runtime.workspace.focusedPanelId;
           const outputPreview = panel.output.trim() || "Waiting for terminal output...";
           return (
@@ -355,6 +518,13 @@ export function VrCommandCenterScreen() {
             </View>
           );
         })}
+        {visiblePanels.length === 0 ? (
+          <Text style={styles.emptyText}>
+            {workspaceScope
+              ? `No workspace panels visible for ${workspaceScope.name}.`
+              : "No workspace panels are currently visible."}
+          </Text>
+        ) : null}
       </View>
     </View>
   );
