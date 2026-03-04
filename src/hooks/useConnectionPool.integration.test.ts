@@ -345,6 +345,41 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("switches focused server without additional network requests or websocket reconnects", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("homelab", "Homelab")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    await harness.waitFor(() => {
+      const pool = harness.getPool();
+      const dgxReady = Boolean(pool.connections.get("dgx")?.allSessions.includes("main"));
+      const homelabReady = Boolean(pool.connections.get("homelab")?.allSessions.includes("main"));
+      return dgxReady && homelabReady;
+    }, "session hydration for both servers");
+
+    const baselineFetchCalls = fetchMock.mock.calls.length;
+    const baselineWsCount = FakeWebSocket.instances.length;
+
+    await harness.act(async () => {
+      harness.getPool().setFocusedServerId("homelab");
+    });
+    await harness.flush();
+
+    expect(harness.getPool().focusedServerId).toBe("homelab");
+    expect(fetchMock.mock.calls.length).toBe(baselineFetchCalls);
+    expect(FakeWebSocket.instances.length).toBe(baselineWsCount);
+
+    await harness.act(async () => {
+      harness.getPool().setFocusedServerId("dgx");
+    });
+    await harness.flush();
+
+    expect(harness.getPool().focusedServerId).toBe("dgx");
+    expect(fetchMock.mock.calls.length).toBe(baselineFetchCalls);
+    expect(FakeWebSocket.instances.length).toBe(baselineWsCount);
+
+    await harness.unmount();
+  });
+
   it("reconnects a server when baseUrl/token fingerprint changes", async () => {
     const original = makeServer("dgx", "DGX");
     const changed: ServerProfile = {
