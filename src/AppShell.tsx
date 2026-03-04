@@ -712,6 +712,7 @@ export default function AppShell() {
   });
   const {
     connections: poolConnections,
+    lifecyclePaused: poolLifecyclePaused,
     focusedServerId: poolFocusedServerId,
     focusedConnection: poolFocusedConnection,
     setFocusedServerId: setPoolFocusedServerId,
@@ -896,6 +897,14 @@ export default function AppShell() {
   const refreshAllServers = useCallback(async () => {
     await refreshPoolAll();
   }, [refreshPoolAll]);
+
+  const connectAllServers = useCallback(() => {
+    connectPoolAll();
+  }, [connectPoolAll]);
+
+  const disconnectAllServers = useCallback(() => {
+    disconnectPoolAll();
+  }, [disconnectPoolAll]);
 
   const [startCwd, setStartCwd] = useState<string>(DEFAULT_CWD);
   const [startPrompt, setStartPrompt] = useState<string>("");
@@ -2283,6 +2292,7 @@ export default function AppShell() {
     unreadServers,
     connectedServerCount: allConnectedServers.length,
     totalActiveStreams,
+    poolLifecyclePaused,
     servers,
     allSessions,
     openSessions,
@@ -2357,6 +2367,8 @@ export default function AppShell() {
     reconnectServer,
     reconnectServers,
     reconnectAllServers,
+    connectAllServers,
+    disconnectAllServers,
     editServer,
     openSshFallback,
     createLocalAiSession,

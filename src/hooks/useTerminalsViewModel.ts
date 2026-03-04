@@ -29,6 +29,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     unreadServers,
     connectedServerCount,
     totalActiveStreams,
+    poolLifecyclePaused,
     servers,
     allSessions,
     openSessions,
@@ -103,6 +104,8 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     reconnectServer,
     reconnectServers,
     reconnectAllServers,
+    connectAllServers,
+    disconnectAllServers,
     editServer,
     openSshFallback,
     createLocalAiSession,
@@ -199,6 +202,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     unreadServers,
     connectedServerCount,
     totalActiveStreams,
+    poolLifecyclePaused,
     servers,
     allSessions,
     openSessions,
@@ -284,6 +288,8 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onReconnectServer: reconnectServer,
     onReconnectServers: reconnectServers,
     onReconnectAllServers: reconnectAllServers,
+    onConnectAllServers: connectAllServers,
+    onDisconnectAllServers: disconnectAllServers,
     onEditServer: editServer,
     onOpenSshFallback: () => {
       void runWithStatus("Opening SSH fallback", async () => {

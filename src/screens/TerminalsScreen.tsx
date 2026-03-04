@@ -199,6 +199,7 @@ export function TerminalsScreen() {
     unreadServers,
     connectedServerCount,
     totalActiveStreams,
+    poolLifecyclePaused,
     servers,
     allSessions,
     openSessions,
@@ -272,6 +273,8 @@ export function TerminalsScreen() {
     onReconnectServer,
     onReconnectServers,
     onReconnectAllServers,
+    onConnectAllServers,
+    onDisconnectAllServers,
     onEditServer,
     onOpenSshFallback,
     onStartSession,
@@ -980,9 +983,22 @@ export function TerminalsScreen() {
         </View>
         <View style={styles.serverPoolSummaryRow}>
           <Text style={styles.serverSubtitle}>
-            {disconnectedServerCount > 0 ? `${disconnectedServerCount} server(s) disconnected` : "All configured servers are connected"}
+            {poolLifecyclePaused
+              ? "Pool paused. Streams are stopped until resumed."
+              : disconnectedServerCount > 0
+                ? `${disconnectedServerCount} server(s) disconnected`
+                : "All configured servers are connected"}
           </Text>
           <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={poolLifecyclePaused ? "Resume connection pool" : "Pause connection pool"}
+              style={[styles.actionButton, servers.length === 0 ? styles.buttonDisabled : null]}
+              disabled={servers.length === 0}
+              onPress={poolLifecyclePaused ? onConnectAllServers : onDisconnectAllServers}
+            >
+              <Text style={styles.actionButtonText}>{poolLifecyclePaused ? "Resume Pool" : "Pause Pool"}</Text>
+            </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Refresh sessions for all connected servers"

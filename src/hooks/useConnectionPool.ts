@@ -82,6 +82,7 @@ type CachedCapabilityProbe = {
 
 type ConnectionPool = {
   connections: Map<string, ServerConnection>;
+  lifecyclePaused: boolean;
   focusedServerId: string | null;
   focusedConnection: ServerConnection | null;
   setFocusedServerId: (id: string | null) => void;
@@ -979,6 +980,7 @@ export function useConnectionPool({
 }: UseConnectionPoolArgs): ConnectionPool {
   const [state, dispatch] = useReducer(reducer, {});
   const [focusedServerId, setFocusedServerIdState] = useState<string | null>(initialFocusedServerId);
+  const [lifecyclePaused, setLifecyclePausedState] = useState(false);
 
   const stateRef = useRef<ConnectionPoolState>(state);
   const wsRefs = useRef<Map<string, Map<string, WebSocket>>>(new Map());
@@ -996,6 +998,11 @@ export function useConnectionPool({
   useEffect(() => {
     stateRef.current = state;
   }, [state]);
+
+  const setLifecyclePaused = useCallback((next: boolean) => {
+    lifecyclePausedRef.current = next;
+    setLifecyclePausedState(next);
+  }, []);
 
   const clearRetry = useCallback((serverId: string, session: string) => {
     const timer = getNestedValue(streamRetryTimersRef.current, serverId, session);
@@ -1361,19 +1368,19 @@ export function useConnectionPool({
 
   const reconnectServer = useCallback(
     async (serverId: string, forceProbe: boolean = true) => {
-      lifecyclePausedRef.current = false;
+      setLifecyclePaused(false);
       await connectServer(serverId, forceProbe);
     },
-    [connectServer]
+    [connectServer, setLifecyclePaused]
   );
 
   const reconnectServers = useCallback(
     async (serverIds: string[], forceProbe: boolean = true) => {
       const uniqueServerIds = Array.from(new Set(serverIds.map((value) => value.trim()).filter(Boolean)));
-      lifecyclePausedRef.current = false;
+      setLifecyclePaused(false);
       await Promise.all(uniqueServerIds.map((serverId) => connectServer(serverId, forceProbe)));
     },
-    [connectServer]
+    [connectServer, setLifecyclePaused]
   );
 
   const fetchTail = useCallback(
@@ -1684,21 +1691,21 @@ export function useConnectionPool({
   }, []);
 
   const connectAll = useCallback(() => {
-    lifecyclePausedRef.current = false;
+    setLifecyclePaused(false);
     Object.values(stateRef.current).forEach((connection) => {
       if (connection.connected) {
         void connectServer(connection.server.id, false);
       }
     });
-  }, [connectServer]);
+  }, [connectServer, setLifecyclePaused]);
 
   const disconnectAll = useCallback(() => {
-    lifecyclePausedRef.current = true;
+    setLifecyclePaused(true);
     closeAllStreams();
     Object.keys(stateRef.current).forEach((serverId) => {
       dispatch({ type: "SET_STATUS", serverId, status: "disconnected" });
     });
-  }, [closeAllStreams]);
+  }, [closeAllStreams, setLifecyclePaused]);
 
   const refreshAll = useCallback(async () => {
     const jobs = Object.values(stateRef.current)
@@ -1739,7 +1746,7 @@ export function useConnectionPool({
 
   useEffect(() => {
     if (!enabled) {
-      lifecyclePausedRef.current = false;
+      setLifecyclePaused(false);
       closeAllStreams();
       return;
     }
@@ -1762,11 +1769,11 @@ export function useConnectionPool({
       autoconnectFingerprintRef.current[server.id] = fingerprint;
       void connectServer(server.id, true);
     });
-  }, [closeAllStreams, connectServer, enabled, state]);
+  }, [closeAllStreams, connectServer, enabled, setLifecyclePaused, state]);
 
   useEffect(() => {
     if (!enabled) {
-      lifecyclePausedRef.current = false;
+      setLifecyclePaused(false);
       closeAllStreams();
       return;
     }
@@ -1794,7 +1801,7 @@ export function useConnectionPool({
         connectStream(connection.server.id, session);
       });
     });
-  }, [closeAllStreams, closeStream, connectStream, enabled, state]);
+  }, [closeAllStreams, closeStream, connectStream, enabled, setLifecyclePaused, state]);
 
   useEffect(() => {
     if (!enabled) {
@@ -1980,6 +1987,7 @@ export function useConnectionPool({
 
   return {
     connections,
+    lifecyclePaused,
     focusedServerId,
     focusedConnection,
     setFocusedServerId,

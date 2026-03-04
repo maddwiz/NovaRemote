@@ -31,6 +31,7 @@ export type TerminalsViewModel = {
   unreadServers: Set<string>;
   connectedServerCount: number;
   totalActiveStreams: number;
+  poolLifecyclePaused: boolean;
   servers: ServerProfile[];
   allSessions: string[];
   openSessions: string[];
@@ -104,6 +105,8 @@ export type TerminalsViewModel = {
   onReconnectServer: (serverId: string) => void;
   onReconnectServers: (serverIds: string[]) => void;
   onReconnectAllServers: () => void;
+  onConnectAllServers: () => void;
+  onDisconnectAllServers: () => void;
   onEditServer: (serverId: string) => void;
   onOpenSshFallback: () => void;
   onStartSession: () => void;

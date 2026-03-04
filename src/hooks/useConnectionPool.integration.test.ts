@@ -495,17 +495,20 @@ describe("useConnectionPool websocket integration", () => {
 
     await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
     const firstWave = FakeWebSocket.instances.slice();
+    expect(harness.getPool().lifecyclePaused).toBe(false);
     await harness.act(async () => {
       harness.getPool().disconnectAll();
     });
 
     expect(firstWave.every((ws) => ws.readyState === FakeWebSocket.CLOSED)).toBe(true);
+    expect(harness.getPool().lifecyclePaused).toBe(true);
     expect(harness.getPool().connections.get("dgx")?.activeStreamCount).toBe(0);
     expect(harness.getPool().connections.get("cloud")?.activeStreamCount).toBe(0);
 
     await harness.act(async () => {
       harness.getPool().connectAll();
     });
+    expect(harness.getPool().lifecyclePaused).toBe(false);
     await harness.waitFor(
       () => FakeWebSocket.instances.length >= firstWave.length + 2,
       "reconnected websocket instances after connectAll"

@@ -28,6 +28,7 @@ function makeBaseArgs() {
     unreadServers: new Set<string>(),
     connectedServerCount: 0,
     totalActiveStreams: 0,
+    poolLifecyclePaused: false,
     servers: [],
     allSessions: [],
     openSessions: [],
@@ -140,6 +141,8 @@ function makeBaseArgs() {
     reconnectServer: vi.fn(),
     reconnectServers: vi.fn(),
     reconnectAllServers: vi.fn(),
+    connectAllServers: vi.fn(),
+    disconnectAllServers: vi.fn(),
     editServer: vi.fn(),
     openSshFallback: vi.fn(async () => undefined),
     createLocalAiSession: vi.fn(),
@@ -281,5 +284,21 @@ describe("useTerminalsViewModel", () => {
 
     expect(runWithStatus).toHaveBeenCalledTimes(1);
     expect(refreshAllServers).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes pool lifecycle actions to connect/disconnect callbacks", () => {
+    const connectAllServers = vi.fn();
+    const disconnectAllServers = vi.fn();
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      connectAllServers,
+      disconnectAllServers,
+    });
+
+    model.onConnectAllServers();
+    model.onDisconnectAllServers();
+
+    expect(connectAllServers).toHaveBeenCalledTimes(1);
+    expect(disconnectAllServers).toHaveBeenCalledTimes(1);
   });
 });
