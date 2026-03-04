@@ -86,6 +86,7 @@ import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
 import { evaluateCrossServerWatchAlerts } from "./crossServerWatchAlerts";
+import { findAgentIdsByName, hasExactAgentName } from "./agentMatching";
 import {
   AiEnginePreference,
   FleetRunResult,
@@ -1673,7 +1674,8 @@ export default function AppShell() {
     | { kind: "approve" }
     | { kind: "deny" }
     | { kind: "create"; name: string }
-    | { kind: "set_goal"; name: string; goal: string };
+    | { kind: "set_goal"; name: string; goal: string }
+    | { kind: "queue_command"; name: string; command: string };
   type PendingAgentServerAction = {
     serverId: string;
     action: AgentServerAction;
@@ -1696,6 +1698,7 @@ export default function AppShell() {
     agents: focusedServerAgents,
     addRuntimeAgent: addFocusedServerRuntimeAgent,
     setRuntimeAgentGoal: setFocusedServerRuntimeAgentGoal,
+    requestAgentApproval: requestFocusedServerAgentApproval,
     approveReadyApprovals: approveReadyAgentsForFocusedServer,
     denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer,
   } = useNovaAgentRuntime({
@@ -1718,37 +1721,64 @@ export default function AppShell() {
         if (!name) {
           return [];
         }
-        const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
-        const alreadyExists = focusedServerAgents.some((agent) => {
-          const agentName = agent.name.trim().toLowerCase().replace(/\s+/g, " ");
-          return agentName === normalizedName;
-        });
-        if (alreadyExists) {
+        if (hasExactAgentName(focusedServerAgents, name)) {
           return [];
         }
         const created = addFocusedServerRuntimeAgent(name);
         return created ? [created.agentId] : [];
       }
+      if (action.kind === "set_goal") {
+        const name = action.name.trim();
+        const goal = action.goal.trim();
+        if (!name || !goal) {
+          return [];
+        }
+        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
+        matchingAgentIds.forEach((agentId) => {
+          setFocusedServerRuntimeAgentGoal(agentId, goal);
+        });
+        return matchingAgentIds;
+      }
       const name = action.name.trim();
-      const goal = action.goal.trim();
-      if (!name || !goal) {
+      const command = action.command.trim();
+      if (!name || !command) {
         return [];
       }
-      const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
-      const matchingAgents = focusedServerAgents.filter((agent) => {
-        const agentName = agent.name.trim().toLowerCase().replace(/\s+/g, " ");
-        return agentName === normalizedName;
+      const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
+      if (matchingAgentIds.length === 0) {
+        return [];
+      }
+      const agentRuntimeConnection = agentRuntimeServerId ? poolConnections.get(agentRuntimeServerId) : null;
+      const sessionCandidates = agentRuntimeConnection
+        ? [...agentRuntimeConnection.openSessions, ...agentRuntimeConnection.allSessions]
+        : [];
+      const remoteSession = sessionCandidates.find((session) => !(agentRuntimeConnection?.localAiSessions || []).includes(session));
+      if (!remoteSession) {
+        return [];
+      }
+
+      const queuedAgentIds: string[] = [];
+      matchingAgentIds.forEach((agentId) => {
+        setFocusedServerRuntimeAgentGoal(agentId, command);
+        const queued = requestFocusedServerAgentApproval(agentId, {
+          command,
+          session: remoteSession,
+          summary: `Queued by voice route for ${remoteSession}`,
+        });
+        if (queued) {
+          queuedAgentIds.push(agentId);
+        }
       });
-      matchingAgents.forEach((agent) => {
-        setFocusedServerRuntimeAgentGoal(agent.agentId, goal);
-      });
-      return matchingAgents.map((agent) => agent.agentId);
+      return queuedAgentIds;
     },
     [
+      agentRuntimeServerId,
       addFocusedServerRuntimeAgent,
       approveReadyAgentsForFocusedServer,
       denyAllPendingAgentsForFocusedServer,
       focusedServerAgents,
+      poolConnections,
+      requestFocusedServerAgentApproval,
       setFocusedServerRuntimeAgentGoal,
     ]
   );
@@ -1836,6 +1866,12 @@ export default function AppShell() {
     [runAgentServerAction]
   );
 
+  const queueAgentCommandForServer = useCallback(
+    async (serverId: string, name: string, command: string): Promise<string[]> =>
+      await runAgentServerAction(serverId, { kind: "queue_command", name, command }),
+    [runAgentServerAction]
+  );
+
   const approveReadyAgentsForServers = useCallback(
     async (serverIds: string[]): Promise<string[]> => {
       const approved: string[] = [];
@@ -1882,6 +1918,18 @@ export default function AppShell() {
       return updated;
     },
     [setAgentGoalForServer]
+  );
+
+  const queueAgentCommandForServers = useCallback(
+    async (serverIds: string[], name: string, command: string): Promise<string[]> => {
+      const queued: string[] = [];
+      for (const serverId of uniqueServerIds(serverIds)) {
+        const next = await queueAgentCommandForServer(serverId, name, command);
+        queued.push(...next);
+      }
+      return queued;
+    },
+    [queueAgentCommandForServer]
   );
 
   const sendControlToSession = useCallback(
@@ -2604,6 +2652,8 @@ export default function AppShell() {
     setAgentGoalForServer,
     createAgentForServers,
     setAgentGoalForServers,
+    queueAgentCommandForServer,
+    queueAgentCommandForServers,
     approveReadyAgentsForFocusedServer,
     denyAllPendingAgentsForFocusedServer,
     approveReadyAgentsForServer,

@@ -321,6 +321,7 @@ describe("useVrLiveRuntime", () => {
     const onReconnectServers = vi.fn(async () => undefined);
     const onCreateAgent = vi.fn(async () => true);
     const onSetAgentGoal = vi.fn(async () => 1);
+    const onQueueAgentCommand = vi.fn(async () => 1);
     const onApproveReadyAgents = vi.fn(async () => ["agent-a", "agent-b"]);
     const onDenyAllPendingAgents = vi.fn(async () => ["agent-a"]);
     const onDisconnectAllServers = vi.fn(async () => undefined);
@@ -343,6 +344,7 @@ describe("useVrLiveRuntime", () => {
         onReconnectServers,
         onCreateAgent,
         onSetAgentGoal,
+        onQueueAgentCommand,
         onApproveReadyAgents,
         onDenyAllPendingAgents,
         onDisconnectAllServers,
@@ -429,6 +431,12 @@ describe("useVrLiveRuntime", () => {
     });
     expect(onSetAgentGoal).toHaveBeenCalledWith(["dgx"], "build watcher", "npm run test");
     expect(current().hudStatus?.message).toContain("Updated goal for 1 agent");
+
+    await act(async () => {
+      await current().dispatchVoice("agent build watcher run npm run test");
+    });
+    expect(onQueueAgentCommand).toHaveBeenCalledWith(["dgx"], "build watcher", "npm run test");
+    expect(current().hudStatus?.message).toContain("Queued 1 pending approval for build watcher");
 
     await act(async () => {
       await current().dispatchVoice("approve ready agents");

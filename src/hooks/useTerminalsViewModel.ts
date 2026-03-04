@@ -110,6 +110,8 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     setAgentGoalForServer,
     createAgentForServers,
     setAgentGoalForServers,
+    queueAgentCommandForServer,
+    queueAgentCommandForServers,
     approveReadyAgentsForFocusedServer,
     denyAllPendingAgentsForFocusedServer,
     approveReadyAgentsForServer,
@@ -298,6 +300,36 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     return updated;
   };
 
+  const runQueueAgentCommandForServer = async (
+    serverId: string,
+    name: string,
+    command: string
+  ): Promise<string[]> => {
+    if (typeof queueAgentCommandForServer === "function") {
+      const queued = await queueAgentCommandForServer(serverId, name, command);
+      return Array.isArray(queued) ? queued : [];
+    }
+    return [];
+  };
+
+  const runQueueAgentCommandForServers = async (
+    serverIds: string[],
+    name: string,
+    command: string
+  ): Promise<string[]> => {
+    const uniqueIds = uniqueServerIds(serverIds);
+    if (typeof queueAgentCommandForServers === "function") {
+      const queued = await queueAgentCommandForServers(uniqueIds, name, command);
+      return Array.isArray(queued) ? queued : [];
+    }
+    const queued: string[] = [];
+    for (const serverId of uniqueIds) {
+      const next = await runQueueAgentCommandForServer(serverId, name, command);
+      queued.push(...next);
+    }
+    return queued;
+  };
+
   const terminalsViewModel: TerminalsViewModel = {
     activeServer,
     connected,
@@ -398,6 +430,8 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onSetAgentGoalForServer: runSetAgentGoalForServer,
     onCreateAgentForServers: runCreateAgentForServers,
     onSetAgentGoalForServers: runSetAgentGoalForServers,
+    onQueueAgentCommandForServer: runQueueAgentCommandForServer,
+    onQueueAgentCommandForServers: runQueueAgentCommandForServers,
     onApproveReadyAgentsForFocusedServer: () => {
       if (typeof approveReadyAgentsForFocusedServer !== "function") {
         return [];

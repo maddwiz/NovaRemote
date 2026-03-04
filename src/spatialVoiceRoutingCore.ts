@@ -12,6 +12,7 @@ export type VoiceRoute =
   | { kind: "minimize" }
   | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
   | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string; allServers?: boolean }
+  | { kind: "queue_agent_command"; name: string; command: string; panelId?: string; allServers?: boolean }
   | { kind: "approve_ready_agents"; panelId?: string }
   | { kind: "deny_all_pending_agents"; panelId?: string }
   | { kind: "pause_pool" }
@@ -297,6 +298,34 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
       kind: "set_agent_goal",
       name,
       goal,
+      panelId: targetPanel.id,
+    };
+  }
+
+  const queueAgentCommandMatch = cleaned.match(
+    /^agent\s+(.+?)\s+(?:run|execute|queue)\s+(.+?)(?:\s+(?:for|on)\s+(.+))?$/i
+  );
+  if (queueAgentCommandMatch) {
+    const name = (queueAgentCommandMatch[1] || "").trim();
+    const command = (queueAgentCommandMatch[2] || "").trim();
+    const target = (queueAgentCommandMatch[3] || "").trim();
+    if (!name || !command) {
+      return { kind: "none" };
+    }
+    if (!target) {
+      return { kind: "queue_agent_command", name, command };
+    }
+    if (isAllServersTarget(target)) {
+      return { kind: "queue_agent_command", name, command, allServers: true };
+    }
+    const targetPanel = findPanelByTarget(panels, target);
+    if (!targetPanel) {
+      return { kind: "queue_agent_command", name, command: `${command} for ${target}`.trim() };
+    }
+    return {
+      kind: "queue_agent_command",
+      name,
+      command,
       panelId: targetPanel.id,
     };
   }

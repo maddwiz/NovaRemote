@@ -144,6 +144,8 @@ export function GlassesModeScreen() {
     onSetAgentGoalForServer,
     onCreateAgentForServers,
     onSetAgentGoalForServers,
+    onQueueAgentCommandForServer,
+    onQueueAgentCommandForServers,
     onApproveReadyAgentsForServer,
     onDenyAllPendingAgentsForServer,
     onApproveReadyAgentsForServers,
@@ -427,6 +429,26 @@ export function GlassesModeScreen() {
         void onSetAgentGoalForServers(serverIds, route.name, route.goal).catch(() => {});
         return;
       }
+      if (route.kind === "queue_agent_command") {
+        if (route.allServers) {
+          const serverIds = Array.from(connections.keys());
+          if (serverIds.length === 0) {
+            return;
+          }
+          void onQueueAgentCommandForServers(serverIds, route.name, route.command).catch(() => {});
+          return;
+        }
+        const serverIds = resolveAgentTargetServerIds(route.panelId);
+        if (serverIds.length === 0) {
+          return;
+        }
+        if (serverIds.length === 1) {
+          void onQueueAgentCommandForServer(serverIds[0], route.name, route.command).catch(() => {});
+          return;
+        }
+        void onQueueAgentCommandForServers(serverIds, route.name, route.command).catch(() => {});
+        return;
+      }
       if (route.kind === "approve_ready_agents") {
         if (!route.panelId) {
           const serverIds = Array.from(connections.keys());
@@ -521,6 +543,8 @@ export function GlassesModeScreen() {
       onSetAgentGoalForServer,
       onCreateAgentForServers,
       onSetAgentGoalForServers,
+      onQueueAgentCommandForServer,
+      onQueueAgentCommandForServers,
       onDisconnectAllServers,
       onApproveReadyAgentsForServer,
       onDenyAllPendingAgentsForServer,

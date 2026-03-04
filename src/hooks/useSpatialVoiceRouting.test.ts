@@ -229,6 +229,21 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const queueAgentCommand = resolveSpatialVoiceRoute({
+      transcript: "agent build watcher run npm run test",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const queueAgentCommandForHomelab = resolveSpatialVoiceRoute({
+      transcript: "agent deploy bot execute npm run deploy for homelab",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const queueAgentCommandForAllServers = resolveSpatialVoiceRoute({
+      transcript: "agent deploy bot run npm run deploy for all servers",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
 
     expect(interrupt).toEqual({
       kind: "control_char",
@@ -307,6 +322,23 @@ describe("resolveSpatialVoiceRoute", () => {
       kind: "set_agent_goal",
       name: "deploy bot",
       goal: "run deploy for staging",
+    });
+    expect(queueAgentCommand).toEqual({
+      kind: "queue_agent_command",
+      name: "build watcher",
+      command: "npm run test",
+    });
+    expect(queueAgentCommandForHomelab).toEqual({
+      kind: "queue_agent_command",
+      name: "deploy bot",
+      command: "npm run deploy",
+      panelId: "home::build-01",
+    });
+    expect(queueAgentCommandForAllServers).toEqual({
+      kind: "queue_agent_command",
+      name: "deploy bot",
+      command: "npm run deploy",
+      allServers: true,
     });
   });
 

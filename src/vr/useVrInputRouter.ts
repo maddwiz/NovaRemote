@@ -32,6 +32,11 @@ export type UseVrInputRouterArgs = {
     name: string,
     goal: string
   ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onQueueAgentCommand?: (
+    serverIds: string[],
+    name: string,
+    command: string
+  ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onApproveReadyAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onDenyAllPendingAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onConnectAllServers?: () => Promise<void> | void;
@@ -79,6 +84,7 @@ export function useVrInputRouter({
   onReconnectServers,
   onCreateAgent,
   onSetAgentGoal,
+  onQueueAgentCommand,
   onApproveReadyAgents,
   onDenyAllPendingAgents,
   onConnectAllServers,
@@ -309,6 +315,38 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to update agent goal",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "queue_agent_command") {
+        if (!onQueueAgentCommand) {
+          publishHudStatus({
+            message: "Agent command queue routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const result = await onQueueAgentCommand(action.serverIds, action.name, action.command);
+          const count = resolveActionCount(result);
+          publishHudStatus({
+            message:
+              count === 0
+                ? `No pending approvals queued for ${action.name}`
+                : count === null
+                  ? `Queued pending approval for ${action.name}`
+                  : `Queued ${count} pending approval${count === 1 ? "" : "s"} for ${action.name}`,
+            severity: count === 0 ? "warning" : "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to queue agent command",
             severity: "error",
             at: now(),
           });
@@ -572,6 +610,7 @@ export function useVrInputRouter({
       onReconnectServers,
       onCreateAgent,
       onSetAgentGoal,
+      onQueueAgentCommand,
       onSendCommand,
       onSendControlChar,
       onSetOverviewMode,

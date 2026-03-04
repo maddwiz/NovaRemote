@@ -19,6 +19,11 @@ export type UseVrLiveRuntimeArgs = {
     name: string,
     goal: string
   ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onQueueAgentCommand?: (
+    serverIds: string[],
+    name: string,
+    command: string
+  ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onApproveReadyAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onDenyAllPendingAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onConnectAllServers?: () => Promise<void> | void;
@@ -34,6 +39,7 @@ export function useVrLiveRuntime({
   onReconnectServers,
   onCreateAgent,
   onSetAgentGoal,
+  onQueueAgentCommand,
   onApproveReadyAgents,
   onDenyAllPendingAgents,
   onConnectAllServers,
@@ -140,6 +146,7 @@ export function useVrLiveRuntime({
     onReconnectServers,
     onCreateAgent,
     onSetAgentGoal,
+    onQueueAgentCommand,
     onApproveReadyAgents,
     onDenyAllPendingAgents,
     onConnectAllServers,

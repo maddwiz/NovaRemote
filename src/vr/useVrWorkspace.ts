@@ -26,6 +26,7 @@ export type VrWorkspaceVoiceAction =
   | { kind: "reconnect_all"; serverIds: string[] }
   | { kind: "create_agent"; serverIds: string[]; name: string }
   | { kind: "set_agent_goal"; serverIds: string[]; name: string; goal: string }
+  | { kind: "queue_agent_command"; serverIds: string[]; name: string; command: string }
   | { kind: "approve_ready_agents"; serverIds: string[] }
   | { kind: "deny_all_pending_agents"; serverIds: string[] }
   | { kind: "pause_pool" }
@@ -718,6 +719,19 @@ export function useVrWorkspace({
           serverIds,
           name: intent.name,
           goal: intent.goal,
+        };
+      }
+      if (intent.kind === "queue_agent_command") {
+        const targetPanel = resolveTargetPanel(intent.panelId);
+        const serverIds = intent.allServers ? serverScopeIds.slice() : targetPanel ? [targetPanel.serverId] : serverScopeIds.slice(0, 1);
+        if (serverIds.length === 0) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "queue_agent_command",
+          serverIds,
+          name: intent.name,
+          command: intent.command,
         };
       }
       if (intent.kind === "approve_ready_agents") {

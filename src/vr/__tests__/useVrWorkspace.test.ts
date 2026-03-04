@@ -285,6 +285,34 @@ describe("useVrWorkspace", () => {
       goal: "run deploy for staging",
     });
 
+    const queueAgentCommandAction = current().applyVoiceTranscript("agent build watcher run npm run test");
+    expect(queueAgentCommandAction).toEqual({
+      kind: "queue_agent_command",
+      serverIds: ["dgx"],
+      name: "build watcher",
+      command: "npm run test",
+    });
+
+    const queueAgentCommandForHomeAction = current().applyVoiceTranscript(
+      "agent deploy bot execute npm run deploy for homelab"
+    );
+    expect(queueAgentCommandForHomeAction).toEqual({
+      kind: "queue_agent_command",
+      serverIds: ["home"],
+      name: "deploy bot",
+      command: "npm run deploy",
+    });
+
+    const queueAgentCommandForAllAction = current().applyVoiceTranscript(
+      "agent deploy bot run npm run deploy for all servers"
+    );
+    expect(queueAgentCommandForAllAction).toEqual({
+      kind: "queue_agent_command",
+      serverIds: ["dgx", "home"],
+      name: "deploy bot",
+      command: "npm run deploy",
+    });
+
     const approveReadyAction = current().applyVoiceTranscript("approve ready agents");
     expect(approveReadyAction).toEqual({
       kind: "approve_ready_agents",

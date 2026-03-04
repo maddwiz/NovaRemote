@@ -365,6 +365,18 @@ describe("useVrInputRouter", () => {
         serverIds: ["dgx", "home"],
         name: "deploy bot",
         goal: "npm run deploy",
+      })
+      .mockReturnValueOnce({
+        kind: "queue_agent_command",
+        serverIds: ["dgx"],
+        name: "build watcher",
+        command: "npm run test",
+      })
+      .mockReturnValueOnce({
+        kind: "queue_agent_command",
+        serverIds: ["dgx", "home"],
+        name: "deploy bot",
+        command: "npm run deploy",
       });
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
     const onCreateAgent = vi
@@ -373,6 +385,10 @@ describe("useVrInputRouter", () => {
       .mockResolvedValueOnce(2);
     const onSetAgentGoal = vi
       .fn<(serverIds: string[], name: string, goal: string) => Promise<number>>()
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2);
+    const onQueueAgentCommand = vi
+      .fn<(serverIds: string[], name: string, command: string) => Promise<number>>()
       .mockResolvedValueOnce(1)
       .mockResolvedValueOnce(2);
 
@@ -389,6 +405,7 @@ describe("useVrInputRouter", () => {
         onSendCommand: async () => undefined,
         onCreateAgent,
         onSetAgentGoal,
+        onQueueAgentCommand,
       });
       return null;
     }
@@ -421,6 +438,18 @@ describe("useVrInputRouter", () => {
     });
     expect(onSetAgentGoal).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "npm run deploy");
     expect(current().hudStatus?.message).toContain("Updated goal for 2 agents");
+
+    await act(async () => {
+      await current().dispatchVoice("agent build watcher run npm run test");
+    });
+    expect(onQueueAgentCommand).toHaveBeenCalledWith(["dgx"], "build watcher", "npm run test");
+    expect(current().hudStatus?.message).toContain("Queued 1 pending approval for build watcher");
+
+    await act(async () => {
+      await current().dispatchVoice("agent deploy bot run npm run deploy for all servers");
+    });
+    expect(onQueueAgentCommand).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "npm run deploy");
+    expect(current().hudStatus?.message).toContain("Queued 2 pending approvals for deploy bot");
 
     await act(async () => {
       renderer?.unmount();

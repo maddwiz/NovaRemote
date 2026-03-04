@@ -147,6 +147,8 @@ function makeBaseArgs() {
     setAgentGoalForServer: vi.fn(async () => []),
     createAgentForServers: vi.fn(async () => []),
     setAgentGoalForServers: vi.fn(async () => []),
+    queueAgentCommandForServer: vi.fn(async () => []),
+    queueAgentCommandForServers: vi.fn(async () => []),
     approveReadyAgentsForFocusedServer: vi.fn(() => []),
     denyAllPendingAgentsForFocusedServer: vi.fn(() => []),
     approveReadyAgentsForServer: vi.fn(async () => []),
@@ -344,6 +346,21 @@ describe("useTerminalsViewModel", () => {
     expect(setAgentGoalForServer).toHaveBeenCalledWith("dgx", "build watcher", "npm run test");
   });
 
+  it("routes server-scoped agent command queue actions through async callbacks", async () => {
+    const queueAgentCommandForServer = vi.fn(async (_serverId: string, _name: string, _command: string) => [
+      "agent-queued",
+    ]);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      queueAgentCommandForServer,
+    });
+
+    await expect(
+      model.onQueueAgentCommandForServer("dgx", "build watcher", "npm run test")
+    ).resolves.toEqual(["agent-queued"]);
+    expect(queueAgentCommandForServer).toHaveBeenCalledWith("dgx", "build watcher", "npm run test");
+  });
+
   it("deduplicates multi-server agent actions before dispatch", async () => {
     const approveReadyAgentsForServers = vi.fn(async (_serverIds: string[]) => ["agent-1", "agent-2"]);
     const denyAllPendingAgentsForServers = vi.fn(async (_serverIds: string[]) => ["agent-3"]);
@@ -384,5 +401,21 @@ describe("useTerminalsViewModel", () => {
 
     expect(createAgentForServers).toHaveBeenCalledWith(["dgx", "cloud"], "build watcher");
     expect(setAgentGoalForServers).toHaveBeenCalledWith(["cloud", "dgx"], "build watcher", "npm run test");
+  });
+
+  it("deduplicates multi-server queued agent actions before dispatch", async () => {
+    const queueAgentCommandForServers = vi.fn(
+      async (_serverIds: string[], _name: string, _command: string) => ["agent-1", "agent-2"]
+    );
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      queueAgentCommandForServers,
+    });
+
+    await expect(
+      model.onQueueAgentCommandForServers(["dgx", "dgx", " ", "cloud"], "build watcher", "npm run test")
+    ).resolves.toEqual(["agent-1", "agent-2"]);
+
+    expect(queueAgentCommandForServers).toHaveBeenCalledWith(["dgx", "cloud"], "build watcher", "npm run test");
   });
 });
