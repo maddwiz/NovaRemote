@@ -83,6 +83,7 @@ import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { GlassesModeScreen } from "./screens/GlassesModeScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
+import { VrCommandCenterScreen } from "./screens/VrCommandCenterScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
 import { evaluateCrossServerWatchAlerts } from "./crossServerWatchAlerts";
@@ -3019,6 +3020,12 @@ export default function AppShell() {
           {route === "glasses" ? (
             <AppProvider value={{ terminals: terminalsViewModel }}>
               <GlassesModeScreen />
+            </AppProvider>
+          ) : null}
+
+          {route === "vr" ? (
+            <AppProvider value={{ terminals: terminalsViewModel }}>
+              <VrCommandCenterScreen />
             </AppProvider>
           ) : null}
 

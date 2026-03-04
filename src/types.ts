@@ -85,7 +85,7 @@ export type VmType = "proxmox" | "vmware" | "hyper-v" | "docker" | "lxc" | "qemu
 
 export type TerminalSendMode = "ai" | "shell";
 
-export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms" | "glasses";
+export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms" | "glasses" | "vr";
 
 export type Status = {
   text: string;

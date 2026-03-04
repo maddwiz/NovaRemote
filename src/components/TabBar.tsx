@@ -52,6 +52,14 @@ export function TabBar({ route, onChange }: TabBarProps) {
       >
         <Text style={[styles.tabButtonText, route === "llms" ? styles.tabButtonTextOn : null]}>LLMs</Text>
       </Pressable>
+      <Pressable
+        style={[styles.tabButton, route === "vr" ? styles.tabButtonOn : null]}
+        onPress={() => onChange("vr")}
+        accessibilityRole="button"
+        accessibilityLabel="Open VR command center tab"
+      >
+        <Text style={[styles.tabButtonText, route === "vr" ? styles.tabButtonTextOn : null]}>VR</Text>
+      </Pressable>
     </View>
   );
 }
