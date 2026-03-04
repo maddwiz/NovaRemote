@@ -14,6 +14,10 @@ const PANELS: VrRoutePanel[] = [
     id: "home-build",
     serverId: "homelab",
     serverName: "Homelab",
+    vmHost: "Rack A",
+    vmType: "qemu",
+    vmName: "build-worker-vm",
+    vmId: "202",
     session: "build-01",
     sessionLabel: "Build Worker",
   },
@@ -29,6 +33,13 @@ describe("findVrPanelByTarget", () => {
     const panel = findVrPanelByTarget(PANELS, "worker homelab");
     expect(panel?.id).toBe("home-build");
   });
+
+  it("matches vm host and vm name targets", () => {
+    const panelByVmHost = findVrPanelByTarget(PANELS, "rack a");
+    const panelByVmName = findVrPanelByTarget(PANELS, "build-worker-vm");
+    expect(panelByVmHost?.id).toBe("home-build");
+    expect(panelByVmName?.id).toBe("home-build");
+  });
 });
 
 describe("parseVrVoiceIntent", () => {
@@ -40,6 +51,13 @@ describe("parseVrVoiceIntent", () => {
   it("parses explicit send-to commands without a colon delimiter", () => {
     const intent = parseVrVoiceIntent("send to Build Worker npm run build", PANELS, "dgx-main");
     expect(intent).toEqual({ kind: "send", panelId: "home-build", command: "npm run build" });
+  });
+
+  it("parses vm metadata targets in explicit routing", () => {
+    const byVmName = parseVrVoiceIntent("send to build-worker-vm: npm run build", PANELS, "dgx-main");
+    const byVmHost = parseVrVoiceIntent("send to rack a npm run build", PANELS, "dgx-main");
+    expect(byVmName).toEqual({ kind: "send", panelId: "home-build", command: "npm run build" });
+    expect(byVmHost).toEqual({ kind: "send", panelId: "home-build", command: "npm run build" });
   });
 
   it("parses focus commands", () => {

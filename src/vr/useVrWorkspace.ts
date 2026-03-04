@@ -106,6 +106,10 @@ type UniversePanel = {
   id: string;
   serverId: string;
   serverName: string;
+  vmHost?: string;
+  vmType?: string;
+  vmName?: string;
+  vmId?: string;
   session: string;
   sessionLabel: string;
   output: string;
@@ -311,6 +315,10 @@ export function useVrWorkspace({
           id: buildVrPanelId(serverId, session),
           serverId,
           serverName: connection.server.name,
+          vmHost: connection.server.vmHost,
+          vmType: connection.server.vmType,
+          vmName: connection.server.vmName,
+          vmId: connection.server.vmId,
           session,
           sessionLabel: session,
           output: connection.tails[session] || "",
@@ -411,14 +419,21 @@ export function useVrWorkspace({
 
   const routePanels = useMemo<VrRoutePanel[]>(
     () =>
-      panels.map((panel) => ({
-        id: panel.id,
-        serverId: panel.serverId,
-        serverName: panel.serverName,
-        session: panel.session,
-        sessionLabel: panel.sessionLabel,
-      })),
-    [panels]
+      panels.map((panel) => {
+        const source = universeById.get(panel.id);
+        return {
+          id: panel.id,
+          serverId: panel.serverId,
+          serverName: panel.serverName,
+          vmHost: source?.vmHost,
+          vmType: source?.vmType,
+          vmName: source?.vmName,
+          vmId: source?.vmId,
+          session: panel.session,
+          sessionLabel: panel.sessionLabel,
+        };
+      }),
+    [panels, universeById]
   );
 
   const focusPanel = useCallback((panelId: string) => {

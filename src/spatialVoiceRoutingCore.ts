@@ -2,6 +2,10 @@ export type VoiceRoutePanel = {
   id: string;
   serverId: string;
   serverName: string;
+  vmHost?: string;
+  vmType?: string;
+  vmName?: string;
+  vmId?: string;
   session: string;
   sessionLabel: string;
 };
@@ -42,6 +46,10 @@ export function normalizeForMatch(value: string): string {
 
 function scorePanel(panel: VoiceRoutePanel, targetTokens: string[]): number {
   const server = normalizeForMatch(panel.serverName);
+  const vmHost = normalizeForMatch(panel.vmHost || "");
+  const vmType = normalizeForMatch(panel.vmType || "");
+  const vmName = normalizeForMatch(panel.vmName || "");
+  const vmId = normalizeForMatch(panel.vmId || "");
   const session = normalizeForMatch(panel.session);
   const sessionLabel = normalizeForMatch(panel.sessionLabel || panel.session);
 
@@ -51,6 +59,18 @@ function scorePanel(panel: VoiceRoutePanel, targetTokens: string[]): number {
       return;
     }
     if (server.includes(token)) {
+      score += 2;
+    }
+    if (vmHost.includes(token)) {
+      score += 2;
+    }
+    if (vmType.includes(token)) {
+      score += 1;
+    }
+    if (vmName.includes(token)) {
+      score += 2;
+    }
+    if (vmId.includes(token)) {
       score += 2;
     }
     if (session.includes(token)) {
@@ -72,9 +92,21 @@ export function findPanelByTarget(panels: VoiceRoutePanel[], rawTarget: string):
 
   const direct = panels.find((panel) => {
     const server = normalizeForMatch(panel.serverName);
+    const vmHost = normalizeForMatch(panel.vmHost || "");
+    const vmType = normalizeForMatch(panel.vmType || "");
+    const vmName = normalizeForMatch(panel.vmName || "");
+    const vmId = normalizeForMatch(panel.vmId || "");
     const session = normalizeForMatch(panel.session);
     const label = normalizeForMatch(panel.sessionLabel || panel.session);
-    return server === target || session === target || label === target;
+    return (
+      server === target ||
+      vmHost === target ||
+      vmType === target ||
+      vmName === target ||
+      vmId === target ||
+      session === target ||
+      label === target
+    );
   });
   if (direct) {
     return direct;
@@ -118,7 +150,7 @@ function parseExplicitSendWithoutColon(
   const candidates = new Map<string, string>();
 
   panels.forEach((panel) => {
-    [panel.serverName, panel.session, panel.sessionLabel].forEach((value) => {
+    [panel.serverName, panel.vmHost, panel.vmType, panel.vmName, panel.vmId, panel.session, panel.sessionLabel].forEach((value) => {
       const target = value?.trim();
       if (!target) {
         return;

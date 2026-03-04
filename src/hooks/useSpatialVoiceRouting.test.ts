@@ -14,6 +14,10 @@ const PANELS = [
     id: "home::build-01",
     serverId: "home",
     serverName: "Homelab",
+    vmHost: "Rack A",
+    vmType: "qemu",
+    vmName: "build-runner",
+    vmId: "201",
     session: "build-01",
     sessionLabel: "build-01",
   },
@@ -21,6 +25,10 @@ const PANELS = [
     id: "cloud::deploy",
     serverId: "cloud",
     serverName: "Cloud VM",
+    vmHost: "Rack B",
+    vmType: "cloud",
+    vmName: "deploy-node",
+    vmId: "c-17",
     session: "deploy",
     sessionLabel: "deploy",
   },
@@ -49,6 +57,30 @@ describe("resolveSpatialVoiceRoute", () => {
     });
 
     expect(route).toEqual({
+      kind: "send_command",
+      panelId: "cloud::deploy",
+      command: "deploy now",
+    });
+  });
+
+  it("routes explicit send-to syntax with vm metadata targets", () => {
+    const routeByVmName = resolveSpatialVoiceRoute({
+      transcript: "send to build-runner: npm run build",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const routeByVmHost = resolveSpatialVoiceRoute({
+      transcript: "send to rack b deploy now",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+
+    expect(routeByVmName).toEqual({
+      kind: "send_command",
+      panelId: "home::build-01",
+      command: "npm run build",
+    });
+    expect(routeByVmHost).toEqual({
       kind: "send_command",
       panelId: "cloud::deploy",
       command: "deploy now",

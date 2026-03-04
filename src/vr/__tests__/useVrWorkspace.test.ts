@@ -29,13 +29,14 @@ const CAPABILITIES: ServerCapabilities = {
   spectate: false,
 };
 
-function makeServer(id: string, name: string): ServerProfile {
+function makeServer(id: string, name: string, overrides: Partial<ServerProfile> = {}): ServerProfile {
   return {
     id,
     name,
     baseUrl: `https://${id}.test`,
     token: `${id}-token`,
     defaultCwd: "/workspace",
+    ...overrides,
   };
 }
 
@@ -107,7 +108,12 @@ describe("vrWorkspaceTestUtils", () => {
 describe("useVrWorkspace", () => {
   it("builds a panel list from multi-server connections and enforces max panels", async () => {
     const dgx = makeServer("dgx", "DGX");
-    const homelab = makeServer("home", "Homelab");
+    const homelab = makeServer("home", "Homelab", {
+      vmHost: "Rack A",
+      vmType: "qemu",
+      vmName: "build-worker-vm",
+      vmId: "202",
+    });
 
     const connections = new Map<string, ServerConnection>([
       [dgx.id, makeConnection(dgx, ["main", "logs"])],
@@ -148,7 +154,12 @@ describe("useVrWorkspace", () => {
 
   it("routes voice commands to the target server/session", async () => {
     const dgx = makeServer("dgx", "DGX Spark");
-    const homelab = makeServer("home", "Homelab");
+    const homelab = makeServer("home", "Homelab", {
+      vmHost: "Rack A",
+      vmType: "qemu",
+      vmName: "build-worker-vm",
+      vmId: "202",
+    });
 
     const connections = new Map<string, ServerConnection>([
       [dgx.id, makeConnection(dgx, ["main"], { main: "ready" })],
@@ -178,6 +189,24 @@ describe("useVrWorkspace", () => {
 
     const action = current().applyVoiceTranscript("send to homelab: npm run build");
     expect(action).toEqual({
+      kind: "send",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+      command: "npm run build",
+    });
+
+    const actionByVmHost = current().applyVoiceTranscript("send to rack a npm run build");
+    expect(actionByVmHost).toEqual({
+      kind: "send",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+      command: "npm run build",
+    });
+
+    const actionByVmName = current().applyVoiceTranscript("send to build-worker-vm: npm run build");
+    expect(actionByVmName).toEqual({
       kind: "send",
       panelId: buildVrPanelId("home", "build-01"),
       serverId: "home",

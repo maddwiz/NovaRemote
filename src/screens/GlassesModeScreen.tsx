@@ -295,14 +295,21 @@ export function GlassesModeScreen() {
 
   const routePanels = useMemo<SpatialVoicePanel[]>(
     () =>
-      allPanels.map((panel) => ({
-        id: panel.id,
-        serverId: panel.serverId,
-        serverName: panel.serverName,
-        session: panel.session,
-        sessionLabel: panel.sessionLabel,
-      })),
-    [allPanels]
+      allPanels.map((panel) => {
+        const serverMeta = connections.get(panel.serverId)?.server;
+        return {
+          id: panel.id,
+          serverId: panel.serverId,
+          serverName: panel.serverName,
+          vmHost: serverMeta?.vmHost,
+          vmType: serverMeta?.vmType,
+          vmName: serverMeta?.vmName,
+          vmId: serverMeta?.vmId,
+          session: panel.session,
+          sessionLabel: panel.sessionLabel,
+        };
+      }),
+    [allPanels, connections]
   );
   const { routeTranscript } = useSpatialVoiceRouting({
     panels: routePanels,
