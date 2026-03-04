@@ -49,11 +49,17 @@ describe("parseVrVoiceIntent", () => {
 
   it("handles workspace overview and rotate", () => {
     expect(parseVrVoiceIntent("show all", PANELS, "dgx-main")).toEqual({ kind: "overview" });
+    expect(parseVrVoiceIntent("show me all logs", PANELS, "dgx-main")).toEqual({ kind: "overview" });
     expect(parseVrVoiceIntent("focus mode", PANELS, "dgx-main")).toEqual({ kind: "minimize" });
     expect(parseVrVoiceIntent("rotate left", PANELS, "dgx-main")).toEqual({
       kind: "rotate_workspace",
       direction: "left",
     });
+  });
+
+  it("focuses target panels for natural show-logs phrasing", () => {
+    const intent = parseVrVoiceIntent("show me build logs", PANELS, "dgx-main");
+    expect(intent).toEqual({ kind: "focus", panelId: "home-build" });
   });
 
   it("falls back to focused panel when not explicitly routed", () => {

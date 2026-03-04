@@ -14,7 +14,38 @@ export function findVrPanelByTarget(panels: VrRoutePanel[], target: string): VrR
   return findPanelByTarget(panels, target);
 }
 
+function parseShowLogsIntent(transcript: string, panels: VrRoutePanel[]): VrVoiceIntent | null {
+  const trimmed = transcript.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const allLogs = trimmed.match(/^show(?:\s+me)?\s+all\s+logs?$/i);
+  if (allLogs) {
+    return { kind: "overview" };
+  }
+
+  const targetMatch = trimmed.match(/^show(?:\s+me)?\s+(.+?)\s+logs?$/i);
+  if (!targetMatch) {
+    return null;
+  }
+  const target = targetMatch[1]?.trim() || "";
+  if (!target) {
+    return null;
+  }
+  const panel = findVrPanelByTarget(panels, target);
+  if (!panel) {
+    return null;
+  }
+  return { kind: "focus", panelId: panel.id };
+}
+
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
+  const showLogsIntent = parseShowLogsIntent(transcript, panels);
+  if (showLogsIntent) {
+    return showLogsIntent;
+  }
+
   const route = resolveSpatialVoiceRoute({
     transcript,
     panels,
