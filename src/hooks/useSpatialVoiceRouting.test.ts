@@ -84,6 +84,25 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(minimize).toEqual({ kind: "minimize" });
   });
 
+  it("routes natural show-logs phrasing to panel focus", () => {
+    const focusLogs = resolveSpatialVoiceRoute({
+      transcript: "show me build logs",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const showAllLogs = resolveSpatialVoiceRoute({
+      transcript: "show me all logs",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+
+    expect(focusLogs).toEqual({
+      kind: "focus_panel",
+      panelId: "home::build-01",
+    });
+    expect(showAllLogs).toEqual({ kind: "show_all" });
+  });
+
   it("recognizes rotate workspace commands", () => {
     const rotateLeft = resolveSpatialVoiceRoute({
       transcript: "rotate left",

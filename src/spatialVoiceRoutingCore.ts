@@ -151,10 +151,21 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
   if (
     normalized === "show all" ||
     normalized === "show all panels" ||
+    normalized === "show all logs" ||
+    normalized === "show me all logs" ||
     normalized === "overview" ||
     normalized === "show overview"
   ) {
     return { kind: "show_all" };
+  }
+
+  const showLogsMatch = cleaned.match(/^show(?:\s+me)?\s+(.+?)\s+logs?$/i);
+  if (showLogsMatch) {
+    const target = showLogsMatch[1]?.trim() || "";
+    const targetPanel = findPanelByTarget(panels, target);
+    if (targetPanel) {
+      return { kind: "focus_panel", panelId: targetPanel.id };
+    }
   }
 
   if (
