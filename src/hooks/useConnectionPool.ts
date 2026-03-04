@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from "react";
+import { AppState, AppStateStatus } from "react-native";
 
 import { apiRequest, normalizeBaseUrl, websocketUrl } from "../api/client";
 import {
@@ -990,6 +991,9 @@ export function useConnectionPool({
   const autoconnectFingerprintRef = useRef<Record<string, string>>({});
   const serverFingerprintRef = useRef<Record<string, string>>({});
   const lifecyclePausedRef = useRef(false);
+  const manualLifecyclePausedRef = useRef(false);
+  const appStateLifecyclePausedRef = useRef(false);
+  const appStateRef = useRef<AppStateStatus>(AppState.currentState || "active");
   const healthPingInFlightRef = useRef(false);
   const healthPingTriggerRef = useRef<(() => Promise<void>) | null>(null);
   const pollInFlightRef = useRef<Set<string>>(new Set());
@@ -999,10 +1003,27 @@ export function useConnectionPool({
     stateRef.current = state;
   }, [state]);
 
-  const setLifecyclePaused = useCallback((next: boolean) => {
+  const syncLifecyclePaused = useCallback(() => {
+    const next = manualLifecyclePausedRef.current || appStateLifecyclePausedRef.current;
     lifecyclePausedRef.current = next;
     setLifecyclePausedState(next);
   }, []);
+
+  const setManualLifecyclePaused = useCallback(
+    (next: boolean) => {
+      manualLifecyclePausedRef.current = next;
+      syncLifecyclePaused();
+    },
+    [syncLifecyclePaused]
+  );
+
+  const setAppStateLifecyclePaused = useCallback(
+    (next: boolean) => {
+      appStateLifecyclePausedRef.current = next;
+      syncLifecyclePaused();
+    },
+    [syncLifecyclePaused]
+  );
 
   const clearRetry = useCallback((serverId: string, session: string) => {
     const timer = getNestedValue(streamRetryTimersRef.current, serverId, session);
@@ -1368,19 +1389,19 @@ export function useConnectionPool({
 
   const reconnectServer = useCallback(
     async (serverId: string, forceProbe: boolean = true) => {
-      setLifecyclePaused(false);
+      setManualLifecyclePaused(false);
       await connectServer(serverId, forceProbe);
     },
-    [connectServer, setLifecyclePaused]
+    [connectServer, setManualLifecyclePaused]
   );
 
   const reconnectServers = useCallback(
     async (serverIds: string[], forceProbe: boolean = true) => {
       const uniqueServerIds = Array.from(new Set(serverIds.map((value) => value.trim()).filter(Boolean)));
-      setLifecyclePaused(false);
+      setManualLifecyclePaused(false);
       await Promise.all(uniqueServerIds.map((serverId) => connectServer(serverId, forceProbe)));
     },
-    [connectServer, setLifecyclePaused]
+    [connectServer, setManualLifecyclePaused]
   );
 
   const fetchTail = useCallback(
@@ -1691,21 +1712,24 @@ export function useConnectionPool({
   }, []);
 
   const connectAll = useCallback(() => {
-    setLifecyclePaused(false);
+    setManualLifecyclePaused(false);
+    if (appStateLifecyclePausedRef.current) {
+      return;
+    }
     Object.values(stateRef.current).forEach((connection) => {
       if (connection.connected) {
         void connectServer(connection.server.id, false);
       }
     });
-  }, [connectServer, setLifecyclePaused]);
+  }, [connectServer, setManualLifecyclePaused]);
 
   const disconnectAll = useCallback(() => {
-    setLifecyclePaused(true);
+    setManualLifecyclePaused(true);
     closeAllStreams();
     Object.keys(stateRef.current).forEach((serverId) => {
       dispatch({ type: "SET_STATUS", serverId, status: "disconnected" });
     });
-  }, [closeAllStreams, setLifecyclePaused]);
+  }, [closeAllStreams, setManualLifecyclePaused]);
 
   const refreshAll = useCallback(async () => {
     const jobs = Object.values(stateRef.current)
@@ -1746,7 +1770,51 @@ export function useConnectionPool({
 
   useEffect(() => {
     if (!enabled) {
-      setLifecyclePaused(false);
+      appStateRef.current = "active";
+      setAppStateLifecyclePaused(false);
+      return;
+    }
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      appStateRef.current = nextState;
+      const shouldPause = nextState !== "active";
+      if (shouldPause === appStateLifecyclePausedRef.current) {
+        return;
+      }
+
+      setAppStateLifecyclePaused(shouldPause);
+      if (shouldPause) {
+        closeAllStreams();
+        Object.keys(stateRef.current).forEach((serverId) => {
+          dispatch({ type: "SET_STATUS", serverId, status: "disconnected" });
+        });
+        return;
+      }
+
+      if (manualLifecyclePausedRef.current) {
+        return;
+      }
+      Object.values(stateRef.current).forEach((connection) => {
+        if (connection.connected) {
+          void connectServer(connection.server.id, false);
+        }
+      });
+    };
+
+    const subscription = AppState.addEventListener("change", handleAppStateChange);
+    if (AppState.currentState && AppState.currentState !== "active") {
+      handleAppStateChange(AppState.currentState);
+    }
+
+    return () => {
+      subscription.remove();
+    };
+  }, [closeAllStreams, connectServer, enabled, setAppStateLifecyclePaused]);
+
+  useEffect(() => {
+    if (!enabled) {
+      setManualLifecyclePaused(false);
+      setAppStateLifecyclePaused(false);
       closeAllStreams();
       return;
     }
@@ -1769,11 +1837,12 @@ export function useConnectionPool({
       autoconnectFingerprintRef.current[server.id] = fingerprint;
       void connectServer(server.id, true);
     });
-  }, [closeAllStreams, connectServer, enabled, setLifecyclePaused, state]);
+  }, [closeAllStreams, connectServer, enabled, setAppStateLifecyclePaused, setManualLifecyclePaused, state]);
 
   useEffect(() => {
     if (!enabled) {
-      setLifecyclePaused(false);
+      setManualLifecyclePaused(false);
+      setAppStateLifecyclePaused(false);
       closeAllStreams();
       return;
     }
@@ -1801,7 +1870,7 @@ export function useConnectionPool({
         connectStream(connection.server.id, session);
       });
     });
-  }, [closeAllStreams, closeStream, connectStream, enabled, setLifecyclePaused, state]);
+  }, [closeAllStreams, closeStream, connectStream, enabled, setAppStateLifecyclePaused, setManualLifecyclePaused, state]);
 
   useEffect(() => {
     if (!enabled) {

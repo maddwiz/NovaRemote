@@ -45,11 +45,24 @@ export const Share = {
   share: async (_content: unknown) => ({ action: "sharedAction" }),
 };
 
+const appStateListeners = new Set<(state: string) => void>();
+
 export const AppState = {
   currentState: "active",
-  addEventListener: (_type: string, _listener: (state: string) => void) => ({
-    remove: () => {},
-  }),
+  addEventListener: (type: string, listener: (state: string) => void) => {
+    if (type === "change") {
+      appStateListeners.add(listener);
+    }
+    return {
+      remove: () => {
+        appStateListeners.delete(listener);
+      },
+    };
+  },
+  __emit(nextState: string) {
+    this.currentState = nextState;
+    Array.from(appStateListeners).forEach((listener) => listener(nextState));
+  },
 };
 
 export const PanResponder = {

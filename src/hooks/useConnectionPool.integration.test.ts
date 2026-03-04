@@ -229,6 +229,12 @@ function wsFor(serverId: string): FakeWebSocket | undefined {
   return FakeWebSocket.instances.find((ws) => ws.url.includes(`${serverId}.novaremote.test`));
 }
 
+async function emitAppState(nextState: "active" | "background" | "inactive") {
+  const { AppState } = await import("react-native");
+  const appStateMock = AppState as unknown as { __emit?: (state: string) => void };
+  appStateMock.__emit?.(nextState);
+}
+
 function countHealthFetchCalls(): number {
   return fetchMock.mock.calls.filter(([input]) => {
     const url = typeof input === "string" ? input : String(input);
@@ -552,6 +558,60 @@ describe("useConnectionPool websocket integration", () => {
     await harness.waitFor(
       () => FakeWebSocket.instances.length >= countAfterDisconnect + 2,
       "connectAll should recreate server streams"
+    );
+
+    await harness.unmount();
+  });
+
+  it("pauses streams on app background and reconnects on foreground without overriding manual pause", async () => {
+    const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "initial websocket instances");
+    const initialWave = FakeWebSocket.instances.slice();
+
+    await harness.act(async () => {
+      await emitAppState("background");
+    });
+    expect(harness.getPool().lifecyclePaused).toBe(true);
+    expect(initialWave.every((ws) => ws.readyState === FakeWebSocket.CLOSED)).toBe(true);
+
+    const countAfterBackground = FakeWebSocket.instances.length;
+    await harness.act(async () => {
+      await emitAppState("active");
+    });
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= countAfterBackground + 2,
+      "foreground reconnect websocket instances"
+    );
+    expect(harness.getPool().lifecyclePaused).toBe(false);
+
+    const resumedWave = FakeWebSocket.instances.slice(countAfterBackground);
+    expect(resumedWave.length).toBeGreaterThanOrEqual(2);
+
+    await harness.act(async () => {
+      harness.getPool().disconnectAll();
+    });
+    expect(harness.getPool().lifecyclePaused).toBe(true);
+    const countAfterManualPause = FakeWebSocket.instances.length;
+
+    await harness.act(async () => {
+      await emitAppState("background");
+      await emitAppState("active");
+    });
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(1200);
+    });
+    await harness.flush();
+
+    expect(harness.getPool().lifecyclePaused).toBe(true);
+    expect(FakeWebSocket.instances.length).toBe(countAfterManualPause);
+
+    await harness.act(async () => {
+      harness.getPool().connectAll();
+    });
+    await harness.waitFor(
+      () => FakeWebSocket.instances.length >= countAfterManualPause + 2,
+      "manual connectAll recreates streams after app-state roundtrip"
     );
 
     await harness.unmount();
