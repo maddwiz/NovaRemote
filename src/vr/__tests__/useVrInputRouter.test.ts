@@ -153,6 +153,54 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("publishes HUD updates for panel visual voice actions", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({ kind: "panel_mini", panelId: "dgx::main" })
+      .mockReturnValueOnce({ kind: "panel_expand", panelId: "dgx::main" })
+      .mockReturnValueOnce({ kind: "panel_opacity", panelId: "dgx::main", opacity: 0.45 });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("mini panel");
+    });
+    expect(current().hudStatus?.message).toContain("Mini panel dgx::main");
+
+    await act(async () => {
+      await current().dispatchVoice("expand panel");
+    });
+    expect(current().hudStatus?.message).toContain("Expanded panel dgx::main");
+
+    await act(async () => {
+      await current().dispatchVoice("opacity 45%");
+    });
+    expect(current().hudStatus?.message).toContain("Panel opacity 45%");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("records rotate HUD status for gesture rotation actions", async () => {
     const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({ kind: "none" }));
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({

@@ -581,6 +581,64 @@ describe("useVrWorkspace", () => {
     });
   });
 
+  it("applies voice commands for panel visual controls", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 3, initialPreset: "arc" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const panelId = buildVrPanelId("dgx", "main");
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("mini panel");
+      expect(action).toEqual({ kind: "panel_mini", panelId });
+    });
+    expect(current().panels.find((panel) => panel.id === panelId)?.mini).toBe(true);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("opacity 35%");
+      expect(action).toEqual({ kind: "panel_opacity", panelId, opacity: 0.35 });
+    });
+    expect(current().panels.find((panel) => panel.id === panelId)?.opacity).toBe(0.35);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("opacity 1%");
+      expect(action).toEqual({ kind: "panel_opacity", panelId, opacity: 0.2 });
+    });
+    expect(current().panels.find((panel) => panel.id === panelId)?.opacity).toBe(0.2);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("expand panel");
+      expect(action).toEqual({ kind: "panel_expand", panelId });
+    });
+    expect(current().panels.find((panel) => panel.id === panelId)?.mini).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("toggles overview mode from voice and gesture inputs", async () => {
     const dgx = makeServer("dgx", "DGX");
     const home = makeServer("home", "Home");

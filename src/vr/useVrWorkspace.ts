@@ -25,6 +25,9 @@ export type VrWorkspaceVoiceAction =
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | { kind: "overview" }
   | { kind: "minimize" }
+  | { kind: "panel_mini"; panelId: string }
+  | { kind: "panel_expand"; panelId: string }
+  | { kind: "panel_opacity"; panelId: string; opacity: number }
   | {
       kind: "send";
       panelId: string;
@@ -53,6 +56,7 @@ export type UseVrWorkspaceResult = {
   addPanel: (serverId: string, session: string) => void;
   removePanel: (panelId: string) => void;
   togglePinPanel: (panelId: string) => void;
+  setPanelMini: (panelId: string, mini: boolean) => void;
   toggleMiniPanel: (panelId: string) => void;
   setPanelOpacity: (panelId: string, opacity: number) => void;
   updatePanelTransform: (panelId: string, patch: Partial<VrPanelTransform>) => void;
@@ -457,6 +461,22 @@ export function useVrWorkspace({
     [universeById]
   );
 
+  const setPanelMini = useCallback(
+    (panelId: string, mini: boolean) => {
+      if (!panelId || !universeById.has(panelId)) {
+        return;
+      }
+      setPanelVisuals((prev) => ({
+        ...prev,
+        [panelId]: {
+          ...prev[panelId],
+          mini,
+        },
+      }));
+    },
+    [universeById]
+  );
+
   const setPanelOpacity = useCallback(
     (panelId: string, opacity: number) => {
       if (!panelId || !universeById.has(panelId) || !isFiniteNumber(opacity)) {
@@ -620,6 +640,18 @@ export function useVrWorkspace({
         setOverviewMode(false);
         return { kind: "minimize" };
       }
+      if (intent.kind === "panel_mini") {
+        setPanelMini(intent.panelId, true);
+        return { kind: "panel_mini", panelId: intent.panelId };
+      }
+      if (intent.kind === "panel_expand") {
+        setPanelMini(intent.panelId, false);
+        return { kind: "panel_expand", panelId: intent.panelId };
+      }
+      if (intent.kind === "panel_opacity") {
+        setPanelOpacity(intent.panelId, intent.opacity);
+        return { kind: "panel_opacity", panelId: intent.panelId, opacity: intent.opacity };
+      }
       if (intent.kind === "send") {
         const panel = universeById.get(intent.panelId);
         if (!panel) {
@@ -635,7 +667,7 @@ export function useVrWorkspace({
       }
       return { kind: "none" };
     },
-    [focusPanel, focusedPanelId, rotateWorkspace, routePanels, universeById]
+    [focusPanel, focusedPanelId, rotateWorkspace, routePanels, setPanelMini, setPanelOpacity, universeById]
   );
 
   const applyGesture = useCallback(
@@ -683,6 +715,7 @@ export function useVrWorkspace({
     addPanel,
     removePanel,
     togglePinPanel,
+    setPanelMini,
     toggleMiniPanel,
     setPanelOpacity,
     updatePanelTransform,

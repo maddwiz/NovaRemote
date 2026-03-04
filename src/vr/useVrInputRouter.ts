@@ -126,6 +126,30 @@ export function useVrInputRouter({
       if (action.kind === "none") {
         return action;
       }
+      if (action.kind === "panel_mini") {
+        publishHudStatus({
+          message: `Mini panel ${action.panelId}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+      if (action.kind === "panel_expand") {
+        publishHudStatus({
+          message: `Expanded panel ${action.panelId}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+      if (action.kind === "panel_opacity") {
+        publishHudStatus({
+          message: `Panel opacity ${Math.round(action.opacity * 100)}%`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
       if (action.kind === "minimize") {
         workspace.setOverviewMode?.(false);
       }

@@ -62,6 +62,32 @@ describe("parseVrVoiceIntent", () => {
     expect(intent).toEqual({ kind: "focus", panelId: "home-build" });
   });
 
+  it("parses panel visual control commands", () => {
+    expect(parseVrVoiceIntent("mini panel", PANELS, "home-build")).toEqual({
+      kind: "panel_mini",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("expand panel", PANELS, "home-build")).toEqual({
+      kind: "panel_expand",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("opacity 45%", PANELS, "home-build")).toEqual({
+      kind: "panel_opacity",
+      panelId: "home-build",
+      opacity: 0.45,
+    });
+    expect(parseVrVoiceIntent("opacity 400%", PANELS, "home-build")).toEqual({
+      kind: "panel_opacity",
+      panelId: "home-build",
+      opacity: 1,
+    });
+    expect(parseVrVoiceIntent("opacity 1%", PANELS, "home-build")).toEqual({
+      kind: "panel_opacity",
+      panelId: "home-build",
+      opacity: 0.2,
+    });
+  });
+
   it("falls back to focused panel when not explicitly routed", () => {
     const intent = parseVrVoiceIntent("git status", PANELS, "home-build");
     expect(intent).toEqual({ kind: "send", panelId: "home-build", command: "git status" });
