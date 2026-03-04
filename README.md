@@ -7,6 +7,7 @@ NovaRemote is an Expo + React Native app for controlling remote terminal and AI 
 - Mobile-first remote terminal + AI workflow for homelabs, devops, and remote coding
 - Companion-server model (no raw SSH credentials stored in app)
 - Fleet operations, watch alerts, AI routing, and glass-friendly on-the-go mode
+- Persistent multi-server connection pool with instant server switching
 
 ## Demo / Screens
 
@@ -32,6 +33,8 @@ Note: placeholder media files are currently committed; replace them with real ca
 ## Features
 
 - Multi-server profiles with secure storage
+- Concurrent multi-server terminal pool (persistent background streams per server)
+- Server switcher rail with status dots, unread output indicators, and VM host grouping
 - AI and shell session control
 - Live terminal streaming + polling fallback
 - ANSI color rendering
@@ -53,7 +56,9 @@ Note: placeholder media files are currently committed; replace them with real ca
 - Encrypted LLM profile export/import with passphrase
 - AI shell command suggestions based on output + history context
 - Watch mode with regex-based alert notifications
+- Cross-server watch alert notifications with server context labels
 - Fleet mode (run one shell command across selected servers)
+- Fleet target grouping by VM host and VM type
 - Configurable fleet wait timeout
 - Per-server configurable shell-run wait timeout for command sends
 - Biometric app unlock (Face ID / Touch ID)
@@ -68,6 +73,10 @@ Note: placeholder media files are currently committed; replace them with real ca
 - Anonymous analytics telemetry (opt-in toggle)
 - Referral program scaffold (share + claim code links)
 - Pro team shared profile templates (export/import/apply, token-free)
+- Shared workspace + voice-channel preview controls
+- NovaAdapt preview controls (agent create/goal/queue/approval routing)
+- AR spatial HUD with multi-panel voice routing across servers
+- VR Command Center preview route with panel scope, stream controls, workspace channels, and agent actions
 - iPad split-view layout (Pro)
 - RevenueCat paywall scaffolding (free tier: 1 server, 2 sessions)
 - Onboarding wizard with connection test
