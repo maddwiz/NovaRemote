@@ -137,6 +137,7 @@ export function GlassesModeScreen() {
     focusedServerId,
     onFocusServer,
     onReconnectServer,
+    onReconnectServers,
     sessionAliases,
     sessionReadOnly,
     glassesMode,
@@ -355,7 +356,10 @@ export function GlassesModeScreen() {
       }
       if (route.kind === "reconnect_all") {
         const uniqueServerIds = Array.from(new Set(allPanels.map((panel) => panel.serverId)));
-        uniqueServerIds.forEach((serverId) => onReconnectServer(serverId));
+        if (uniqueServerIds.length === 0) {
+          return;
+        }
+        onReconnectServers(uniqueServerIds);
         return;
       }
       if (route.kind === "reconnect_server") {
@@ -406,6 +410,7 @@ export function GlassesModeScreen() {
       allPanels,
       focusedPanelId,
       onReconnectServer,
+      onReconnectServers,
       onOpenServerSessionOnMac,
       onSendServerSessionCommand,
       onSendServerSessionControlChar,
