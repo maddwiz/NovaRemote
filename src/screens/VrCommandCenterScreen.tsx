@@ -256,6 +256,83 @@ export function VrCommandCenterScreen() {
     if (!transcript) {
       return;
     }
+    const manageChannelMatch = transcript.match(
+      /^(create|add|delete|remove)\s+(?:vr\s+)?(?:voice\s+)?channel\s+(.+?)(?:\s+in\s+(.+))?$/i
+    );
+    if (manageChannelMatch) {
+      const action = (manageChannelMatch[1] || "").toLowerCase();
+      const channelName = (manageChannelMatch[2] || "").trim();
+      const requestedWorkspaceLabel = normalizeToken(manageChannelMatch[3] || "");
+      const requestedWorkspace =
+        requestedWorkspaceLabel.length > 0
+          ? sharedWorkspaces.find((workspace) => {
+              const normalizedName = normalizeToken(workspace.name);
+              return (
+                normalizedName === requestedWorkspaceLabel ||
+                normalizedName.includes(requestedWorkspaceLabel) ||
+                requestedWorkspaceLabel.includes(normalizedName)
+              );
+            }) || null
+          : null;
+      const targetWorkspace =
+        requestedWorkspace ||
+        (activeWorkspaceId ? workspaceById.get(activeWorkspaceId) || null : null) ||
+        (sharedWorkspaces.length === 1 ? sharedWorkspaces[0] : null);
+      if (!targetWorkspace) {
+        setVoiceStatus(
+          sharedWorkspaces.length > 1
+            ? "Specify a workspace or scope to one workspace before channel management."
+            : "No workspace available for channel management."
+        );
+        setVoiceInput("");
+        return;
+      }
+
+      const permissions = getWorkspacePermissions(targetWorkspace);
+      if (!permissions.canManageChannels) {
+        setVoiceStatus(`Channel management is blocked for ${targetWorkspace.name}.`);
+        setVoiceInput("");
+        return;
+      }
+
+      if (action === "create" || action === "add") {
+        const existing = voiceChannels.find(
+          (channel) =>
+            channel.workspaceId === targetWorkspace.id &&
+            normalizeToken(channel.name) === normalizeToken(channelName)
+        );
+        if (existing) {
+          setVoiceStatus(`#${existing.name} already exists in ${targetWorkspace.name}.`);
+          setVoiceInput("");
+          return;
+        }
+        createChannel({
+          workspaceId: targetWorkspace.id,
+          name: channelName,
+        });
+        setVoiceStatus(`Created #${channelName} in ${targetWorkspace.name}`);
+        setVoiceInput("");
+        return;
+      }
+
+      const channelToDelete = voiceChannels.find(
+        (channel) =>
+          channel.workspaceId === targetWorkspace.id &&
+          (normalizeToken(channel.name) === normalizeToken(channelName) ||
+            normalizeToken(channel.name).includes(normalizeToken(channelName)) ||
+            normalizeToken(channelName).includes(normalizeToken(channel.name)))
+      );
+      if (!channelToDelete) {
+        setVoiceStatus(`No channel named "${channelName}" found in ${targetWorkspace.name}.`);
+        setVoiceInput("");
+        return;
+      }
+      deleteChannel(channelToDelete.id);
+      setVoiceStatus(`Deleted #${channelToDelete.name} from ${targetWorkspace.name}`);
+      setVoiceInput("");
+      return;
+    }
+
     const channelMatch = transcript.match(/^(join|leave|mute|unmute)\s+(?:vr\s+)?(?:voice\s+)?channel(?:\s+(.+))?$/i);
     if (channelMatch) {
       const action = (channelMatch[1] || "").toLowerCase();
@@ -322,7 +399,19 @@ export function VrCommandCenterScreen() {
       targetPanelId: runtime.workspace.focusedPanelId,
     });
     setVoiceInput("");
-  }, [activeWorkspaceId, joinChannel, leaveChannel, runtime, toggleMute, voiceChannels, voiceInput, workspaceById]);
+  }, [
+    activeWorkspaceId,
+    createChannel,
+    deleteChannel,
+    joinChannel,
+    leaveChannel,
+    runtime,
+    sharedWorkspaces,
+    toggleMute,
+    voiceChannels,
+    voiceInput,
+    workspaceById,
+  ]);
 
   const sendFocusedCommand = useCallback(() => {
     const command = commandInput.trim();

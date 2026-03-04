@@ -406,6 +406,71 @@ describe("VrCommandCenterScreen", () => {
     });
   });
 
+  it("handles voice channel create and delete commands with workspace targeting", async () => {
+    const runtime = makeRuntime();
+    const createChannel = vi.fn();
+    const deleteChannel = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    const channels: VoiceChannel[] = [
+      {
+        id: "voice-1",
+        workspaceId: "workspace-1",
+        name: "incident",
+        joined: false,
+        muted: false,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    useVoiceChannelsMock.mockReturnValue({
+      channels,
+      loading: false,
+      createChannel,
+      deleteChannel,
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    const renderer = await renderScreen(runtime, { workspaces });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("create channel triage");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(createChannel).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      name: "triage",
+    });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("delete channel incident");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(deleteChannel).toHaveBeenCalledWith("voice-1");
+    expect(runtime.dispatchVoice).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("scopes panels to workspace and manages voice channel actions", async () => {
     const runtime = makeRuntime();
     const createChannel = vi.fn();
