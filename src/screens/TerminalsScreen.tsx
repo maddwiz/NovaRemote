@@ -702,7 +702,13 @@ export function TerminalsScreen() {
             onFocusServer(serverId);
           }}
           onShareLive={() => onShareServerSessionLive(serverId, session)}
-          onExport={() => onExportSession(session)}
+          onExport={() => {
+            if (isFocusedServer) {
+              onExportSession(session);
+              return;
+            }
+            onFocusServer(serverId);
+          }}
           onFullscreen={() => {
             if (isFocusedServer) {
               onFocusSession(session);
