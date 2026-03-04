@@ -261,6 +261,10 @@ export function NovaAgentPanel({
   const [sessionByAgent, setSessionByAgent] = useState<Record<string, string>>({});
 
   const canAddAgent = isPro || agents.length < 1;
+  const pendingAgents = useMemo(
+    () => agents.filter((agent) => agent.pendingApproval !== null),
+    [agents]
+  );
 
   const defaultSession = useMemo(() => sessions[0] || null, [sessions]);
 
@@ -280,6 +284,36 @@ export function NovaAgentPanel({
       setSessionByAgent((prev) => ({ ...prev, [created.agentId]: defaultSession }));
     }
     setNewAgentName("");
+  };
+
+  const approveReadyPending = () => {
+    if (pendingAgents.length === 0) {
+      return;
+    }
+
+    const nextCommands: Record<string, string> = { ...commandByAgent };
+    pendingAgents.forEach((agent) => {
+      const selectedSession = sessionByAgent[agent.agentId] || agent.pendingApproval?.session || defaultSession;
+      const command = (commandByAgent[agent.agentId] || agent.pendingApproval?.command || "").trim();
+      if (!selectedSession || !command) {
+        return;
+      }
+
+      const approved = approveAgentApproval(agent.agentId, {
+        commandOverride: command,
+        sessionOverride: selectedSession,
+      });
+      if (approved) {
+        nextCommands[agent.agentId] = "";
+      }
+    });
+    setCommandByAgent(nextCommands);
+  };
+
+  const denyAllPending = () => {
+    pendingAgents.forEach((agent) => {
+      denyAgentApproval(agent.agentId);
+    });
   };
 
   if (!serverId) {
@@ -323,6 +357,28 @@ export function NovaAgentPanel({
       {!canAddAgent ? (
         <Text style={styles.emptyText}>Free tier supports one agent per server. Upgrade to add more.</Text>
       ) : null}
+
+      <View style={styles.actionsWrap}>
+        <Text style={styles.serverSubtitle}>{`Pending approvals: ${pendingAgents.length}`}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Approve pending agents with ready command and session routes"
+          style={[styles.actionButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
+          disabled={pendingAgents.length === 0}
+          onPress={approveReadyPending}
+        >
+          <Text style={styles.actionButtonText}>Approve Ready</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Deny all pending agent approvals"
+          style={[styles.actionDangerButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
+          disabled={pendingAgents.length === 0}
+          onPress={denyAllPending}
+        >
+          <Text style={styles.actionDangerText}>Deny All</Text>
+        </Pressable>
+      </View>
 
       {loading || memoryLoading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
       {!loading && !memoryLoading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
