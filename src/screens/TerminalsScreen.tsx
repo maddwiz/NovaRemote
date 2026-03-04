@@ -267,6 +267,7 @@ export function TerminalsScreen() {
     onOpenServers,
     onFocusServer,
     onReconnectServer,
+    onReconnectServers,
     onEditServer,
     onOpenSshFallback,
     onStartSession,
@@ -964,6 +965,7 @@ export function TerminalsScreen() {
         focusedServerId={focusedServerId}
         onFocusServer={onFocusServer}
         onReconnectServer={onReconnectServer}
+        onReconnectServers={onReconnectServers}
         onEditServer={onEditServer}
         onAddServer={onOpenServers}
         unreadServers={unreadServers}

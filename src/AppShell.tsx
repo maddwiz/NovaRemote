@@ -870,6 +870,16 @@ export default function AppShell() {
     [reconnectPoolServer, setError]
   );
 
+  const reconnectServers = useCallback(
+    (serverIds: string[]) => {
+      const uniqueIds = Array.from(new Set(serverIds.map((value) => value.trim()).filter(Boolean)));
+      uniqueIds.forEach((serverId) => {
+        reconnectServer(serverId);
+      });
+    },
+    [reconnectServer]
+  );
+
   const [startCwd, setStartCwd] = useState<string>(DEFAULT_CWD);
   const [startPrompt, setStartPrompt] = useState<string>("");
   const [startOpenOnMac, setStartOpenOnMac] = useState<boolean>(true);
@@ -2337,6 +2347,7 @@ export default function AppShell() {
     setRoute,
     focusServer,
     reconnectServer,
+    reconnectServers,
     editServer,
     openSshFallback,
     createLocalAiSession,

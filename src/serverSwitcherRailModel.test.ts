@@ -2,8 +2,10 @@ import { describe, expect, it, vi } from "vitest";
 
 import { ServerConnection, ServerProfile } from "./types";
 import {
+  buildServerGroupMenuActions,
   buildServerSwitcherMenuActions,
   formatServerDetails,
+  formatServerGroupDetails,
   groupServersByVmHost,
 } from "./serverSwitcherRailModel";
 
@@ -148,5 +150,56 @@ describe("buildServerSwitcherMenuActions", () => {
     expect(onReconnect).toHaveBeenCalledTimes(1);
     expect(onViewDetails).toHaveBeenCalledTimes(1);
     expect(onEditServer).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("formatServerGroupDetails", () => {
+  it("summarizes host-level status and vm type metrics", () => {
+    const dgx = makeServer({ id: "dgx", name: "DGX", vmHost: "Rack A", vmType: "proxmox" });
+    const lab = makeServer({ id: "lab", name: "Lab", vmHost: "Rack A", vmType: "qemu" });
+    const groups = groupServersByVmHost([dgx, lab]);
+    const group = groups[0];
+
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, "connected")],
+      [lab.id, makeConnection(lab, "degraded")],
+    ]);
+    const unreadServers = new Set<string>([lab.id]);
+
+    const summary = formatServerGroupDetails(group, connections, unreadServers);
+    expect(summary).toContain("Servers: 2");
+    expect(summary).toContain("Status: 1 connected • 1 connecting");
+    expect(summary).toContain("Unread: 1");
+    expect(summary).toContain("VM Types: Proxmox 1 • QEMU 1");
+  });
+});
+
+describe("buildServerGroupMenuActions", () => {
+  it("builds host reconnect, focus, details, and cancel actions", () => {
+    const onReconnectGroup = vi.fn();
+    const onFocusFirstServer = vi.fn();
+    const onViewDetails = vi.fn();
+
+    const actions = buildServerGroupMenuActions({
+      onReconnectGroup,
+      onFocusFirstServer,
+      onViewDetails,
+    });
+
+    expect(actions.map((action) => action.text)).toEqual([
+      "Reconnect Host",
+      "Focus First Server",
+      "View Host Details",
+      "Cancel",
+    ]);
+    expect(actions[3].style).toBe("cancel");
+
+    actions[0].onPress?.();
+    actions[1].onPress?.();
+    actions[2].onPress?.();
+
+    expect(onReconnectGroup).toHaveBeenCalledTimes(1);
+    expect(onFocusFirstServer).toHaveBeenCalledTimes(1);
+    expect(onViewDetails).toHaveBeenCalledTimes(1);
   });
 });

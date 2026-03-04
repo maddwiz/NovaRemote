@@ -99,6 +99,7 @@ export type TerminalsViewModel = {
   onOpenServers: () => void;
   onFocusServer: (serverId: string) => void;
   onReconnectServer: (serverId: string) => void;
+  onReconnectServers: (serverIds: string[]) => void;
   onEditServer: (serverId: string) => void;
   onOpenSshFallback: () => void;
   onStartSession: () => void;

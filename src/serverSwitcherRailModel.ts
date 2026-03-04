@@ -1,4 +1,5 @@
 import { ServerConnection, ServerProfile, VmType } from "./types";
+import { deriveServerRailStatus } from "./serverRailStatus";
 
 export type ServerRailGroup = {
   key: string;
@@ -20,6 +21,12 @@ export type ServerSwitcherMenuAction = {
   text: string;
   style?: "default" | "cancel" | "destructive";
   onPress?: () => void;
+};
+
+type BuildServerGroupMenuActionsArgs = {
+  onReconnectGroup: () => void;
+  onFocusFirstServer: () => void;
+  onViewDetails: () => void;
 };
 
 const VM_TYPE_ORDER: VmType[] = ["proxmox", "vmware", "hyper-v", "qemu", "virtualbox", "lxc", "docker", "cloud"];
@@ -170,6 +177,58 @@ export function formatServerDetails(server: ServerProfile, connection: ServerCon
     .join("\n");
 }
 
+export function formatServerGroupDetails(
+  group: ServerRailGroup,
+  connections: Map<string, ServerConnection>,
+  unreadServers: Set<string>
+): string {
+  const statusCounts = {
+    connected: 0,
+    connecting: 0,
+    disconnected: 0,
+    inactive: 0,
+  };
+  let openSessions = 0;
+  let totalSessions = 0;
+  let activeStreams = 0;
+  let unreadCount = 0;
+  let latencySum = 0;
+  let latencyCount = 0;
+
+  group.servers.forEach((server) => {
+    const connection = connections.get(server.id);
+    const status = deriveServerRailStatus(server, connection);
+    statusCounts[status] += 1;
+
+    if (unreadServers.has(server.id)) {
+      unreadCount += 1;
+    }
+    if (!connection) {
+      return;
+    }
+    openSessions += connection.openSessions.length;
+    totalSessions += connection.allSessions.length;
+    activeStreams += connection.activeStreamCount;
+    if (typeof connection.health.latencyMs === "number") {
+      latencySum += connection.health.latencyMs;
+      latencyCount += 1;
+    }
+  });
+
+  const vmTypeSummary = group.vmTypeGroups.map((entry) => `${entry.label} ${entry.servers.length}`).join(" • ");
+  const averageLatency = latencyCount > 0 ? `${Math.round(latencySum / latencyCount)} ms` : "n/a";
+
+  return [
+    `Servers: ${group.servers.length}`,
+    `Status: ${statusCounts.connected} connected • ${statusCounts.connecting} connecting • ${statusCounts.disconnected} disconnected • ${statusCounts.inactive} inactive`,
+    `Sessions: ${openSessions} open / ${totalSessions} total`,
+    `Streams: ${activeStreams}`,
+    `Unread: ${unreadCount}`,
+    `Latency (avg): ${averageLatency}`,
+    `VM Types: ${vmTypeSummary}`,
+  ].join("\n");
+}
+
 type BuildServerSwitcherMenuActionsArgs = {
   onReconnect: () => void;
   onViewDetails: () => void;
@@ -185,6 +244,19 @@ export function buildServerSwitcherMenuActions({
     { text: "Reconnect", onPress: onReconnect },
     { text: "View Details", onPress: onViewDetails },
     { text: "Edit Server", onPress: onEditServer },
+    { text: "Cancel", style: "cancel" },
+  ];
+}
+
+export function buildServerGroupMenuActions({
+  onReconnectGroup,
+  onFocusFirstServer,
+  onViewDetails,
+}: BuildServerGroupMenuActionsArgs): ServerSwitcherMenuAction[] {
+  return [
+    { text: "Reconnect Host", onPress: onReconnectGroup },
+    { text: "Focus First Server", onPress: onFocusFirstServer },
+    { text: "View Host Details", onPress: onViewDetails },
     { text: "Cancel", style: "cancel" },
   ];
 }

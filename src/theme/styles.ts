@@ -335,6 +335,11 @@ export const styles = StyleSheet.create({
     marginBottom: 4,
     gap: 8,
   },
+  serverRailGroupHeaderAction: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+  },
   serverRailGroupLabel: {
     color: "#7f7aa8",
     fontSize: 10,
@@ -353,6 +358,12 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 7,
     paddingVertical: 2,
     overflow: "hidden",
+  },
+  serverRailGroupUnreadBadge: {
+    width: 7,
+    height: 7,
+    borderRadius: 4,
+    backgroundColor: "#ff8c42",
   },
   serverRailVmTypeRow: {
     gap: 5,

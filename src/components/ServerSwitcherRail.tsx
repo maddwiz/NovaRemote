@@ -2,7 +2,14 @@ import React from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { deriveServerRailStatus } from "../serverRailStatus";
-import { buildServerSwitcherMenuActions, formatServerDetails, groupServersByVmHost } from "../serverSwitcherRailModel";
+import {
+  buildServerGroupMenuActions,
+  buildServerSwitcherMenuActions,
+  formatServerDetails,
+  formatServerGroupDetails,
+  groupServersByVmHost,
+  ServerRailGroup,
+} from "../serverSwitcherRailModel";
 import { styles } from "../theme/styles";
 import { ServerConnection, ServerProfile } from "../types";
 
@@ -12,6 +19,7 @@ type ServerSwitcherRailProps = {
   focusedServerId: string | null;
   onFocusServer: (serverId: string) => void;
   onReconnectServer?: (serverId: string) => void;
+  onReconnectServers?: (serverIds: string[]) => void;
   onEditServer?: (serverId: string) => void;
   onAddServer: () => void;
   unreadServers: Set<string>;
@@ -31,12 +39,31 @@ function dotStyleForServer(server: ServerProfile, connection: ServerConnection |
   return styles.serverRailDotDisconnected;
 }
 
+function dotStyleForGroup(group: ServerRailGroup, connections: Map<string, ServerConnection>) {
+  const statuses = group.servers.map((server) => deriveServerRailStatus(server, connections.get(server.id)));
+  if (statuses.length === 0 || statuses.every((status) => status === "inactive")) {
+    return styles.serverRailDotInactive;
+  }
+  const hasConnected = statuses.some((status) => status === "connected");
+  const hasConnecting = statuses.some((status) => status === "connecting");
+  const hasDisconnected = statuses.some((status) => status === "disconnected");
+
+  if (hasConnected && !hasConnecting && !hasDisconnected) {
+    return styles.serverRailDotConnected;
+  }
+  if (hasConnecting || (hasConnected && hasDisconnected)) {
+    return styles.serverRailDotConnecting;
+  }
+  return styles.serverRailDotDisconnected;
+}
+
 export function ServerSwitcherRail({
   servers,
   connections,
   focusedServerId,
   onFocusServer,
   onReconnectServer,
+  onReconnectServers,
   onEditServer,
   onAddServer,
   unreadServers,
@@ -86,7 +113,53 @@ export function ServerSwitcherRail({
         {groupedServers.map((group) => (
           <View key={group.key} style={styles.serverRailGroupCard}>
             <View style={styles.serverRailGroupHeader}>
-              <Text style={styles.serverRailGroupLabel}>{group.label}</Text>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Focus ${group.label} host`}
+                style={styles.serverRailGroupHeaderAction}
+                onPress={() => {
+                  const firstServer = group.servers[0];
+                  if (firstServer) {
+                    onFocusServer(firstServer.id);
+                  }
+                }}
+                onLongPress={() => {
+                  const groupServerIds = group.servers.map((server) => server.id);
+                  Alert.alert(
+                    group.label,
+                    "Host options",
+                    buildServerGroupMenuActions({
+                      onReconnectGroup: () => {
+                        if (onReconnectServers) {
+                          onReconnectServers(groupServerIds);
+                          return;
+                        }
+                        if (onReconnectServer) {
+                          groupServerIds.forEach((serverId) => onReconnectServer(serverId));
+                        }
+                      },
+                      onFocusFirstServer: () => {
+                        const firstServer = group.servers[0];
+                        if (firstServer) {
+                          onFocusServer(firstServer.id);
+                        }
+                      },
+                      onViewDetails: () => {
+                        Alert.alert(
+                          `${group.label} details`,
+                          formatServerGroupDetails(group, connections, unreadServers)
+                        );
+                      },
+                    })
+                  );
+                }}
+              >
+                <View style={[styles.serverRailDot, dotStyleForGroup(group, connections)]} />
+                <Text style={styles.serverRailGroupLabel}>{group.label}</Text>
+                {group.servers.some((server) => unreadServers.has(server.id)) ? (
+                  <View style={styles.serverRailGroupUnreadBadge} />
+                ) : null}
+              </Pressable>
               <Text style={styles.serverRailGroupCount}>{group.servers.length}</Text>
             </View>
             {group.vmTypeGroups.map((vmTypeGroup) => (

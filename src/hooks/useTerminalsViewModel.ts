@@ -98,6 +98,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     setRoute,
     focusServer,
     reconnectServer,
+    reconnectServers,
     editServer,
     openSshFallback,
     createLocalAiSession,
@@ -270,6 +271,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onOpenServers: () => setRoute("servers"),
     onFocusServer: focusServer,
     onReconnectServer: reconnectServer,
+    onReconnectServers: reconnectServers,
     onEditServer: editServer,
     onOpenSshFallback: () => {
       void runWithStatus("Opening SSH fallback", async () => {
