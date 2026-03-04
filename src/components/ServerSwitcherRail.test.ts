@@ -3,6 +3,11 @@ import TestRenderer, { act } from "react-test-renderer";
 import { Alert } from "react-native";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("expo-secure-store", () => ({
+  getItemAsync: vi.fn(async () => null),
+  setItemAsync: vi.fn(async () => undefined),
+}));
+
 import { ServerConnection, ServerProfile } from "../types";
 import { ServerSwitcherRail } from "./ServerSwitcherRail";
 
@@ -222,6 +227,45 @@ describe("ServerSwitcherRail", () => {
 
     expect(onReconnectServers).toHaveBeenCalledTimes(1);
     expect(new Set(onReconnectServers.mock.calls[0]?.[0] as string[])).toEqual(new Set([dgx.id, lab.id]));
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("collapses and expands host groups from the header action", async () => {
+    const dgx = makeServer("dgx", "DGX", { vmHost: "Rack A", vmType: "proxmox" });
+    const lab = makeServer("lab", "Lab", { vmHost: "Rack A", vmType: "qemu" });
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, "connected")],
+      [lab.id, makeConnection(lab, "connected")],
+    ]);
+
+    const renderer = await renderRail({
+      servers: [dgx, lab],
+      connections,
+      focusedServerId: dgx.id,
+      onFocusServer: () => {},
+      onAddServer: () => {},
+      unreadServers: new Set(),
+    });
+
+    expect(renderer.root.findByProps({ accessibilityLabel: "Switch to DGX" })).toBeDefined();
+    expect(renderer.root.findByProps({ accessibilityLabel: "Switch to Lab" })).toBeDefined();
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Focus Rack A host" }).props.onPress();
+    });
+
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Switch to DGX" })).toThrow();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Switch to Lab" })).toThrow();
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Focus Rack A host" }).props.onPress();
+    });
+
+    expect(renderer.root.findByProps({ accessibilityLabel: "Switch to DGX" })).toBeDefined();
+    expect(renderer.root.findByProps({ accessibilityLabel: "Switch to Lab" })).toBeDefined();
 
     await act(async () => {
       renderer.unmount();

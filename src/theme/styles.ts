@@ -347,6 +347,11 @@ export const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.5,
   },
+  serverRailGroupToggle: {
+    color: "#66d7ff",
+    fontSize: 10,
+    fontWeight: "700",
+  },
   serverRailGroupCount: {
     color: "#96b8de",
     fontSize: 10,
@@ -364,6 +369,12 @@ export const styles = StyleSheet.create({
     height: 7,
     borderRadius: 4,
     backgroundColor: "#ff8c42",
+  },
+  serverRailGroupSummary: {
+    color: "#8ca8d7",
+    fontSize: 10,
+    fontWeight: "600",
+    marginBottom: 2,
   },
   serverRailVmTypeRow: {
     gap: 5,

@@ -8,6 +8,7 @@ import { ServerCard } from "../components/ServerCard";
 import { useQrSetup } from "../hooks/useQrSetup";
 import { QrScannerModal } from "../components/QrScannerModal";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
+import { useVmGroupPrefs } from "../hooks/useVmGroupPrefs";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import { getWorkspaceLocalMember, getWorkspacePermissions } from "../workspacePermissions";
 import { groupServersByVmHost } from "../serverSwitcherRailModel";
@@ -209,6 +210,17 @@ export function ServersScreen({
     () => groupServersByVmHost(servers, { standalonePosition: "first" }),
     [servers]
   );
+  const groupKeys = useMemo(() => groupedServers.map((group) => group.key), [groupedServers]);
+  const {
+    collapsedGroupKeys,
+    isGroupCollapsed,
+    toggleGroupCollapsed,
+    expandAllGroups,
+    collapseAllGroups,
+  } = useVmGroupPrefs({
+    scope: "servers",
+    groupKeys,
+  });
 
   const channelsByWorkspace = useMemo(() => {
     const grouped = new Map<string, typeof voiceChannels>();
@@ -264,36 +276,76 @@ export function ServersScreen({
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Server Profiles</Text>
       {servers.length === 0 ? <Text style={styles.emptyText}>No servers yet.</Text> : null}
+      {groupedServers.length > 1 ? (
+        <View style={styles.modeRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Expand all server host groups"
+            style={[styles.actionButton, collapsedGroupKeys.length === 0 ? styles.buttonDisabled : null]}
+            disabled={collapsedGroupKeys.length === 0}
+            onPress={expandAllGroups}
+          >
+            <Text style={styles.actionButtonText}>Expand Hosts</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Collapse all server host groups"
+            style={[
+              styles.actionButton,
+              groupedServers.length === 0 || collapsedGroupKeys.length === groupedServers.length ? styles.buttonDisabled : null,
+            ]}
+            disabled={groupedServers.length === 0 || collapsedGroupKeys.length === groupedServers.length}
+            onPress={collapseAllGroups}
+          >
+            <Text style={styles.actionButtonText}>Collapse Hosts</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       <View style={styles.serverListWrap}>
-        {groupedServers.map((group) => (
-          <View key={group.key} style={styles.serverCard}>
-            <Text style={styles.panelLabel}>{`${group.label} (${group.servers.length})`}</Text>
-            <View style={styles.serverListWrap}>
-              {group.vmTypeGroups.map((vmTypeGroup) => (
-                <View key={`${group.key}-${vmTypeGroup.key}`} style={styles.serverCard}>
-                  {group.vmTypeGroups.length > 1 ? (
-                    <Text style={styles.serverSubtitle}>{`${vmTypeGroup.label} (${vmTypeGroup.servers.length})`}</Text>
-                  ) : null}
-                  <View style={styles.serverListWrap}>
-                    {vmTypeGroup.servers.map((server) => (
-                      <ServerCard
-                        key={server.id}
-                        server={server}
-                        isActive={server.id === activeServerId}
-                        onUse={onUseServer}
-                        onEdit={onBeginEditServer}
-                        onDelete={onDeleteServer}
-                        onShare={onShareServer}
-                        onOpenSsh={onOpenServerSsh}
-                      />
-                    ))}
-                  </View>
+        {groupedServers.map((group) => {
+          const collapsed = isGroupCollapsed(group.key);
+          return (
+            <View key={group.key} style={styles.serverCard}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Toggle ${group.label} host group`}
+                style={styles.serverCardHeader}
+                onPress={() => toggleGroupCollapsed(group.key)}
+              >
+                <Text style={styles.panelLabel}>{`${group.label} (${group.servers.length})`}</Text>
+                <Text style={styles.serverSubtitle}>{collapsed ? "Show" : "Hide"}</Text>
+              </Pressable>
+              {collapsed ? (
+                <Text style={styles.emptyText}>{`${group.vmTypeGroups.length} type(s)`}</Text>
+              ) : (
+                <View style={styles.serverListWrap}>
+                  {group.vmTypeGroups.map((vmTypeGroup) => (
+                    <View key={`${group.key}-${vmTypeGroup.key}`} style={styles.serverCard}>
+                      {group.vmTypeGroups.length > 1 ? (
+                        <Text style={styles.serverSubtitle}>{`${vmTypeGroup.label} (${vmTypeGroup.servers.length})`}</Text>
+                      ) : null}
+                      <View style={styles.serverListWrap}>
+                        {vmTypeGroup.servers.map((server) => (
+                          <ServerCard
+                            key={server.id}
+                            server={server}
+                            isActive={server.id === activeServerId}
+                            onUse={onUseServer}
+                            onEdit={onBeginEditServer}
+                            onDelete={onDeleteServer}
+                            onShare={onShareServer}
+                            onOpenSsh={onOpenServerSsh}
+                          />
+                        ))}
+                      </View>
+                    </View>
+                  ))}
                 </View>
-              ))}
+              )}
             </View>
-          </View>
-        ))}
+          );
+        })}
       </View>
 
       <View style={styles.serverCard}>

@@ -1,6 +1,7 @@
 import React from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
+import { useVmGroupPrefs } from "../hooks/useVmGroupPrefs";
 import { deriveServerRailStatus } from "../serverRailStatus";
 import {
   buildServerGroupMenuActions,
@@ -69,6 +70,11 @@ export function ServerSwitcherRail({
   unreadServers,
 }: ServerSwitcherRailProps) {
   const groupedServers = React.useMemo(() => groupServersByVmHost(servers), [servers]);
+  const groupKeys = React.useMemo(() => groupedServers.map((group) => group.key), [groupedServers]);
+  const { isGroupCollapsed, toggleGroupCollapsed } = useVmGroupPrefs({
+    scope: "rail",
+    groupKeys,
+  });
   const renderServerChip = (server: ServerProfile) => {
     const connection = connections.get(server.id);
     const focused = focusedServerId === server.id;
@@ -119,7 +125,12 @@ export function ServerSwitcherRail({
                 style={styles.serverRailGroupHeaderAction}
                 onPress={() => {
                   const firstServer = group.servers[0];
-                  if (firstServer) {
+                  if (!firstServer) {
+                    return;
+                  }
+                  if (group.servers.length > 1) {
+                    toggleGroupCollapsed(group.key);
+                  } else {
                     onFocusServer(firstServer.id);
                   }
                 }}
@@ -156,22 +167,29 @@ export function ServerSwitcherRail({
               >
                 <View style={[styles.serverRailDot, dotStyleForGroup(group, connections)]} />
                 <Text style={styles.serverRailGroupLabel}>{group.label}</Text>
+                <Text style={styles.serverRailGroupToggle}>{isGroupCollapsed(group.key) ? "Show" : "Hide"}</Text>
                 {group.servers.some((server) => unreadServers.has(server.id)) ? (
                   <View style={styles.serverRailGroupUnreadBadge} />
                 ) : null}
               </Pressable>
               <Text style={styles.serverRailGroupCount}>{group.servers.length}</Text>
             </View>
-            {group.vmTypeGroups.map((vmTypeGroup) => (
-              <View key={`${group.key}-${vmTypeGroup.key}`} style={styles.serverRailVmTypeRow}>
-                {group.vmTypeGroups.length > 1 ? (
-                  <Text style={styles.serverRailVmTypeLabel}>{vmTypeGroup.label}</Text>
-                ) : null}
-                <View style={styles.serverRailVmTypeChips}>
-                  {vmTypeGroup.servers.map((server) => renderServerChip(server))}
+            {isGroupCollapsed(group.key) ? (
+              <Text style={styles.serverRailGroupSummary}>
+                {`${group.vmTypeGroups.length} type(s) • ${group.servers.length} server(s)`}
+              </Text>
+            ) : (
+              group.vmTypeGroups.map((vmTypeGroup) => (
+                <View key={`${group.key}-${vmTypeGroup.key}`} style={styles.serverRailVmTypeRow}>
+                  {group.vmTypeGroups.length > 1 ? (
+                    <Text style={styles.serverRailVmTypeLabel}>{vmTypeGroup.label}</Text>
+                  ) : null}
+                  <View style={styles.serverRailVmTypeChips}>
+                    {vmTypeGroup.servers.map((server) => renderServerChip(server))}
+                  </View>
                 </View>
-              </View>
-            ))}
+              ))
+            )}
           </View>
         ))}
 

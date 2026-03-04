@@ -36,6 +36,7 @@ export const STORAGE_NOVA_MEMORY_PREFIX = "novaremote.nova_memory.v1";
 export const STORAGE_SHARED_WORKSPACES = "novaremote.shared_workspaces.v1";
 export const STORAGE_VOICE_CHANNELS = "novaremote.voice_channels.v1";
 export const STORAGE_VR_WORKSPACE_PREFIX = "novaremote.vr_workspace.v1";
+export const STORAGE_VM_GROUP_PREFS_PREFIX = "novaremote.vm_group_prefs.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
