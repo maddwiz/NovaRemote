@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ServerCapabilities, ServerConnection, ServerProfile } from "../../types";
 import { VrTerminalApiBasePath } from "../contracts";
 import { VrSessionClient } from "../sessionClient";
+import { VrStreamPool } from "../streamPool";
 import { buildVrPanelId } from "../useVrWorkspace";
 import { useVrLiveRuntime } from "../useVrLiveRuntime";
 
@@ -156,6 +157,106 @@ afterEach(() => {
 });
 
 describe("useVrLiveRuntime", () => {
+  it("routes runtime stream subscriptions through the VR stream pool with pooled base paths", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"], { terminalApiBasePath: "/terminal" })],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string,
+        enter?: boolean
+      ) => Promise<void>
+    >(async () => undefined);
+    const openStream = vi.fn(() => "dgx::main");
+    const closeStream = vi.fn();
+    const closeServer = vi.fn();
+    const closeAll = vi.fn();
+    const pause = vi.fn();
+    const resume = vi.fn();
+    const trackedStreamCount = vi.fn(() => 2);
+    const activeStreamCount = vi.fn(() => 1);
+    const isPaused = vi.fn(() => false);
+
+    const streamPoolMock: VrStreamPool = {
+      openStream,
+      closeStream,
+      closeServer,
+      closeAll,
+      pause,
+      resume,
+      trackedStreamCount,
+      activeStreamCount,
+      isPaused,
+    };
+
+    let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Runtime not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({ sendMock }),
+        streamPool: streamPoolMock,
+        maxPanels: 2,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const onDelta = vi.fn();
+    const streamKey = current().subscribeServerSessionStream("dgx", "main", { onDelta });
+    expect(streamKey).toBe("dgx::main");
+    expect(openStream).toHaveBeenCalledWith({
+      server: {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      basePath: "/terminal",
+      session: "main",
+      callbacks: {
+        onDelta,
+      },
+    });
+
+    current().unsubscribeServerSessionStream("dgx", "main");
+    expect(closeStream).toHaveBeenCalledWith("dgx", "main");
+    current().pauseServerStreams();
+    expect(pause).toHaveBeenCalledTimes(1);
+    current().resumeServerStreams();
+    expect(resume).toHaveBeenCalledTimes(1);
+    current().closeServerStreams("dgx");
+    expect(closeServer).toHaveBeenCalledWith("dgx");
+    current().closeAllServerStreams();
+    expect(closeAll).toHaveBeenCalledTimes(1);
+    expect(current().getStreamPoolSnapshot()).toEqual({
+      paused: false,
+      tracked: 2,
+      active: 1,
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("routes send actions through the live VR session client with pooled base path", async () => {
     const dgx = makeServer("dgx", "DGX");
     const home = makeServer("home", "Homelab");
