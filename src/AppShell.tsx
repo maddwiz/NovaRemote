@@ -725,6 +725,7 @@ export default function AppShell() {
     fetchTail: fetchPoolTail,
     closeStream: closePoolStream,
     connectAll: connectPoolAll,
+    disconnectAll: disconnectPoolAll,
   } = pool;
 
   useEffect(() => {
@@ -1858,6 +1859,7 @@ export default function AppShell() {
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
       if (state !== "active") {
+        disconnectPoolAll();
         lock();
         return;
       }
@@ -1869,7 +1871,7 @@ export default function AppShell() {
     return () => {
       sub.remove();
     };
-  }, [connectPoolAll, lock, unlocked]);
+  }, [connectPoolAll, disconnectPoolAll, lock, unlocked]);
 
   useEffect(() => {
     if (glassesMode.voiceLoop) {
