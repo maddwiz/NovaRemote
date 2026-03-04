@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { useAppContext } from "../context/AppContext";
+import { resolveGlassesScopeRoute } from "../glassesScopeRouting";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import { styles } from "../theme/styles";
@@ -256,6 +257,28 @@ export function VrCommandCenterScreen() {
     if (!transcript) {
       return;
     }
+    const scopeRoute = resolveGlassesScopeRoute({
+      transcript,
+      workspaces: sharedWorkspaces.map((workspace) => ({ id: workspace.id, name: workspace.name })),
+      vmHostScopeOptions,
+    });
+    if (scopeRoute.kind === "set_workspace_scope") {
+      setActiveWorkspaceId(scopeRoute.workspaceId);
+      const label = scopeRoute.workspaceId ? workspaceById.get(scopeRoute.workspaceId)?.name || "selected workspace" : "all servers";
+      setVoiceStatus(`Scoped workspace to ${label}.`);
+      setVoiceInput("");
+      return;
+    }
+    if (scopeRoute.kind === "set_vm_host_scope") {
+      setActiveVmHostScope(scopeRoute.vmHostScope);
+      const label = scopeRoute.vmHostScope
+        ? vmHostScopeOptions.find((option) => option.key === scopeRoute.vmHostScope)?.label || scopeRoute.vmHostScope
+        : "all hosts";
+      setVoiceStatus(`Scoped VM host to ${label}.`);
+      setVoiceInput("");
+      return;
+    }
+
     const manageChannelMatch = transcript.match(
       /^(create|add|delete|remove)\s+(?:vr\s+)?(?:voice\s+)?channel\s+(.+?)(?:\s+in\s+(.+))?$/i
     );
@@ -410,6 +433,7 @@ export function VrCommandCenterScreen() {
     toggleMute,
     voiceChannels,
     voiceInput,
+    vmHostScopeOptions,
     workspaceById,
   ]);
 

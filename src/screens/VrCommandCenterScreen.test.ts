@@ -299,6 +299,91 @@ describe("VrCommandCenterScreen", () => {
     });
   });
 
+  it("handles voice workspace and vm host scope commands before runtime routing", async () => {
+    const baseRuntime = makeRuntime();
+    const runtime = {
+      ...baseRuntime,
+      workspace: {
+        ...baseRuntime.workspace,
+        focusedPanelId: "dgx::main",
+        panels: [
+          ...baseRuntime.workspace.panels,
+          {
+            id: "home::ops",
+            serverId: "home",
+            serverName: "Home",
+            session: "ops",
+            sessionLabel: "ops",
+            connected: true,
+            output: "ops output",
+            pinned: false,
+            mini: false,
+            transform: {
+              x: 0.4,
+              y: 1.45,
+              z: -1.8,
+              yaw: 0,
+            },
+          },
+        ],
+      },
+    };
+    const dgx = makeServer("dgx", "DGX", { vmHost: "Rack A" });
+    const home = makeServer("home", "Home", { vmHost: "Rack B" });
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main", "build"])],
+      [home.id, makeConnection(home, ["ops"])],
+    ]);
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    const renderer = await renderScreen(runtime, { connections, workspaces });
+
+    expect(renderer.root.findByProps({ accessibilityLabel: "Focus panel main" })).toBeDefined();
+    expect(renderer.root.findByProps({ accessibilityLabel: "Focus panel ops" })).toBeDefined();
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("scope workspace platform ops");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Focus panel ops" })).toThrow();
+    expect(renderer.root.findByProps({ children: "Scoped workspace to Platform Ops." })).toBeDefined();
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("scope workspace all servers");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(renderer.root.findByProps({ accessibilityLabel: "Focus panel ops" })).toBeDefined();
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "VR voice command" }).props.onChangeText("scope host rack b");
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Dispatch voice command" }).props.onPress();
+    });
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Focus panel main" })).toThrow();
+    expect(renderer.root.findByProps({ accessibilityLabel: "Focus panel ops" })).toBeDefined();
+    expect(renderer.root.findByProps({ children: "Scoped VM host to Rack B." })).toBeDefined();
+    expect(runtime.dispatchVoice).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("routes panel live-share controls through vr voice dispatch and runtime share callback", async () => {
     const runtime = makeRuntime();
     const onShareServerSessionLive = vi.fn();
