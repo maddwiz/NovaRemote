@@ -741,11 +741,11 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       });
     },
-    onVoiceStopCaptureForServer: (serverId, session) => {
+    onVoiceStopCaptureForServer: (serverId, session, options) => {
       if (typeof stopVoiceCaptureIntoServerSession === "function") {
         if (glassesMode.voiceLoop) {
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          void stopVoiceCaptureIntoServerSession(serverId, session).then((ok: boolean) => {
+          void stopVoiceCaptureIntoServerSession(serverId, session, options).then((ok: boolean) => {
             if (ok) {
               void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
               return;
@@ -756,7 +756,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         }
         void runWithStatus(`Transcribing voice for ${session}`, async () => {
           await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-          await stopVoiceCaptureIntoServerSession(serverId, session);
+          await stopVoiceCaptureIntoServerSession(serverId, session, options);
           await Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         });
         return;

@@ -170,7 +170,11 @@ export type TerminalsViewModel = {
   onCloseGlassesMode: () => void;
   onVoiceStartCapture: () => void;
   onVoiceStopCapture: (session: string) => void;
-  onVoiceStopCaptureForServer: (serverId: string, session: string) => void;
+  onVoiceStopCaptureForServer: (
+    serverId: string,
+    session: string,
+    options?: { autoSend?: boolean }
+  ) => void;
   onVoiceSendTranscript: (session: string) => void;
   onVoiceSendTranscriptForServer: (serverId: string, session: string) => void;
   onRunFleet: () => void;

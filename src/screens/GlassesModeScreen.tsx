@@ -246,6 +246,7 @@ export function GlassesModeScreen() {
   const voiceStartRef = useRef(onVoiceStartCapture);
   const ambientFloorDbRef = useRef<number | null>(null);
   const dynamicThresholdDbRef = useRef<number | null>(null);
+  const pendingAutoRouteRef = useRef<boolean>(false);
 
   useEffect(() => {
     voiceStartRef.current = onVoiceStartCapture;
@@ -334,18 +335,6 @@ export function GlassesModeScreen() {
     activePanelRef.current = activePanel;
   }, [activePanel]);
 
-  const stopVoiceForActivePanel = useCallback(() => {
-    const panel = activePanelRef.current;
-    if (!panel) {
-      return;
-    }
-    onVoiceStopCaptureForServer(panel.serverId, panel.session);
-  }, [onVoiceStopCaptureForServer]);
-
-  useEffect(() => {
-    voiceStopRef.current = stopVoiceForActivePanel;
-  }, [stopVoiceForActivePanel]);
-
   const arrangedPanels = useMemo(
     () => buildSpatialPanels(allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode),
     [allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode]
@@ -365,6 +354,50 @@ export function GlassesModeScreen() {
     })),
     focusedPanelId,
   });
+
+  const applyTranscriptRoute = useCallback(
+    (transcript: string, autoSend: boolean) => {
+      const route = routeTranscript(transcript);
+      if (route.kind === "focus_panel") {
+        setFocusedPanelId(route.panelId);
+        return;
+      }
+      if (route.kind === "show_all") {
+        setOverviewMode(true);
+        return;
+      }
+      if (route.kind === "minimize") {
+        setOverviewMode(false);
+        return;
+      }
+      if (route.kind !== "send_command") {
+        return;
+      }
+      const target = panelMap.get(route.panelId);
+      if (!target) {
+        return;
+      }
+      onSetServerSessionDraft(target.serverId, target.session, route.command);
+      if (autoSend) {
+        onSendServerSessionDraft(target.serverId, target.session);
+      }
+    },
+    [onSendServerSessionDraft, onSetServerSessionDraft, panelMap, routeTranscript]
+  );
+
+  const stopVoiceForActivePanel = useCallback(() => {
+    const panel = activePanelRef.current;
+    if (!panel) {
+      return;
+    }
+    const deferAutoRoute = glassesMode.voiceAutoSend && panelIds.length > 1;
+    pendingAutoRouteRef.current = deferAutoRoute;
+    onVoiceStopCaptureForServer(panel.serverId, panel.session, deferAutoRoute ? { autoSend: false } : undefined);
+  }, [glassesMode.voiceAutoSend, onVoiceStopCaptureForServer, panelIds.length]);
+
+  useEffect(() => {
+    voiceStopRef.current = stopVoiceForActivePanel;
+  }, [stopVoiceForActivePanel]);
 
   const onDraftChangeForActivePanel = useCallback(
     (value: string) => {
@@ -519,6 +552,22 @@ export function GlassesModeScreen() {
     voiceMeteringDb,
     voiceRecording,
   ]);
+
+  useEffect(() => {
+    if (!pendingAutoRouteRef.current) {
+      return;
+    }
+    if (voiceRecording || voiceBusy) {
+      return;
+    }
+
+    pendingAutoRouteRef.current = false;
+    const transcript = voiceTranscript.trim();
+    if (!transcript) {
+      return;
+    }
+    applyTranscriptRoute(transcript, true);
+  }, [applyTranscriptRoute, voiceBusy, voiceRecording, voiceTranscript]);
 
   useEffect(() => {
     return () => {
@@ -879,10 +928,7 @@ export function GlassesModeScreen() {
               if (!activeSession) {
                 return;
               }
-              if (!activePanel) {
-                return;
-              }
-              onVoiceStopCaptureForServer(activePanel.serverId, activeSession);
+              voiceStopRef.current();
             }}
           >
             <Text style={styles.glassesRouteButtonText}>{voiceBusy ? "Transcribing..." : "Stop + Transcribe"}</Text>
@@ -894,29 +940,7 @@ export function GlassesModeScreen() {
             style={[styles.glassesRouteButton, !transcriptReady ? styles.buttonDisabled : null]}
             disabled={!transcriptReady}
             onPress={() => {
-              const route = routeTranscript(voiceTranscript);
-              if (route.kind === "focus_panel") {
-                setFocusedPanelId(route.panelId);
-                return;
-              }
-              if (route.kind === "show_all") {
-                setOverviewMode(true);
-                return;
-              }
-              if (route.kind === "minimize") {
-                setOverviewMode(false);
-                return;
-              }
-              if (route.kind === "send_command") {
-                const target = panelMap.get(route.panelId);
-                if (!target) {
-                  return;
-                }
-                onSetServerSessionDraft(target.serverId, target.session, route.command);
-                if (glassesMode.voiceAutoSend) {
-                  onSendServerSessionDraft(target.serverId, target.session);
-                }
-              }
+              applyTranscriptRoute(voiceTranscript, glassesMode.voiceAutoSend);
             }}
           >
             <Text style={styles.glassesRouteButtonText}>Route Transcript</Text>

@@ -1651,11 +1651,16 @@ export default function AppShell() {
   );
 
   const stopVoiceCaptureIntoSession = useCallback(
-    async (session: string, serverId?: string): Promise<boolean> => {
+    async (
+      session: string,
+      serverId?: string,
+      options?: { autoSend?: boolean }
+    ): Promise<boolean> => {
       const targetServerId = serverId ?? focusedServerId;
       if (!targetServerId) {
         throw new Error("Select a server before using voice capture.");
       }
+      const autoSend = options?.autoSend ?? glassesMode.voiceAutoSend;
       try {
         const rawTranscript = (
           await stopVoiceCaptureAndTranscribe({
@@ -1680,7 +1685,7 @@ export default function AppShell() {
         }
 
         setPoolDrafts(targetServerId, (prev) => ({ ...prev, [session]: commandTranscript }));
-        if (!glassesMode.voiceAutoSend) {
+        if (!autoSend) {
           voiceLoopRetryCountRef.current[session] = 0;
           if (glassesMode.voiceLoop) {
             scheduleVoiceLoopRestart(session, 180);
@@ -1758,8 +1763,8 @@ export default function AppShell() {
   );
 
   const stopVoiceCaptureIntoServerSession = useCallback(
-    async (serverId: string, session: string): Promise<boolean> => {
-      return await stopVoiceCaptureIntoSession(session, serverId);
+    async (serverId: string, session: string, options?: { autoSend?: boolean }): Promise<boolean> => {
+      return await stopVoiceCaptureIntoSession(session, serverId, options);
     },
     [stopVoiceCaptureIntoSession]
   );
