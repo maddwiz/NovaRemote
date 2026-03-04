@@ -5,6 +5,7 @@ import { useAppContext } from "../context/AppContext";
 import { styles } from "../theme/styles";
 import { VrLayoutPreset } from "../vr/contracts";
 import { useVrLiveRuntime } from "../vr/useVrLiveRuntime";
+import { buildVrPanelId } from "../vr/useVrWorkspace";
 
 const VR_PRESETS: VrLayoutPreset[] = ["arc", "grid", "stacked", "cockpit", "custom"];
 
@@ -59,6 +60,25 @@ export function VrCommandCenterScreen() {
     () => runtime.workspace.panels.find((panel) => panel.id === runtime.workspace.focusedPanelId) || null,
     [runtime.workspace.focusedPanelId, runtime.workspace.panels]
   );
+  const availablePanels = useMemo(() => {
+    const visible = new Set(runtime.workspace.panels.map((panel) => panel.id));
+    const next: Array<{ id: string; serverId: string; session: string; label: string }> = [];
+    connections.forEach((connection, serverId) => {
+      connection.openSessions.forEach((session) => {
+        const id = buildVrPanelId(serverId, session);
+        if (visible.has(id)) {
+          return;
+        }
+        next.push({
+          id,
+          serverId,
+          session,
+          label: `${connection.server.name} · ${session}`,
+        });
+      });
+    });
+    return next;
+  }, [connections, runtime.workspace.panels]);
   const [snapshot, setSnapshot] = useState(() => runtime.getStreamPoolSnapshot());
 
   useEffect(() => {
@@ -212,6 +232,27 @@ export function VrCommandCenterScreen() {
         </View>
       </View>
 
+      <View style={styles.vrRuntimeInputCard}>
+        <Text style={styles.serverSubtitle}>Panel pool</Text>
+        <View style={styles.vrRuntimeActionRow}>
+          {availablePanels.length === 0 ? (
+            <Text style={styles.emptyText}>All open sessions are already in the workspace.</Text>
+          ) : (
+            availablePanels.map((entry) => (
+              <Pressable
+                key={`vr-add-${entry.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Add panel ${entry.label}`}
+                style={styles.chip}
+                onPress={() => runtime.workspace.addPanel(entry.serverId, entry.session)}
+              >
+                <Text style={styles.chipText}>{`+ ${entry.label}`}</Text>
+              </Pressable>
+            ))
+          )}
+        </View>
+      </View>
+
       {runtime.hudStatus ? (
         <View style={styles.vrRuntimeHudStatus}>
           <Text style={styles.serverSubtitle}>{runtime.hudStatus.message}</Text>
@@ -295,6 +336,14 @@ export function VrCommandCenterScreen() {
                   }}
                 >
                   <Text style={styles.chipText}>Stop</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove panel ${panel.sessionLabel}`}
+                  style={styles.chip}
+                  onPress={() => runtime.workspace.removePanel(panel.id)}
+                >
+                  <Text style={styles.chipText}>Remove</Text>
                 </Pressable>
               </View>
 
