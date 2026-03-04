@@ -603,6 +603,8 @@ describe("useVrInputRouter", () => {
   it("publishes HUD updates for panel visual voice actions", async () => {
     const applyVoiceTranscript = vi
       .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({ kind: "panel_pin", panelId: "dgx::main" })
+      .mockReturnValueOnce({ kind: "panel_unpin", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_mini", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_expand", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_opacity", panelId: "dgx::main", opacity: 0.45 });
@@ -627,6 +629,16 @@ describe("useVrInputRouter", () => {
     await act(async () => {
       renderer = TestRenderer.create(React.createElement(Harness));
     });
+
+    await act(async () => {
+      await current().dispatchVoice("pin panel");
+    });
+    expect(current().hudStatus?.message).toContain("Pinned panel dgx::main");
+
+    await act(async () => {
+      await current().dispatchVoice("unpin panel");
+    });
+    expect(current().hudStatus?.message).toContain("Unpinned panel dgx::main");
 
     await act(async () => {
       await current().dispatchVoice("mini panel");

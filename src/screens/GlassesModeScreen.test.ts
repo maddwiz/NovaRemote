@@ -527,6 +527,70 @@ describe("GlassesModeScreen", () => {
     });
   });
 
+  it("routes spatial pin and unpin voice commands to HUD pin state", async () => {
+    const routeTranscript = vi
+      .fn<(transcript: string) => { kind: string; panelId?: string }>()
+      .mockReturnValueOnce({ kind: "pin_panel", panelId: "home::build" })
+      .mockReturnValueOnce({ kind: "unpin_panel", panelId: "home::build" });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "pin panel for home",
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(routeTranscript).toHaveBeenCalledWith("pin panel for home");
+    expect(() => screen.root.findByProps({ children: "Pinned Home build to HUD" })).not.toThrow();
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "unpin panel for home",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(routeTranscript).toHaveBeenLastCalledWith("unpin panel for home");
+    expect(() => screen.root.findByProps({ children: "Unpinned Home build from HUD" })).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
   it("handles voice channel create commands with explicit workspace targeting", async () => {
     const createChannel = vi.fn((input: { workspaceId: string; name: string }) => ({
       id: "voice-2",

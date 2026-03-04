@@ -111,6 +111,14 @@ describe("parseVrVoiceIntent", () => {
       kind: "share_live",
       panelId: "home-build",
     });
+    expect(parseVrVoiceIntent("pin panel for homelab", PANELS, "dgx-main")).toEqual({
+      kind: "panel_pin",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("unpin panel", PANELS, "home-build")).toEqual({
+      kind: "panel_unpin",
+      panelId: "home-build",
+    });
     expect(parseVrVoiceIntent("reconnect homelab", PANELS, "dgx-main")).toEqual({
       kind: "reconnect_server",
       panelId: "home-build",

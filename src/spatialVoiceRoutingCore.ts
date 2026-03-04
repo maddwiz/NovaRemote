@@ -29,6 +29,8 @@ export type VoiceRoute =
   | { kind: "stop_session"; panelId: string }
   | { kind: "open_on_mac"; panelId: string }
   | { kind: "share_live"; panelId: string }
+  | { kind: "pin_panel"; panelId: string }
+  | { kind: "unpin_panel"; panelId: string }
   | { kind: "send_command"; panelId: string; command: string };
 
 type ResolveVoiceRouteArgs = {
@@ -441,6 +443,30 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
       return { kind: "none" };
     }
     return { kind: "share_live", panelId };
+  }
+
+  const pinPanelMatch = cleaned.match(
+    /^(?:pin|keep)\s+(?:this\s+)?(?:panel|session|terminal)?(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+  );
+  if (pinPanelMatch) {
+    const target = pinPanelMatch[1]?.trim() || pinPanelMatch[2]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    if (!panelId) {
+      return { kind: "none" };
+    }
+    return { kind: "pin_panel", panelId };
+  }
+
+  const unpinPanelMatch = cleaned.match(
+    /^(?:unpin|un-pin|remove\s+pin)\s+(?:this\s+)?(?:panel|session|terminal)?(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+  );
+  if (unpinPanelMatch) {
+    const target = unpinPanelMatch[1]?.trim() || unpinPanelMatch[2]?.trim() || "";
+    const panelId = (target ? findPanelByTarget(panels, target)?.id : null) || resolveFocusedPanelId(panels, focusedPanelId);
+    if (!panelId) {
+      return { kind: "none" };
+    }
+    return { kind: "unpin_panel", panelId };
   }
 
   const interruptMatch = cleaned.match(

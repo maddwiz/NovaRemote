@@ -201,6 +201,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "home::build-01",
     });
+    const pinPanel = resolveSpatialVoiceRoute({
+      transcript: "pin panel for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const unpinFocused = resolveSpatialVoiceRoute({
+      transcript: "unpin panel",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
     const pausePool = resolveSpatialVoiceRoute({
       transcript: "pause all streams",
       panels: PANELS,
@@ -321,6 +331,14 @@ describe("resolveSpatialVoiceRoute", () => {
     });
     expect(shareSpectateFallback).toEqual({
       kind: "share_live",
+      panelId: "home::build-01",
+    });
+    expect(pinPanel).toEqual({
+      kind: "pin_panel",
+      panelId: "cloud::deploy",
+    });
+    expect(unpinFocused).toEqual({
+      kind: "unpin_panel",
       panelId: "home::build-01",
     });
     expect(pausePool).toEqual({

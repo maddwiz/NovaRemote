@@ -891,6 +891,19 @@ describe("useVrWorkspace", () => {
     });
 
     const panelId = buildVrPanelId("dgx", "main");
+    expect(current().panels.find((panel) => panel.id === panelId)?.pinned).toBe(false);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("pin panel");
+      expect(action).toEqual({ kind: "panel_pin", panelId });
+    });
+    expect(current().panels.find((panel) => panel.id === panelId)?.pinned).toBe(true);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("unpin panel");
+      expect(action).toEqual({ kind: "panel_unpin", panelId });
+    });
+    expect(current().panels.find((panel) => panel.id === panelId)?.pinned).toBe(false);
 
     await act(async () => {
       const action = current().applyVoiceTranscript("mini panel");

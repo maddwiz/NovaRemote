@@ -507,6 +507,32 @@ export function GlassesModeScreen() {
     onRestore: restoreSpatialLayout,
   });
 
+  const pinPanel = useCallback(
+    (panelId: string) => {
+      if (!panelMap.has(panelId)) {
+        return;
+      }
+      setPinnedPanelIds((previous) => {
+        const next = previous.includes(panelId) ? previous : [...previous, panelId];
+        setPanelIds((current) => ensurePanelVisible(current, next, panelId, maxPanels));
+        return next;
+      });
+    },
+    [maxPanels, panelMap]
+  );
+
+  const unpinPanel = useCallback(
+    (panelId: string) => {
+      if (!panelMap.has(panelId)) {
+        return;
+      }
+      setPinnedPanelIds((previous) =>
+        previous.includes(panelId) ? previous.filter((entry) => entry !== panelId) : previous
+      );
+    },
+    [panelMap]
+  );
+
   const applyTranscriptRoute = useCallback(
     (transcript: string, autoSend: boolean) => {
       const scopeRoute = resolveGlassesScopeRoute({
@@ -848,6 +874,24 @@ export function GlassesModeScreen() {
         setRouteStatus(`Requested live link for ${target.serverName} ${target.sessionLabel}`);
         return;
       }
+      if (route.kind === "pin_panel") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        pinPanel(target.id);
+        setRouteStatus(`Pinned ${target.serverName} ${target.sessionLabel} to HUD`);
+        return;
+      }
+      if (route.kind === "unpin_panel") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        unpinPanel(target.id);
+        setRouteStatus(`Unpinned ${target.serverName} ${target.sessionLabel} from HUD`);
+        return;
+      }
       if (route.kind !== "send_command") {
         return;
       }
@@ -884,11 +928,13 @@ export function GlassesModeScreen() {
       onSendServerSessionCommand,
       onSendServerSessionControlChar,
       onSetServerSessionDraft,
+      pinPanel,
       panelIds,
       panelMap,
       pinnedPanelIds,
       routeTranscript,
       sharedWorkspaces,
+      unpinPanel,
       activeWorkspaceId,
       createChannel,
       deleteChannel,
@@ -1297,14 +1343,14 @@ export function GlassesModeScreen() {
             setFocusedPanelId(panelId);
           }}
           onTogglePinPanel={(panelId) => {
-            setPinnedPanelIds((previous) =>
-              previous.includes(panelId)
-                ? previous.filter((entry) => entry !== panelId)
-                : [...previous, panelId]
-            );
+            if (pinnedPanelIds.includes(panelId)) {
+              unpinPanel(panelId);
+              return;
+            }
+            pinPanel(panelId);
           }}
           onRemovePanel={(panelId) => {
-            setPinnedPanelIds((previous) => previous.filter((entry) => entry !== panelId));
+            unpinPanel(panelId);
             setPanelIds((previous) => previous.filter((entry) => entry !== panelId));
           }}
           onCyclePanel={cyclePanels}

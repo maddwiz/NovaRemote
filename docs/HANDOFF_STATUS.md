@@ -28,6 +28,7 @@ Updated: 2026-03-04
 - [x] Brand expansions (`meta_orion`, `meta_ray_ban`, `viture_pro`)
 - [x] Voice-channel controls and role-gated channel management in glasses route
 - [x] Voice `share live` / spectator-link routing in glasses + VR
+- [x] Voice pin/unpin panel routing in shared parser + glasses HUD + VR workspace/HUD
 
 ## v1.4 VR Command Center
 

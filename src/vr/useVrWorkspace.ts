@@ -60,6 +60,8 @@ export type VrWorkspaceVoiceAction =
   | { kind: "overview" }
   | { kind: "minimize" }
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
+  | { kind: "panel_pin"; panelId: string }
+  | { kind: "panel_unpin"; panelId: string }
   | { kind: "panel_mini"; panelId: string }
   | { kind: "panel_expand"; panelId: string }
   | { kind: "panel_opacity"; panelId: string; opacity: number }
@@ -502,6 +504,30 @@ export function useVrWorkspace({
     });
   }, []);
 
+  const setPanelPinned = useCallback(
+    (panelId: string, pinned: boolean) => {
+      if (!panelId || !universeById.has(panelId)) {
+        return;
+      }
+      if (pinned) {
+        setPinnedPanelIds((prevPinned) => {
+          const nextPinned = prevPinned.includes(panelId) ? prevPinned : [...prevPinned, panelId];
+          setPanelIds((prevPanelIds) => {
+            const withPanel = prevPanelIds.includes(panelId) ? prevPanelIds : [...prevPanelIds, panelId];
+            return applyPanelLimit(withPanel, nextPinned, panelLimit, panelId);
+          });
+          return nextPinned;
+        });
+        return;
+      }
+
+      setPinnedPanelIds((prevPinned) =>
+        prevPinned.includes(panelId) ? prevPinned.filter((id) => id !== panelId) : prevPinned
+      );
+    },
+    [panelLimit, universeById]
+  );
+
   const toggleMiniPanel = useCallback(
     (panelId: string) => {
       if (!panelId || !universeById.has(panelId)) {
@@ -861,6 +887,14 @@ export function useVrWorkspace({
           session: panel.session,
         };
       }
+      if (intent.kind === "panel_pin") {
+        setPanelPinned(intent.panelId, true);
+        return { kind: "panel_pin", panelId: intent.panelId };
+      }
+      if (intent.kind === "panel_unpin") {
+        setPanelPinned(intent.panelId, false);
+        return { kind: "panel_unpin", panelId: intent.panelId };
+      }
       if (intent.kind === "panel_mini") {
         setPanelMini(intent.panelId, true);
         return { kind: "panel_mini", panelId: intent.panelId };
@@ -888,7 +922,17 @@ export function useVrWorkspace({
       }
       return { kind: "none" };
     },
-    [focusPanel, focusedPanelId, rotateWorkspace, routePanels, serverScopeIds, setPanelMini, setPanelOpacity, universeById]
+    [
+      focusPanel,
+      focusedPanelId,
+      rotateWorkspace,
+      routePanels,
+      serverScopeIds,
+      setPanelMini,
+      setPanelOpacity,
+      setPanelPinned,
+      universeById,
+    ]
   );
 
   const applyGesture = useCallback(

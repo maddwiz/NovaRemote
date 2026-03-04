@@ -583,6 +583,24 @@ export function useVrInputRouter({
         return action;
       }
 
+      if (action.kind === "panel_pin") {
+        publishHudStatus({
+          message: `Pinned panel ${action.panelId}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+
+      if (action.kind === "panel_unpin") {
+        publishHudStatus({
+          message: `Unpinned panel ${action.panelId}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+
       if (action.kind === "panel_mini") {
         publishHudStatus({
           message: `Mini panel ${action.panelId}`,
