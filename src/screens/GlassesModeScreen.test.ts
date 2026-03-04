@@ -794,4 +794,90 @@ describe("GlassesModeScreen", () => {
       screen.unmount();
     });
   });
+
+  it("supports inline glasses workspace channel create and delete controls", async () => {
+    const createChannel = vi.fn((input: { workspaceId: string; name: string }) => ({
+      id: "voice-new",
+      workspaceId: input.workspaceId,
+      name: input.name,
+      joined: false,
+      muted: false,
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z",
+    }));
+    const deleteChannel = vi.fn();
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [
+        {
+          id: "voice-1",
+          workspaceId: "workspace-1",
+          name: "incident",
+          joined: false,
+          muted: false,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createChannel,
+      deleteChannel,
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+    useSharedWorkspacesMock.mockReturnValue({
+      workspaces: [
+        {
+          id: "workspace-1",
+          name: "Platform Ops",
+          serverIds: ["dgx"],
+          members: [{ id: "local-user", name: "Local User", role: "owner" }],
+          channelId: "channel-workspace-1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(),
+      renameWorkspace: vi.fn(),
+      setWorkspaceServers: vi.fn(),
+      setMemberRole: vi.fn(),
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([[dgx.id, makeConnection(dgx, ["main"])]]);
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "New glasses voice channel for Platform Ops" }).props.onChangeText("triage");
+    });
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Create glasses voice channel for Platform Ops" }).props.onPress();
+    });
+    expect(createChannel).toHaveBeenCalledWith({
+      workspaceId: "workspace-1",
+      name: "triage",
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Delete glasses voice channel incident" }).props.onPress();
+    });
+    expect(deleteChannel).toHaveBeenCalledWith("voice-1");
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
 });

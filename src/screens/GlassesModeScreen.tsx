@@ -233,6 +233,7 @@ export function GlassesModeScreen() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeVmHostScope, setActiveVmHostScope] = useState<string | null>(null);
   const [routeStatus, setRouteStatus] = useState<string | null>(null);
+  const [newChannelNamesByWorkspace, setNewChannelNamesByWorkspace] = useState<Record<string, string>>({});
   const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
 
   const vmHostScopeOptions = useMemo(() => {
@@ -306,6 +307,22 @@ export function GlassesModeScreen() {
     }
     return sharedWorkspaces;
   }, [activeWorkspaceId, sharedWorkspaces, workspaceById]);
+  const setWorkspaceChannelDraft = useCallback((workspaceId: string, value: string) => {
+    setNewChannelNamesByWorkspace((previous) => ({
+      ...previous,
+      [workspaceId]: value,
+    }));
+  }, []);
+  const clearWorkspaceChannelDraft = useCallback((workspaceId: string) => {
+    setNewChannelNamesByWorkspace((previous) => {
+      if (!(workspaceId in previous)) {
+        return previous;
+      }
+      const next = { ...previous };
+      delete next[workspaceId];
+      return next;
+    });
+  }, []);
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
@@ -1300,9 +1317,45 @@ export function GlassesModeScreen() {
           const channels = voiceChannelsByWorkspace.get(workspace.id) || [];
           const joined = channels.find((channel) => channel.joined) || null;
           const permissions = getWorkspacePermissions(workspace);
+          const draft = (newChannelNamesByWorkspace[workspace.id] || "").trim();
           return (
             <View key={`glasses-workspace-channel-${workspace.id}`} style={styles.serverCard}>
               <Text style={styles.serverSubtitle}>{`${workspace.name} • ${permissions.role}`}</Text>
+              {permissions.canManageChannels ? (
+                <View style={styles.modeRow}>
+                  <TextInput
+                    accessibilityLabel={`New glasses voice channel for ${workspace.name}`}
+                    style={[styles.input, styles.flexButton]}
+                    value={newChannelNamesByWorkspace[workspace.id] || ""}
+                    onChangeText={(value) => setWorkspaceChannelDraft(workspace.id, value)}
+                    placeholder="New channel"
+                    placeholderTextColor="#7f7aa8"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Create glasses voice channel for ${workspace.name}`}
+                    style={[styles.actionButton, !draft ? styles.buttonDisabled : null]}
+                    disabled={!draft}
+                    onPress={() => {
+                      if (!draft) {
+                        return;
+                      }
+                      const created = createChannel({
+                        workspaceId: workspace.id,
+                        name: draft,
+                      });
+                      if (created) {
+                        clearWorkspaceChannelDraft(workspace.id);
+                        setRouteStatus(`Created #${created.name} in ${workspace.name}`);
+                      }
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Create</Text>
+                  </Pressable>
+                </View>
+              ) : null}
               {channels.length === 0 ? <Text style={styles.emptyText}>No channels configured.</Text> : null}
               {channels.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -1335,6 +1388,24 @@ export function GlassesModeScreen() {
                     );
                   })}
                 </ScrollView>
+              ) : null}
+              {permissions.canManageChannels && channels.length > 0 ? (
+                <View style={styles.actionsWrap}>
+                  {channels.map((channel) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete glasses voice channel ${channel.name}`}
+                      key={`glasses-delete-channel-${workspace.id}-${channel.id}`}
+                      style={styles.actionDangerButton}
+                      onPress={() => {
+                        deleteChannel(channel.id);
+                        setRouteStatus(`Deleted #${channel.name} from ${workspace.name}`);
+                      }}
+                    >
+                      <Text style={styles.actionDangerText}>{`Delete #${channel.name}`}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               ) : null}
               {joined ? (
                 <View style={styles.modeRow}>
