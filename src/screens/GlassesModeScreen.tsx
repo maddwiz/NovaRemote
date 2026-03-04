@@ -35,6 +35,11 @@ type BrandProfile = {
   displayAspect: string;
 };
 
+type PendingAgentVoiceAction = {
+  kind: "approve_ready_agents" | "deny_all_pending_agents";
+  targetServerId: string;
+} | null;
+
 const BRAND_PROFILES: Record<GlassesBrand, BrandProfile> = {
   xreal_x1: {
     label: "XREAL X1",
@@ -182,6 +187,7 @@ export function GlassesModeScreen() {
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
   const [overviewMode, setOverviewMode] = useState<boolean>(true);
   const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
+  const [pendingAgentVoiceAction, setPendingAgentVoiceAction] = useState<PendingAgentVoiceAction>(null);
   const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -367,10 +373,34 @@ export function GlassesModeScreen() {
         return;
       }
       if (route.kind === "approve_ready_agents") {
+        const targetServerId = route.panelId ? panelMap.get(route.panelId)?.serverId || null : focusedServerId;
+        if (!targetServerId) {
+          return;
+        }
+        if (focusedServerId && targetServerId !== focusedServerId) {
+          setPendingAgentVoiceAction({
+            kind: "approve_ready_agents",
+            targetServerId,
+          });
+          onFocusServer(targetServerId);
+          return;
+        }
         onApproveReadyAgentsForFocusedServer();
         return;
       }
       if (route.kind === "deny_all_pending_agents") {
+        const targetServerId = route.panelId ? panelMap.get(route.panelId)?.serverId || null : focusedServerId;
+        if (!targetServerId) {
+          return;
+        }
+        if (focusedServerId && targetServerId !== focusedServerId) {
+          setPendingAgentVoiceAction({
+            kind: "deny_all_pending_agents",
+            targetServerId,
+          });
+          onFocusServer(targetServerId);
+          return;
+        }
         onDenyAllPendingAgentsForFocusedServer();
         return;
       }
@@ -439,11 +469,33 @@ export function GlassesModeScreen() {
       onSendServerSessionCommand,
       onSendServerSessionControlChar,
       onSetServerSessionDraft,
+      focusedServerId,
       panelIds,
       panelMap,
       routeTranscript,
     ]
   );
+
+  useEffect(() => {
+    if (!pendingAgentVoiceAction) {
+      return;
+    }
+    if (!focusedServerId || focusedServerId !== pendingAgentVoiceAction.targetServerId) {
+      return;
+    }
+
+    if (pendingAgentVoiceAction.kind === "approve_ready_agents") {
+      onApproveReadyAgentsForFocusedServer();
+    } else {
+      onDenyAllPendingAgentsForFocusedServer();
+    }
+    setPendingAgentVoiceAction(null);
+  }, [
+    focusedServerId,
+    onApproveReadyAgentsForFocusedServer,
+    onDenyAllPendingAgentsForFocusedServer,
+    pendingAgentVoiceAction,
+  ]);
 
   const stopVoiceForActivePanel = useCallback(() => {
     const panel = activePanelRef.current;
