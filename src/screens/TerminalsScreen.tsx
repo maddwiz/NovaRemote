@@ -10,6 +10,7 @@ import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
 import { GlassesHudModal } from "../components/GlassesHudModal";
 import { NovaAgentPanel } from "../components/NovaAgentPanel";
+import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { styles } from "../theme/styles";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
@@ -85,6 +86,14 @@ function formatNumber(value: number | undefined, decimals: number = 0): string {
     return "n/a";
   }
   return value.toFixed(decimals);
+}
+
+function sameIdSet(a: string[], b: string[]): boolean {
+  if (a.length !== b.length) {
+    return false;
+  }
+  const setA = new Set(a);
+  return b.every((value) => setA.has(value));
 }
 
 function glassesBrandLabel(brand: GlassesBrand): string {
@@ -282,6 +291,7 @@ export function TerminalsScreen() {
     onTogglePinSession,
     onSetFleetCommand,
     onSetFleetCwd,
+    onSetFleetTargets,
     onToggleFleetTarget,
     onSetFleetWaitMs,
     onSetShellRunWaitMs,
@@ -327,6 +337,7 @@ export function TerminalsScreen() {
   } = useAppContext().terminals;
 
   const { width } = useWindowDimensions();
+  const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
   const activeBackend = activeServer?.terminalBackend;
@@ -811,6 +822,37 @@ export function TerminalsScreen() {
           );
         })}
       </ScrollView>
+
+      {sharedWorkspaces.length > 0 ? (
+        <>
+          <Text style={styles.serverSubtitle}>Workspace Targets</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+            {sharedWorkspaces.map((workspace) => {
+              const targetIds = workspace.serverIds.filter((serverId) => servers.some((server) => server.id === serverId));
+              const active = targetIds.length > 0 && sameIdSet(fleetTargets, targetIds);
+              return (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Apply workspace ${workspace.name} as fleet targets`}
+                  key={`fleet-workspace-${workspace.id}`}
+                  style={[styles.chip, active ? styles.chipActive : null]}
+                  onPress={() => onSetFleetTargets(targetIds)}
+                >
+                  <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{`${workspace.name} (${targetIds.length})`}</Text>
+                </Pressable>
+              );
+            })}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Clear all fleet targets"
+              style={[styles.chip, fleetTargets.length === 0 ? styles.chipActive : null]}
+              onPress={() => onSetFleetTargets([])}
+            >
+              <Text style={[styles.chipText, fleetTargets.length === 0 ? styles.chipTextActive : null]}>Clear</Text>
+            </Pressable>
+          </ScrollView>
+        </>
+      ) : null}
 
       <Pressable accessibilityRole="button"
         accessibilityLabel="Run command across selected servers"

@@ -6,6 +6,20 @@ import { TerminalsViewModel } from "../context/AppContext";
 import { DEFAULT_SPECTATE_TTL_SECONDS, FREE_SESSION_LIMIT, isLikelyAiSession } from "../constants";
 import { ProcessSignal, TerminalSendMode } from "../types";
 
+function uniqueServerIds(serverIds: string[]): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  serverIds.forEach((value) => {
+    const id = value.trim();
+    if (!id || seen.has(id)) {
+      return;
+    }
+    seen.add(id);
+    next.push(id);
+  });
+  return next;
+}
+
 export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsViewModel {
   const {
     activeServer,
@@ -641,6 +655,9 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     },
     onSetFleetCommand: setFleetCommand,
     onSetFleetCwd: setFleetCwd,
+    onSetFleetTargets: (serverIds) => {
+      setFleetTargets(uniqueServerIds(serverIds));
+    },
     onToggleFleetTarget: (serverId) => {
       setFleetTargets((prev: any[]) => (prev.includes(serverId) ? prev.filter((id: any) => id !== serverId) : [...prev, serverId]));
     },

@@ -135,6 +135,7 @@ export type TerminalsViewModel = {
   onTogglePinSession: (session: string) => void;
   onSetFleetCommand: (value: string) => void;
   onSetFleetCwd: (value: string) => void;
+  onSetFleetTargets: (serverIds: string[]) => void;
   onToggleFleetTarget: (serverId: string) => void;
   onSetFleetWaitMs: (value: string) => void;
   onSetShellRunWaitMs: (value: string) => void;
