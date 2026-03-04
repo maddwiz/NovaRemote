@@ -15,6 +15,7 @@ import { useVoiceChannels } from "../hooks/useVoiceChannels";
 import { styles } from "../theme/styles";
 import { getWorkspacePermissions } from "../workspacePermissions";
 import { buildVmHostTargetGroups, buildVmHostVmTypeTargetGroups } from "../fleetTargets";
+import { buildOpenTerminalEntries } from "../openTerminalEntries";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
   TERMINAL_FONT_OPTIONS,
@@ -24,7 +25,7 @@ import {
   buildTerminalAppearance,
   getTerminalPreset,
 } from "../theme/terminalTheme";
-import { GlassesBrand, ProcessSignal, ServerConnection } from "../types";
+import { GlassesBrand, ProcessSignal } from "../types";
 
 function renderSessionChips(
   allSessions: string[],
@@ -180,15 +181,6 @@ function glassesBrandPreset(brand: GlassesBrand): {
 }
 
 type ProcessSortMode = "cpu" | "mem" | "uptime" | "name";
-
-type OpenTerminalEntry = {
-  key: string;
-  serverId: string;
-  serverName: string;
-  session: string;
-  connection: ServerConnection | null;
-  isFocusedServer: boolean;
-};
 
 function normalizeProcessSorts(input: unknown): ProcessSortMode[] {
   if (!Array.isArray(input)) {
@@ -392,51 +384,20 @@ export function TerminalsScreen() {
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
-  const openTerminalEntries = useMemo<OpenTerminalEntry[]>(() => {
-    if (!showAllServerTerminals) {
-      const primaryServerId = focusedServerId || activeServer?.id || "";
-      const primaryServerName = activeServer?.name || "Server";
-      return sortedOpenSessions.map((session) => ({
-        key: `${primaryServerId}::${session}`,
-        serverId: primaryServerId,
-        serverName: primaryServerName,
-        session,
-        connection: primaryServerId ? connections.get(primaryServerId) ?? null : null,
-        isFocusedServer: true,
-      }));
-    }
-
-    const entries: OpenTerminalEntry[] = [];
-    servers.forEach((server) => {
-      const connection = connections.get(server.id) ?? null;
-      if (!connection) {
-        return;
-      }
-      const serverOpenSessions = server.id === focusedServerId
-        ? sortSessionsPinnedFirst(connection.openSessions, pinnedSessions)
-        : connection.openSessions.slice().sort((a, b) => a.localeCompare(b));
-      serverOpenSessions.forEach((session) => {
-        entries.push({
-          key: `${server.id}::${session}`,
-          serverId: server.id,
-          serverName: server.name,
-          session,
-          connection,
-          isFocusedServer: server.id === focusedServerId,
-        });
-      });
-    });
-    return entries;
-  }, [
-    activeServer?.id,
-    activeServer?.name,
-    connections,
-    focusedServerId,
-    pinnedSessions,
-    servers,
-    showAllServerTerminals,
-    sortedOpenSessions,
-  ]);
+  const openTerminalEntries = useMemo(
+    () =>
+      buildOpenTerminalEntries({
+        showAllServerTerminals,
+        sortedOpenSessions,
+        focusedServerId,
+        activeServerId: activeServer?.id || null,
+        activeServerName: activeServer?.name || null,
+        servers,
+        connections,
+        pinnedSessions,
+      }),
+    [activeServer?.id, activeServer?.name, connections, focusedServerId, pinnedSessions, servers, showAllServerTerminals, sortedOpenSessions]
+  );
   const showServerBadge = connectedServerCount > 1;
   const vmHostTargetGroups = useMemo(() => buildVmHostTargetGroups(servers), [servers]);
   const vmHostVmTypeTargetGroups = useMemo(() => buildVmHostVmTypeTargetGroups(servers), [servers]);
