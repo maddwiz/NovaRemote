@@ -206,3 +206,30 @@ For each target server profile:
 - Stream reconnect pass.
 - Concurrent phone + VR streams pass.
 
+## 13. Workspace Snapshot Contract
+
+VR clients may persist panel workspace state per server scope.
+
+Snapshot shape:
+
+```json
+{
+  "version": "1.0.0",
+  "preset": "custom",
+  "focusedPanelId": "home::build-01",
+  "panelIds": ["home::build-01", "dgx::main"],
+  "pinnedPanelIds": ["home::build-01"],
+  "customTransforms": {
+    "home::build-01": { "x": 0.4, "y": 1.82, "z": -1.5, "yaw": 18, "width": 1.3, "height": 0.75 }
+  }
+}
+```
+
+Rules:
+
+- `preset` supports: `arc`, `grid`, `stacked`, `cockpit`, `custom`.
+- `focusedPanelId` may be `null` if there are no panels.
+- `panelIds` order is the rendered panel order.
+- `pinnedPanelIds` must be a subset of `panelIds`.
+- `customTransforms` keys must be panel IDs in `panelIds`.
+- Each transform requires `x`, `y`, `z`, `yaw`; optional fields are `pitch`, `roll`, `width`, `height`, `index`.

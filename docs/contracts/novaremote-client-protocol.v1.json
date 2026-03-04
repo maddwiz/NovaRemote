@@ -18,6 +18,9 @@
     },
     "capabilities": {
       "$ref": "#/$defs/capabilities"
+    },
+    "vrWorkspaceSnapshot": {
+      "$ref": "#/$defs/vrWorkspaceSnapshot"
     }
   },
   "$defs": {
@@ -60,6 +63,53 @@
         },
         "session": { "type": "string", "minLength": 1 },
         "data": { "type": "string" }
+      }
+    },
+    "vrLayoutPreset": {
+      "type": "string",
+      "enum": ["arc", "grid", "stacked", "cockpit", "custom"]
+    },
+    "vrPanelTransform": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["x", "y", "z", "yaw"],
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" },
+        "z": { "type": "number" },
+        "yaw": { "type": "number" },
+        "pitch": { "type": "number" },
+        "roll": { "type": "number" },
+        "width": { "type": "number" },
+        "height": { "type": "number" },
+        "index": { "type": "number" }
+      }
+    },
+    "vrWorkspaceSnapshot": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["version", "preset", "focusedPanelId", "panelIds", "pinnedPanelIds"],
+      "properties": {
+        "version": { "type": "string", "const": "1.0.0" },
+        "preset": { "$ref": "#/$defs/vrLayoutPreset" },
+        "focusedPanelId": {
+          "type": ["string", "null"],
+          "minLength": 1
+        },
+        "panelIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "pinnedPanelIds": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 }
+        },
+        "customTransforms": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/vrPanelTransform"
+          }
+        }
       }
     }
   }
