@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER, SSH_HOST_PLACEHOLDER, SSH_USER_PLACEHOLDER } from "../constants";
@@ -169,6 +169,45 @@ export function ServersScreen({
   const [showQrScanner, setShowQrScanner] = useState<boolean>(false);
   const [qrError, setQrError] = useState<string>("");
   const { parseQrPayload } = useQrSetup();
+  const groupedServers = useMemo(() => {
+    const groups = new Map<string, { label: string; servers: ServerProfile[] }>();
+    servers.forEach((server) => {
+      const vmHost = server.vmHost?.trim() || "";
+      const key = vmHost ? `vmhost:${vmHost.toLowerCase()}` : "standalone";
+      const label = vmHost || "Standalone";
+      const existing = groups.get(key);
+      if (existing) {
+        existing.servers.push(server);
+        return;
+      }
+      groups.set(key, { label, servers: [server] });
+    });
+
+    return Array.from(groups.entries())
+      .map(([key, value]) => ({
+        key,
+        label: value.label,
+        servers: value.servers
+          .slice()
+          .sort((a, b) => {
+            const aVm = (a.vmName || a.name).toLowerCase();
+            const bVm = (b.vmName || b.name).toLowerCase();
+            if (aVm !== bVm) {
+              return aVm.localeCompare(bVm);
+            }
+            return a.name.localeCompare(b.name);
+          }),
+      }))
+      .sort((a, b) => {
+        if (a.key === "standalone") {
+          return -1;
+        }
+        if (b.key === "standalone") {
+          return 1;
+        }
+        return a.label.localeCompare(b.label);
+      });
+  }, [servers]);
 
   return (
     <View style={styles.panel}>
@@ -176,17 +215,24 @@ export function ServersScreen({
       {servers.length === 0 ? <Text style={styles.emptyText}>No servers yet.</Text> : null}
 
       <View style={styles.serverListWrap}>
-        {servers.map((server) => (
-          <ServerCard
-            key={server.id}
-            server={server}
-            isActive={server.id === activeServerId}
-            onUse={onUseServer}
-            onEdit={onBeginEditServer}
-            onDelete={onDeleteServer}
-            onShare={onShareServer}
-            onOpenSsh={onOpenServerSsh}
-          />
+        {groupedServers.map((group) => (
+          <View key={group.key} style={styles.serverCard}>
+            <Text style={styles.panelLabel}>{`${group.label} (${group.servers.length})`}</Text>
+            <View style={styles.serverListWrap}>
+              {group.servers.map((server) => (
+                <ServerCard
+                  key={server.id}
+                  server={server}
+                  isActive={server.id === activeServerId}
+                  onUse={onUseServer}
+                  onEdit={onBeginEditServer}
+                  onDelete={onDeleteServer}
+                  onShare={onShareServer}
+                  onOpenSsh={onOpenServerSsh}
+                />
+              ))}
+            </View>
+          </View>
         ))}
       </View>
 
