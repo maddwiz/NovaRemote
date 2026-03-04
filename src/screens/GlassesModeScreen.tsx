@@ -140,6 +140,8 @@ export function GlassesModeScreen() {
     onReconnectServers,
     onConnectAllServers,
     onDisconnectAllServers,
+    onApproveReadyAgentsForFocusedServer,
+    onDenyAllPendingAgentsForFocusedServer,
     sessionAliases,
     sessionReadOnly,
     glassesMode,
@@ -364,6 +366,14 @@ export function GlassesModeScreen() {
         onReconnectServers(uniqueServerIds);
         return;
       }
+      if (route.kind === "approve_ready_agents") {
+        onApproveReadyAgentsForFocusedServer();
+        return;
+      }
+      if (route.kind === "deny_all_pending_agents") {
+        onDenyAllPendingAgentsForFocusedServer();
+        return;
+      }
       if (route.kind === "pause_pool") {
         onDisconnectAllServers();
         return;
@@ -421,6 +431,8 @@ export function GlassesModeScreen() {
       focusedPanelId,
       onConnectAllServers,
       onDisconnectAllServers,
+      onApproveReadyAgentsForFocusedServer,
+      onDenyAllPendingAgentsForFocusedServer,
       onReconnectServer,
       onReconnectServers,
       onOpenServerSessionOnMac,

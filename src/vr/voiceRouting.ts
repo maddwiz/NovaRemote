@@ -220,6 +220,16 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
       kind: "reconnect_all",
     };
   }
+  if (route.kind === "approve_ready_agents") {
+    return {
+      kind: "approve_ready_agents",
+    };
+  }
+  if (route.kind === "deny_all_pending_agents") {
+    return {
+      kind: "deny_all_pending_agents",
+    };
+  }
   if (route.kind === "pause_pool") {
     return {
       kind: "pause_pool",

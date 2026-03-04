@@ -46,6 +46,7 @@ import { commandQueueStatus, useCommandQueue } from "./hooks/useCommandQueue";
 import { useCollaboration } from "./hooks/useCollaboration";
 import { useConnectionPool } from "./hooks/useConnectionPool";
 import { useServerConnection } from "./hooks/useServerConnection";
+import { useNovaAgentRuntime } from "./hooks/useNovaAgentRuntime";
 import { useProcessManager } from "./hooks/useProcessManager";
 import { useSessionRecordings } from "./hooks/useSessionRecordings";
 import { useNotifications } from "./hooks/useNotifications";
@@ -1653,6 +1654,24 @@ export default function AppShell() {
     [poolConnections, scopedServerId, sendPoolControlChar, sessionReadOnly]
   );
 
+  const glassesAgentServerId = route === "glasses" ? focusedServerId : null;
+  const dispatchFocusedServerAgentCommand = useCallback(
+    (session: string, command: string) => {
+      if (!glassesAgentServerId) {
+        return;
+      }
+      void sendServerSessionCommand(glassesAgentServerId, session, command, "shell").catch((error) => {
+        setError(error);
+      });
+    },
+    [glassesAgentServerId, sendServerSessionCommand, setError]
+  );
+  const { approveReadyApprovals: approveReadyAgentsForFocusedServer, denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer } =
+    useNovaAgentRuntime({
+      serverId: glassesAgentServerId,
+      onDispatchCommand: dispatchFocusedServerAgentCommand,
+    });
+
   const sendControlToSession = useCallback(
     async (session: string, char: string) => {
       if (!char) {
@@ -2369,6 +2388,8 @@ export default function AppShell() {
     reconnectAllServers,
     connectAllServers,
     disconnectAllServers,
+    approveReadyAgentsForFocusedServer,
+    denyAllPendingAgentsForFocusedServer,
     editServer,
     openSshFallback,
     createLocalAiSession,

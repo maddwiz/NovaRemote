@@ -169,6 +169,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const approveReady = resolveSpatialVoiceRoute({
+      transcript: "approve ready agents",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const denyPending = resolveSpatialVoiceRoute({
+      transcript: "deny all pending agents",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
 
     expect(interrupt).toEqual({
       kind: "control_char",
@@ -193,6 +203,12 @@ describe("resolveSpatialVoiceRoute", () => {
     });
     expect(resumePool).toEqual({
       kind: "resume_pool",
+    });
+    expect(approveReady).toEqual({
+      kind: "approve_ready_agents",
+    });
+    expect(denyPending).toEqual({
+      kind: "deny_all_pending_agents",
     });
   });
 

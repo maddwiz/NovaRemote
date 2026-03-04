@@ -10,6 +10,8 @@ export type VoiceRoute =
   | { kind: "none" }
   | { kind: "show_all" }
   | { kind: "minimize" }
+  | { kind: "approve_ready_agents" }
+  | { kind: "deny_all_pending_agents" }
   | { kind: "pause_pool" }
   | { kind: "resume_pool" }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
@@ -233,6 +235,20 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
       return { kind: "reconnect_server", panelId: panel.id };
     }
     return { kind: "none" };
+  }
+
+  const approveReadyAgentsMatch = cleaned.match(
+    /^(?:approve(?:\s+ready)?\s+agents?|approve\s+all\s+agents?|run\s+ready\s+agents?)$/i
+  );
+  if (approveReadyAgentsMatch) {
+    return { kind: "approve_ready_agents" };
+  }
+
+  const denyPendingAgentsMatch = cleaned.match(
+    /^(?:deny|reject)\s+(?:all\s+)?(?:pending\s+)?agents?(?:\s+approvals?)?$/i
+  );
+  if (denyPendingAgentsMatch) {
+    return { kind: "deny_all_pending_agents" };
   }
 
   const stopSessionMatch = cleaned.match(

@@ -106,6 +106,8 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     reconnectAllServers,
     connectAllServers,
     disconnectAllServers,
+    approveReadyAgentsForFocusedServer,
+    denyAllPendingAgentsForFocusedServer,
     editServer,
     openSshFallback,
     createLocalAiSession,
@@ -290,6 +292,20 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onReconnectAllServers: reconnectAllServers,
     onConnectAllServers: connectAllServers,
     onDisconnectAllServers: disconnectAllServers,
+    onApproveReadyAgentsForFocusedServer: () => {
+      if (typeof approveReadyAgentsForFocusedServer !== "function") {
+        return [];
+      }
+      const approved = approveReadyAgentsForFocusedServer();
+      return Array.isArray(approved) ? approved : [];
+    },
+    onDenyAllPendingAgentsForFocusedServer: () => {
+      if (typeof denyAllPendingAgentsForFocusedServer !== "function") {
+        return [];
+      }
+      const denied = denyAllPendingAgentsForFocusedServer();
+      return Array.isArray(denied) ? denied : [];
+    },
     onEditServer: editServer,
     onOpenSshFallback: () => {
       void runWithStatus("Opening SSH fallback", async () => {
