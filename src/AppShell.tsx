@@ -1745,7 +1745,14 @@ export default function AppShell() {
         return [];
       }
       const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-      if (matchingAgentIds.length === 0) {
+      const resolvedAgentIds =
+        matchingAgentIds.length > 0
+          ? matchingAgentIds
+          : (() => {
+              const created = addFocusedServerRuntimeAgent(name);
+              return created ? [created.agentId] : [];
+            })();
+      if (resolvedAgentIds.length === 0) {
         return [];
       }
       const agentRuntimeConnection = agentRuntimeServerId ? poolConnections.get(agentRuntimeServerId) : null;
@@ -1758,7 +1765,7 @@ export default function AppShell() {
       }
 
       const queuedAgentIds: string[] = [];
-      matchingAgentIds.forEach((agentId) => {
+      resolvedAgentIds.forEach((agentId) => {
         setFocusedServerRuntimeAgentGoal(agentId, command);
         const queued = requestFocusedServerAgentApproval(agentId, {
           command,
