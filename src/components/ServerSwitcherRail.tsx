@@ -1,6 +1,7 @@
 import React from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
+import { deriveServerRailStatus } from "../serverRailStatus";
 import { styles } from "../theme/styles";
 import { ServerConnection, ServerProfile } from "../types";
 
@@ -15,21 +16,15 @@ type ServerSwitcherRailProps = {
   unreadServers: Set<string>;
 };
 
-function hasCredentials(server: ServerProfile): boolean {
-  return Boolean(server.baseUrl.trim() && server.token.trim());
-}
-
 function dotStyleForServer(server: ServerProfile, connection: ServerConnection | undefined) {
-  if (!hasCredentials(server)) {
+  const status = deriveServerRailStatus(server, connection);
+  if (status === "inactive") {
     return styles.serverRailDotInactive;
   }
-  if (!connection) {
-    return styles.serverRailDotDisconnected;
-  }
-  if (connection.status === "connected") {
+  if (status === "connected") {
     return styles.serverRailDotConnected;
   }
-  if (connection.status === "connecting" || connection.status === "degraded") {
+  if (status === "connecting") {
     return styles.serverRailDotConnecting;
   }
   return styles.serverRailDotDisconnected;
