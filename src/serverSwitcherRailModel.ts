@@ -12,6 +12,10 @@ export type ServerRailGroup = {
   }[];
 };
 
+type GroupServersByVmHostOptions = {
+  standalonePosition?: "first" | "last";
+};
+
 export type ServerSwitcherMenuAction = {
   text: string;
   style?: "default" | "cancel" | "destructive";
@@ -61,7 +65,11 @@ function sortVmTypeGroups(
   return b.servers.length - a.servers.length;
 }
 
-export function groupServersByVmHost(servers: ServerProfile[]): ServerRailGroup[] {
+export function groupServersByVmHost(
+  servers: ServerProfile[],
+  options: GroupServersByVmHostOptions = {}
+): ServerRailGroup[] {
+  const standalonePosition = options.standalonePosition || "last";
   const byKey = new Map<string, ServerRailGroup>();
 
   servers.forEach((server) => {
@@ -122,6 +130,9 @@ export function groupServersByVmHost(servers: ServerProfile[]): ServerRailGroup[
     })
     .sort((a, b) => {
       if (a.isStandalone !== b.isStandalone) {
+        if (standalonePosition === "first") {
+          return a.isStandalone ? -1 : 1;
+        }
         return a.isStandalone ? 1 : -1;
       }
       if (a.label !== b.label) {

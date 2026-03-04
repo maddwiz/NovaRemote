@@ -95,6 +95,15 @@ describe("groupServersByVmHost", () => {
       vmTypeGroups: [{ key: "vmtype:cloud", label: "Cloud", servers: [cloud] }],
     });
   });
+
+  it("supports standalone-first ordering when requested", () => {
+    const dgx = makeServer({ id: "dgx", name: "DGX", vmHost: "Rack A", vmType: "proxmox", vmName: "dgx-vm" });
+    const cloud = makeServer({ id: "cloud", name: "Cloud", vmHost: "  ", vmType: "cloud" });
+    const vmB = makeServer({ id: "vm-b", name: "VM-B", vmHost: "Rack B", vmType: "docker" });
+
+    const groups = groupServersByVmHost([dgx, cloud, vmB], { standalonePosition: "first" });
+    expect(groups.map((group) => group.label)).toEqual(["Standalone", "Rack A", "Rack B"]);
+  });
 });
 
 describe("formatServerDetails", () => {

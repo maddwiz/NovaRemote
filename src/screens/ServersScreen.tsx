@@ -205,7 +205,10 @@ export function ServersScreen({
     }
     setWorkspaceServerIds([seedId]);
   }, [activeServerId, servers, workspaceServerIds.length]);
-  const groupedServers = useMemo(() => groupServersByVmHost(servers), [servers]);
+  const groupedServers = useMemo(
+    () => groupServersByVmHost(servers, { standalonePosition: "first" }),
+    [servers]
+  );
 
   const channelsByWorkspace = useMemo(() => {
     const grouped = new Map<string, typeof voiceChannels>();
