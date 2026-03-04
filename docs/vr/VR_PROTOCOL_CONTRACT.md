@@ -182,6 +182,13 @@ Current behavior if missing headers:
 - Bound tail buffer size per panel (line/byte cap).
 - Route command sends by `serverId + session` (never by session alone).
 - Do not force focus switch for cross-server send execution.
+- Support layout snap interactions from input and voice:
+  - Gesture: `snap_layout` with presets `arc|grid|stacked|cockpit`.
+  - Voice: `layout <preset>` and `snap <preset>`.
+- Support panel visual voice controls scoped to focused or explicitly targeted panel:
+  - `mini panel`, `expand panel`, `opacity 45%`
+  - `mini for <target>`, `expand <target>`, `set <target> opacity to 45%`
+  - Target resolution should match server/session aliases (for example `homelab`, `build worker`).
 
 ## 10. Security Requirements
 
