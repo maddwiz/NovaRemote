@@ -418,4 +418,15 @@ describe("useTerminalsViewModel", () => {
 
     expect(queueAgentCommandForServers).toHaveBeenCalledWith(["dgx", "cloud"], "build watcher", "npm run test");
   });
+
+  it("opens the vr command center route", () => {
+    const setRoute = vi.fn();
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      setRoute,
+    });
+
+    model.onOpenVrCommandCenter();
+    expect(setRoute).toHaveBeenCalledWith("vr");
+  });
 });
