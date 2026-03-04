@@ -2,6 +2,7 @@ import React from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { deriveServerRailStatus } from "../serverRailStatus";
+import { buildServerSwitcherMenuActions, formatServerDetails, groupServersByVmHost } from "../serverSwitcherRailModel";
 import { styles } from "../theme/styles";
 import { ServerConnection, ServerProfile } from "../types";
 
@@ -30,20 +31,6 @@ function dotStyleForServer(server: ServerProfile, connection: ServerConnection |
   return styles.serverRailDotDisconnected;
 }
 
-function detailsText(server: ServerProfile, connection: ServerConnection | undefined): string {
-  if (!connection) {
-    return `Status: disconnected\nURL: ${server.baseUrl || "not set"}\nSessions: 0`;
-  }
-
-  const latency = connection.health.latencyMs === null ? "n/a" : `${connection.health.latencyMs} ms`;
-  return [
-    `Status: ${connection.status}`,
-    `Sessions: ${connection.openSessions.length} open / ${connection.allSessions.length} total`,
-    `Streams: ${connection.activeStreamCount}`,
-    `Latency: ${latency}`,
-  ].join("\n");
-}
-
 export function ServerSwitcherRail({
   servers,
   connections,
@@ -54,26 +41,7 @@ export function ServerSwitcherRail({
   onAddServer,
   unreadServers,
 }: ServerSwitcherRailProps) {
-  const groupedServers = React.useMemo(() => {
-    const groups: Array<{ key: string; label: string; servers: ServerProfile[] }> = [];
-    const byKey = new Map<string, { key: string; label: string; servers: ServerProfile[] }>();
-
-    servers.forEach((server) => {
-      const rawVmHost = server.vmHost?.trim() || "";
-      const key = rawVmHost ? `vmhost:${rawVmHost.toLowerCase()}` : "standalone";
-      const label = rawVmHost || "Standalone";
-      const existing = byKey.get(key);
-      if (existing) {
-        existing.servers.push(server);
-        return;
-      }
-      const created = { key, label, servers: [server] };
-      byKey.set(key, created);
-      groups.push(created);
-    });
-
-    return groups;
-  }, [servers]);
+  const groupedServers = React.useMemo(() => groupServersByVmHost(servers), [servers]);
 
   return (
     <View style={styles.serverRail}>
@@ -95,18 +63,18 @@ export function ServerSwitcherRail({
                   style={[styles.serverRailChip, focused ? styles.serverRailChipFocused : null]}
                   onPress={() => onFocusServer(server.id)}
                   onLongPress={() => {
-                    Alert.alert(server.name, "Connection options", [
-                      { text: "Reconnect", onPress: () => (onReconnectServer ? onReconnectServer(server.id) : onFocusServer(server.id)) },
-                      {
-                        text: "View Details",
-                        onPress: () => {
+                    Alert.alert(
+                      server.name,
+                      "Connection options",
+                      buildServerSwitcherMenuActions({
+                        onReconnect: () => (onReconnectServer ? onReconnectServer(server.id) : onFocusServer(server.id)),
+                        onViewDetails: () => {
                           onFocusServer(server.id);
-                          Alert.alert(`${server.name} details`, detailsText(server, connection));
+                          Alert.alert(`${server.name} details`, formatServerDetails(server, connection));
                         },
-                      },
-                      { text: "Edit Server", onPress: () => (onEditServer ? onEditServer(server.id) : onAddServer()) },
-                      { text: "Cancel", style: "cancel" },
-                    ]);
+                        onEditServer: () => (onEditServer ? onEditServer(server.id) : onAddServer()),
+                      })
+                    );
                   }}
                 >
                   <View style={[styles.serverRailDot, dotStyleForServer(server, connection)]} />
