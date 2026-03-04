@@ -235,6 +235,18 @@ describe("useVrWorkspace", () => {
       serverIds: ["dgx", "home"],
     });
 
+    const approveHomeAction = current().applyVoiceTranscript("approve ready agents for homelab");
+    expect(approveHomeAction).toEqual({
+      kind: "approve_ready_agents",
+      serverIds: ["home"],
+    });
+
+    const denyDgxAction = current().applyVoiceTranscript("deny all pending agents for dgx spark");
+    expect(denyDgxAction).toEqual({
+      kind: "deny_all_pending_agents",
+      serverIds: ["dgx"],
+    });
+
     const pausePoolAction = current().applyVoiceTranscript("pause all streams");
     expect(pausePoolAction).toEqual({
       kind: "pause_pool",

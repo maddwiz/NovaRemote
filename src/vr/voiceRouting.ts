@@ -8,8 +8,8 @@ export type VrVoiceIntent =
   | { kind: "focus"; panelId: string }
   | { kind: "reconnect_server"; panelId: string }
   | { kind: "reconnect_all" }
-  | { kind: "approve_ready_agents" }
-  | { kind: "deny_all_pending_agents" }
+  | { kind: "approve_ready_agents"; panelId?: string }
+  | { kind: "deny_all_pending_agents"; panelId?: string }
   | { kind: "pause_pool" }
   | { kind: "resume_pool" }
   | { kind: "send"; panelId: string; command: string }
@@ -58,17 +58,27 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
   const cleaned = transcript.trim();
   if (cleaned) {
     const approveReadyAgentsMatch = cleaned.match(
-      /^(?:approve(?:\s+ready)?\s+agents?|approve\s+all\s+agents?|run\s+ready\s+agents?)$/i
+      /^(?:approve(?:\s+ready)?\s+agents?|approve\s+all\s+agents?|run\s+ready\s+agents?)(?:\s+(?:for|on)\s+(.+))?$/i
     );
     if (approveReadyAgentsMatch) {
-      return { kind: "approve_ready_agents" };
+      const target = approveReadyAgentsMatch[1] || null;
+      const panelId = target ? resolvePanelId(panels, focusedPanelId, target) : null;
+      if (target && !panelId) {
+        return { kind: "none" };
+      }
+      return panelId ? { kind: "approve_ready_agents", panelId } : { kind: "approve_ready_agents" };
     }
 
     const denyPendingAgentsMatch = cleaned.match(
-      /^(?:deny|reject)\s+(?:all\s+)?(?:pending\s+)?agents?(?:\s+approvals?)?$/i
+      /^(?:deny|reject)\s+(?:all\s+)?(?:pending\s+)?agents?(?:\s+approvals?)?(?:\s+(?:for|on)\s+(.+))?$/i
     );
     if (denyPendingAgentsMatch) {
-      return { kind: "deny_all_pending_agents" };
+      const target = denyPendingAgentsMatch[1] || null;
+      const panelId = target ? resolvePanelId(panels, focusedPanelId, target) : null;
+      if (target && !panelId) {
+        return { kind: "none" };
+      }
+      return panelId ? { kind: "deny_all_pending_agents", panelId } : { kind: "deny_all_pending_agents" };
     }
 
     const stopSessionMatch = cleaned.match(
@@ -221,14 +231,24 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
     };
   }
   if (route.kind === "approve_ready_agents") {
-    return {
-      kind: "approve_ready_agents",
-    };
+    return route.panelId
+      ? {
+          kind: "approve_ready_agents",
+          panelId: route.panelId,
+        }
+      : {
+          kind: "approve_ready_agents",
+        };
   }
   if (route.kind === "deny_all_pending_agents") {
-    return {
-      kind: "deny_all_pending_agents",
-    };
+    return route.panelId
+      ? {
+          kind: "deny_all_pending_agents",
+          panelId: route.panelId,
+        }
+      : {
+          kind: "deny_all_pending_agents",
+        };
   }
   if (route.kind === "pause_pool") {
     return {

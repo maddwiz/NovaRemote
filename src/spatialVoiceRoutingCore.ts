@@ -10,8 +10,8 @@ export type VoiceRoute =
   | { kind: "none" }
   | { kind: "show_all" }
   | { kind: "minimize" }
-  | { kind: "approve_ready_agents" }
-  | { kind: "deny_all_pending_agents" }
+  | { kind: "approve_ready_agents"; panelId?: string }
+  | { kind: "deny_all_pending_agents"; panelId?: string }
   | { kind: "pause_pool" }
   | { kind: "resume_pool" }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
@@ -238,17 +238,33 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
   }
 
   const approveReadyAgentsMatch = cleaned.match(
-    /^(?:approve(?:\s+ready)?\s+agents?|approve\s+all\s+agents?|run\s+ready\s+agents?)$/i
+    /^(?:approve(?:\s+ready)?\s+agents?|approve\s+all\s+agents?|run\s+ready\s+agents?)(?:\s+(?:for|on)\s+(.+))?$/i
   );
   if (approveReadyAgentsMatch) {
-    return { kind: "approve_ready_agents" };
+    const target = approveReadyAgentsMatch[1]?.trim() || "";
+    if (!target) {
+      return { kind: "approve_ready_agents" };
+    }
+    const targetPanel = findPanelByTarget(panels, target);
+    if (!targetPanel) {
+      return { kind: "none" };
+    }
+    return { kind: "approve_ready_agents", panelId: targetPanel.id };
   }
 
   const denyPendingAgentsMatch = cleaned.match(
-    /^(?:deny|reject)\s+(?:all\s+)?(?:pending\s+)?agents?(?:\s+approvals?)?$/i
+    /^(?:deny|reject)\s+(?:all\s+)?(?:pending\s+)?agents?(?:\s+approvals?)?(?:\s+(?:for|on)\s+(.+))?$/i
   );
   if (denyPendingAgentsMatch) {
-    return { kind: "deny_all_pending_agents" };
+    const target = denyPendingAgentsMatch[1]?.trim() || "";
+    if (!target) {
+      return { kind: "deny_all_pending_agents" };
+    }
+    const targetPanel = findPanelByTarget(panels, target);
+    if (!targetPanel) {
+      return { kind: "none" };
+    }
+    return { kind: "deny_all_pending_agents", panelId: targetPanel.id };
   }
 
   const stopSessionMatch = cleaned.match(

@@ -95,8 +95,16 @@ describe("parseVrVoiceIntent", () => {
     expect(parseVrVoiceIntent("approve ready agents", PANELS, "dgx-main")).toEqual({
       kind: "approve_ready_agents",
     });
+    expect(parseVrVoiceIntent("approve ready agents for homelab", PANELS, "dgx-main")).toEqual({
+      kind: "approve_ready_agents",
+      panelId: "home-build",
+    });
     expect(parseVrVoiceIntent("deny all pending agents", PANELS, "dgx-main")).toEqual({
       kind: "deny_all_pending_agents",
+    });
+    expect(parseVrVoiceIntent("deny pending agents for dgx spark", PANELS, "home-build")).toEqual({
+      kind: "deny_all_pending_agents",
+      panelId: "dgx-main",
     });
     expect(parseVrVoiceIntent("pause pool", PANELS, "dgx-main")).toEqual({
       kind: "pause_pool",

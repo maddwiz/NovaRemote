@@ -681,12 +681,32 @@ export function useVrWorkspace({
         };
       }
       if (intent.kind === "approve_ready_agents") {
+        if (intent.panelId) {
+          const targetPanel = universeById.get(intent.panelId);
+          if (!targetPanel) {
+            return { kind: "none" };
+          }
+          return {
+            kind: "approve_ready_agents",
+            serverIds: [targetPanel.serverId],
+          };
+        }
         return {
           kind: "approve_ready_agents",
           serverIds: serverScopeIds.slice(),
         };
       }
       if (intent.kind === "deny_all_pending_agents") {
+        if (intent.panelId) {
+          const targetPanel = universeById.get(intent.panelId);
+          if (!targetPanel) {
+            return { kind: "none" };
+          }
+          return {
+            kind: "deny_all_pending_agents",
+            serverIds: [targetPanel.serverId],
+          };
+        }
         return {
           kind: "deny_all_pending_agents",
           serverIds: serverScopeIds.slice(),
