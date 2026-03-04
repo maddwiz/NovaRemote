@@ -13,6 +13,7 @@ import {
 import { SpatialTerminalLayout } from "../components/SpatialTerminalLayout";
 import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
+import { resolveGlassesScopeRoute } from "../glassesScopeRouting";
 import { SpatialLayoutSnapshot, useSpatialLayoutPrefs } from "../hooks/useSpatialLayoutPrefs";
 import { SpatialVoicePanel, useSpatialVoiceRouting } from "../hooks/useSpatialVoiceRouting";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
@@ -449,6 +450,20 @@ export function GlassesModeScreen() {
 
   const applyTranscriptRoute = useCallback(
     (transcript: string, autoSend: boolean) => {
+      const scopeRoute = resolveGlassesScopeRoute({
+        transcript,
+        workspaces: sharedWorkspaces.map((workspace) => ({ id: workspace.id, name: workspace.name })),
+        vmHostScopeOptions,
+      });
+      if (scopeRoute.kind === "set_workspace_scope") {
+        setActiveWorkspaceId(scopeRoute.workspaceId);
+        return;
+      }
+      if (scopeRoute.kind === "set_vm_host_scope") {
+        setActiveVmHostScope(scopeRoute.vmHostScope);
+        return;
+      }
+
       const route = routeTranscript(transcript);
       const resolveAgentTargetServerIds = (panelId?: string): string[] => {
         if (panelId) {
@@ -668,7 +683,9 @@ export function GlassesModeScreen() {
       panelMap,
       pinnedPanelIds,
       routeTranscript,
+      sharedWorkspaces,
       maxPanels,
+      vmHostScopeOptions,
     ]
   );
 
