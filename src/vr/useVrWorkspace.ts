@@ -38,6 +38,10 @@ export type VrWorkspaceVoiceAction =
 
 export type VrWorkspaceGestureAction = VrGestureAction;
 
+export type VrVoiceDispatchOptions = {
+  targetPanelId?: string | null;
+};
+
 export type UseVrWorkspaceArgs = {
   connections: Map<string, ServerConnection>;
   maxPanels?: number;
@@ -63,7 +67,7 @@ export type UseVrWorkspaceResult = {
   exportSnapshot: () => VrWorkspaceSnapshot;
   restoreSnapshot: (snapshot: VrWorkspaceSnapshot | null | undefined) => void;
   applyGesture: (event: VrGestureEvent) => VrWorkspaceGestureAction;
-  applyVoiceTranscript: (transcript: string) => VrWorkspaceVoiceAction;
+  applyVoiceTranscript: (transcript: string, options?: VrVoiceDispatchOptions) => VrWorkspaceVoiceAction;
 };
 
 type UniversePanel = {
@@ -622,8 +626,13 @@ export function useVrWorkspace({
   });
 
   const applyVoiceTranscript = useCallback(
-    (transcript: string): VrWorkspaceVoiceAction => {
-      const intent = parseVrVoiceIntent(transcript, routePanels, focusedPanelId);
+    (transcript: string, options?: VrVoiceDispatchOptions): VrWorkspaceVoiceAction => {
+      const targetedPanelId = options?.targetPanelId ?? null;
+      const routingPanelId =
+        targetedPanelId && universeById.has(targetedPanelId)
+          ? targetedPanelId
+          : focusedPanelId;
+      const intent = parseVrVoiceIntent(transcript, routePanels, routingPanelId);
       if (intent.kind === "focus") {
         focusPanel(intent.panelId);
         return { kind: "focus", panelId: intent.panelId };

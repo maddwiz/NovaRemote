@@ -4,7 +4,12 @@ import { VrGestureEvent } from "./inputGestures";
 import { VrWorkspaceGestureAction, VrWorkspaceVoiceAction } from "./useVrWorkspace";
 
 type WorkspaceInputBridge = {
-  applyVoiceTranscript: (transcript: string) => VrWorkspaceVoiceAction;
+  applyVoiceTranscript: (
+    transcript: string,
+    options?: {
+      targetPanelId?: string | null;
+    }
+  ) => VrWorkspaceVoiceAction;
   applyGesture: (event: VrGestureEvent) => VrWorkspaceGestureAction;
   setOverviewMode?: (enabled: boolean) => void;
 };
@@ -25,7 +30,12 @@ export type UseVrInputRouterArgs = {
 export type UseVrInputRouterResult = {
   hudStatus: VrHudStatus;
   clearHudStatus: () => void;
-  dispatchVoice: (transcript: string) => Promise<VrWorkspaceVoiceAction>;
+  dispatchVoice: (
+    transcript: string,
+    options?: {
+      targetPanelId?: string | null;
+    }
+  ) => Promise<VrWorkspaceVoiceAction>;
   dispatchGesture: (event: VrGestureEvent) => VrWorkspaceGestureAction;
 };
 
@@ -78,8 +88,15 @@ export function useVrInputRouter({
   }, []);
 
   const dispatchVoice = useCallback(
-    async (transcript: string): Promise<VrWorkspaceVoiceAction> => {
-      const action = workspace.applyVoiceTranscript(transcript);
+    async (
+      transcript: string,
+      options?: {
+        targetPanelId?: string | null;
+      }
+    ): Promise<VrWorkspaceVoiceAction> => {
+      const action = workspace.applyVoiceTranscript(transcript, {
+        targetPanelId: options?.targetPanelId ?? null,
+      });
       if (action.kind === "send") {
         try {
           await onSendCommand(action.serverId, action.session, action.command);

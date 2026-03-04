@@ -190,6 +190,55 @@ describe("useVrWorkspace", () => {
     });
   });
 
+  it("routes unrouted voice transcripts to an explicit target panel without focus switch", async () => {
+    const dgx = makeServer("dgx", "DGX Spark");
+    const homelab = makeServer("home", "Homelab");
+
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"], { main: "ready" })],
+      [homelab.id, makeConnection(homelab, ["build-01"], { "build-01": "running" })],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 4 });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(current().focusedPanelId).toBe(buildVrPanelId("dgx", "main"));
+
+    const action = current().applyVoiceTranscript("npm run build", {
+      targetPanelId: buildVrPanelId("home", "build-01"),
+    });
+    expect(action).toEqual({
+      kind: "send",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+      command: "npm run build",
+    });
+    expect(current().focusedPanelId).toBe(buildVrPanelId("dgx", "main"));
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("rotates visible panel order", async () => {
     const dgx = makeServer("dgx", "DGX");
     const home = makeServer("home", "Homelab");

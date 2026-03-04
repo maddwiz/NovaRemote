@@ -31,7 +31,9 @@ afterEach(() => {
 
 describe("useVrInputRouter", () => {
   it("dispatches voice send actions and reports success in HUD state", async () => {
-    const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({
       kind: "send",
       panelId: "dgx::main",
       serverId: "dgx",
@@ -65,7 +67,9 @@ describe("useVrInputRouter", () => {
       await current().dispatchVoice("send to dgx: npm test");
     });
 
-    expect(applyVoiceTranscript).toHaveBeenCalledWith("send to dgx: npm test");
+    expect(applyVoiceTranscript).toHaveBeenCalledWith("send to dgx: npm test", {
+      targetPanelId: null,
+    });
     expect(onSendCommand).toHaveBeenCalledWith("dgx", "main", "npm test");
     expect(current().hudStatus?.severity).toBe("success");
     expect(current().hudStatus?.message).toContain("Sent to dgx/main");
@@ -75,8 +79,58 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("passes gaze target panel routing through dispatchVoice options", async () => {
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({
+      kind: "send",
+      panelId: "home::build",
+      serverId: "home",
+      session: "build",
+      command: "npm run build",
+    }));
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onSendCommand = vi.fn(async () => undefined);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("npm run build", { targetPanelId: "home::build" });
+    });
+
+    expect(applyVoiceTranscript).toHaveBeenCalledWith("npm run build", {
+      targetPanelId: "home::build",
+    });
+    expect(onSendCommand).toHaveBeenCalledWith("home", "build", "npm run build");
+    expect(current().hudStatus?.message).toContain("Sent to home/build");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("toggles overview mode from voice and gesture actions", async () => {
-    const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({ kind: "overview" }));
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({ kind: "overview" }));
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "overview" }));
     const onSetOverviewMode = vi.fn();
 
@@ -117,7 +171,9 @@ describe("useVrInputRouter", () => {
   });
 
   it("calls workspace.setOverviewMode(false) for minimize voice actions", async () => {
-    const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({ kind: "minimize" }));
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({ kind: "minimize" }));
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
     const setOverviewMode = vi.fn();
 
@@ -155,7 +211,7 @@ describe("useVrInputRouter", () => {
 
   it("publishes HUD updates for panel visual voice actions", async () => {
     const applyVoiceTranscript = vi
-      .fn<(transcript: string) => VrWorkspaceVoiceAction>()
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
       .mockReturnValueOnce({ kind: "panel_mini", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_expand", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_opacity", panelId: "dgx::main", opacity: 0.45 });
@@ -202,7 +258,9 @@ describe("useVrInputRouter", () => {
   });
 
   it("records rotate HUD status for gesture rotation actions", async () => {
-    const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({ kind: "none" }));
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({ kind: "none" }));
     const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({
       kind: "rotate_workspace",
       direction: "left",
@@ -242,7 +300,9 @@ describe("useVrInputRouter", () => {
 
   it("auto-clears HUD status after the configured timeout", async () => {
     vi.useFakeTimers();
-    const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({
       kind: "send",
       panelId: "dgx::main",
       serverId: "dgx",
