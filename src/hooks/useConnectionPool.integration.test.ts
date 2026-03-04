@@ -726,4 +726,59 @@ describe("useConnectionPool websocket integration", () => {
 
     await harness.unmount();
   });
+
+  it("connects a server after credentials are added", async () => {
+    const serverWithoutToken: ServerProfile = {
+      ...makeServer("lab", "Lab"),
+      token: "   ",
+    };
+    const serverWithToken: ServerProfile = {
+      ...serverWithoutToken,
+      token: "lab-token",
+    };
+
+    const harness = await mountPool([serverWithoutToken], true);
+    expect(harness.getPool().connections.get("lab")?.connected).toBe(false);
+    expect(FakeWebSocket.instances.length).toBe(0);
+
+    await harness.updateServers([serverWithToken]);
+    await harness.waitFor(() => FakeWebSocket.instances.length === 1, "websocket created after credentials update");
+
+    const pool = harness.getPool();
+    expect(pool.connections.get("lab")?.connected).toBe(true);
+    expect(pool.connections.get("lab")?.status).not.toBe("disconnected");
+
+    await harness.unmount();
+  });
+
+  it("disconnects and cleans streams when credentials are removed", async () => {
+    const valid = makeServer("dgx", "DGX");
+    const missingToken: ServerProfile = {
+      ...valid,
+      token: "   ",
+    };
+
+    const harness = await mountPool([valid], true);
+    await harness.waitFor(() => FakeWebSocket.instances.length === 1, "initial websocket");
+    const originalWs = FakeWebSocket.instances[0];
+
+    await harness.updateServers([missingToken]);
+    await harness.waitFor(
+      () => harness.getPool().connections.get("dgx")?.status === "disconnected",
+      "pool status after credentials removal"
+    );
+
+    const pool = harness.getPool();
+    expect(pool.connections.get("dgx")?.connected).toBe(false);
+    expect(pool.connections.get("dgx")?.status).toBe("disconnected");
+    expect(pool.connections.get("dgx")?.activeStreamCount).toBe(0);
+    expect(originalWs.readyState).toBe(FakeWebSocket.CLOSED);
+
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(FakeWebSocket.instances.length).toBe(1);
+
+    await harness.unmount();
+  });
 });
