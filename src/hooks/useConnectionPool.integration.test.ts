@@ -575,6 +575,7 @@ describe("useConnectionPool websocket integration", () => {
     );
 
     const secondWave = FakeWebSocket.instances.slice(beforeBulkReconnectCount);
+    expect(secondWave.length).toBe(2);
     expect(secondWave.some((ws) => ws.url.includes("dgx.novaremote.test"))).toBe(true);
     expect(secondWave.some((ws) => ws.url.includes("cloud.novaremote.test"))).toBe(true);
 
