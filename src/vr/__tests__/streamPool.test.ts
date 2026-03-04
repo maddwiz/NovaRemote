@@ -241,4 +241,31 @@ describe("createVrStreamPool", () => {
     expect(FakeWebSocket.instances.length).toBe(countAfterPause + 1);
     expect(statuses.some((entry) => entry.status === "disconnected")).toBe(true);
   });
+
+  it("reconnects stream when target credentials change", () => {
+    const pool = createVrStreamPool({
+      websocketCtor: FakeWebSocket as unknown as typeof WebSocket,
+    });
+
+    pool.openStream({
+      server: { id: "dgx", baseUrl: "https://dgx.novaremote.test", token: "dgx-token-v1" },
+      basePath: "/tmux",
+      session: "main",
+    });
+    const first = wsFor("dgx");
+    first?.emitOpen();
+    expect(first?.sentFrames).toContain(JSON.stringify({ type: "auth", token: "dgx-token-v1" }));
+
+    pool.openStream({
+      server: { id: "dgx", baseUrl: "https://dgx-v2.novaremote.test", token: "dgx-token-v2" },
+      basePath: "/tmux",
+      session: "main",
+    });
+
+    expect(FakeWebSocket.instances.length).toBe(2);
+    const second = FakeWebSocket.instances[1];
+    expect(second.url).toContain("dgx-v2.novaremote.test");
+    second.emitOpen();
+    expect(second.sentFrames).toContain(JSON.stringify({ type: "auth", token: "dgx-token-v2" }));
+  });
 });
