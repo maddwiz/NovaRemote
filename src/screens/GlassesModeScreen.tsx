@@ -287,6 +287,25 @@ export function GlassesModeScreen() {
   const workspaceById = useMemo(() => {
     return new Map(sharedWorkspaces.map((workspace) => [workspace.id, workspace]));
   }, [sharedWorkspaces]);
+  const voiceChannelsByWorkspace = useMemo(() => {
+    const grouped = new Map<string, typeof voiceChannels>();
+    voiceChannels.forEach((channel) => {
+      const existing = grouped.get(channel.workspaceId);
+      if (existing) {
+        existing.push(channel);
+        return;
+      }
+      grouped.set(channel.workspaceId, [channel]);
+    });
+    return grouped;
+  }, [voiceChannels]);
+  const visibleVoiceWorkspaces = useMemo(() => {
+    if (activeWorkspaceId) {
+      const scoped = workspaceById.get(activeWorkspaceId);
+      return scoped ? [scoped] : [];
+    }
+    return sharedWorkspaces;
+  }, [activeWorkspaceId, sharedWorkspaces, workspaceById]);
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);
@@ -1273,6 +1292,87 @@ export function GlassesModeScreen() {
         </Text>
         {voiceError ? <Text style={styles.emptyText}>{`Voice error: ${voiceError}`}</Text> : null}
         {routeStatus ? <Text style={styles.emptyText}>{routeStatus}</Text> : null}
+        <Text style={styles.serverSubtitle}>Workspace channels</Text>
+        {visibleVoiceWorkspaces.length === 0 ? (
+          <Text style={styles.emptyText}>No workspaces available.</Text>
+        ) : null}
+        {visibleVoiceWorkspaces.map((workspace) => {
+          const channels = voiceChannelsByWorkspace.get(workspace.id) || [];
+          const joined = channels.find((channel) => channel.joined) || null;
+          const permissions = getWorkspacePermissions(workspace);
+          return (
+            <View key={`glasses-workspace-channel-${workspace.id}`} style={styles.serverCard}>
+              <Text style={styles.serverSubtitle}>{`${workspace.name} • ${permissions.role}`}</Text>
+              {channels.length === 0 ? <Text style={styles.emptyText}>No channels configured.</Text> : null}
+              {channels.length > 0 ? (
+                <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+                  {channels.map((channel) => {
+                    const active = channel.joined;
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`${active ? "Leave" : "Join"} glasses voice channel ${channel.name}`}
+                        key={`glasses-channel-${workspace.id}-${channel.id}`}
+                        style={[styles.chip, active ? styles.chipActive : null, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                        disabled={!permissions.canJoinChannels}
+                        onPress={() => {
+                          if (!permissions.canJoinChannels) {
+                            return;
+                          }
+                          if (active) {
+                            leaveChannel(channel.id);
+                            setRouteStatus(`Left #${channel.name}`);
+                            return;
+                          }
+                          joinChannel(channel.id);
+                          setRouteStatus(`Joined #${channel.name}`);
+                        }}
+                      >
+                        <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
+                          {`#${channel.name}${channel.muted ? " (muted)" : ""}`}
+                        </Text>
+                      </Pressable>
+                    );
+                  })}
+                </ScrollView>
+              ) : null}
+              {joined ? (
+                <View style={styles.modeRow}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${joined.muted ? "Unmute" : "Mute"} glasses joined channel ${joined.name}`}
+                    style={[styles.actionButton, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                    disabled={!permissions.canJoinChannels}
+                    onPress={() => {
+                      if (!permissions.canJoinChannels) {
+                        return;
+                      }
+                      toggleMute(joined.id);
+                      setRouteStatus(`${joined.muted ? "Unmuted" : "Muted"} #${joined.name}`);
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>{joined.muted ? "Unmute" : "Mute"}</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Leave glasses joined channel ${joined.name}`}
+                    style={[styles.actionButton, !permissions.canJoinChannels ? styles.buttonDisabled : null]}
+                    disabled={!permissions.canJoinChannels}
+                    onPress={() => {
+                      if (!permissions.canJoinChannels) {
+                        return;
+                      }
+                      leaveChannel(joined.id);
+                      setRouteStatus(`Left #${joined.name}`);
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Leave</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+            </View>
+          );
+        })}
         {transcriptReady ? <Text style={styles.serverSubtitle}>{`Transcript: ${voiceTranscript}`}</Text> : null}
         {voiceRecording && typeof voiceMeteringDb === "number" ? (
           <Text style={styles.emptyText}>{`Mic level ${Math.round(voiceMeteringDb)} dB`}</Text>
