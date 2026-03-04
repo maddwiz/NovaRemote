@@ -2,7 +2,13 @@ import * as SecureStore from "expo-secure-store";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import { STORAGE_VR_WORKSPACE_PREFIX } from "../constants";
-import { VR_PROTOCOL_VERSION, VrLayoutPreset, VrPanelTransform, VrWorkspaceSnapshot } from "./contracts";
+import {
+  VR_PROTOCOL_VERSION,
+  VrLayoutPreset,
+  VrPanelTransform,
+  VrPanelVisualState,
+  VrWorkspaceSnapshot,
+} from "./contracts";
 
 type UseVrWorkspacePrefsArgs = {
   serverScopeIds: string[];
@@ -39,6 +45,10 @@ function isVrLayoutPreset(value: unknown): value is VrLayoutPreset {
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === "number" && Number.isFinite(value);
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
 }
 
 function sanitizePanelTransform(value: unknown): VrPanelTransform | null {
@@ -97,6 +107,44 @@ function sanitizeCustomTransforms(
   return Object.keys(next).length > 0 ? next : undefined;
 }
 
+function sanitizePanelVisual(value: unknown): VrPanelVisualState | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Partial<VrPanelVisualState>;
+  const next: VrPanelVisualState = {};
+  if (typeof parsed.mini === "boolean") {
+    next.mini = parsed.mini;
+  }
+  if (isFiniteNumber(parsed.opacity)) {
+    next.opacity = clamp(parsed.opacity, 0.2, 1);
+  }
+  return Object.keys(next).length > 0 ? next : null;
+}
+
+function sanitizePanelVisuals(
+  value: unknown,
+  allowedPanelIds: Set<string>
+): Record<string, VrPanelVisualState> | undefined {
+  if (!value || typeof value !== "object") {
+    return undefined;
+  }
+
+  const next: Record<string, VrPanelVisualState> = {};
+  Object.entries(value as Record<string, unknown>).forEach(([panelId, visual]) => {
+    if (!allowedPanelIds.has(panelId)) {
+      return;
+    }
+    const normalized = sanitizePanelVisual(visual);
+    if (!normalized) {
+      return;
+    }
+    next[panelId] = normalized;
+  });
+
+  return Object.keys(next).length > 0 ? next : undefined;
+}
+
 export function makeVrWorkspaceScope(serverScopeIds: string[]): string {
   const normalized = uniqueOrdered(serverScopeIds.map((entry) => entry.trim()).filter(Boolean)).sort();
   if (normalized.length === 0) {
@@ -144,6 +192,7 @@ export function normalizeVrWorkspaceSnapshot(
     panelIds,
     pinnedPanelIds,
     overviewMode: Boolean(parsed.overviewMode),
+    panelVisuals: sanitizePanelVisuals(parsed.panelVisuals, panelSet),
     customTransforms: sanitizeCustomTransforms(parsed.customTransforms, panelSet),
   };
 }
@@ -238,5 +287,6 @@ export const vrWorkspacePrefsTestUtils = {
   makeVrWorkspaceScope,
   makeVrWorkspaceStorageKey,
   sanitizePanelTransform,
+  sanitizePanelVisual,
   normalizeVrWorkspaceSnapshot,
 };

@@ -4,6 +4,7 @@ import { ServerConnection } from "../types";
 import {
   VR_PROTOCOL_VERSION,
   VrLayoutPreset,
+  VrPanelVisualState,
   VrPanelState,
   VrPanelTransform,
   VrWorkspaceSnapshot,
@@ -52,6 +53,8 @@ export type UseVrWorkspaceResult = {
   addPanel: (serverId: string, session: string) => void;
   removePanel: (panelId: string) => void;
   togglePinPanel: (panelId: string) => void;
+  toggleMiniPanel: (panelId: string) => void;
+  setPanelOpacity: (panelId: string, opacity: number) => void;
   updatePanelTransform: (panelId: string, patch: Partial<VrPanelTransform>) => void;
   exportSnapshot: () => VrWorkspaceSnapshot;
   restoreSnapshot: (snapshot: VrWorkspaceSnapshot | null | undefined) => void;
@@ -201,6 +204,46 @@ function sanitizeTransformsByPanelId(
   return next;
 }
 
+function clamp(value: number, min: number, max: number): number {
+  return Math.max(min, Math.min(max, value));
+}
+
+function sanitizePanelVisual(value: unknown): VrPanelVisualState | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Partial<VrPanelVisualState>;
+  const next: VrPanelVisualState = {};
+  if (typeof parsed.mini === "boolean") {
+    next.mini = parsed.mini;
+  }
+  if (isFiniteNumber(parsed.opacity)) {
+    next.opacity = clamp(parsed.opacity, 0.2, 1);
+  }
+  return Object.keys(next).length > 0 ? next : null;
+}
+
+function sanitizePanelVisualsByPanelId(
+  panelVisuals: unknown,
+  allowedPanelIds: Set<string>
+): Record<string, VrPanelVisualState> {
+  if (!panelVisuals || typeof panelVisuals !== "object") {
+    return {};
+  }
+  const next: Record<string, VrPanelVisualState> = {};
+  Object.entries(panelVisuals as Record<string, unknown>).forEach(([panelId, value]) => {
+    if (!allowedPanelIds.has(panelId)) {
+      return;
+    }
+    const visual = sanitizePanelVisual(value);
+    if (!visual) {
+      return;
+    }
+    next[panelId] = visual;
+  });
+  return next;
+}
+
 function isVrLayoutPreset(value: unknown): value is VrLayoutPreset {
   return value === "arc" || value === "grid" || value === "stacked" || value === "cockpit" || value === "custom";
 }
@@ -215,6 +258,7 @@ export function useVrWorkspace({
   const [overviewMode, setOverviewMode] = useState<boolean>(false);
   const [panelIds, setPanelIds] = useState<string[]>([]);
   const [pinnedPanelIds, setPinnedPanelIds] = useState<string[]>([]);
+  const [panelVisuals, setPanelVisuals] = useState<Record<string, VrPanelVisualState>>({});
   const [customTransforms, setCustomTransforms] = useState<Record<string, VrPanelTransform>>({});
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
 
@@ -280,6 +324,14 @@ export function useVrWorkspace({
       }
       return Object.fromEntries(filtered);
     });
+
+    setPanelVisuals((prev) => {
+      const filtered = Object.entries(prev).filter(([panelId]) => availableSet.has(panelId));
+      if (filtered.length === Object.keys(prev).length) {
+        return prev;
+      }
+      return Object.fromEntries(filtered);
+    });
   }, [panelLimit, pinnedPanelIds, universe]);
 
   const panels = useMemo(() => {
@@ -290,9 +342,12 @@ export function useVrWorkspace({
       .map((panel) => {
         const base = defaultPanelState(panel);
         const customTransform = customTransforms[panel.id];
+        const visual = panelVisuals[panel.id];
         return {
           ...base,
           pinned: pinnedSet.has(panel.id),
+          mini: Boolean(visual?.mini),
+          opacity: visual?.opacity ?? 1,
           transform: customTransform ? { ...base.transform, ...customTransform } : base.transform,
         };
       });
@@ -312,7 +367,7 @@ export function useVrWorkspace({
         };
       })
       .filter((panel): panel is VrWorkspacePanel => Boolean(panel));
-  }, [customTransforms, overviewMode, panelIds, pinnedPanelIds, preset, universeById]);
+  }, [customTransforms, overviewMode, panelIds, panelVisuals, pinnedPanelIds, preset, universeById]);
 
   const routePanels = useMemo<VrRoutePanel[]>(
     () =>
@@ -358,6 +413,14 @@ export function useVrWorkspace({
   const removePanel = useCallback((panelId: string) => {
     setPanelIds((prev) => prev.filter((id) => id !== panelId));
     setPinnedPanelIds((prev) => prev.filter((id) => id !== panelId));
+    setPanelVisuals((prev) => {
+      if (!(panelId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[panelId];
+      return next;
+    });
     setCustomTransforms((prev) => {
       if (!(panelId in prev)) {
         return prev;
@@ -377,6 +440,39 @@ export function useVrWorkspace({
       return [...prev, panelId];
     });
   }, []);
+
+  const toggleMiniPanel = useCallback(
+    (panelId: string) => {
+      if (!panelId || !universeById.has(panelId)) {
+        return;
+      }
+      setPanelVisuals((prev) => ({
+        ...prev,
+        [panelId]: {
+          ...prev[panelId],
+          mini: !Boolean(prev[panelId]?.mini),
+        },
+      }));
+    },
+    [universeById]
+  );
+
+  const setPanelOpacity = useCallback(
+    (panelId: string, opacity: number) => {
+      if (!panelId || !universeById.has(panelId) || !isFiniteNumber(opacity)) {
+        return;
+      }
+      const clamped = clamp(opacity, 0.2, 1);
+      setPanelVisuals((prev) => ({
+        ...prev,
+        [panelId]: {
+          ...prev[panelId],
+          opacity: clamped,
+        },
+      }));
+    },
+    [universeById]
+  );
 
   const updatePanelTransform = useCallback(
     (panelId: string, patch: Partial<VrPanelTransform>) => {
@@ -437,16 +533,18 @@ export function useVrWorkspace({
   const exportSnapshot = useCallback((): VrWorkspaceSnapshot => {
     const activePanelIds = new Set(panelIds);
     const persistedTransforms = sanitizeTransformsByPanelId(customTransforms, activePanelIds);
+    const persistedPanelVisuals = sanitizePanelVisualsByPanelId(panelVisuals, activePanelIds);
     return {
       version: VR_PROTOCOL_VERSION,
       preset,
       focusedPanelId,
       panelIds: panelIds.slice(),
       pinnedPanelIds: pinnedPanelIds.filter((panelId) => activePanelIds.has(panelId)),
+      panelVisuals: Object.keys(persistedPanelVisuals).length > 0 ? persistedPanelVisuals : undefined,
       customTransforms: Object.keys(persistedTransforms).length > 0 ? persistedTransforms : undefined,
       overviewMode,
     };
-  }, [customTransforms, focusedPanelId, overviewMode, panelIds, pinnedPanelIds, preset]);
+  }, [customTransforms, focusedPanelId, overviewMode, panelIds, panelVisuals, pinnedPanelIds, preset]);
 
   const restoreSnapshot = useCallback(
     (snapshot: VrWorkspaceSnapshot | null | undefined) => {
@@ -480,12 +578,14 @@ export function useVrWorkspace({
 
       const nextPreset = isVrLayoutPreset(snapshot.preset) ? snapshot.preset : DEFAULT_PRESET;
       const nextCustomTransforms = sanitizeTransformsByPanelId(snapshot.customTransforms, new Set(nextPanelIds));
+      const nextPanelVisuals = sanitizePanelVisualsByPanelId(snapshot.panelVisuals, new Set(nextPanelIds));
 
       setPreset(nextPreset);
       setOverviewMode(Boolean(snapshot.overviewMode));
       setPanelIds(nextPanelIds);
       setFocusedPanelId(nextFocusedPanelId);
       setPinnedPanelIds(nextPinnedPanelIds);
+      setPanelVisuals(nextPanelVisuals);
       setCustomTransforms(nextCustomTransforms);
     },
     [panelLimit, universe]
@@ -583,6 +683,8 @@ export function useVrWorkspace({
     addPanel,
     removePanel,
     togglePinPanel,
+    toggleMiniPanel,
+    setPanelOpacity,
     updatePanelTransform,
     exportSnapshot,
     restoreSnapshot,
@@ -593,6 +695,7 @@ export function useVrWorkspace({
 
 export const vrWorkspaceTestUtils = {
   applyPanelLimit,
+  sanitizePanelVisual,
   uniqueOrdered,
   sanitizeTransform,
   rotateOrder,

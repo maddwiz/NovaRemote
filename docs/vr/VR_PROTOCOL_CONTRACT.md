@@ -220,6 +220,9 @@ Snapshot shape:
   "focusedPanelId": "home::build-01",
   "panelIds": ["home::build-01", "dgx::main"],
   "pinnedPanelIds": ["home::build-01"],
+  "panelVisuals": {
+    "home::build-01": { "mini": true, "opacity": 0.55 }
+  },
   "customTransforms": {
     "home::build-01": { "x": 0.4, "y": 1.82, "z": -1.5, "yaw": 18, "width": 1.3, "height": 0.75 }
   }
@@ -233,5 +236,8 @@ Rules:
 - `panelIds` order is the rendered panel order.
 - `pinnedPanelIds` must be a subset of `panelIds`.
 - `overviewMode` toggles expanded overview (`true`) versus focus mode (`false`).
+- `panelVisuals` keys must be panel IDs in `panelIds`.
+  - `mini` is the mini-panel toggle.
+  - `opacity` is clamped between `0.2` and `1.0`.
 - `customTransforms` keys must be panel IDs in `panelIds`.
 - Each transform requires `x`, `y`, `z`, `yaw`; optional fields are `pitch`, `roll`, `width`, `height`, `index`.

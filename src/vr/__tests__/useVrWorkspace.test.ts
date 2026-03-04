@@ -321,6 +321,9 @@ describe("useVrWorkspace", () => {
         focusedPanelId: homePanel,
         panelIds: [homePanel, dgxPanel, "extra::session"],
         pinnedPanelIds: [homePanel],
+        panelVisuals: {
+          [homePanel]: { mini: true, opacity: 0.55 },
+        },
         customTransforms: {
           [homePanel]: { x: 0.4, y: 1.82, z: -1.5, yaw: 18, width: 1.3, height: 0.75 },
         },
@@ -339,11 +342,14 @@ describe("useVrWorkspace", () => {
       width: 1.3,
       height: 0.75,
     });
+    expect(current().panels.find((panel) => panel.id === homePanel)?.mini).toBe(true);
+    expect(current().panels.find((panel) => panel.id === homePanel)?.opacity).toBeCloseTo(0.55);
 
     const exported = current().exportSnapshot();
     expect(exported.panelIds).toEqual([homePanel, dgxPanel]);
     expect(exported.focusedPanelId).toBe(homePanel);
     expect(exported.pinnedPanelIds).toEqual([homePanel]);
+    expect(exported.panelVisuals?.[homePanel]).toEqual({ mini: true, opacity: 0.55 });
     expect(exported.customTransforms?.[homePanel]?.x).toBe(0.4);
 
     await act(async () => {
@@ -521,6 +527,54 @@ describe("useVrWorkspace", () => {
     });
     const rotatedOrder = current().panels.map((panel) => panel.id);
     expect(rotatedOrder).toEqual(vrWorkspaceTestUtils.rotateOrder(firstOrder, "left"));
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("updates panel mini mode and opacity with clamping", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 3, initialPreset: "arc" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const panelId = buildVrPanelId("dgx", "main");
+    expect(current().panels.find((panel) => panel.id === panelId)?.mini).toBe(false);
+    expect(current().panels.find((panel) => panel.id === panelId)?.opacity).toBe(1);
+
+    await act(async () => {
+      current().toggleMiniPanel(panelId);
+      current().setPanelOpacity(panelId, 0.05);
+    });
+
+    const panel = current().panels.find((entry) => entry.id === panelId);
+    expect(panel?.mini).toBe(true);
+    expect(panel?.opacity).toBe(0.2);
+
+    const snapshot = current().exportSnapshot();
+    expect(snapshot.panelVisuals?.[panelId]).toEqual({ mini: true, opacity: 0.2 });
 
     await act(async () => {
       renderer?.unmount();

@@ -69,6 +69,11 @@ describe("useVrWorkspacePrefs helpers", () => {
         focusedPanelId: "missing",
         panelIds: ["a", "b", "x", "a", "c"],
         pinnedPanelIds: ["x", "b", "b"],
+        panelVisuals: {
+          a: { mini: true, opacity: 1.3 },
+          c: { mini: false, opacity: 0.1 },
+          x: { mini: true, opacity: 0.6 },
+        },
         customTransforms: {
           a: { x: 0.2, y: 1.1, z: -1.4, yaw: 11, width: 1.2, bad: true },
           x: { x: 999, y: 999, z: 999, yaw: 999 },
@@ -85,6 +90,9 @@ describe("useVrWorkspacePrefs helpers", () => {
     expect(normalized.pinnedPanelIds).toEqual(["b"]);
     expect(normalized.focusedPanelId).toBe("a");
     expect(normalized.overviewMode).toBe(false);
+    expect(normalized.panelVisuals).toEqual({
+      a: { mini: true, opacity: 1 },
+    });
     expect(normalized.customTransforms).toEqual({
       a: { x: 0.2, y: 1.1, z: -1.4, yaw: 11, width: 1.2 },
     });
@@ -97,6 +105,7 @@ describe("useVrWorkspacePrefs helpers", () => {
     expect(normalized.panelIds).toEqual(["main"]);
     expect(normalized.focusedPanelId).toBe("main");
     expect(normalized.overviewMode).toBe(false);
+    expect(normalized.panelVisuals).toBeUndefined();
     expect(normalized.customTransforms).toBeUndefined();
   });
 });

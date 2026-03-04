@@ -85,6 +85,14 @@
         "index": { "type": "number" }
       }
     },
+    "vrPanelVisualState": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mini": { "type": "boolean" },
+        "opacity": { "type": "number", "minimum": 0.2, "maximum": 1.0 }
+      }
+    },
     "vrWorkspaceSnapshot": {
       "type": "object",
       "additionalProperties": false,
@@ -106,6 +114,12 @@
         },
         "overviewMode": {
           "type": "boolean"
+        },
+        "panelVisuals": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/vrPanelVisualState"
+          }
         },
         "customTransforms": {
           "type": "object",

@@ -31,6 +31,11 @@ export type VrPanelTransform = {
   index?: number;
 };
 
+export type VrPanelVisualState = {
+  mini?: boolean;
+  opacity?: number;
+};
+
 export type VrPanelState = {
   id: string;
   serverId: string;
@@ -38,6 +43,8 @@ export type VrPanelState = {
   session: string;
   sessionLabel: string;
   pinned?: boolean;
+  mini?: boolean;
+  opacity?: number;
   readOnly?: boolean;
   transform: VrPanelTransform;
 };
@@ -49,5 +56,6 @@ export type VrWorkspaceSnapshot = {
   panelIds: string[];
   pinnedPanelIds: string[];
   overviewMode?: boolean;
+  panelVisuals?: Record<string, VrPanelVisualState>;
   customTransforms?: Record<string, VrPanelTransform>;
 };
