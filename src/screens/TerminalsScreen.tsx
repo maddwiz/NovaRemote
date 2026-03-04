@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
 import { NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
 
@@ -349,7 +349,15 @@ export function TerminalsScreen() {
 
   const { width } = useWindowDimensions();
   const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
-  const { channels: voiceChannels, loading: voiceChannelsLoading, joinChannel, leaveChannel, toggleMute } = useVoiceChannels();
+  const {
+    channels: voiceChannels,
+    loading: voiceChannelsLoading,
+    createChannel,
+    deleteChannel,
+    joinChannel,
+    leaveChannel,
+    toggleMute,
+  } = useVoiceChannels();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
   const activeBackend = activeServer?.terminalBackend;
@@ -361,6 +369,7 @@ export function TerminalsScreen() {
   const [processSignal, setProcessSignal] = useState<ProcessSignal>("TERM");
   const [selectedProcessPids, setSelectedProcessPids] = useState<number[]>([]);
   const [pendingProcessKill, setPendingProcessKill] = useState<{ pids: number[]; signal: ProcessSignal } | null>(null);
+  const [newChannelNamesByWorkspace, setNewChannelNamesByWorkspace] = useState<Record<string, string>>({});
   const terminalAppearance = useMemo(() => buildTerminalAppearance(terminalTheme), [terminalTheme]);
   const glassesTerminalTextStyle = useMemo(
     () =>
@@ -394,6 +403,22 @@ export function TerminalsScreen() {
   const vmHostTargetGroups = useMemo(() => buildVmHostTargetGroups(servers), [servers]);
   const vmHostVmTypeTargetGroups = useMemo(() => buildVmHostVmTypeTargetGroups(servers), [servers]);
   const disconnectedServerCount = Math.max(0, servers.length - connectedServerCount);
+  const setWorkspaceChannelDraft = useCallback((workspaceId: string, value: string) => {
+    setNewChannelNamesByWorkspace((previous) => ({
+      ...previous,
+      [workspaceId]: value,
+    }));
+  }, []);
+  const clearWorkspaceChannelDraft = useCallback((workspaceId: string) => {
+    setNewChannelNamesByWorkspace((previous) => {
+      if (!(workspaceId in previous)) {
+        return previous;
+      }
+      const next = { ...previous };
+      delete next[workspaceId];
+      return next;
+    });
+  }, []);
 
   const queueAgentCommand = (session: string, command: string) => {
     if (!focusedServerId || !session || !command.trim()) {
@@ -1063,6 +1088,46 @@ export function TerminalsScreen() {
                 </Text>
               </View>
               <Text style={styles.emptyText}>{`Role: ${permissions.role}`}</Text>
+              {permissions.canManageChannels ? (
+                <View style={styles.modeRow}>
+                  <TextInput
+                    accessibilityLabel={`New voice channel for ${workspace.name}`}
+                    style={[styles.input, styles.flexButton]}
+                    value={newChannelNamesByWorkspace[workspace.id] || ""}
+                    onChangeText={(value) => setWorkspaceChannelDraft(workspace.id, value)}
+                    placeholder="New channel (e.g. incident)"
+                    placeholderTextColor="#7f7aa8"
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                  />
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Create voice channel for ${workspace.name}`}
+                    style={[
+                      styles.actionButton,
+                      !(newChannelNamesByWorkspace[workspace.id] || "").trim() ? styles.buttonDisabled : null,
+                    ]}
+                    disabled={!(newChannelNamesByWorkspace[workspace.id] || "").trim()}
+                    onPress={() => {
+                      const draft = (newChannelNamesByWorkspace[workspace.id] || "").trim();
+                      if (!draft) {
+                        return;
+                      }
+                      const created = createChannel({
+                        workspaceId: workspace.id,
+                        name: draft,
+                      });
+                      if (created) {
+                        clearWorkspaceChannelDraft(workspace.id);
+                      }
+                    }}
+                  >
+                    <Text style={styles.actionButtonText}>Create</Text>
+                  </Pressable>
+                </View>
+              ) : (
+                <Text style={styles.emptyText}>Only owners or editors can manage channels.</Text>
+              )}
               {workspaceChannels.length === 0 ? <Text style={styles.emptyText}>No channels configured.</Text> : null}
               {workspaceChannels.length > 0 ? (
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
@@ -1093,6 +1158,21 @@ export function TerminalsScreen() {
                     );
                   })}
                 </ScrollView>
+              ) : null}
+              {permissions.canManageChannels && workspaceChannels.length > 0 ? (
+                <View style={styles.actionsWrap}>
+                  {workspaceChannels.map((channel) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete voice channel ${channel.name}`}
+                      key={`delete-${channel.id}`}
+                      style={styles.actionDangerButton}
+                      onPress={() => deleteChannel(channel.id)}
+                    >
+                      <Text style={styles.actionDangerText}>{`Delete #${channel.name}`}</Text>
+                    </Pressable>
+                  ))}
+                </View>
               ) : null}
               {joinedChannel ? (
                 <View style={styles.actionsWrap}>
