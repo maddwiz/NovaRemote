@@ -89,14 +89,33 @@ function buildSessionClient(args: {
     session: string,
     key: string
   ) => Promise<void>;
+  listSessionsMock?: (
+    server: Parameters<VrSessionClient["listSessions"]>[0],
+    basePath: VrTerminalApiBasePath
+  ) => Promise<ReturnType<VrSessionClient["listSessions"]> extends Promise<infer T> ? T : never>;
+  createSessionMock?: (
+    server: Parameters<VrSessionClient["createSession"]>[0],
+    basePath: VrTerminalApiBasePath,
+    session: string,
+    cwd: string
+  ) => Promise<void>;
+  tailMock?: (
+    server: Parameters<VrSessionClient["tail"]>[0],
+    basePath: VrTerminalApiBasePath,
+    session: string,
+    lines?: number
+  ) => Promise<string>;
+  healthMock?: (
+    server: Parameters<VrSessionClient["health"]>[0]
+  ) => Promise<{ ok: boolean; latencyMs: number | null }>;
 }): VrSessionClient {
   return {
-    listSessions: vi.fn(async () => []),
-    createSession: vi.fn(async () => undefined),
+    listSessions: args.listSessionsMock || (vi.fn(async () => []) as VrSessionClient["listSessions"]),
+    createSession: args.createSessionMock || (vi.fn(async () => undefined) as VrSessionClient["createSession"]),
     send: args.sendMock,
     ctrl: args.ctrlMock || (vi.fn(async () => undefined) as VrSessionClient["ctrl"]),
-    tail: vi.fn(async () => ""),
-    health: vi.fn(async () => ({ ok: true, latencyMs: 12 })),
+    tail: args.tailMock || (vi.fn(async () => "") as VrSessionClient["tail"]),
+    health: args.healthMock || (vi.fn(async () => ({ ok: true, latencyMs: 12 })) as VrSessionClient["health"]),
   };
 }
 
@@ -316,6 +335,128 @@ describe("useVrLiveRuntime", () => {
       "C-c"
     );
     expect(current().hudStatus?.message).toContain("Sent C-c to dgx/main");
+    expect(sendMock).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("exposes direct live runtime session and health adapter methods", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string,
+        enter?: boolean
+      ) => Promise<void>
+    >(async () => undefined);
+    const listSessionsMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["listSessions"]>[0],
+        basePath: VrTerminalApiBasePath
+      ) => Promise<ReturnType<VrSessionClient["listSessions"]> extends Promise<infer T> ? T : never>
+    >(async () => [{ name: "main" }, { name: "build" }]);
+    const createSessionMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["createSession"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        cwd: string
+      ) => Promise<void>
+    >(async () => undefined);
+    const tailMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["tail"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        lines?: number
+      ) => Promise<string>
+    >(async () => "tail-output");
+    const healthMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["health"]>[0]
+      ) => Promise<{ ok: boolean; latencyMs: number | null }>
+    >(async () => ({ ok: true, latencyMs: 17 }));
+
+    let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Runtime not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({
+          sendMock,
+          listSessionsMock,
+          createSessionMock,
+          tailMock,
+          healthMock,
+        }),
+        maxPanels: 3,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await expect(current().listServerSessions("dgx")).resolves.toEqual([{ name: "main" }, { name: "build" }]);
+    await expect(current().createServerSession("dgx", "build", "/workspace")).resolves.toBeUndefined();
+    await expect(current().fetchServerTail("dgx", "main", 120)).resolves.toBe("tail-output");
+    await expect(current().pingServerHealth("dgx")).resolves.toEqual({ ok: true, latencyMs: 17 });
+
+    expect(listSessionsMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "/tmux"
+    );
+    expect(createSessionMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "/tmux",
+      "build",
+      "/workspace"
+    );
+    expect(tailMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "/tmux",
+      "main",
+      120
+    );
+    expect(healthMock).toHaveBeenCalledWith({
+      id: "dgx",
+      name: "DGX",
+      baseUrl: "https://dgx.novaremote.test",
+      token: "dgx-token",
+    });
     expect(sendMock).toHaveBeenCalledTimes(0);
 
     await act(async () => {

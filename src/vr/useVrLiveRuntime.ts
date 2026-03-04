@@ -47,22 +47,70 @@ export function useVrLiveRuntime({
     };
   }, [connections]);
 
-  const input = useVrInputRouter({
-    workspace,
-    onSetOverviewMode: workspace.setOverviewMode,
-    onSendCommand: async (serverId, session, command) => {
+  const sendServerCommand = useCallback(
+    async (serverId: string, session: string, command: string) => {
       const { connection, target } = resolveServerTarget(serverId);
       await liveClient.send(target, connection.terminalApiBasePath, session, command, true);
     },
-    onSendControlChar: async (serverId, session, char) => {
+    [liveClient, resolveServerTarget]
+  );
+
+  const sendServerControlChar = useCallback(
+    async (serverId: string, session: string, char: string) => {
       const { connection, target } = resolveServerTarget(serverId);
       await liveClient.ctrl(target, connection.terminalApiBasePath, session, char);
     },
+    [liveClient, resolveServerTarget]
+  );
+
+  const listServerSessions = useCallback(
+    async (serverId: string) => {
+      const { connection, target } = resolveServerTarget(serverId);
+      return await liveClient.listSessions(target, connection.terminalApiBasePath);
+    },
+    [liveClient, resolveServerTarget]
+  );
+
+  const createServerSession = useCallback(
+    async (serverId: string, session: string, cwd: string) => {
+      const { connection, target } = resolveServerTarget(serverId);
+      await liveClient.createSession(target, connection.terminalApiBasePath, session, cwd);
+    },
+    [liveClient, resolveServerTarget]
+  );
+
+  const fetchServerTail = useCallback(
+    async (serverId: string, session: string, lines?: number) => {
+      const { connection, target } = resolveServerTarget(serverId);
+      return await liveClient.tail(target, connection.terminalApiBasePath, session, lines);
+    },
+    [liveClient, resolveServerTarget]
+  );
+
+  const pingServerHealth = useCallback(
+    async (serverId: string) => {
+      const { target } = resolveServerTarget(serverId);
+      return await liveClient.health(target);
+    },
+    [liveClient, resolveServerTarget]
+  );
+
+  const input = useVrInputRouter({
+    workspace,
+    onSetOverviewMode: workspace.setOverviewMode,
+    onSendCommand: sendServerCommand,
+    onSendControlChar: sendServerControlChar,
   });
 
   return {
     workspace,
     input,
+    listServerSessions,
+    createServerSession,
+    fetchServerTail,
+    pingServerHealth,
+    sendServerCommand,
+    sendServerControlChar,
     hudStatus: input.hudStatus,
     clearHudStatus: input.clearHudStatus,
     dispatchVoice: input.dispatchVoice,

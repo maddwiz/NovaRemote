@@ -134,17 +134,29 @@ export function groupServersByVmHost(servers: ServerProfile[]): ServerRailGroup[
 }
 
 export function formatServerDetails(server: ServerProfile, connection: ServerConnection | undefined): string {
+  const vmDetails = [server.vmHost, server.vmType, server.vmName || server.vmId].filter(Boolean).join(" • ");
+
   if (!connection) {
-    return `Status: disconnected\nURL: ${server.baseUrl || "not set"}\nSessions: 0`;
+    return [
+      "Status: disconnected",
+      vmDetails ? `VM: ${vmDetails}` : null,
+      `URL: ${server.baseUrl || "not set"}`,
+      "Sessions: 0",
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   const latency = connection.health.latencyMs === null ? "n/a" : `${connection.health.latencyMs} ms`;
   return [
     `Status: ${connection.status}`,
+    vmDetails ? `VM: ${vmDetails}` : null,
     `Sessions: ${connection.openSessions.length} open / ${connection.allSessions.length} total`,
     `Streams: ${connection.activeStreamCount}`,
     `Latency: ${latency}`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 type BuildServerSwitcherMenuActionsArgs = {
