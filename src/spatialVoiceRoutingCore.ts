@@ -10,6 +10,8 @@ export type VoiceRoute =
   | { kind: "none" }
   | { kind: "show_all" }
   | { kind: "minimize" }
+  | { kind: "pause_pool" }
+  | { kind: "resume_pool" }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
   | { kind: "focus_panel"; panelId: string }
   | { kind: "reconnect_server"; panelId: string }
@@ -189,6 +191,27 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     normalized === "single panel"
   ) {
     return { kind: "minimize" };
+  }
+
+  if (
+    normalized === "pause pool" ||
+    normalized === "pause connection pool" ||
+    normalized === "pause all servers" ||
+    normalized === "pause all streams" ||
+    normalized === "stop all streams"
+  ) {
+    return { kind: "pause_pool" };
+  }
+
+  if (
+    normalized === "resume pool" ||
+    normalized === "resume connection pool" ||
+    normalized === "resume all servers" ||
+    normalized === "resume all streams" ||
+    normalized === "start all streams" ||
+    normalized === "unpause pool"
+  ) {
+    return { kind: "resume_pool" };
   }
 
   if (normalized === "rotate left" || normalized === "rotate workspace left" || normalized === "previous panel") {

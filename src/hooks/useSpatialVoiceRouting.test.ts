@@ -159,6 +159,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const pausePool = resolveSpatialVoiceRoute({
+      transcript: "pause all streams",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const resumePool = resolveSpatialVoiceRoute({
+      transcript: "resume pool",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
 
     expect(interrupt).toEqual({
       kind: "control_char",
@@ -177,6 +187,12 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(openOnMac).toEqual({
       kind: "open_on_mac",
       panelId: "home::build-01",
+    });
+    expect(pausePool).toEqual({
+      kind: "pause_pool",
+    });
+    expect(resumePool).toEqual({
+      kind: "resume_pool",
     });
   });
 
