@@ -16,6 +16,14 @@ Recommended top-level folders:
 - `clients/visionos/` SwiftUI + RealityKit app
 - `shared/` generated OpenAPI types / message models (language-specific)
 
+Quick scaffold command from `NovaRemote`:
+
+```bash
+npm run vr:bootstrap-repo -- /absolute/path/to/NovaRemoteVR
+```
+
+This creates the baseline directory structure, starter docs, and then syncs protocol contracts.
+
 ## 2. Shared Contract Source of Truth
 
 Source files in `NovaRemote`:

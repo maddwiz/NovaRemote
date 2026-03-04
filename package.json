@@ -14,6 +14,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "ci": "npm run typecheck && npm run test && npm run doctor",
+    "vr:bootstrap-repo": "bash ./scripts/bootstrap-vr-repo.sh",
     "vr:sync-contracts": "bash ./scripts/sync-vr-contracts.sh",
     "fix:ios:path-spaces": "node scripts/fix-ios-space-paths.mjs",
     "pods:install:ios": "cd ios && pod install",
