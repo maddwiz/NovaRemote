@@ -189,6 +189,26 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const createAgent = resolveSpatialVoiceRoute({
+      transcript: "create agent build watcher",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const createAgentForHomelab = resolveSpatialVoiceRoute({
+      transcript: "create agent deploy bot for homelab",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const setAgentGoal = resolveSpatialVoiceRoute({
+      transcript: "set agent deploy bot goal npm run deploy",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const setAgentGoalForCloud = resolveSpatialVoiceRoute({
+      transcript: "agent build watcher goal tail -f logs for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
 
     expect(interrupt).toEqual({
       kind: "control_char",
@@ -226,6 +246,26 @@ describe("resolveSpatialVoiceRoute", () => {
     });
     expect(denyPendingForCloud).toEqual({
       kind: "deny_all_pending_agents",
+      panelId: "cloud::deploy",
+    });
+    expect(createAgent).toEqual({
+      kind: "create_agent",
+      name: "build watcher",
+    });
+    expect(createAgentForHomelab).toEqual({
+      kind: "create_agent",
+      name: "deploy bot",
+      panelId: "home::build-01",
+    });
+    expect(setAgentGoal).toEqual({
+      kind: "set_agent_goal",
+      name: "deploy bot",
+      goal: "npm run deploy",
+    });
+    expect(setAgentGoalForCloud).toEqual({
+      kind: "set_agent_goal",
+      name: "build watcher",
+      goal: "tail -f logs",
       panelId: "cloud::deploy",
     });
   });

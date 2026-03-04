@@ -319,6 +319,8 @@ describe("useVrLiveRuntime", () => {
     >(async () => undefined);
     const onReconnectServer = vi.fn(async () => undefined);
     const onReconnectServers = vi.fn(async () => undefined);
+    const onCreateAgent = vi.fn(async () => true);
+    const onSetAgentGoal = vi.fn(async () => 1);
     const onApproveReadyAgents = vi.fn(async () => ["agent-a", "agent-b"]);
     const onDenyAllPendingAgents = vi.fn(async () => ["agent-a"]);
     const onDisconnectAllServers = vi.fn(async () => undefined);
@@ -339,6 +341,8 @@ describe("useVrLiveRuntime", () => {
         maxPanels: 3,
         onReconnectServer,
         onReconnectServers,
+        onCreateAgent,
+        onSetAgentGoal,
         onApproveReadyAgents,
         onDenyAllPendingAgents,
         onDisconnectAllServers,
@@ -413,6 +417,18 @@ describe("useVrLiveRuntime", () => {
     });
     expect(onReconnectServers).toHaveBeenCalledWith(["dgx"]);
     expect(current().hudStatus?.message).toContain("Reconnect queued for 1 servers");
+
+    await act(async () => {
+      await current().dispatchVoice("create agent build watcher");
+    });
+    expect(onCreateAgent).toHaveBeenCalledWith(["dgx"], "build watcher");
+    expect(current().hudStatus?.message).toContain("Created 1 agent named build watcher");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent build watcher goal npm run test");
+    });
+    expect(onSetAgentGoal).toHaveBeenCalledWith(["dgx"], "build watcher", "npm run test");
+    expect(current().hudStatus?.message).toContain("Updated goal for 1 agent");
 
     await act(async () => {
       await current().dispatchVoice("approve ready agents");

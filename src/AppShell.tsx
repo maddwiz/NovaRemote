@@ -1669,9 +1669,14 @@ export default function AppShell() {
   );
 
   const agentRuntimeServerId = focusedServerId;
+  type AgentServerAction =
+    | { kind: "approve" }
+    | { kind: "deny" }
+    | { kind: "create"; name: string }
+    | { kind: "set_goal"; name: string; goal: string };
   type PendingAgentServerAction = {
     serverId: string;
-    kind: "approve" | "deny";
+    action: AgentServerAction;
     resolve: (agentIds: string[]) => void;
     reject: (error: unknown) => void;
   };
@@ -1687,18 +1692,65 @@ export default function AppShell() {
     },
     [agentRuntimeServerId, sendServerSessionCommand, setError]
   );
-  const { approveReadyApprovals: approveReadyAgentsForFocusedServer, denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer } =
-    useNovaAgentRuntime({
-      serverId: agentRuntimeServerId,
-      onDispatchCommand: dispatchFocusedServerAgentCommand,
-    });
+  const {
+    agents: focusedServerAgents,
+    addRuntimeAgent: addFocusedServerRuntimeAgent,
+    setRuntimeAgentGoal: setFocusedServerRuntimeAgentGoal,
+    approveReadyApprovals: approveReadyAgentsForFocusedServer,
+    denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer,
+  } = useNovaAgentRuntime({
+    serverId: agentRuntimeServerId,
+    onDispatchCommand: dispatchFocusedServerAgentCommand,
+  });
 
   const executeFocusedAgentServerAction = useCallback(
-    (kind: "approve" | "deny"): string[] => {
-      const result = kind === "approve" ? approveReadyAgentsForFocusedServer() : denyAllPendingAgentsForFocusedServer();
-      return Array.isArray(result) ? result : [];
+    (action: AgentServerAction): string[] => {
+      if (action.kind === "approve") {
+        const approved = approveReadyAgentsForFocusedServer();
+        return Array.isArray(approved) ? approved : [];
+      }
+      if (action.kind === "deny") {
+        const denied = denyAllPendingAgentsForFocusedServer();
+        return Array.isArray(denied) ? denied : [];
+      }
+      if (action.kind === "create") {
+        const name = action.name.trim();
+        if (!name) {
+          return [];
+        }
+        const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
+        const alreadyExists = focusedServerAgents.some((agent) => {
+          const agentName = agent.name.trim().toLowerCase().replace(/\s+/g, " ");
+          return agentName === normalizedName;
+        });
+        if (alreadyExists) {
+          return [];
+        }
+        const created = addFocusedServerRuntimeAgent(name);
+        return created ? [created.agentId] : [];
+      }
+      const name = action.name.trim();
+      const goal = action.goal.trim();
+      if (!name || !goal) {
+        return [];
+      }
+      const normalizedName = name.toLowerCase().replace(/\s+/g, " ");
+      const matchingAgents = focusedServerAgents.filter((agent) => {
+        const agentName = agent.name.trim().toLowerCase().replace(/\s+/g, " ");
+        return agentName === normalizedName;
+      });
+      matchingAgents.forEach((agent) => {
+        setFocusedServerRuntimeAgentGoal(agent.agentId, goal);
+      });
+      return matchingAgents.map((agent) => agent.agentId);
     },
-    [approveReadyAgentsForFocusedServer, denyAllPendingAgentsForFocusedServer]
+    [
+      addFocusedServerRuntimeAgent,
+      approveReadyAgentsForFocusedServer,
+      denyAllPendingAgentsForFocusedServer,
+      focusedServerAgents,
+      setFocusedServerRuntimeAgentGoal,
+    ]
   );
 
   const processPendingAgentServerActions = useCallback(() => {
@@ -1719,7 +1771,7 @@ export default function AppShell() {
 
     pendingAgentServerActionsRef.current.shift();
     try {
-      current.resolve(executeFocusedAgentServerAction(current.kind));
+      current.resolve(executeFocusedAgentServerAction(current.action));
     } catch (error) {
       current.reject(error);
     }
@@ -1744,7 +1796,7 @@ export default function AppShell() {
   }, []);
 
   const runAgentServerAction = useCallback(
-    async (serverId: string, kind: "approve" | "deny"): Promise<string[]> => {
+    async (serverId: string, action: AgentServerAction): Promise<string[]> => {
       const targetServerId = serverId.trim();
       if (!targetServerId) {
         return [];
@@ -1753,13 +1805,13 @@ export default function AppShell() {
         throw new Error("Target server is not available.");
       }
       if (focusedServerId === targetServerId) {
-        return executeFocusedAgentServerAction(kind);
+        return executeFocusedAgentServerAction(action);
       }
 
       return await new Promise<string[]>((resolve, reject) => {
         pendingAgentServerActionsRef.current.push({
           serverId: targetServerId,
-          kind,
+          action,
           resolve,
           reject,
         });
@@ -1770,12 +1822,23 @@ export default function AppShell() {
   );
 
   const approveReadyAgentsForServer = useCallback(
-    async (serverId: string): Promise<string[]> => await runAgentServerAction(serverId, "approve"),
+    async (serverId: string): Promise<string[]> => await runAgentServerAction(serverId, { kind: "approve" }),
     [runAgentServerAction]
   );
 
   const denyAllPendingAgentsForServer = useCallback(
-    async (serverId: string): Promise<string[]> => await runAgentServerAction(serverId, "deny"),
+    async (serverId: string): Promise<string[]> => await runAgentServerAction(serverId, { kind: "deny" }),
+    [runAgentServerAction]
+  );
+
+  const createAgentForServer = useCallback(
+    async (serverId: string, name: string): Promise<string[]> => await runAgentServerAction(serverId, { kind: "create", name }),
+    [runAgentServerAction]
+  );
+
+  const setAgentGoalForServer = useCallback(
+    async (serverId: string, name: string, goal: string): Promise<string[]> =>
+      await runAgentServerAction(serverId, { kind: "set_goal", name, goal }),
     [runAgentServerAction]
   );
 
@@ -1801,6 +1864,30 @@ export default function AppShell() {
       return denied;
     },
     [denyAllPendingAgentsForServer]
+  );
+
+  const createAgentForServers = useCallback(
+    async (serverIds: string[], name: string): Promise<string[]> => {
+      const created: string[] = [];
+      for (const serverId of uniqueServerIds(serverIds)) {
+        const next = await createAgentForServer(serverId, name);
+        created.push(...next);
+      }
+      return created;
+    },
+    [createAgentForServer]
+  );
+
+  const setAgentGoalForServers = useCallback(
+    async (serverIds: string[], name: string, goal: string): Promise<string[]> => {
+      const updated: string[] = [];
+      for (const serverId of uniqueServerIds(serverIds)) {
+        const next = await setAgentGoalForServer(serverId, name, goal);
+        updated.push(...next);
+      }
+      return updated;
+    },
+    [setAgentGoalForServer]
   );
 
   const sendControlToSession = useCallback(
@@ -2519,6 +2606,10 @@ export default function AppShell() {
     reconnectAllServers,
     connectAllServers,
     disconnectAllServers,
+    createAgentForServer,
+    setAgentGoalForServer,
+    createAgentForServers,
+    setAgentGoalForServers,
     approveReadyAgentsForFocusedServer,
     denyAllPendingAgentsForFocusedServer,
     approveReadyAgentsForServer,

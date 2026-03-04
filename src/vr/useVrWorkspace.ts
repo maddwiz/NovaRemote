@@ -24,6 +24,8 @@ export type VrWorkspaceVoiceAction =
   | { kind: "focus"; panelId: string }
   | { kind: "reconnect_server"; panelId: string; serverId: string }
   | { kind: "reconnect_all"; serverIds: string[] }
+  | { kind: "create_agent"; serverIds: string[]; name: string }
+  | { kind: "set_agent_goal"; serverIds: string[]; name: string; goal: string }
   | { kind: "approve_ready_agents"; serverIds: string[] }
   | { kind: "deny_all_pending_agents"; serverIds: string[] }
   | { kind: "pause_pool" }
@@ -659,6 +661,19 @@ export function useVrWorkspace({
           ? targetedPanelId
           : focusedPanelId;
       const intent = parseVrVoiceIntent(transcript, routePanels, routingPanelId);
+      const resolveTargetPanel = (panelId?: string): UniversePanel | null => {
+        if (panelId) {
+          return universeById.get(panelId) || null;
+        }
+        if (routingPanelId) {
+          const fromRouting = universeById.get(routingPanelId);
+          if (fromRouting) {
+            return fromRouting;
+          }
+        }
+        const firstPanel = routePanels[0];
+        return firstPanel ? universeById.get(firstPanel.id) || null : null;
+      };
       if (intent.kind === "focus") {
         focusPanel(intent.panelId);
         return { kind: "focus", panelId: intent.panelId };
@@ -678,6 +693,31 @@ export function useVrWorkspace({
         return {
           kind: "reconnect_all",
           serverIds: serverScopeIds.slice(),
+        };
+      }
+      if (intent.kind === "create_agent") {
+        const targetPanel = resolveTargetPanel(intent.panelId);
+        const serverIds = targetPanel ? [targetPanel.serverId] : serverScopeIds.slice(0, 1);
+        if (serverIds.length === 0) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "create_agent",
+          serverIds,
+          name: intent.name,
+        };
+      }
+      if (intent.kind === "set_agent_goal") {
+        const targetPanel = resolveTargetPanel(intent.panelId);
+        const serverIds = targetPanel ? [targetPanel.serverId] : serverScopeIds.slice(0, 1);
+        if (serverIds.length === 0) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "set_agent_goal",
+          serverIds,
+          name: intent.name,
+          goal: intent.goal,
         };
       }
       if (intent.kind === "approve_ready_agents") {

@@ -143,6 +143,10 @@ function makeBaseArgs() {
     reconnectAllServers: vi.fn(),
     connectAllServers: vi.fn(),
     disconnectAllServers: vi.fn(),
+    createAgentForServer: vi.fn(async () => []),
+    setAgentGoalForServer: vi.fn(async () => []),
+    createAgentForServers: vi.fn(async () => []),
+    setAgentGoalForServers: vi.fn(async () => []),
     approveReadyAgentsForFocusedServer: vi.fn(() => []),
     denyAllPendingAgentsForFocusedServer: vi.fn(() => []),
     approveReadyAgentsForServer: vi.fn(async () => []),
@@ -323,6 +327,23 @@ describe("useTerminalsViewModel", () => {
     expect(denyAllPendingAgentsForServer).toHaveBeenCalledWith("dgx");
   });
 
+  it("routes server-scoped agent create and goal actions through async callbacks", async () => {
+    const createAgentForServer = vi.fn(async (_serverId: string, _name: string) => ["agent-created"]);
+    const setAgentGoalForServer = vi.fn(async (_serverId: string, _name: string, _goal: string) => ["agent-updated"]);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      createAgentForServer,
+      setAgentGoalForServer,
+    });
+
+    await expect(model.onCreateAgentForServer("dgx", "build watcher")).resolves.toEqual(["agent-created"]);
+    await expect(model.onSetAgentGoalForServer("dgx", "build watcher", "npm run test")).resolves.toEqual([
+      "agent-updated",
+    ]);
+    expect(createAgentForServer).toHaveBeenCalledWith("dgx", "build watcher");
+    expect(setAgentGoalForServer).toHaveBeenCalledWith("dgx", "build watcher", "npm run test");
+  });
+
   it("deduplicates multi-server agent actions before dispatch", async () => {
     const approveReadyAgentsForServers = vi.fn(async (_serverIds: string[]) => ["agent-1", "agent-2"]);
     const denyAllPendingAgentsForServers = vi.fn(async (_serverIds: string[]) => ["agent-3"]);
@@ -342,5 +363,26 @@ describe("useTerminalsViewModel", () => {
 
     expect(approveReadyAgentsForServers).toHaveBeenCalledWith(["dgx", "cloud"]);
     expect(denyAllPendingAgentsForServers).toHaveBeenCalledWith(["cloud", "dgx"]);
+  });
+
+  it("deduplicates multi-server agent create/goal actions before dispatch", async () => {
+    const createAgentForServers = vi.fn(async (_serverIds: string[], _name: string) => ["agent-1", "agent-2"]);
+    const setAgentGoalForServers = vi.fn(async (_serverIds: string[], _name: string, _goal: string) => ["agent-3"]);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      createAgentForServers,
+      setAgentGoalForServers,
+    });
+
+    await expect(model.onCreateAgentForServers(["dgx", "dgx", " ", "cloud"], "build watcher")).resolves.toEqual([
+      "agent-1",
+      "agent-2",
+    ]);
+    await expect(
+      model.onSetAgentGoalForServers(["cloud", "", "dgx", "cloud"], "build watcher", "npm run test")
+    ).resolves.toEqual(["agent-3"]);
+
+    expect(createAgentForServers).toHaveBeenCalledWith(["dgx", "cloud"], "build watcher");
+    expect(setAgentGoalForServers).toHaveBeenCalledWith(["cloud", "dgx"], "build watcher", "npm run test");
   });
 });

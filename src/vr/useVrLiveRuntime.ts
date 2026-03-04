@@ -13,6 +13,12 @@ export type UseVrLiveRuntimeArgs = {
   sessionClient?: VrSessionClient;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
+  onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onSetAgentGoal?: (
+    serverIds: string[],
+    name: string,
+    goal: string
+  ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onApproveReadyAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onDenyAllPendingAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onConnectAllServers?: () => Promise<void> | void;
@@ -26,6 +32,8 @@ export function useVrLiveRuntime({
   sessionClient,
   onReconnectServer,
   onReconnectServers,
+  onCreateAgent,
+  onSetAgentGoal,
   onApproveReadyAgents,
   onDenyAllPendingAgents,
   onConnectAllServers,
@@ -130,6 +138,8 @@ export function useVrLiveRuntime({
     onSendControlChar: sendServerControlChar,
     onReconnectServer,
     onReconnectServers,
+    onCreateAgent,
+    onSetAgentGoal,
     onApproveReadyAgents,
     onDenyAllPendingAgents,
     onConnectAllServers,

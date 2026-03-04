@@ -26,6 +26,12 @@ export type UseVrInputRouterArgs = {
   onSendControlChar?: (serverId: string, session: string, char: string) => Promise<void> | void;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
+  onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onSetAgentGoal?: (
+    serverIds: string[],
+    name: string,
+    goal: string
+  ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onApproveReadyAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onDenyAllPendingAgents?: (serverIds: string[]) => Promise<void | number | string[]> | void | number | string[];
   onConnectAllServers?: () => Promise<void> | void;
@@ -52,9 +58,12 @@ function now(): number {
   return Date.now();
 }
 
-function resolveActionCount(result: void | number | string[] | null | undefined): number | null {
+function resolveActionCount(result: void | number | boolean | string[] | null | undefined): number | null {
   if (typeof result === "number" && Number.isFinite(result)) {
     return Math.max(0, Math.floor(result));
+  }
+  if (typeof result === "boolean") {
+    return result ? 1 : 0;
   }
   if (Array.isArray(result)) {
     return result.length;
@@ -68,6 +77,8 @@ export function useVrInputRouter({
   onSendControlChar,
   onReconnectServer,
   onReconnectServers,
+  onCreateAgent,
+  onSetAgentGoal,
   onApproveReadyAgents,
   onDenyAllPendingAgents,
   onConnectAllServers,
@@ -234,6 +245,70 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to reconnect all servers",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "create_agent") {
+        if (!onCreateAgent) {
+          publishHudStatus({
+            message: "Agent creation routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const result = await onCreateAgent(action.serverIds, action.name);
+          const count = resolveActionCount(result);
+          publishHudStatus({
+            message:
+              count === 0
+                ? `No agents were created for ${action.name}`
+                : count === null
+                  ? `Created agent ${action.name}`
+                  : `Created ${count} agent${count === 1 ? "" : "s"} named ${action.name}`,
+            severity: count === 0 ? "warning" : "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to create agent",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "set_agent_goal") {
+        if (!onSetAgentGoal) {
+          publishHudStatus({
+            message: "Agent goal routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const result = await onSetAgentGoal(action.serverIds, action.name, action.goal);
+          const count = resolveActionCount(result);
+          publishHudStatus({
+            message:
+              count === 0
+                ? `No agent goals updated for ${action.name}`
+                : count === null
+                  ? `Updated goal for ${action.name}`
+                  : `Updated goal for ${count} agent${count === 1 ? "" : "s"}`,
+            severity: count === 0 ? "warning" : "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to update agent goal",
             severity: "error",
             at: now(),
           });
@@ -495,6 +570,8 @@ export function useVrInputRouter({
       onOpenOnMac,
       onReconnectServer,
       onReconnectServers,
+      onCreateAgent,
+      onSetAgentGoal,
       onSendCommand,
       onSendControlChar,
       onSetOverviewMode,

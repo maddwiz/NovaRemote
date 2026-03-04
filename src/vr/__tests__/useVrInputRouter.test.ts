@@ -341,6 +341,63 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches agent lifecycle voice actions through creation and goal callbacks", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({
+        kind: "create_agent",
+        serverIds: ["dgx"],
+        name: "build watcher",
+      })
+      .mockReturnValueOnce({
+        kind: "set_agent_goal",
+        serverIds: ["dgx"],
+        name: "build watcher",
+        goal: "npm run test",
+      });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onCreateAgent = vi.fn(async () => true);
+    const onSetAgentGoal = vi.fn(async () => 1);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onCreateAgent,
+        onSetAgentGoal,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("create agent build watcher");
+    });
+    expect(onCreateAgent).toHaveBeenCalledWith(["dgx"], "build watcher");
+    expect(current().hudStatus?.message).toContain("Created 1 agent named build watcher");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent build watcher goal npm run test");
+    });
+    expect(onSetAgentGoal).toHaveBeenCalledWith(["dgx"], "build watcher", "npm run test");
+    expect(current().hudStatus?.message).toContain("Updated goal for 1 agent");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("dispatches pool lifecycle voice actions through connect/disconnect callbacks", async () => {
     const applyVoiceTranscript = vi
       .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()

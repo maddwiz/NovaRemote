@@ -223,6 +223,36 @@ describe("useVrWorkspace", () => {
       serverIds: ["dgx", "home"],
     });
 
+    const createAgentAction = current().applyVoiceTranscript("create agent build watcher");
+    expect(createAgentAction).toEqual({
+      kind: "create_agent",
+      serverIds: ["dgx"],
+      name: "build watcher",
+    });
+
+    const createAgentForHomeAction = current().applyVoiceTranscript("create agent deploy bot for homelab");
+    expect(createAgentForHomeAction).toEqual({
+      kind: "create_agent",
+      serverIds: ["home"],
+      name: "deploy bot",
+    });
+
+    const setAgentGoalAction = current().applyVoiceTranscript("set agent deploy bot goal npm run deploy");
+    expect(setAgentGoalAction).toEqual({
+      kind: "set_agent_goal",
+      serverIds: ["dgx"],
+      name: "deploy bot",
+      goal: "npm run deploy",
+    });
+
+    const setAgentGoalForHomeAction = current().applyVoiceTranscript("agent build watcher goal tail -f logs for homelab");
+    expect(setAgentGoalForHomeAction).toEqual({
+      kind: "set_agent_goal",
+      serverIds: ["home"],
+      name: "build watcher",
+      goal: "tail -f logs",
+    });
+
     const approveReadyAction = current().applyVoiceTranscript("approve ready agents");
     expect(approveReadyAction).toEqual({
       kind: "approve_ready_agents",

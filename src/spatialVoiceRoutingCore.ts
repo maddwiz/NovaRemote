@@ -10,6 +10,8 @@ export type VoiceRoute =
   | { kind: "none" }
   | { kind: "show_all" }
   | { kind: "minimize" }
+  | { kind: "create_agent"; name: string; panelId?: string }
+  | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string }
   | { kind: "approve_ready_agents"; panelId?: string }
   | { kind: "deny_all_pending_agents"; panelId?: string }
   | { kind: "pause_pool" }
@@ -235,6 +237,50 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
       return { kind: "reconnect_server", panelId: panel.id };
     }
     return { kind: "none" };
+  }
+
+  const createAgentMatch = cleaned.match(
+    /^(?:create|add|spawn)\s+agent\s+(.+?)(?:\s+(?:for|on)\s+(.+))?$/i
+  );
+  if (createAgentMatch) {
+    const name = createAgentMatch[1]?.trim() || "";
+    if (!name) {
+      return { kind: "none" };
+    }
+    const target = createAgentMatch[2]?.trim() || "";
+    if (!target) {
+      return { kind: "create_agent", name };
+    }
+    const targetPanel = findPanelByTarget(panels, target);
+    if (!targetPanel) {
+      return { kind: "none" };
+    }
+    return { kind: "create_agent", name, panelId: targetPanel.id };
+  }
+
+  const setGoalMatch = cleaned.match(
+    /^(?:set\s+agent\s+(.+?)\s+goal|agent\s+(.+?)\s+goal)\s+(.+?)(?:\s+(?:for|on)\s+(.+))?$/i
+  );
+  if (setGoalMatch) {
+    const name = (setGoalMatch[1] || setGoalMatch[2] || "").trim();
+    const goal = (setGoalMatch[3] || "").trim();
+    const target = (setGoalMatch[4] || "").trim();
+    if (!name || !goal) {
+      return { kind: "none" };
+    }
+    if (!target) {
+      return { kind: "set_agent_goal", name, goal };
+    }
+    const targetPanel = findPanelByTarget(panels, target);
+    if (!targetPanel) {
+      return { kind: "none" };
+    }
+    return {
+      kind: "set_agent_goal",
+      name,
+      goal,
+      panelId: targetPanel.id,
+    };
   }
 
   const approveReadyAgentsMatch = cleaned.match(

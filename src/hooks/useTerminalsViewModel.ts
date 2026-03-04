@@ -106,6 +106,10 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     reconnectAllServers,
     connectAllServers,
     disconnectAllServers,
+    createAgentForServer,
+    setAgentGoalForServer,
+    createAgentForServers,
+    setAgentGoalForServers,
     approveReadyAgentsForFocusedServer,
     denyAllPendingAgentsForFocusedServer,
     approveReadyAgentsForServer,
@@ -250,6 +254,50 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     return denied;
   };
 
+  const runCreateAgentForServer = async (serverId: string, name: string): Promise<string[]> => {
+    if (typeof createAgentForServer === "function") {
+      const created = await createAgentForServer(serverId, name);
+      return Array.isArray(created) ? created : [];
+    }
+    return [];
+  };
+
+  const runSetAgentGoalForServer = async (serverId: string, name: string, goal: string): Promise<string[]> => {
+    if (typeof setAgentGoalForServer === "function") {
+      const updated = await setAgentGoalForServer(serverId, name, goal);
+      return Array.isArray(updated) ? updated : [];
+    }
+    return [];
+  };
+
+  const runCreateAgentForServers = async (serverIds: string[], name: string): Promise<string[]> => {
+    const uniqueIds = uniqueServerIds(serverIds);
+    if (typeof createAgentForServers === "function") {
+      const created = await createAgentForServers(uniqueIds, name);
+      return Array.isArray(created) ? created : [];
+    }
+    const created: string[] = [];
+    for (const serverId of uniqueIds) {
+      const next = await runCreateAgentForServer(serverId, name);
+      created.push(...next);
+    }
+    return created;
+  };
+
+  const runSetAgentGoalForServers = async (serverIds: string[], name: string, goal: string): Promise<string[]> => {
+    const uniqueIds = uniqueServerIds(serverIds);
+    if (typeof setAgentGoalForServers === "function") {
+      const updated = await setAgentGoalForServers(uniqueIds, name, goal);
+      return Array.isArray(updated) ? updated : [];
+    }
+    const updated: string[] = [];
+    for (const serverId of uniqueIds) {
+      const next = await runSetAgentGoalForServer(serverId, name, goal);
+      updated.push(...next);
+    }
+    return updated;
+  };
+
   const terminalsViewModel: TerminalsViewModel = {
     activeServer,
     connected,
@@ -346,6 +394,10 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onReconnectAllServers: reconnectAllServers,
     onConnectAllServers: connectAllServers,
     onDisconnectAllServers: disconnectAllServers,
+    onCreateAgentForServer: runCreateAgentForServer,
+    onSetAgentGoalForServer: runSetAgentGoalForServer,
+    onCreateAgentForServers: runCreateAgentForServers,
+    onSetAgentGoalForServers: runSetAgentGoalForServers,
     onApproveReadyAgentsForFocusedServer: () => {
       if (typeof approveReadyAgentsForFocusedServer !== "function") {
         return [];

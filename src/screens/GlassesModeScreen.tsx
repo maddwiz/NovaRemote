@@ -140,6 +140,10 @@ export function GlassesModeScreen() {
     onReconnectServers,
     onConnectAllServers,
     onDisconnectAllServers,
+    onCreateAgentForServer,
+    onSetAgentGoalForServer,
+    onCreateAgentForServers,
+    onSetAgentGoalForServers,
     onApproveReadyAgentsForServer,
     onDenyAllPendingAgentsForServer,
     onApproveReadyAgentsForServers,
@@ -337,6 +341,21 @@ export function GlassesModeScreen() {
   const applyTranscriptRoute = useCallback(
     (transcript: string, autoSend: boolean) => {
       const route = routeTranscript(transcript);
+      const resolveAgentTargetServerIds = (panelId?: string): string[] => {
+        if (panelId) {
+          const target = panelMap.get(panelId);
+          return target ? [target.serverId] : [];
+        }
+        const focusedPanel = focusedPanelId ? panelMap.get(focusedPanelId) || null : null;
+        if (focusedPanel) {
+          return [focusedPanel.serverId];
+        }
+        if (focusedServerId && connections.has(focusedServerId)) {
+          return [focusedServerId];
+        }
+        const firstServerId = Array.from(connections.keys())[0];
+        return firstServerId ? [firstServerId] : [];
+      };
       if (route.kind === "focus_panel") {
         setFocusedPanelId(route.panelId);
         return;
@@ -366,6 +385,30 @@ export function GlassesModeScreen() {
           return;
         }
         onReconnectServers(uniqueServerIds);
+        return;
+      }
+      if (route.kind === "create_agent") {
+        const serverIds = resolveAgentTargetServerIds(route.panelId);
+        if (serverIds.length === 0) {
+          return;
+        }
+        if (serverIds.length === 1) {
+          void onCreateAgentForServer(serverIds[0], route.name).catch(() => {});
+          return;
+        }
+        void onCreateAgentForServers(serverIds, route.name).catch(() => {});
+        return;
+      }
+      if (route.kind === "set_agent_goal") {
+        const serverIds = resolveAgentTargetServerIds(route.panelId);
+        if (serverIds.length === 0) {
+          return;
+        }
+        if (serverIds.length === 1) {
+          void onSetAgentGoalForServer(serverIds[0], route.name, route.goal).catch(() => {});
+          return;
+        }
+        void onSetAgentGoalForServers(serverIds, route.name, route.goal).catch(() => {});
         return;
       }
       if (route.kind === "approve_ready_agents") {
@@ -454,8 +497,14 @@ export function GlassesModeScreen() {
     },
     [
       allPanels,
+      connections,
       focusedPanelId,
+      focusedServerId,
       onConnectAllServers,
+      onCreateAgentForServer,
+      onSetAgentGoalForServer,
+      onCreateAgentForServers,
+      onSetAgentGoalForServers,
       onDisconnectAllServers,
       onApproveReadyAgentsForServer,
       onDenyAllPendingAgentsForServer,
@@ -467,7 +516,6 @@ export function GlassesModeScreen() {
       onSendServerSessionCommand,
       onSendServerSessionControlChar,
       onSetServerSessionDraft,
-      focusedServerId,
       panelIds,
       panelMap,
       routeTranscript,
