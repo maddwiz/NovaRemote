@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { VrGestureEvent } from "./inputGestures";
 import { VrWorkspaceGestureAction, VrWorkspaceVoiceAction } from "./useVrWorkspace";
@@ -18,6 +18,7 @@ export type UseVrInputRouterArgs = {
   workspace: WorkspaceInputBridge;
   onSendCommand: (serverId: string, session: string, command: string) => Promise<void> | void;
   onSetOverviewMode?: (enabled: boolean) => void;
+  hudAutoClearMs?: number;
 };
 
 export type UseVrInputRouterResult = {
@@ -35,11 +36,44 @@ export function useVrInputRouter({
   workspace,
   onSendCommand,
   onSetOverviewMode,
+  hudAutoClearMs = 3000,
 }: UseVrInputRouterArgs): UseVrInputRouterResult {
   const [hudStatus, setHudStatus] = useState<VrHudStatus>(null);
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const publishHudStatus = useCallback(
+    (next: VrHudStatus) => {
+      setHudStatus(next);
+      if (clearTimerRef.current) {
+        clearTimeout(clearTimerRef.current);
+        clearTimerRef.current = null;
+      }
+      if (!next || hudAutoClearMs <= 0) {
+        return;
+      }
+      clearTimerRef.current = setTimeout(() => {
+        clearTimerRef.current = null;
+        setHudStatus(null);
+      }, hudAutoClearMs);
+    },
+    [hudAutoClearMs]
+  );
 
   const clearHudStatus = useCallback(() => {
-    setHudStatus(null);
+    if (clearTimerRef.current) {
+      clearTimeout(clearTimerRef.current);
+      clearTimerRef.current = null;
+    }
+    publishHudStatus(null);
+  }, [publishHudStatus]);
+
+  useEffect(() => {
+    return () => {
+      if (clearTimerRef.current) {
+        clearTimeout(clearTimerRef.current);
+        clearTimerRef.current = null;
+      }
+    };
   }, []);
 
   const dispatchVoice = useCallback(
@@ -48,13 +82,13 @@ export function useVrInputRouter({
       if (action.kind === "send") {
         try {
           await onSendCommand(action.serverId, action.session, action.command);
-          setHudStatus({
+          publishHudStatus({
             message: `Sent to ${action.serverId}/${action.session}`,
             severity: "success",
             at: now(),
           });
         } catch (error) {
-          setHudStatus({
+          publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to send command",
             severity: "error",
             at: now(),
@@ -63,7 +97,7 @@ export function useVrInputRouter({
         return action;
       }
       if (action.kind === "focus") {
-        setHudStatus({
+        publishHudStatus({
           message: `Focused panel ${action.panelId}`,
           severity: "info",
           at: now(),
@@ -71,7 +105,7 @@ export function useVrInputRouter({
         return action;
       }
       if (action.kind === "rotate_workspace") {
-        setHudStatus({
+        publishHudStatus({
           message: `Rotated workspace ${action.direction}`,
           severity: "info",
           at: now(),
@@ -80,7 +114,7 @@ export function useVrInputRouter({
       }
       if (action.kind === "overview") {
         onSetOverviewMode?.(true);
-        setHudStatus({
+        publishHudStatus({
           message: "Overview mode",
           severity: "info",
           at: now(),
@@ -91,21 +125,21 @@ export function useVrInputRouter({
         return action;
       }
       onSetOverviewMode?.(false);
-      setHudStatus({
+      publishHudStatus({
         message: "Focus mode",
         severity: "info",
         at: now(),
       });
       return action;
     },
-    [onSendCommand, onSetOverviewMode, workspace]
+    [onSendCommand, onSetOverviewMode, publishHudStatus, workspace]
   );
 
   const dispatchGesture = useCallback(
     (event: VrGestureEvent): VrWorkspaceGestureAction => {
       const action = workspace.applyGesture(event);
       if (action.kind === "rotate_workspace") {
-        setHudStatus({
+        publishHudStatus({
           message: `Rotated workspace ${action.direction}`,
           severity: "info",
           at: now(),
@@ -113,7 +147,7 @@ export function useVrInputRouter({
         return action;
       }
       if (action.kind === "focus") {
-        setHudStatus({
+        publishHudStatus({
           message: `Focused panel ${action.panelId}`,
           severity: "info",
           at: now(),
@@ -122,7 +156,7 @@ export function useVrInputRouter({
       }
       if (action.kind === "overview") {
         onSetOverviewMode?.(true);
-        setHudStatus({
+        publishHudStatus({
           message: "Overview mode",
           severity: "info",
           at: now(),
@@ -130,7 +164,7 @@ export function useVrInputRouter({
       }
       return action;
     },
-    [onSetOverviewMode, workspace]
+    [onSetOverviewMode, publishHudStatus, workspace]
   );
 
   return {

@@ -25,6 +25,7 @@ beforeEach(() => {
 afterEach(() => {
   consoleErrorSpy?.mockRestore();
   consoleErrorSpy = null;
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -148,6 +149,53 @@ describe("useVrInputRouter", () => {
 
     expect(current().hudStatus?.message).toContain("Rotated workspace left");
     expect(current().hudStatus?.severity).toBe("info");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("auto-clears HUD status after the configured timeout", async () => {
+    vi.useFakeTimers();
+    const applyVoiceTranscript = vi.fn<(transcript: string) => VrWorkspaceVoiceAction>(() => ({
+      kind: "send",
+      panelId: "dgx::main",
+      serverId: "dgx",
+      session: "main",
+      command: "echo ok",
+    }));
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        hudAutoClearMs: 500,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("send to dgx: echo ok");
+    });
+    expect(current().hudStatus?.message).toContain("Sent to dgx/main");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
+    expect(current().hudStatus).toBeNull();
 
     await act(async () => {
       renderer?.unmount();
