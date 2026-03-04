@@ -33,6 +33,7 @@ export function VrCommandCenterScreen() {
     focusedServerId,
     onReconnectServer,
     onReconnectServers,
+    onShareServerSessionLive,
     onCreateAgentForServers,
     onSetAgentGoalForServers,
     onQueueAgentCommandForServers,
@@ -698,6 +699,10 @@ export function VrCommandCenterScreen() {
         {visiblePanels.map((panel) => {
           const focused = panel.id === runtime.workspace.focusedPanelId;
           const outputPreview = panel.output.trim() || "Waiting for terminal output...";
+          const panelConnection = connections.get(panel.serverId);
+          const canShareLive =
+            Boolean(panelConnection?.capabilities.spectate) &&
+            !Boolean(panelConnection?.localAiSessions.includes(panel.session));
           return (
             <View
               key={panel.id}
@@ -751,6 +756,15 @@ export function VrCommandCenterScreen() {
                   }}
                 >
                   <Text style={styles.chipText}>Open Mac</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Share live ${panel.sessionLabel}`}
+                  style={[styles.chip, !canShareLive ? styles.buttonDisabled : null]}
+                  disabled={!canShareLive}
+                  onPress={() => onShareServerSessionLive(panel.serverId, panel.session)}
+                >
+                  <Text style={styles.chipText}>Share Live</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"

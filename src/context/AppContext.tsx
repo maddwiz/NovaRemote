@@ -129,6 +129,7 @@ export type TerminalsViewModel = {
   onOpenServerSessionOnMac: (serverId: string, session: string) => void;
   onSyncSession: (session: string) => void;
   onShareLiveSession: (session: string) => void;
+  onShareServerSessionLive: (serverId: string, session: string) => void;
   onExportSession: (session: string) => void;
   onFocusSession: (session: string) => void;
   onStopSession: (session: string) => void;

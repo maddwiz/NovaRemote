@@ -419,6 +419,93 @@ describe("useTerminalsViewModel", () => {
     expect(queueAgentCommandForServers).toHaveBeenCalledWith(["dgx", "cloud"], "build watcher", "npm run test");
   });
 
+  it("creates server-scoped live share links using pooled connection metadata", async () => {
+    const createSpectateLink = vi.fn(async () => ({
+      url: "https://spectate.example.com/session/main",
+      expiresAt: "2026-03-04T00:00:00.000Z",
+    }));
+    const setShareConfig = vi.fn();
+    const track = vi.fn();
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      createSpectateLink,
+      setShareConfig,
+      track,
+      connections: new Map([
+        [
+          "dgx",
+          {
+            server: {
+              id: "dgx",
+              name: "DGX",
+              baseUrl: "https://dgx.novaremote.test",
+              token: "dgx-token",
+              defaultCwd: "/workspace",
+            },
+            connected: true,
+            capabilities: {
+              terminal: true,
+              tmux: true,
+              codex: false,
+              files: false,
+              shellRun: false,
+              macAttach: false,
+              stream: true,
+              sysStats: false,
+              processes: false,
+              collaboration: false,
+              spectate: true,
+            },
+            terminalApiBasePath: "/terminal",
+            capabilitiesLoading: false,
+            allSessions: ["main"],
+            localAiSessions: [],
+            openSessions: ["main"],
+            tails: { main: "" },
+            drafts: {},
+            sendBusy: {},
+            sendModes: {},
+            streamLive: {},
+            connectionMeta: {},
+            health: {
+              lastPingAt: null,
+              latencyMs: null,
+              activeStreams: 1,
+              openSessions: 1,
+            },
+            status: "connected",
+            lastError: null,
+            activeStreamCount: 1,
+          },
+        ],
+      ]),
+    });
+
+    model.onShareServerSessionLive("dgx", "main");
+    await Promise.resolve();
+
+    expect(createSpectateLink).toHaveBeenCalledWith(
+      expect.objectContaining({ id: "dgx", name: "DGX" }),
+      "/terminal",
+      "main"
+    );
+    expect(setShareConfig).toHaveBeenCalledWith(
+      expect.objectContaining({
+        title: "main",
+        link: "https://spectate.example.com/session/main",
+        heading: "Share Live Session",
+      })
+    );
+    expect(track).toHaveBeenCalledWith(
+      "session_spectate_link_created",
+      expect.objectContaining({
+        has_expiry: true,
+        ttl_seconds: 86400,
+        server_id: "dgx",
+      })
+    );
+  });
+
   it("opens the vr command center route", () => {
     const setRoute = vi.fn();
     const model = useTerminalsViewModel({

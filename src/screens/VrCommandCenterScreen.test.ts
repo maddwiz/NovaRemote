@@ -40,7 +40,13 @@ function makeServer(id: string, name: string, overrides: Partial<ServerProfile> 
   };
 }
 
-function makeConnection(server: ServerProfile, openSessions: string[]): ServerConnection {
+function makeConnection(
+  server: ServerProfile,
+  openSessions: string[],
+  options?: {
+    spectate?: boolean;
+  }
+): ServerConnection {
   return {
     server,
     connected: true,
@@ -55,7 +61,7 @@ function makeConnection(server: ServerProfile, openSessions: string[]): ServerCo
       sysStats: false,
       processes: false,
       collaboration: false,
-      spectate: false,
+      spectate: Boolean(options?.spectate),
     },
     terminalApiBasePath: "/tmux",
     capabilitiesLoading: false,
@@ -226,6 +232,7 @@ describe("VrCommandCenterScreen", () => {
       focusedServerId: dgx.id,
       onReconnectServer: vi.fn(),
       onReconnectServers: vi.fn(),
+      onShareServerSessionLive: vi.fn(),
       onCreateAgentForServers: vi.fn(async () => []),
       onSetAgentGoalForServers: vi.fn(async () => []),
       onQueueAgentCommandForServers: vi.fn(async () => []),
@@ -286,6 +293,29 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Send command to focused panel" }).props.onPress();
     });
     expect(runtime.dispatchVoice).toHaveBeenCalledWith("npm run build", { targetPanelId: "dgx::main" });
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("shares live panel links through server-scoped terminal callback", async () => {
+    const runtime = makeRuntime();
+    const onShareServerSessionLive = vi.fn();
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([[dgx.id, makeConnection(dgx, ["main", "build"], { spectate: true })]]);
+    const renderer = await renderScreen(runtime, {
+      connections,
+      terminalsOverrides: {
+        onShareServerSessionLive,
+      },
+    });
+
+    act(() => {
+      renderer.root.findByProps({ accessibilityLabel: "Share live main" }).props.onPress();
+    });
+
+    expect(onShareServerSessionLive).toHaveBeenCalledWith("dgx", "main");
 
     await act(async () => {
       renderer.unmount();

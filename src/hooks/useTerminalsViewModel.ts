@@ -134,7 +134,6 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     openServerSessionOnMac,
     fetchTail,
     createSpectateLink,
-    terminalApiBasePath,
     setShareConfig,
     setFocusedSession,
     handleStop,
@@ -328,6 +327,53 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       queued.push(...next);
     }
     return queued;
+  };
+
+  const shareServerSessionLive = async (serverId: string, session: string) => {
+    const targetConnection =
+      connections && typeof (connections as Map<string, unknown>).get === "function"
+        ? (connections as Map<string, any>).get(serverId)
+        : null;
+    if (!targetConnection) {
+      throw new Error("Selected server is not available.");
+    }
+    if ((targetConnection.localAiSessions || []).includes(session)) {
+      throw new Error("Local LLM sessions cannot be shared as live spectator links.");
+    }
+    if (!targetConnection.capabilities?.spectate) {
+      throw new Error(`${targetConnection.server?.name || "Target server"} does not support session spectator links.`);
+    }
+
+    const rawResult = await createSpectateLink(targetConnection.server, targetConnection.terminalApiBasePath, session);
+    const normalized =
+      typeof rawResult === "string"
+        ? { url: rawResult, expiresAt: null as string | null }
+        : {
+            url: typeof rawResult?.url === "string" ? rawResult.url : "",
+            expiresAt: typeof rawResult?.expiresAt === "string" ? rawResult.expiresAt : null,
+          };
+    if (!normalized.url) {
+      throw new Error("Unable to create a spectator link for this session.");
+    }
+
+    const sessionTitle = activeServer?.id === serverId ? sessionAliases[session]?.trim() || session : session;
+    const expiresLabel = normalized.expiresAt
+      ? `Read-only browser view. Expires ${new Date(normalized.expiresAt).toLocaleString()}.`
+      : "Read-only browser view. Server controls token expiry.";
+
+    setShareConfig({
+      title: sessionTitle,
+      link: normalized.url,
+      heading: "Share Live Session",
+      description: expiresLabel,
+      shareButtonLabel: "Share Spectator Link",
+    });
+
+    track("session_spectate_link_created", {
+      has_expiry: Boolean(normalized.expiresAt),
+      ttl_seconds: DEFAULT_SPECTATE_TTL_SECONDS,
+      server_id: serverId,
+    });
   };
 
   const terminalsViewModel: TerminalsViewModel = {
@@ -577,33 +623,16 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     },
     onShareLiveSession: (session) => {
       void runWithStatus(`Creating live share link for ${session}`, async () => {
-        if (isLocalSession(session)) {
-          throw new Error("Local LLM sessions cannot be shared as live spectator links.");
-        }
-        if (!activeServer) {
+        const targetServerId = focusedServerId || activeServer?.id || null;
+        if (!targetServerId) {
           throw new Error("No active server selected.");
         }
-        if (!capabilities.spectate) {
-          throw new Error("Active server does not support session spectator links.");
-        }
-
-        const result = await createSpectateLink(activeServer, terminalApiBasePath, session);
-        const expiresLabel = result.expiresAt
-          ? `Read-only browser view. Expires ${new Date(result.expiresAt).toLocaleString()}.`
-          : "Read-only browser view. Server controls token expiry.";
-
-        setShareConfig({
-          title: sessionAliases[session]?.trim() || session,
-          link: result.url,
-          heading: "Share Live Session",
-          description: expiresLabel,
-          shareButtonLabel: "Share Spectator Link",
-        });
-
-        track("session_spectate_link_created", {
-          has_expiry: Boolean(result.expiresAt),
-          ttl_seconds: DEFAULT_SPECTATE_TTL_SECONDS,
-        });
+        await shareServerSessionLive(targetServerId, session);
+      });
+    },
+    onShareServerSessionLive: (serverId, session) => {
+      void runWithStatus(`Creating live share link for ${session}`, async () => {
+        await shareServerSessionLive(serverId, session);
       });
     },
     onExportSession: (session) => {
