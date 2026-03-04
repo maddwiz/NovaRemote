@@ -196,6 +196,7 @@ export type TerminalsViewModel = {
   onSetGlassesHeadsetPttEnabled: (enabled: boolean) => void;
   onOpenGlassesMode: () => void;
   onCloseGlassesMode: () => void;
+  onOpenVrCommandCenter: () => void;
   onVoiceStartCapture: () => void;
   onVoiceStopCapture: (session: string) => void;
   onVoiceStopCaptureForServer: (

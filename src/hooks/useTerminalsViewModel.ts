@@ -972,6 +972,9 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onCloseGlassesMode: () => {
       setRoute("terminals");
     },
+    onOpenVrCommandCenter: () => {
+      setRoute("vr");
+    },
     onVoiceStartCapture: () => {
       void runWithStatus("Starting voice capture", async () => {
         await Haptics.selectionAsync();

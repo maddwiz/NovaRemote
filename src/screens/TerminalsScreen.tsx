@@ -340,6 +340,7 @@ export function TerminalsScreen() {
     onSetGlassesLoopCaptureMs,
     onSetGlassesHeadsetPttEnabled,
     onOpenGlassesMode,
+    onOpenVrCommandCenter,
     onVoiceStartCapture,
     onVoiceStopCapture,
     onVoiceSendTranscript,
@@ -1365,6 +1366,16 @@ export function TerminalsScreen() {
                 onPress={onOpenGlassesMode}
               >
                 <Text style={styles.buttonPrimaryText}>Open Spatial HUD</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open VR command center"
+                accessibilityHint="Opens the VR command center preview with pooled server runtime controls."
+                style={[styles.buttonGhost, !glassesActiveSession ? styles.buttonDisabled : null]}
+                disabled={!glassesActiveSession}
+                onPress={onOpenVrCommandCenter}
+              >
+                <Text style={styles.buttonGhostText}>Open VR Command Center</Text>
               </Pressable>
             </View>
 
