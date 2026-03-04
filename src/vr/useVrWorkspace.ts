@@ -9,6 +9,7 @@ import {
   VrWorkspaceSnapshot,
 } from "./contracts";
 import { buildPresetLayout } from "./layoutPresets";
+import { useVrWorkspacePrefs } from "./useVrWorkspacePrefs";
 import { parseVrVoiceIntent, VrRoutePanel } from "./voiceRouting";
 
 export type VrWorkspacePanel = VrPanelState & {
@@ -204,6 +205,8 @@ export function useVrWorkspace({
   const universeById = useMemo(() => {
     return new Map(universe.map((panel) => [panel.id, panel]));
   }, [universe]);
+  const panelUniverseIds = useMemo(() => universe.map((panel) => panel.id), [universe]);
+  const serverScopeIds = useMemo(() => Array.from(connections.keys()), [connections]);
 
   useEffect(() => {
     const availableIds = universe.map((panel) => panel.id);
@@ -446,6 +449,16 @@ export function useVrWorkspace({
     },
     [panelLimit, universe]
   );
+
+  const workspaceSnapshot = useMemo(() => exportSnapshot(), [exportSnapshot]);
+
+  useVrWorkspacePrefs({
+    serverScopeIds,
+    panelUniverseIds,
+    maxPanels: panelLimit,
+    value: workspaceSnapshot,
+    onRestore: restoreSnapshot,
+  });
 
   const applyVoiceTranscript = useCallback(
     (transcript: string): VrWorkspaceVoiceAction => {

@@ -1,9 +1,19 @@
 import React from "react";
+import * as SecureStore from "expo-secure-store";
 import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServerCapabilities, ServerConnection, ServerProfile } from "../../types";
 import { buildVrPanelId, useVrWorkspace, UseVrWorkspaceResult, vrWorkspaceTestUtils } from "../useVrWorkspace";
+
+vi.mock("expo-secure-store", () => ({
+  getItemAsync: vi.fn(async () => null),
+  setItemAsync: vi.fn(async () => undefined),
+}));
+
+vi.mock("../../constants", () => ({
+  STORAGE_VR_WORKSPACE_PREFIX: "novaremote.vr_workspace.v1",
+}));
 
 const CAPABILITIES: ServerCapabilities = {
   terminal: true,
@@ -58,6 +68,8 @@ function makeConnection(server: ServerProfile, sessions: string[], tails: Record
 }
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+const getItemAsyncMock = vi.mocked(SecureStore.getItemAsync);
+const setItemAsyncMock = vi.mocked(SecureStore.setItemAsync);
 
 beforeEach(() => {
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -68,6 +80,10 @@ beforeEach(() => {
     process.stderr.write(`${joined}\n`);
   });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+  getItemAsyncMock.mockResolvedValue(null);
+  setItemAsyncMock.mockResolvedValue(undefined);
+  getItemAsyncMock.mockClear();
+  setItemAsyncMock.mockClear();
 });
 
 afterEach(() => {
@@ -324,6 +340,67 @@ describe("useVrWorkspace", () => {
     expect(exported.focusedPanelId).toBe(homePanel);
     expect(exported.pinnedPanelIds).toEqual([homePanel]);
     expect(exported.customTransforms?.[homePanel]?.x).toBe(0.4);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("hydrates workspace state from persisted snapshot preferences", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Homelab");
+    const dgxPanel = buildVrPanelId("dgx", "main");
+    const homePanel = buildVrPanelId("home", "build");
+
+    getItemAsyncMock.mockResolvedValueOnce(
+      JSON.stringify({
+        version: "1.0.0",
+        preset: "custom",
+        focusedPanelId: homePanel,
+        panelIds: [homePanel, dgxPanel],
+        pinnedPanelIds: [homePanel],
+        customTransforms: {
+          [homePanel]: { x: 0.8, y: 1.7, z: -1.6, yaw: 22 },
+        },
+      })
+    );
+
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 4, initialPreset: "arc" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(current().preset).toBe("custom");
+    expect(current().focusedPanelId).toBe(homePanel);
+    expect(current().panels.map((panel) => panel.id)).toEqual([homePanel, dgxPanel]);
+    expect(current().panels.find((panel) => panel.id === homePanel)?.pinned).toBe(true);
+    expect(current().panels.find((panel) => panel.id === homePanel)?.transform.yaw).toBe(22);
+    expect(getItemAsyncMock).toHaveBeenCalledTimes(1);
+    expect(setItemAsyncMock).toHaveBeenCalled();
 
     await act(async () => {
       renderer?.unmount();
