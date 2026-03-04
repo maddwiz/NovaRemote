@@ -24,7 +24,7 @@ import {
   buildTerminalAppearance,
   getTerminalPreset,
 } from "../theme/terminalTheme";
-import { GlassesBrand, ProcessSignal } from "../types";
+import { GlassesBrand, ProcessSignal, ServerConnection } from "../types";
 
 function renderSessionChips(
   allSessions: string[],
@@ -181,6 +181,15 @@ function glassesBrandPreset(brand: GlassesBrand): {
 
 type ProcessSortMode = "cpu" | "mem" | "uptime" | "name";
 
+type OpenTerminalEntry = {
+  key: string;
+  serverId: string;
+  serverName: string;
+  session: string;
+  connection: ServerConnection | null;
+  isFocusedServer: boolean;
+};
+
 function normalizeProcessSorts(input: unknown): ProcessSortMode[] {
   if (!Array.isArray(input)) {
     return ["cpu"];
@@ -205,10 +214,6 @@ export function TerminalsScreen() {
     openSessions,
     tails,
     drafts,
-    sendBusy,
-    streamLive,
-    connectionMeta,
-    sendModes,
     sessionAiEngine,
     startCwd,
     startPrompt,
@@ -221,7 +226,6 @@ export function TerminalsScreen() {
     supportedFeatures,
     sysStats,
     hasExternalLlm,
-    localAiSessions,
     commandHistory,
     historyCount,
     sessionAliases,
@@ -281,9 +285,9 @@ export function TerminalsScreen() {
     onToggleSessionVisible,
     onSetSessionMode,
     onSetSessionAiEngine,
-    onOpenOnMac,
+    onOpenServerSessionOnMac,
     onSyncSession,
-    onShareLiveSession,
+    onShareServerSessionLive,
     onExportSession,
     onFocusSession,
     onStopSession,
@@ -293,12 +297,12 @@ export function TerminalsScreen() {
     onSetTags,
     onSetSessionAlias,
     onAutoNameSession,
-    onSetDraft,
+    onSetServerSessionDraft,
     onAdaptDraftForBackend,
-    onSendControlChar,
+    onSendServerSessionControlChar,
     onSendServerSessionCommand,
-    onSend,
-    onClearDraft,
+    onSendServerSessionDraft,
+    onClearServerSessionDraft,
     onTogglePinSession,
     onSetFleetCommand,
     onSetFleetCwd,
@@ -364,6 +368,7 @@ export function TerminalsScreen() {
   const activeBackend = activeServer?.terminalBackend;
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
+  const [showAllServerTerminals, setShowAllServerTerminals] = useState(false);
   const [glassesSession, setGlassesSession] = useState<string | null>(null);
   const [processFilter, setProcessFilter] = useState<string>("");
   const [processSorts, setProcessSorts] = useState<ProcessSortMode[]>(["cpu"]);
@@ -387,6 +392,51 @@ export function TerminalsScreen() {
   const terminalPreset = useMemo(() => getTerminalPreset(terminalTheme.preset), [terminalTheme.preset]);
   const sortedAllSessions = useMemo(() => sortSessionsPinnedFirst(allSessions, pinnedSessions), [allSessions, pinnedSessions]);
   const sortedOpenSessions = useMemo(() => sortSessionsPinnedFirst(openSessions, pinnedSessions), [openSessions, pinnedSessions]);
+  const openTerminalEntries = useMemo<OpenTerminalEntry[]>(() => {
+    if (!showAllServerTerminals) {
+      const primaryServerId = focusedServerId || activeServer?.id || "";
+      const primaryServerName = activeServer?.name || "Server";
+      return sortedOpenSessions.map((session) => ({
+        key: `${primaryServerId}::${session}`,
+        serverId: primaryServerId,
+        serverName: primaryServerName,
+        session,
+        connection: primaryServerId ? connections.get(primaryServerId) ?? null : null,
+        isFocusedServer: true,
+      }));
+    }
+
+    const entries: OpenTerminalEntry[] = [];
+    servers.forEach((server) => {
+      const connection = connections.get(server.id) ?? null;
+      if (!connection) {
+        return;
+      }
+      const serverOpenSessions = server.id === focusedServerId
+        ? sortSessionsPinnedFirst(connection.openSessions, pinnedSessions)
+        : connection.openSessions.slice().sort((a, b) => a.localeCompare(b));
+      serverOpenSessions.forEach((session) => {
+        entries.push({
+          key: `${server.id}::${session}`,
+          serverId: server.id,
+          serverName: server.name,
+          session,
+          connection,
+          isFocusedServer: server.id === focusedServerId,
+        });
+      });
+    });
+    return entries;
+  }, [
+    activeServer?.id,
+    activeServer?.name,
+    connections,
+    focusedServerId,
+    pinnedSessions,
+    servers,
+    showAllServerTerminals,
+    sortedOpenSessions,
+  ]);
   const showServerBadge = connectedServerCount > 1;
   const vmHostTargetGroups = useMemo(() => buildVmHostTargetGroups(servers), [servers]);
   const vmHostVmTypeTargetGroups = useMemo(() => buildVmHostVmTypeTargetGroups(servers), [servers]);
@@ -406,6 +456,12 @@ export function TerminalsScreen() {
       onStartSession();
     }
   };
+
+  useEffect(() => {
+    if (showAllServerTerminals && connectedServerCount < 2) {
+      setShowAllServerTerminals(false);
+    }
+  }, [connectedServerCount, showAllServerTerminals]);
 
   useEffect(() => {
     const valid = new Set(processes.map((entry) => entry.pid));
@@ -509,16 +565,16 @@ export function TerminalsScreen() {
   }, [processFilter, processSorts, processes]);
 
   useEffect(() => {
-    if (sortedOpenSessions.length === 0) {
+    if (openTerminalEntries.length === 0) {
       if (activeTabSession !== null) {
         setActiveTabSession(null);
       }
       return;
     }
-    if (!activeTabSession || !sortedOpenSessions.includes(activeTabSession)) {
-      setActiveTabSession(sortedOpenSessions[0]);
+    if (!activeTabSession || !openTerminalEntries.some((entry) => entry.key === activeTabSession)) {
+      setActiveTabSession(openTerminalEntries[0].key);
     }
-  }, [activeTabSession, sortedOpenSessions]);
+  }, [activeTabSession, openTerminalEntries]);
 
   useEffect(() => {
     if (sortedOpenSessions.length === 0) {
@@ -533,182 +589,318 @@ export function TerminalsScreen() {
   }, [glassesSession, sortedOpenSessions]);
 
   const openTerminalCards = useMemo(() => {
-    return sortedOpenSessions.map((session) => {
-      const output = tails[session] ?? "";
-      const draft = drafts[session] ?? "";
-      const isSending = Boolean(sendBusy[session]);
-      const isLive = Boolean(streamLive[session]);
-      const mode = sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
-      const tags = sessionTags[session] || [];
-      const meta = connectionMeta[session];
-      const isLocalOnly = localAiSessions.includes(session);
-      const aiEngine = sessionAiEngine[session] || (isLocalOnly ? "external" : "auto");
-      const watch = watchRules[session] || { enabled: false, pattern: "", lastMatch: null };
-      const recording = recordings[session];
-      const collaborators = sessionPresence[session] || [];
-      const readOnly = Boolean(sessionReadOnly[session]);
+    return openTerminalEntries.map((entry) => {
+      const { session, serverId, serverName, connection, isFocusedServer } = entry;
+      const scopedCapabilities = connection?.capabilities || capabilities;
+      const scopedConnected = typeof connection?.connected === "boolean" ? connection.connected : connected;
+      const scopedLocalAiSessions = connection?.localAiSessions || [];
+      const scopedTails = connection?.tails || {};
+      const scopedDrafts = connection?.drafts || {};
+      const scopedSendBusy = connection?.sendBusy || {};
+      const scopedStreamLive = connection?.streamLive || {};
+      const scopedSendModes = connection?.sendModes || {};
+      const scopedConnectionMeta = connection?.connectionMeta || {};
+      const output = scopedTails[session] ?? "";
+      const draft = scopedDrafts[session] ?? "";
+      const isSending = Boolean(scopedSendBusy[session]);
+      const isLive = Boolean(scopedStreamLive[session]);
+      const mode = scopedSendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+      const meta = scopedConnectionMeta[session];
+      const isLocalOnly = scopedLocalAiSessions.includes(session);
+      const aiEngine = isFocusedServer
+        ? sessionAiEngine[session] || (isLocalOnly ? "external" : "auto")
+        : isLocalOnly
+          ? "external"
+          : "auto";
+      const watch = isFocusedServer ? watchRules[session] || { enabled: false, pattern: "", lastMatch: null } : { enabled: false, pattern: "", lastMatch: null };
+      const recording = isFocusedServer ? recordings[session] : undefined;
+      const collaborators = isFocusedServer ? sessionPresence[session] || [] : [];
+      const readOnly = isFocusedServer ? Boolean(sessionReadOnly[session]) : false;
       const recordingDuration = recording?.chunks.length ? recording.chunks[recording.chunks.length - 1]?.atMs || 0 : 0;
+      const sessionAlias = isFocusedServer ? sessionAliases[session] || "" : "";
+      const tags = isFocusedServer ? sessionTags[session] || [] : [];
+      const pinned = isFocusedServer ? pinnedSessions.includes(session) : false;
+      const queuedItems = isFocusedServer ? commandQueue[session] || [] : [];
+      const suggestions = isFocusedServer ? suggestionsBySession[session] || [] : [];
+      const suggestionsBusy = isFocusedServer ? Boolean(suggestionBusyBySession[session]) : false;
+      const errorHint = isFocusedServer ? errorHintsBySession[session] || null : null;
+      const triageBusy = isFocusedServer ? Boolean(triageBusyBySession[session]) : false;
+      const triageExplanation = isFocusedServer ? triageExplanationBySession[session] || "" : "";
+      const triageFixes = isFocusedServer ? triageFixesBySession[session] || [] : [];
+      const watchAlerts = isFocusedServer ? watchAlertHistoryBySession[session] || [] : [];
+      const historySuggestions = isFocusedServer ? commandHistory[session] || [] : [];
+      const scopedBackend = connection?.server.terminalBackend || (isFocusedServer ? activeBackend : undefined);
+      const historyValue = isFocusedServer ? historyCount[session] || 0 : 0;
 
       return (
         <TerminalCard
-          key={session}
+          key={entry.key}
           session={session}
-          sessionAlias={sessionAliases[session] || ""}
-          serverLabel={activeServer?.name || ""}
+          sessionAlias={sessionAlias}
+          serverLabel={serverName}
           showServerLabel={showServerBadge}
           output={output}
           draft={draft}
           isSending={isSending}
           isLive={isLive}
-          isServerConnected={!isLocalOnly && connected}
+          isServerConnected={!isLocalOnly && scopedConnected}
           connectionState={isLocalOnly ? "disconnected" : meta?.state ?? "disconnected"}
           isLocalOnly={isLocalOnly}
           mode={mode}
-          aiAvailable={capabilities.codex || hasExternalLlm}
-          shellAvailable={!isLocalOnly && capabilities.terminal}
-          canOpenOnMac={!isLocalOnly && capabilities.macAttach}
-          canSync={!isLocalOnly}
-          canShareLive={!isLocalOnly && capabilities.spectate}
-          canStop={!isLocalOnly}
+          aiAvailable={isFocusedServer ? scopedCapabilities.codex || hasExternalLlm : false}
+          shellAvailable={isFocusedServer ? !isLocalOnly && scopedCapabilities.terminal : false}
+          canOpenOnMac={!isLocalOnly && scopedCapabilities.macAttach}
+          canSync={isFocusedServer && !isLocalOnly}
+          canShareLive={!isLocalOnly && scopedCapabilities.spectate}
+          canStop={isFocusedServer && !isLocalOnly}
           aiEngine={aiEngine}
-          canUseServerAi={!isLocalOnly && capabilities.codex}
-          canUseExternalAi={hasExternalLlm}
-          suggestions={suggestionsBySession[session] || []}
-          suggestionsBusy={Boolean(suggestionBusyBySession[session])}
-          errorHint={errorHintsBySession[session] || null}
-          triageBusy={Boolean(triageBusyBySession[session])}
-          triageExplanation={triageExplanationBySession[session] || ""}
-          triageFixes={triageFixesBySession[session] || []}
+          canUseServerAi={isFocusedServer && !isLocalOnly && scopedCapabilities.codex}
+          canUseExternalAi={isFocusedServer && hasExternalLlm}
+          suggestions={suggestions}
+          suggestionsBusy={suggestionsBusy}
+          errorHint={errorHint}
+          triageBusy={triageBusy}
+          triageExplanation={triageExplanation}
+          triageFixes={triageFixes}
           watchEnabled={watch.enabled}
           watchPattern={watch.pattern}
-          watchAlerts={watchAlertHistoryBySession[session] || []}
-          collaborationAvailable={!isLocalOnly && capabilities.collaboration}
+          watchAlerts={watchAlerts}
+          collaborationAvailable={!isLocalOnly && scopedCapabilities.collaboration}
           collaborators={collaborators}
           readOnly={readOnly}
           tags={tags}
-          pinned={pinnedSessions.includes(session)}
-          queuedItems={commandQueue[session] || []}
+          pinned={pinned}
+          queuedItems={queuedItems}
           recordingActive={Boolean(recording?.active)}
           recordingChunks={recording?.chunks.length || 0}
           recordingDurationMs={recordingDuration}
-          historySuggestions={commandHistory[session] || []}
-          terminalBackend={activeBackend}
+          historySuggestions={historySuggestions}
+          terminalBackend={scopedBackend}
           terminalViewStyle={terminalAppearance.terminalViewStyle}
           terminalTextStyle={glassesTerminalTextStyle}
-          historyCount={historyCount[session] || 0}
-          onSetMode={(nextMode) => onSetSessionMode(session, nextMode)}
-          onSetAiEngine={(nextEngine) => onSetSessionAiEngine(session, nextEngine)}
-          onOpenOnMac={() => onOpenOnMac(session)}
-          onSync={() => onSyncSession(session)}
-          onShareLive={() => onShareLiveSession(session)}
+          historyCount={historyValue}
+          onSetMode={(nextMode) => {
+            if (isFocusedServer) {
+              onSetSessionMode(session, nextMode);
+              return;
+            }
+            onFocusServer(serverId);
+          }}
+          onSetAiEngine={(nextEngine) => {
+            if (isFocusedServer) {
+              onSetSessionAiEngine(session, nextEngine);
+              return;
+            }
+            onFocusServer(serverId);
+          }}
+          onOpenOnMac={() => onOpenServerSessionOnMac(serverId, session)}
+          onSync={() => {
+            if (isFocusedServer) {
+              onSyncSession(session);
+              return;
+            }
+            onFocusServer(serverId);
+          }}
+          onShareLive={() => onShareServerSessionLive(serverId, session)}
           onExport={() => onExportSession(session)}
-          onFullscreen={() => onFocusSession(session)}
-          onStop={() => onStopSession(session)}
-          onHide={() => onHideSession(session)}
-          onHistoryPrev={() => onHistoryPrev(session)}
-          onHistoryNext={() => onHistoryNext(session)}
-          onTagsChange={(raw) => onSetTags(session, raw)}
-          onSessionAliasChange={(value) => onSetSessionAlias(session, value)}
-          onAutoName={() => onAutoNameSession(session)}
-          onDraftChange={(value) => onSetDraft(session, value)}
-          onAdaptDraftForBackend={() => onAdaptDraftForBackend(session)}
-          onSendControlChar={(value) => onSendControlChar(session, value)}
-          onRequestSuggestions={() => onRequestSuggestions(session)}
-          onUseSuggestion={(value) => onUseSuggestion(session, value)}
-          onExplainError={() => onExplainError(session)}
-          onSuggestErrorFixes={() => onSuggestErrorFixes(session)}
-          onToggleWatch={(enabled) => onToggleWatch(session, enabled)}
-          onWatchPatternChange={(pattern) => onSetWatchPattern(session, pattern)}
-          onClearWatchAlerts={() => onClearWatchAlerts(session)}
-          onRefreshPresence={() => onRefreshSessionPresence(session)}
-          onSetReadOnly={(value) => onSetSessionReadOnly(session, value)}
-          onTogglePin={() => onTogglePinSession(session)}
-          onFlushQueue={() => onFlushQueue(session)}
-          onRemoveQueuedCommand={(index) => onRemoveQueuedCommand(session, index)}
-          onToggleRecording={() => onToggleRecording(session)}
-          onOpenPlayback={() => onOpenPlayback(session)}
-          onDeleteRecording={() => onDeleteRecording(session)}
-          onSend={() => onSend(session)}
-          onClear={() => onClearDraft(session)}
+          onFullscreen={() => {
+            if (isFocusedServer) {
+              onFocusSession(session);
+              return;
+            }
+            onFocusServer(serverId);
+          }}
+          onStop={() => {
+            if (isFocusedServer) {
+              onStopSession(session);
+              return;
+            }
+            onSendServerSessionControlChar(serverId, session, "\u0003");
+          }}
+          onHide={() => {
+            if (isFocusedServer) {
+              onHideSession(session);
+              return;
+            }
+            onFocusServer(serverId);
+          }}
+          onHistoryPrev={() => {
+            if (isFocusedServer) {
+              onHistoryPrev(session);
+            }
+          }}
+          onHistoryNext={() => {
+            if (isFocusedServer) {
+              onHistoryNext(session);
+            }
+          }}
+          onTagsChange={(raw) => {
+            if (isFocusedServer) {
+              onSetTags(session, raw);
+            }
+          }}
+          onSessionAliasChange={(value) => {
+            if (isFocusedServer) {
+              onSetSessionAlias(session, value);
+            }
+          }}
+          onAutoName={() => {
+            if (isFocusedServer) {
+              onAutoNameSession(session);
+            }
+          }}
+          onDraftChange={(value) => onSetServerSessionDraft(serverId, session, value)}
+          onAdaptDraftForBackend={() => {
+            if (isFocusedServer) {
+              onAdaptDraftForBackend(session);
+            }
+          }}
+          onSendControlChar={(value) => onSendServerSessionControlChar(serverId, session, value)}
+          onRequestSuggestions={() => {
+            if (isFocusedServer) {
+              onRequestSuggestions(session);
+            }
+          }}
+          onUseSuggestion={(value) => {
+            if (isFocusedServer) {
+              onUseSuggestion(session, value);
+            }
+          }}
+          onExplainError={() => {
+            if (isFocusedServer) {
+              onExplainError(session);
+            }
+          }}
+          onSuggestErrorFixes={() => {
+            if (isFocusedServer) {
+              onSuggestErrorFixes(session);
+            }
+          }}
+          onToggleWatch={(enabled) => {
+            if (isFocusedServer) {
+              onToggleWatch(session, enabled);
+            }
+          }}
+          onWatchPatternChange={(pattern) => {
+            if (isFocusedServer) {
+              onSetWatchPattern(session, pattern);
+            }
+          }}
+          onClearWatchAlerts={() => {
+            if (isFocusedServer) {
+              onClearWatchAlerts(session);
+            }
+          }}
+          onRefreshPresence={() => {
+            if (isFocusedServer) {
+              onRefreshSessionPresence(session);
+            }
+          }}
+          onSetReadOnly={(value) => {
+            if (isFocusedServer) {
+              onSetSessionReadOnly(session, value);
+            }
+          }}
+          onTogglePin={() => {
+            if (isFocusedServer) {
+              onTogglePinSession(session);
+            }
+          }}
+          onFlushQueue={() => {
+            if (isFocusedServer) {
+              onFlushQueue(session);
+            }
+          }}
+          onRemoveQueuedCommand={(index) => {
+            if (isFocusedServer) {
+              onRemoveQueuedCommand(session, index);
+            }
+          }}
+          onToggleRecording={() => {
+            if (isFocusedServer) {
+              onToggleRecording(session);
+            }
+          }}
+          onOpenPlayback={() => {
+            if (isFocusedServer) {
+              onOpenPlayback(session);
+            }
+          }}
+          onDeleteRecording={() => {
+            if (isFocusedServer) {
+              onDeleteRecording(session);
+            }
+          }}
+          onSend={() => onSendServerSessionDraft(serverId, session)}
+          onClear={() => onClearServerSessionDraft(serverId, session)}
         />
       );
     });
   }, [
-    capabilities.codex,
-    capabilities.terminal,
-    capabilities.macAttach,
-    capabilities.collaboration,
-    capabilities.spectate,
-    connected,
-    connectionMeta,
-    drafts,
-    hasExternalLlm,
+    activeBackend,
+    capabilities,
     commandHistory,
-    historyCount,
-    sessionAliases,
-    sessionPresence,
-    sessionReadOnly,
-    errorHintsBySession,
-    triageBusyBySession,
-    triageExplanationBySession,
-    triageFixesBySession,
-    watchAlertHistoryBySession,
-    pinnedSessions,
     commandQueue,
-    recordings,
-    terminalAppearance,
+    connected,
+    errorHintsBySession,
     glassesTerminalTextStyle,
-    onClearDraft,
+    hasExternalLlm,
+    historyCount,
+    onAdaptDraftForBackend,
+    onAutoNameSession,
+    onClearServerSessionDraft,
+    onClearWatchAlerts,
+    onDeleteRecording,
+    onExplainError,
+    onExportSession,
+    onFlushQueue,
+    onFocusServer,
     onFocusSession,
     onHideSession,
     onHistoryNext,
     onHistoryPrev,
-    onOpenOnMac,
-    onShareLiveSession,
-    onExplainError,
-    onSuggestErrorFixes,
-    onRequestSuggestions,
-    onSend,
-    onSetDraft,
-    onSetSessionMode,
-    onSetSessionAiEngine,
-    onSetTags,
-    onSetSessionAlias,
-    onAutoNameSession,
-    onAdaptDraftForBackend,
-    onSendControlChar,
-    onSetWatchPattern,
-    onClearWatchAlerts,
+    onOpenPlayback,
+    onOpenServerSessionOnMac,
     onRefreshSessionPresence,
+    onRemoveQueuedCommand,
+    onRequestSuggestions,
+    onSendServerSessionControlChar,
+    onSendServerSessionDraft,
+    onSetServerSessionDraft,
+    onSetSessionAiEngine,
+    onSetSessionAlias,
+    onSetSessionMode,
     onSetSessionReadOnly,
+    onSetTags,
+    onSetWatchPattern,
+    onShareServerSessionLive,
     onStopSession,
+    onSuggestErrorFixes,
     onSyncSession,
     onTogglePinSession,
-    onToggleWatch,
-    onFlushQueue,
-    onRemoveQueuedCommand,
     onToggleRecording,
-    onOpenPlayback,
-    onDeleteRecording,
+    onToggleWatch,
     onUseSuggestion,
-    localAiSessions,
+    openTerminalEntries,
+    pinnedSessions,
+    recordings,
     sessionAiEngine,
-    sendBusy,
-    sendModes,
+    sessionAliases,
+    sessionPresence,
+    sessionReadOnly,
+    sessionTags,
     suggestionBusyBySession,
     suggestionsBySession,
-    sessionAliases,
-    sessionTags,
-    streamLive,
-    sortedOpenSessions,
-    tails,
+    terminalAppearance.terminalViewStyle,
+    triageBusyBySession,
+    triageExplanationBySession,
+    triageFixesBySession,
+    watchAlertHistoryBySession,
     watchRules,
-    activeBackend,
-    activeServer?.name,
     showServerBadge,
   ]);
 
-  const tabActiveIndex = activeTabSession ? sortedOpenSessions.indexOf(activeTabSession) : -1;
+  const tabActiveIndex = activeTabSession ? openTerminalEntries.findIndex((entry) => entry.key === activeTabSession) : -1;
   const tabCard = tabActiveIndex >= 0 ? openTerminalCards[tabActiveIndex] : null;
   const glassesActiveSession = glassesSession && sortedOpenSessions.includes(glassesSession)
     ? glassesSession
@@ -728,25 +920,27 @@ export function TerminalsScreen() {
   );
   const renderOpenTerminals = () => {
     if (openTerminalCards.length === 0) {
-      return <Text style={styles.emptyText}>Tap a session above to open it.</Text>;
+      return <Text style={styles.emptyText}>{showAllServerTerminals ? "No open sessions across the server pool." : "Tap a session above to open it."}</Text>;
     }
 
     if (layoutMode === "tabs") {
       return (
         <>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-            {sortedOpenSessions.map((session) => (
-              <Pressable accessibilityRole="button"
-                accessibilityLabel={`Select open session ${sessionAliases[session]?.trim() || session}`}
-                key={`tab-${session}`}
-                style={[styles.chip, activeTabSession === session ? styles.chipActive : null]}
-                onPress={() => setActiveTabSession(session)}
-              >
-                <Text style={[styles.chipText, activeTabSession === session ? styles.chipTextActive : null]}>
-                  {sessionAliases[session]?.trim() || session}
-                </Text>
-              </Pressable>
-            ))}
+            {openTerminalEntries.map((entry) => {
+              const alias = entry.isFocusedServer ? sessionAliases[entry.session]?.trim() || entry.session : entry.session;
+              const label = showAllServerTerminals ? `${entry.serverName} • ${alias}` : alias;
+              return (
+                <Pressable accessibilityRole="button"
+                  accessibilityLabel={`Select open session ${label}`}
+                  key={`tab-${entry.key}`}
+                  style={[styles.chip, activeTabSession === entry.key ? styles.chipActive : null]}
+                  onPress={() => setActiveTabSession(entry.key)}
+                >
+                  <Text style={[styles.chipText, activeTabSession === entry.key ? styles.chipTextActive : null]}>{label}</Text>
+                </Pressable>
+              );
+            })}
           </ScrollView>
           {tabCard}
         </>
@@ -759,7 +953,7 @@ export function TerminalsScreen() {
         <View style={styles.actionsWrap}>
           {openTerminalCards.map((card, index) => (
             <View
-              key={`grid-${sortedOpenSessions[index]}`}
+              key={`grid-${openTerminalEntries[index]?.key || index}`}
               style={{
                 width: gridColumns === 2 ? "49%" : "100%",
               }}
@@ -779,7 +973,7 @@ export function TerminalsScreen() {
         <View style={styles.actionsWrap}>
           {openTerminalCards.slice(0, 2).map((card, index) => (
             <View
-              key={`split-${sortedOpenSessions[index]}`}
+              key={`split-${openTerminalEntries[index]?.key || index}`}
               style={{
                 width: wantsSplit ? "49%" : "100%",
               }}
@@ -1008,6 +1202,30 @@ export function TerminalsScreen() {
               <Text style={styles.actionButtonText}>Reconnect All</Text>
             </Pressable>
           </View>
+        </View>
+        <View style={styles.serverPoolSummaryRow}>
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show terminals for focused server"
+              style={[styles.chip, !showAllServerTerminals ? styles.chipActive : null]}
+              onPress={() => setShowAllServerTerminals(false)}
+            >
+              <Text style={[styles.chipText, !showAllServerTerminals ? styles.chipTextActive : null]}>Focused</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show terminals for all servers"
+              style={[styles.chip, showAllServerTerminals ? styles.chipActive : null, connectedServerCount < 2 ? styles.buttonDisabled : null]}
+              onPress={() => setShowAllServerTerminals(true)}
+              disabled={connectedServerCount < 2}
+            >
+              <Text style={[styles.chipText, showAllServerTerminals ? styles.chipTextActive : null]}>All Servers</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.serverSubtitle}>
+            {showAllServerTerminals ? "Showing pooled open sessions from every server." : "Showing only sessions from the focused server."}
+          </Text>
         </View>
       </View>
 
@@ -1684,6 +1902,11 @@ export function TerminalsScreen() {
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Available Sessions</Text>
+        {showAllServerTerminals ? (
+          <Text style={styles.serverSubtitle}>
+            Session chips below still control visibility for the currently focused server.
+          </Text>
+        ) : null}
 
         <TextInput
           style={styles.input}
@@ -1712,6 +1935,8 @@ export function TerminalsScreen() {
       </View>
     </>
   );
+
+  const openTerminalsTitle = showAllServerTerminals ? "Open Terminals (All Servers)" : "Open Terminals";
 
   const processKillModal = (
     <ProcessKillConfirmModal
@@ -1747,7 +1972,7 @@ export function TerminalsScreen() {
         </View>
         {topPanels}
         <View style={styles.panel}>
-          <Text style={styles.panelLabel}>Open Terminals</Text>
+          <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
           {renderOpenTerminals()}
         </View>
         {processKillModal}
@@ -1762,7 +1987,7 @@ export function TerminalsScreen() {
           <View style={styles.splitLeft}>{topPanels}</View>
           <View style={styles.splitRight}>
             <View style={styles.panel}>
-              <Text style={styles.panelLabel}>Open Terminals</Text>
+              <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
               {renderOpenTerminals()}
             </View>
           </View>
@@ -1776,7 +2001,7 @@ export function TerminalsScreen() {
     <>
       {topPanels}
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>Open Terminals</Text>
+        <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
         {renderOpenTerminals()}
       </View>
       {processKillModal}
