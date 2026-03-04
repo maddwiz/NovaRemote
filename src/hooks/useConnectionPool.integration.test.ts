@@ -341,6 +341,52 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("fans out websocket streams for 5 servers with 3 sessions each", async () => {
+    fetchMock.mockImplementation(async (input: unknown) => {
+      const url = typeof input === "string" ? input : String(input);
+      if (url.includes("/tmux/sessions")) {
+        return jsonResponse({
+          sessions: [{ name: "main" }, { name: "build" }, { name: "deploy" }],
+        });
+      }
+      return await defaultFetchImpl(input);
+    });
+
+    const servers = [
+      makeServer("dgx", "DGX"),
+      makeServer("homelab", "Homelab"),
+      makeServer("cloud", "Cloud"),
+      makeServer("render", "Render"),
+      makeServer("edge", "Edge"),
+    ];
+    const harness = await mountPool(servers);
+    await harness.waitFor(
+      () => servers.every((server) => (harness.getPool().connections.get(server.id)?.allSessions.length || 0) === 3),
+      "all sessions discovered for each server"
+    );
+
+    await harness.act(async () => {
+      servers.forEach((server) => {
+        harness.getPool().toggleSessionVisible(server.id, "build");
+        harness.getPool().toggleSessionVisible(server.id, "deploy");
+      });
+    });
+
+    await harness.waitFor(() => FakeWebSocket.instances.length === 15, "5 servers x 3 open-session websocket fan-out");
+    expect(harness.getPool().connections.size).toBe(5);
+    expect(harness.getPool().allConnectedServers.length).toBe(5);
+    servers.forEach((server) => {
+      expect(harness.getPool().connections.get(server.id)?.openSessions.length).toBe(3);
+    });
+
+    await harness.act(async () => {
+      FakeWebSocket.instances.forEach((ws) => ws.emitOpen());
+    });
+    expect(harness.getPool().totalActiveStreams).toBe(15);
+
+    await harness.unmount();
+  });
+
   it("reconnects closed streams with backoff and preserves other server streams", async () => {
     const harness = await mountPool([makeServer("dgx", "DGX"), makeServer("cloud", "Cloud")]);
 
