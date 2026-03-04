@@ -1702,7 +1702,12 @@ export default function AppShell() {
   );
 
   const processPendingAgentServerActions = useCallback(() => {
-    const current = pendingAgentServerActionsRef.current[0];
+    let current = pendingAgentServerActionsRef.current[0];
+    while (current && !servers.some((server) => server.id === current.serverId)) {
+      pendingAgentServerActionsRef.current.shift();
+      current.reject(new Error("Target server is no longer available."));
+      current = pendingAgentServerActionsRef.current[0];
+    }
     if (!current) {
       return;
     }
@@ -1723,7 +1728,7 @@ export default function AppShell() {
     if (next && next.serverId !== focusedServerId) {
       focusServer(next.serverId);
     }
-  }, [executeFocusedAgentServerAction, focusServer, focusedServerId]);
+  }, [executeFocusedAgentServerAction, focusServer, focusedServerId, servers]);
 
   useEffect(() => {
     processPendingAgentServerActions();
