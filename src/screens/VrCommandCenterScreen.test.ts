@@ -220,7 +220,7 @@ describe("VrCommandCenterScreen", () => {
     await act(async () => {
       renderer.root.findByProps({ accessibilityLabel: "Send command to focused panel" }).props.onPress();
     });
-    expect(runtime.sendServerCommand).toHaveBeenCalledWith("dgx", "main", "npm run build");
+    expect(runtime.dispatchVoice).toHaveBeenCalledWith("npm run build", { targetPanelId: "dgx::main" });
 
     await act(async () => {
       renderer.unmount();

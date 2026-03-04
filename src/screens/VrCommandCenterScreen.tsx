@@ -107,7 +107,9 @@ export function VrCommandCenterScreen() {
     if (!command || !focusedPanel) {
       return;
     }
-    void runtime.sendServerCommand(focusedPanel.serverId, focusedPanel.session, command);
+    void runtime.dispatchVoice(command, {
+      targetPanelId: focusedPanel.id,
+    });
     setCommandInput("");
   }, [commandInput, focusedPanel, runtime]);
 
@@ -312,7 +314,7 @@ export function VrCommandCenterScreen() {
                   accessibilityLabel={`Open ${panel.sessionLabel} on Mac`}
                   style={styles.chip}
                   onPress={() => {
-                    void runtime.openServerOnMac(panel.serverId, panel.session);
+                    void runtime.dispatchVoice("open on mac", { targetPanelId: panel.id });
                   }}
                 >
                   <Text style={styles.chipText}>Open Mac</Text>
@@ -322,7 +324,7 @@ export function VrCommandCenterScreen() {
                   accessibilityLabel={`Interrupt ${panel.sessionLabel}`}
                   style={styles.chip}
                   onPress={() => {
-                    void runtime.sendServerControlChar(panel.serverId, panel.session, "C-c");
+                    void runtime.dispatchVoice("interrupt", { targetPanelId: panel.id });
                   }}
                 >
                   <Text style={styles.chipText}>C-c</Text>
@@ -332,7 +334,7 @@ export function VrCommandCenterScreen() {
                   accessibilityLabel={`Stop ${panel.sessionLabel}`}
                   style={styles.chip}
                   onPress={() => {
-                    void runtime.stopServerSession(panel.serverId, panel.session);
+                    void runtime.dispatchVoice("stop session", { targetPanelId: panel.id });
                   }}
                 >
                   <Text style={styles.chipText}>Stop</Text>
