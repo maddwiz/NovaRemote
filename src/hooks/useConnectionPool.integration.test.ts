@@ -757,15 +757,22 @@ describe("useConnectionPool websocket integration", () => {
       ...makeServer("lab", "Lab"),
       token: "   ",
     };
+    const missingBaseUrl: ServerProfile = {
+      ...makeServer("cloud", "Cloud"),
+      baseUrl: "   ",
+    };
 
-    const harness = await mountPool([valid, missingToken]);
+    const harness = await mountPool([valid, missingToken, missingBaseUrl]);
     await harness.waitFor(() => FakeWebSocket.instances.length === 1, "single websocket for only valid server");
 
     const pool = harness.getPool();
     expect(pool.connections.get("dgx")?.connected).toBe(true);
     expect(pool.connections.get("lab")?.connected).toBe(false);
     expect(pool.connections.get("lab")?.status).toBe("disconnected");
+    expect(pool.connections.get("cloud")?.connected).toBe(false);
+    expect(pool.connections.get("cloud")?.status).toBe("disconnected");
     expect(wsFor("lab")).toBeUndefined();
+    expect(wsFor("cloud")).toBeUndefined();
     expect(pool.allConnectedServers.map((server) => server.id)).toEqual(["dgx"]);
     expect(pool.totalActiveStreams).toBe(0);
 
