@@ -377,7 +377,7 @@ export function GlassesModeScreen() {
           onApproveReadyAgentsForFocusedServer();
           return;
         }
-        void onApproveReadyAgentsForServer(targetServerId);
+        void onApproveReadyAgentsForServer(targetServerId).catch(() => {});
         return;
       }
       if (route.kind === "deny_all_pending_agents") {
@@ -389,7 +389,7 @@ export function GlassesModeScreen() {
           onDenyAllPendingAgentsForFocusedServer();
           return;
         }
-        void onDenyAllPendingAgentsForServer(targetServerId);
+        void onDenyAllPendingAgentsForServer(targetServerId).catch(() => {});
         return;
       }
       if (route.kind === "pause_pool") {
