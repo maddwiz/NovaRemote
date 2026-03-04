@@ -59,18 +59,41 @@ function makeConnection(server: ServerProfile, status: ServerConnection["status"
 }
 
 describe("groupServersByVmHost", () => {
-  it("groups servers by vmHost and keeps standalone servers together", () => {
-    const dgx = makeServer({ id: "dgx", name: "DGX", vmHost: "Rack A" });
-    const lab = makeServer({ id: "lab", name: "Lab", vmHost: "Rack A" });
-    const cloud = makeServer({ id: "cloud", name: "Cloud", vmHost: "  " });
-    const vmB = makeServer({ id: "vm-b", name: "VM-B", vmHost: "Rack B" });
+  it("builds host hierarchy with vmType buckets and standalone fallback", () => {
+    const dgx = makeServer({ id: "dgx", name: "DGX", vmHost: "Rack A", vmType: "proxmox", vmName: "dgx-vm" });
+    const lab = makeServer({ id: "lab", name: "Lab", vmHost: "Rack A", vmType: "qemu", vmName: "lab-vm" });
+    const cloud = makeServer({ id: "cloud", name: "Cloud", vmHost: "  ", vmType: "cloud" });
+    const vmB = makeServer({ id: "vm-b", name: "VM-B", vmHost: "Rack B", vmType: "docker" });
+    const bare = makeServer({ id: "bare", name: "Bare", vmHost: "Rack A" });
 
-    const groups = groupServersByVmHost([dgx, cloud, lab, vmB]);
-    expect(groups).toEqual([
-      { key: "vmhost:rack a", label: "Rack A", servers: [dgx, lab] },
-      { key: "standalone", label: "Standalone", servers: [cloud] },
-      { key: "vmhost:rack b", label: "Rack B", servers: [vmB] },
-    ]);
+    const groups = groupServersByVmHost([dgx, cloud, lab, vmB, bare]);
+    expect(groups.map((group) => group.label)).toEqual(["Rack A", "Rack B", "Standalone"]);
+
+    expect(groups[0]).toEqual({
+      key: "vmhost:rack a",
+      label: "Rack A",
+      isStandalone: false,
+      servers: [bare, dgx, lab],
+      vmTypeGroups: [
+        { key: "vmtype:proxmox", label: "Proxmox", servers: [dgx] },
+        { key: "vmtype:qemu", label: "QEMU", servers: [lab] },
+        { key: "vmtype:general", label: "General", servers: [bare] },
+      ],
+    });
+    expect(groups[1]).toEqual({
+      key: "vmhost:rack b",
+      label: "Rack B",
+      isStandalone: false,
+      servers: [vmB],
+      vmTypeGroups: [{ key: "vmtype:docker", label: "Docker", servers: [vmB] }],
+    });
+    expect(groups[2]).toEqual({
+      key: "standalone",
+      label: "Standalone",
+      isStandalone: true,
+      servers: [cloud],
+      vmTypeGroups: [{ key: "vmtype:cloud", label: "Cloud", servers: [cloud] }],
+    });
   });
 });
 

@@ -319,11 +319,21 @@ export const styles = StyleSheet.create({
     backgroundColor: "rgba(6, 3, 18, 0.95)",
     borderRadius: 12,
   },
-  serverRailGroup: {
+  serverRailGroupCard: {
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: "#2e245a",
+    backgroundColor: "rgba(18, 12, 37, 0.92)",
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    marginRight: 8,
+  },
+  serverRailGroupHeader: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    marginRight: 8,
+    justifyContent: "space-between",
+    marginBottom: 4,
+    gap: 8,
   },
   serverRailGroupLabel: {
     color: "#7f7aa8",
@@ -331,6 +341,33 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     textTransform: "uppercase",
     letterSpacing: 0.5,
+  },
+  serverRailGroupCount: {
+    color: "#96b8de",
+    fontSize: 10,
+    fontWeight: "800",
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#3b2d73",
+    backgroundColor: "rgba(45, 32, 92, 0.7)",
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    overflow: "hidden",
+  },
+  serverRailVmTypeRow: {
+    gap: 5,
+    marginBottom: 5,
+  },
+  serverRailVmTypeLabel: {
+    color: "#8ca8d7",
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.4,
+  },
+  serverRailVmTypeChips: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   serverRailChip: {
     flexDirection: "row",
