@@ -140,10 +140,10 @@ export function GlassesModeScreen() {
     onReconnectServers,
     onConnectAllServers,
     onDisconnectAllServers,
-    onApproveReadyAgentsForFocusedServer,
-    onDenyAllPendingAgentsForFocusedServer,
     onApproveReadyAgentsForServer,
     onDenyAllPendingAgentsForServer,
+    onApproveReadyAgentsForServers,
+    onDenyAllPendingAgentsForServers,
     sessionAliases,
     sessionReadOnly,
     glassesMode,
@@ -369,24 +369,32 @@ export function GlassesModeScreen() {
         return;
       }
       if (route.kind === "approve_ready_agents") {
-        const targetServerId = route.panelId ? panelMap.get(route.panelId)?.serverId || null : focusedServerId;
-        if (!targetServerId) {
+        if (!route.panelId) {
+          const serverIds = Array.from(connections.keys());
+          if (serverIds.length === 0) {
+            return;
+          }
+          void onApproveReadyAgentsForServers(serverIds).catch(() => {});
           return;
         }
-        if (targetServerId === focusedServerId) {
-          onApproveReadyAgentsForFocusedServer();
+        const targetServerId = panelMap.get(route.panelId)?.serverId || null;
+        if (!targetServerId) {
           return;
         }
         void onApproveReadyAgentsForServer(targetServerId).catch(() => {});
         return;
       }
       if (route.kind === "deny_all_pending_agents") {
-        const targetServerId = route.panelId ? panelMap.get(route.panelId)?.serverId || null : focusedServerId;
-        if (!targetServerId) {
+        if (!route.panelId) {
+          const serverIds = Array.from(connections.keys());
+          if (serverIds.length === 0) {
+            return;
+          }
+          void onDenyAllPendingAgentsForServers(serverIds).catch(() => {});
           return;
         }
-        if (targetServerId === focusedServerId) {
-          onDenyAllPendingAgentsForFocusedServer();
+        const targetServerId = panelMap.get(route.panelId)?.serverId || null;
+        if (!targetServerId) {
           return;
         }
         void onDenyAllPendingAgentsForServer(targetServerId).catch(() => {});
@@ -449,10 +457,10 @@ export function GlassesModeScreen() {
       focusedPanelId,
       onConnectAllServers,
       onDisconnectAllServers,
-      onApproveReadyAgentsForFocusedServer,
       onApproveReadyAgentsForServer,
-      onDenyAllPendingAgentsForFocusedServer,
       onDenyAllPendingAgentsForServer,
+      onApproveReadyAgentsForServers,
+      onDenyAllPendingAgentsForServers,
       onReconnectServer,
       onReconnectServers,
       onOpenServerSessionOnMac,
