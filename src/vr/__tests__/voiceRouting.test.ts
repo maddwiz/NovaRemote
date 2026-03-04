@@ -51,6 +51,16 @@ describe("parseVrVoiceIntent", () => {
     expect(parseVrVoiceIntent("show all", PANELS, "dgx-main")).toEqual({ kind: "overview" });
     expect(parseVrVoiceIntent("show me all logs", PANELS, "dgx-main")).toEqual({ kind: "overview" });
     expect(parseVrVoiceIntent("focus mode", PANELS, "dgx-main")).toEqual({ kind: "minimize" });
+    expect(parseVrVoiceIntent("interrupt", PANELS, "dgx-main")).toEqual({
+      kind: "control",
+      panelId: "dgx-main",
+      char: "C-c",
+    });
+    expect(parseVrVoiceIntent("ctrl z for build worker", PANELS, "dgx-main")).toEqual({
+      kind: "control",
+      panelId: "home-build",
+      char: "C-z",
+    });
     expect(parseVrVoiceIntent("layout grid", PANELS, "dgx-main")).toEqual({
       kind: "layout_preset",
       preset: "grid",

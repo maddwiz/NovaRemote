@@ -185,6 +185,15 @@ describe("useVrWorkspace", () => {
       command: "npm run build",
     });
 
+    const controlAction = current().applyVoiceTranscript("interrupt for homelab");
+    expect(controlAction).toEqual({
+      kind: "control",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+      char: "C-c",
+    });
+
     await act(async () => {
       renderer?.unmount();
     });

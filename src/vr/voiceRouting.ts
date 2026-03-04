@@ -1,5 +1,5 @@
-import { VrLayoutPreset } from "./contracts";
 import { findPanelByTarget, resolveSpatialVoiceRoute, VoiceRoutePanel } from "../spatialVoiceRoutingCore";
+import { VrLayoutPreset } from "./contracts";
 
 export type VrRoutePanel = VoiceRoutePanel;
 
@@ -7,6 +7,7 @@ export type VrVoiceIntent =
   | { kind: "none" }
   | { kind: "focus"; panelId: string }
   | { kind: "send"; panelId: string; command: string }
+  | { kind: "control"; panelId: string; char: string }
   | { kind: "overview" }
   | { kind: "minimize" }
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
@@ -36,6 +37,28 @@ function resolvePanelId(panels: VrRoutePanel[], focusedPanelId: string | null, t
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
   const cleaned = transcript.trim();
   if (cleaned) {
+    const interruptMatch = cleaned.match(
+      /^(?:interrupt|stop command|cancel command)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+    );
+    if (interruptMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, interruptMatch[1] || interruptMatch[2] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "control", panelId, char: "C-c" };
+    }
+
+    const controlMatch = cleaned.match(
+      /^(?:ctrl\s*\+?|control\s+)([a-z])(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+    );
+    if (controlMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, controlMatch[2] || controlMatch[3] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "control", panelId, char: `C-${(controlMatch[1] || "c").toLowerCase()}` };
+    }
+
     const layoutMatch = cleaned.match(
       /^(?:layout|preset|snap(?:\s+layout)?)\s+(arc|grid|stacked|cockpit)$/i
     );

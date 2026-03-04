@@ -23,6 +23,7 @@ export type VrHudStatus = {
 export type UseVrInputRouterArgs = {
   workspace: WorkspaceInputBridge;
   onSendCommand: (serverId: string, session: string, command: string) => Promise<void> | void;
+  onSendControlChar?: (serverId: string, session: string, char: string) => Promise<void> | void;
   onSetOverviewMode?: (enabled: boolean) => void;
   hudAutoClearMs?: number;
 };
@@ -46,6 +47,7 @@ function now(): number {
 export function useVrInputRouter({
   workspace,
   onSendCommand,
+  onSendControlChar,
   onSetOverviewMode,
   hudAutoClearMs = 3000,
 }: UseVrInputRouterArgs): UseVrInputRouterResult {
@@ -108,6 +110,31 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to send command",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+      if (action.kind === "control") {
+        if (!onSendControlChar) {
+          publishHudStatus({
+            message: "Control routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          await onSendControlChar(action.serverId, action.session, action.char);
+          publishHudStatus({
+            message: `Sent ${action.char} to ${action.serverId}/${action.session}`,
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to send control character",
             severity: "error",
             at: now(),
           });
@@ -186,7 +213,7 @@ export function useVrInputRouter({
       });
       return action;
     },
-    [onSendCommand, onSetOverviewMode, publishHudStatus, workspace]
+    [onSendCommand, onSendControlChar, onSetOverviewMode, publishHudStatus, workspace]
   );
 
   const dispatchGesture = useCallback(

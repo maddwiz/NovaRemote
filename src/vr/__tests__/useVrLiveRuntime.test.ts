@@ -75,20 +75,26 @@ function makeConnection(
   };
 }
 
-function buildSessionClient(
+function buildSessionClient(args: {
   sendMock: (
     server: Parameters<VrSessionClient["send"]>[0],
     basePath: VrTerminalApiBasePath,
     session: string,
     text: string,
     enter?: boolean
-  ) => Promise<void>
-): VrSessionClient {
+  ) => Promise<void>;
+  ctrlMock?: (
+    server: Parameters<VrSessionClient["ctrl"]>[0],
+    basePath: VrTerminalApiBasePath,
+    session: string,
+    key: string
+  ) => Promise<void>;
+}): VrSessionClient {
   return {
     listSessions: vi.fn(async () => []),
     createSession: vi.fn(async () => undefined),
-    send: sendMock,
-    ctrl: vi.fn(async () => undefined),
+    send: args.sendMock,
+    ctrl: args.ctrlMock || (vi.fn(async () => undefined) as VrSessionClient["ctrl"]),
     tail: vi.fn(async () => ""),
     health: vi.fn(async () => ({ ok: true, latencyMs: 12 })),
   };
@@ -148,7 +154,7 @@ describe("useVrLiveRuntime", () => {
     function Harness() {
       latest = useVrLiveRuntime({
         connections,
-        sessionClient: buildSessionClient(sendMock),
+        sessionClient: buildSessionClient({ sendMock }),
         maxPanels: 4,
       });
       return null;
@@ -213,7 +219,7 @@ describe("useVrLiveRuntime", () => {
     function Harness() {
       latest = useVrLiveRuntime({
         connections,
-        sessionClient: buildSessionClient(sendMock),
+        sessionClient: buildSessionClient({ sendMock }),
         maxPanels: 3,
       });
       return null;
@@ -239,6 +245,77 @@ describe("useVrLiveRuntime", () => {
     });
     expect(current().workspace.preset).toBe("cockpit");
     expect(current().hudStatus?.message).toContain("Snapped layout cockpit");
+    expect(sendMock).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("routes control voice actions through the live VR ctrl transport", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+    ]);
+    const sendMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["send"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        text: string,
+        enter?: boolean
+      ) => Promise<void>
+    >(async () => undefined);
+    const ctrlMock = vi.fn<
+      (
+        server: Parameters<VrSessionClient["ctrl"]>[0],
+        basePath: VrTerminalApiBasePath,
+        session: string,
+        key: string
+      ) => Promise<void>
+    >(async () => undefined);
+
+    let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Runtime not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrLiveRuntime({
+        connections,
+        sessionClient: buildSessionClient({ sendMock, ctrlMock }),
+        maxPanels: 3,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("interrupt");
+    });
+
+    expect(ctrlMock).toHaveBeenCalledWith(
+      {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+      },
+      "/tmux",
+      "main",
+      "C-c"
+    );
+    expect(current().hudStatus?.message).toContain("Sent C-c to dgx/main");
     expect(sendMock).toHaveBeenCalledTimes(0);
 
     await act(async () => {

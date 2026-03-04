@@ -54,6 +54,10 @@ export function useVrLiveRuntime({
       const { connection, target } = resolveServerTarget(serverId);
       await liveClient.send(target, connection.terminalApiBasePath, session, command, true);
     },
+    onSendControlChar: async (serverId, session, char) => {
+      const { connection, target } = resolveServerTarget(serverId);
+      await liveClient.ctrl(target, connection.terminalApiBasePath, session, char);
+    },
   });
 
   return {
@@ -65,4 +69,3 @@ export function useVrLiveRuntime({
     dispatchGesture: input.dispatchGesture,
   };
 }
-

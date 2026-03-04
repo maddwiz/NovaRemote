@@ -127,6 +127,53 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches control-char voice actions through the control callback", async () => {
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({
+      kind: "control",
+      panelId: "home::build",
+      serverId: "home",
+      session: "build",
+      char: "C-c",
+    }));
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onSendControlChar = vi.fn(async () => undefined);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onSendControlChar,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("interrupt for homelab");
+    });
+
+    expect(onSendControlChar).toHaveBeenCalledWith("home", "build", "C-c");
+    expect(current().hudStatus?.message).toContain("Sent C-c to home/build");
+    expect(current().hudStatus?.severity).toBe("success");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("toggles overview mode from voice and gesture actions", async () => {
     const applyVoiceTranscript = vi.fn<
       (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction

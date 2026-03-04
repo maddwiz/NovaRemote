@@ -23,6 +23,13 @@ export type VrWorkspaceVoiceAction =
   | { kind: "none" }
   | { kind: "focus"; panelId: string }
   | { kind: "rotate_workspace"; direction: "left" | "right" }
+  | {
+      kind: "control";
+      panelId: string;
+      serverId: string;
+      session: string;
+      char: string;
+    }
   | { kind: "overview" }
   | { kind: "minimize" }
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
@@ -653,6 +660,19 @@ export function useVrWorkspace({
       if (intent.kind === "layout_preset") {
         setPreset(intent.preset);
         return { kind: "layout_preset", preset: intent.preset };
+      }
+      if (intent.kind === "control") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        return {
+          kind: "control",
+          panelId: panel.id,
+          serverId: panel.serverId,
+          session: panel.session,
+          char: intent.char,
+        };
       }
       if (intent.kind === "panel_mini") {
         setPanelMini(intent.panelId, true);
