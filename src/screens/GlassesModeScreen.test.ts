@@ -569,4 +569,80 @@ describe("GlassesModeScreen", () => {
       screen.unmount();
     });
   });
+
+  it("requires workspace targeting for channel create commands when multiple workspaces are visible", async () => {
+    const createChannel = vi.fn();
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [],
+      loading: false,
+      createChannel,
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+    });
+
+    useSharedWorkspacesMock.mockReturnValue({
+      workspaces: [
+        {
+          id: "workspace-1",
+          name: "Platform Ops",
+          serverIds: ["dgx"],
+          members: [{ id: "local-user", name: "Local User", role: "owner" }],
+          channelId: "channel-workspace-1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+        {
+          id: "workspace-2",
+          name: "Release Hub",
+          serverIds: ["home"],
+          members: [{ id: "local-user", name: "Local User", role: "owner" }],
+          channelId: "channel-workspace-2",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(),
+      renameWorkspace: vi.fn(),
+      setWorkspaceServers: vi.fn(),
+      setMemberRole: vi.fn(),
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["ops"])],
+    ]);
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections, {
+              voiceTranscript: "create channel triage",
+            }),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(createChannel).not.toHaveBeenCalled();
+    expect(() =>
+      screen.root.findByProps({ children: "Specify a workspace or scope to one workspace before channel management." })
+    ).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
 });
