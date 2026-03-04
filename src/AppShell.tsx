@@ -115,6 +115,20 @@ function parseCommaTags(raw: string): string[] {
   );
 }
 
+function uniqueServerIds(serverIds: string[]): string[] {
+  const seen = new Set<string>();
+  const next: string[] = [];
+  serverIds.forEach((serverId) => {
+    const value = serverId.trim();
+    if (!value || seen.has(value)) {
+      return;
+    }
+    seen.add(value);
+    next.push(value);
+  });
+  return next;
+}
+
 function countMatches(output: string, searchTerm: string): number {
   const term = searchTerm.trim();
   if (!term) {
@@ -1654,23 +1668,135 @@ export default function AppShell() {
     [poolConnections, scopedServerId, sendPoolControlChar, sessionReadOnly]
   );
 
-  const glassesAgentServerId = route === "glasses" ? focusedServerId : null;
+  const agentRuntimeServerId = focusedServerId;
+  type PendingAgentServerAction = {
+    serverId: string;
+    kind: "approve" | "deny";
+    resolve: (agentIds: string[]) => void;
+    reject: (error: unknown) => void;
+  };
+  const pendingAgentServerActionsRef = useRef<PendingAgentServerAction[]>([]);
   const dispatchFocusedServerAgentCommand = useCallback(
     (session: string, command: string) => {
-      if (!glassesAgentServerId) {
+      if (!agentRuntimeServerId) {
         return;
       }
-      void sendServerSessionCommand(glassesAgentServerId, session, command, "shell").catch((error) => {
+      void sendServerSessionCommand(agentRuntimeServerId, session, command, "shell").catch((error) => {
         setError(error);
       });
     },
-    [glassesAgentServerId, sendServerSessionCommand, setError]
+    [agentRuntimeServerId, sendServerSessionCommand, setError]
   );
   const { approveReadyApprovals: approveReadyAgentsForFocusedServer, denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer } =
     useNovaAgentRuntime({
-      serverId: glassesAgentServerId,
+      serverId: agentRuntimeServerId,
       onDispatchCommand: dispatchFocusedServerAgentCommand,
     });
+
+  const executeFocusedAgentServerAction = useCallback(
+    (kind: "approve" | "deny"): string[] => {
+      const result = kind === "approve" ? approveReadyAgentsForFocusedServer() : denyAllPendingAgentsForFocusedServer();
+      return Array.isArray(result) ? result : [];
+    },
+    [approveReadyAgentsForFocusedServer, denyAllPendingAgentsForFocusedServer]
+  );
+
+  const processPendingAgentServerActions = useCallback(() => {
+    const current = pendingAgentServerActionsRef.current[0];
+    if (!current) {
+      return;
+    }
+
+    if (!focusedServerId || focusedServerId !== current.serverId) {
+      focusServer(current.serverId);
+      return;
+    }
+
+    pendingAgentServerActionsRef.current.shift();
+    try {
+      current.resolve(executeFocusedAgentServerAction(current.kind));
+    } catch (error) {
+      current.reject(error);
+    }
+
+    const next = pendingAgentServerActionsRef.current[0];
+    if (next && next.serverId !== focusedServerId) {
+      focusServer(next.serverId);
+    }
+  }, [executeFocusedAgentServerAction, focusServer, focusedServerId]);
+
+  useEffect(() => {
+    processPendingAgentServerActions();
+  }, [focusedServerId, processPendingAgentServerActions]);
+
+  useEffect(() => {
+    return () => {
+      const error = new Error("Agent action was cancelled.");
+      while (pendingAgentServerActionsRef.current.length > 0) {
+        pendingAgentServerActionsRef.current.shift()?.reject(error);
+      }
+    };
+  }, []);
+
+  const runAgentServerAction = useCallback(
+    async (serverId: string, kind: "approve" | "deny"): Promise<string[]> => {
+      const targetServerId = serverId.trim();
+      if (!targetServerId) {
+        return [];
+      }
+      if (!servers.some((server) => server.id === targetServerId)) {
+        throw new Error("Target server is not available.");
+      }
+      if (focusedServerId === targetServerId) {
+        return executeFocusedAgentServerAction(kind);
+      }
+
+      return await new Promise<string[]>((resolve, reject) => {
+        pendingAgentServerActionsRef.current.push({
+          serverId: targetServerId,
+          kind,
+          resolve,
+          reject,
+        });
+        processPendingAgentServerActions();
+      });
+    },
+    [executeFocusedAgentServerAction, focusedServerId, processPendingAgentServerActions, servers]
+  );
+
+  const approveReadyAgentsForServer = useCallback(
+    async (serverId: string): Promise<string[]> => await runAgentServerAction(serverId, "approve"),
+    [runAgentServerAction]
+  );
+
+  const denyAllPendingAgentsForServer = useCallback(
+    async (serverId: string): Promise<string[]> => await runAgentServerAction(serverId, "deny"),
+    [runAgentServerAction]
+  );
+
+  const approveReadyAgentsForServers = useCallback(
+    async (serverIds: string[]): Promise<string[]> => {
+      const approved: string[] = [];
+      for (const serverId of uniqueServerIds(serverIds)) {
+        const next = await approveReadyAgentsForServer(serverId);
+        approved.push(...next);
+      }
+      return approved;
+    },
+    [approveReadyAgentsForServer]
+  );
+
+  const denyAllPendingAgentsForServers = useCallback(
+    async (serverIds: string[]): Promise<string[]> => {
+      const denied: string[] = [];
+      for (const serverId of uniqueServerIds(serverIds)) {
+        const next = await denyAllPendingAgentsForServer(serverId);
+        denied.push(...next);
+      }
+      return denied;
+    },
+    [denyAllPendingAgentsForServer]
+  );
 
   const sendControlToSession = useCallback(
     async (session: string, char: string) => {
@@ -2390,6 +2516,10 @@ export default function AppShell() {
     disconnectAllServers,
     approveReadyAgentsForFocusedServer,
     denyAllPendingAgentsForFocusedServer,
+    approveReadyAgentsForServer,
+    denyAllPendingAgentsForServer,
+    approveReadyAgentsForServers,
+    denyAllPendingAgentsForServers,
     editServer,
     openSshFallback,
     createLocalAiSession,

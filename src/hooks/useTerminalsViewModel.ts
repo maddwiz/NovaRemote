@@ -108,6 +108,10 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     disconnectAllServers,
     approveReadyAgentsForFocusedServer,
     denyAllPendingAgentsForFocusedServer,
+    approveReadyAgentsForServer,
+    denyAllPendingAgentsForServer,
+    approveReadyAgentsForServers,
+    denyAllPendingAgentsForServers,
     editServer,
     openSshFallback,
     createLocalAiSession,
@@ -195,6 +199,56 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     sendVoiceTranscriptToServerSession,
     runFleetCommand,
   } = args as any;
+
+  const runApproveReadyAgentsForServer = async (serverId: string): Promise<string[]> => {
+    if (typeof approveReadyAgentsForServer === "function") {
+      const approved = await approveReadyAgentsForServer(serverId);
+      return Array.isArray(approved) ? approved : [];
+    }
+    if (activeServer?.id !== serverId || typeof approveReadyAgentsForFocusedServer !== "function") {
+      return [];
+    }
+    const approved = approveReadyAgentsForFocusedServer();
+    return Array.isArray(approved) ? approved : [];
+  };
+
+  const runDenyAllPendingAgentsForServer = async (serverId: string): Promise<string[]> => {
+    if (typeof denyAllPendingAgentsForServer === "function") {
+      const denied = await denyAllPendingAgentsForServer(serverId);
+      return Array.isArray(denied) ? denied : [];
+    }
+    if (activeServer?.id !== serverId || typeof denyAllPendingAgentsForFocusedServer !== "function") {
+      return [];
+    }
+    const denied = denyAllPendingAgentsForFocusedServer();
+    return Array.isArray(denied) ? denied : [];
+  };
+
+  const runApproveReadyAgentsForServers = async (serverIds: string[]): Promise<string[]> => {
+    if (typeof approveReadyAgentsForServers === "function") {
+      const approved = await approveReadyAgentsForServers(uniqueServerIds(serverIds));
+      return Array.isArray(approved) ? approved : [];
+    }
+    const approved: string[] = [];
+    for (const serverId of uniqueServerIds(serverIds)) {
+      const next = await runApproveReadyAgentsForServer(serverId);
+      approved.push(...next);
+    }
+    return approved;
+  };
+
+  const runDenyAllPendingAgentsForServers = async (serverIds: string[]): Promise<string[]> => {
+    if (typeof denyAllPendingAgentsForServers === "function") {
+      const denied = await denyAllPendingAgentsForServers(uniqueServerIds(serverIds));
+      return Array.isArray(denied) ? denied : [];
+    }
+    const denied: string[] = [];
+    for (const serverId of uniqueServerIds(serverIds)) {
+      const next = await runDenyAllPendingAgentsForServer(serverId);
+      denied.push(...next);
+    }
+    return denied;
+  };
 
   const terminalsViewModel: TerminalsViewModel = {
     activeServer,
@@ -306,6 +360,10 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       const denied = denyAllPendingAgentsForFocusedServer();
       return Array.isArray(denied) ? denied : [];
     },
+    onApproveReadyAgentsForServer: runApproveReadyAgentsForServer,
+    onDenyAllPendingAgentsForServer: runDenyAllPendingAgentsForServer,
+    onApproveReadyAgentsForServers: runApproveReadyAgentsForServers,
+    onDenyAllPendingAgentsForServers: runDenyAllPendingAgentsForServers,
     onEditServer: editServer,
     onOpenSshFallback: () => {
       void runWithStatus("Opening SSH fallback", async () => {

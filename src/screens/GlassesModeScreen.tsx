@@ -35,11 +35,6 @@ type BrandProfile = {
   displayAspect: string;
 };
 
-type PendingAgentVoiceAction = {
-  kind: "approve_ready_agents" | "deny_all_pending_agents";
-  targetServerId: string;
-} | null;
-
 const BRAND_PROFILES: Record<GlassesBrand, BrandProfile> = {
   xreal_x1: {
     label: "XREAL X1",
@@ -147,6 +142,8 @@ export function GlassesModeScreen() {
     onDisconnectAllServers,
     onApproveReadyAgentsForFocusedServer,
     onDenyAllPendingAgentsForFocusedServer,
+    onApproveReadyAgentsForServer,
+    onDenyAllPendingAgentsForServer,
     sessionAliases,
     sessionReadOnly,
     glassesMode,
@@ -187,7 +184,6 @@ export function GlassesModeScreen() {
   const [focusedPanelId, setFocusedPanelId] = useState<string | null>(null);
   const [overviewMode, setOverviewMode] = useState<boolean>(true);
   const [settingsVisible, setSettingsVisible] = useState<boolean>(false);
-  const [pendingAgentVoiceAction, setPendingAgentVoiceAction] = useState<PendingAgentVoiceAction>(null);
   const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -377,15 +373,11 @@ export function GlassesModeScreen() {
         if (!targetServerId) {
           return;
         }
-        if (focusedServerId && targetServerId !== focusedServerId) {
-          setPendingAgentVoiceAction({
-            kind: "approve_ready_agents",
-            targetServerId,
-          });
-          onFocusServer(targetServerId);
+        if (targetServerId === focusedServerId) {
+          onApproveReadyAgentsForFocusedServer();
           return;
         }
-        onApproveReadyAgentsForFocusedServer();
+        void onApproveReadyAgentsForServer(targetServerId);
         return;
       }
       if (route.kind === "deny_all_pending_agents") {
@@ -393,15 +385,11 @@ export function GlassesModeScreen() {
         if (!targetServerId) {
           return;
         }
-        if (focusedServerId && targetServerId !== focusedServerId) {
-          setPendingAgentVoiceAction({
-            kind: "deny_all_pending_agents",
-            targetServerId,
-          });
-          onFocusServer(targetServerId);
+        if (targetServerId === focusedServerId) {
+          onDenyAllPendingAgentsForFocusedServer();
           return;
         }
-        onDenyAllPendingAgentsForFocusedServer();
+        void onDenyAllPendingAgentsForServer(targetServerId);
         return;
       }
       if (route.kind === "pause_pool") {
@@ -462,7 +450,9 @@ export function GlassesModeScreen() {
       onConnectAllServers,
       onDisconnectAllServers,
       onApproveReadyAgentsForFocusedServer,
+      onApproveReadyAgentsForServer,
       onDenyAllPendingAgentsForFocusedServer,
+      onDenyAllPendingAgentsForServer,
       onReconnectServer,
       onReconnectServers,
       onOpenServerSessionOnMac,
@@ -475,27 +465,6 @@ export function GlassesModeScreen() {
       routeTranscript,
     ]
   );
-
-  useEffect(() => {
-    if (!pendingAgentVoiceAction) {
-      return;
-    }
-    if (!focusedServerId || focusedServerId !== pendingAgentVoiceAction.targetServerId) {
-      return;
-    }
-
-    if (pendingAgentVoiceAction.kind === "approve_ready_agents") {
-      onApproveReadyAgentsForFocusedServer();
-    } else {
-      onDenyAllPendingAgentsForFocusedServer();
-    }
-    setPendingAgentVoiceAction(null);
-  }, [
-    focusedServerId,
-    onApproveReadyAgentsForFocusedServer,
-    onDenyAllPendingAgentsForFocusedServer,
-    pendingAgentVoiceAction,
-  ]);
 
   const stopVoiceForActivePanel = useCallback(() => {
     const panel = activePanelRef.current;

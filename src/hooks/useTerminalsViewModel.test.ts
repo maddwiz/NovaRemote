@@ -143,6 +143,12 @@ function makeBaseArgs() {
     reconnectAllServers: vi.fn(),
     connectAllServers: vi.fn(),
     disconnectAllServers: vi.fn(),
+    approveReadyAgentsForFocusedServer: vi.fn(() => []),
+    denyAllPendingAgentsForFocusedServer: vi.fn(() => []),
+    approveReadyAgentsForServer: vi.fn(async () => []),
+    denyAllPendingAgentsForServer: vi.fn(async () => []),
+    approveReadyAgentsForServers: vi.fn(async () => []),
+    denyAllPendingAgentsForServers: vi.fn(async () => []),
     editServer: vi.fn(),
     openSshFallback: vi.fn(async () => undefined),
     createLocalAiSession: vi.fn(),
@@ -300,5 +306,41 @@ describe("useTerminalsViewModel", () => {
 
     expect(connectAllServers).toHaveBeenCalledTimes(1);
     expect(disconnectAllServers).toHaveBeenCalledTimes(1);
+  });
+
+  it("routes server-scoped agent approval actions through async callbacks", async () => {
+    const approveReadyAgentsForServer = vi.fn(async (_serverId: string) => ["agent-a"]);
+    const denyAllPendingAgentsForServer = vi.fn(async (_serverId: string) => ["agent-b"]);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      approveReadyAgentsForServer,
+      denyAllPendingAgentsForServer,
+    });
+
+    await expect(model.onApproveReadyAgentsForServer("dgx")).resolves.toEqual(["agent-a"]);
+    await expect(model.onDenyAllPendingAgentsForServer("dgx")).resolves.toEqual(["agent-b"]);
+    expect(approveReadyAgentsForServer).toHaveBeenCalledWith("dgx");
+    expect(denyAllPendingAgentsForServer).toHaveBeenCalledWith("dgx");
+  });
+
+  it("deduplicates multi-server agent actions before dispatch", async () => {
+    const approveReadyAgentsForServers = vi.fn(async (_serverIds: string[]) => ["agent-1", "agent-2"]);
+    const denyAllPendingAgentsForServers = vi.fn(async (_serverIds: string[]) => ["agent-3"]);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      approveReadyAgentsForServers,
+      denyAllPendingAgentsForServers,
+    });
+
+    await expect(model.onApproveReadyAgentsForServers(["dgx", "dgx", " ", "cloud"])).resolves.toEqual([
+      "agent-1",
+      "agent-2",
+    ]);
+    await expect(model.onDenyAllPendingAgentsForServers(["cloud", "", "dgx", "cloud"])).resolves.toEqual([
+      "agent-3",
+    ]);
+
+    expect(approveReadyAgentsForServers).toHaveBeenCalledWith(["dgx", "cloud"]);
+    expect(denyAllPendingAgentsForServers).toHaveBeenCalledWith(["cloud", "dgx"]);
   });
 });
