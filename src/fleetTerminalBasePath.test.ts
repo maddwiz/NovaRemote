@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { resolveFleetTerminalApiBasePath } from "./fleetTerminalBasePath";
+import { resolveFleetTerminalApiBasePath, shouldAttemptFleetShellRun } from "./fleetTerminalBasePath";
 import { ServerConnection, ServerProfile } from "./types";
 
 function makeServer(id: string): ServerProfile {
@@ -83,5 +83,29 @@ describe("resolveFleetTerminalApiBasePath", () => {
     expect(result).toBe("/terminal");
     expect(detector).toHaveBeenCalledTimes(1);
     expect(detector).toHaveBeenCalledWith(server);
+  });
+});
+
+describe("shouldAttemptFleetShellRun", () => {
+  it("returns false when pooled capabilities explicitly disable shellRun", () => {
+    const server = makeServer("dgx");
+    const connections = new Map<string, ServerConnection>([[server.id, makeConnection(server, "/tmux")]]);
+
+    expect(shouldAttemptFleetShellRun({ serverId: server.id, connections })).toBe(false);
+  });
+
+  it("returns true when no pooled connection is available", () => {
+    const connections = new Map<string, ServerConnection>();
+
+    expect(shouldAttemptFleetShellRun({ serverId: "cloud", connections })).toBe(true);
+  });
+
+  it("returns true when pooled capabilities allow shellRun", () => {
+    const server = makeServer("lab");
+    const connection = makeConnection(server, "/terminal");
+    connection.capabilities.shellRun = true;
+    const connections = new Map<string, ServerConnection>([[server.id, connection]]);
+
+    expect(shouldAttemptFleetShellRun({ serverId: server.id, connections })).toBe(true);
   });
 });

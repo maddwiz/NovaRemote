@@ -131,4 +131,37 @@ describe("useConnectionPool multi-server reducer flows", () => {
     expect(degradedOne[cloud.id]?.status).toBe("connected");
     expect(degradedOne[cloud.id]?.activeStreamCount).toBe(1);
   });
+
+  it("bounds tail output size to the latest 1200 lines for snapshots and deltas", () => {
+    const dgx = makeServer("dgx", "DGX");
+    const initial = makeReadyPoolState(dgx);
+
+    const snapshotData = Array.from({ length: 1305 }, (_, index) => `line-${index}`).join("\n");
+    const afterSnapshot = connectionPoolTestUtils.reduceStreamMessage(
+      initial,
+      dgx.id,
+      "main",
+      { type: "snapshot", session: "main", data: snapshotData },
+      100
+    ).state;
+
+    const snapshotLines = (afterSnapshot[dgx.id]?.tails.main || "").split("\n");
+    expect(snapshotLines.length).toBe(1200);
+    expect(snapshotLines[0]).toBe("line-105");
+    expect(snapshotLines[snapshotLines.length - 1]).toBe("line-1304");
+
+    const deltaData = `\n${Array.from({ length: 10 }, (_, index) => `line-${1305 + index}`).join("\n")}`;
+    const afterDelta = connectionPoolTestUtils.reduceStreamMessage(
+      afterSnapshot,
+      dgx.id,
+      "main",
+      { type: "delta", session: "main", data: deltaData },
+      120
+    ).state;
+
+    const deltaLines = (afterDelta[dgx.id]?.tails.main || "").split("\n");
+    expect(deltaLines.length).toBe(1200);
+    expect(deltaLines[0]).toBe("line-115");
+    expect(deltaLines[deltaLines.length - 1]).toBe("line-1314");
+  });
 });

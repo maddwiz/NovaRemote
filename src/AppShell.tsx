@@ -71,7 +71,7 @@ import { useAnalytics } from "./hooks/useAnalytics";
 import { useReferrals } from "./hooks/useReferrals";
 import { useSharedProfiles } from "./hooks/useSharedProfiles";
 import { useTerminalsViewModel } from "./hooks/useTerminalsViewModel";
-import { resolveFleetTerminalApiBasePath } from "./fleetTerminalBasePath";
+import { resolveFleetTerminalApiBasePath, shouldAttemptFleetShellRun } from "./fleetTerminalBasePath";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -1232,18 +1232,25 @@ export default function AppShell() {
             });
 
             let output = "";
-            try {
-              const data = await apiRequest<{ output?: string }>(server.baseUrl, server.token, "/shell/run", {
-                method: "POST",
-                body: JSON.stringify({ session, command, wait_ms: waitMs, tail_lines: 280 }),
-              });
-              output = data.output || "";
-            } catch (shellError) {
-              const shellMessage = shellError instanceof Error ? shellError.message : String(shellError);
-              if (!shellMessage.startsWith("404")) {
-                throw shellError;
+            let shellRunSucceeded = false;
+            const tryShellRun = shouldAttemptFleetShellRun({ serverId: server.id, connections: poolConnections });
+            if (tryShellRun) {
+              try {
+                const data = await apiRequest<{ output?: string }>(server.baseUrl, server.token, "/shell/run", {
+                  method: "POST",
+                  body: JSON.stringify({ session, command, wait_ms: waitMs, tail_lines: 280 }),
+                });
+                output = data.output || "";
+                shellRunSucceeded = true;
+              } catch (shellError) {
+                const shellMessage = shellError instanceof Error ? shellError.message : String(shellError);
+                if (!shellMessage.startsWith("404")) {
+                  throw shellError;
+                }
               }
+            }
 
+            if (!shellRunSucceeded) {
               await apiRequest(server.baseUrl, server.token, `${terminalBasePath}/send`, {
                 method: "POST",
                 body: JSON.stringify({ session, text: command, enter: true }),

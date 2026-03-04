@@ -8,6 +8,11 @@ type ResolveFleetTerminalApiBasePathArgs = {
   detectApiBasePath: FleetApiPathDetector;
 };
 
+type ResolveFleetShellRunSupportArgs = {
+  serverId: string;
+  connections: Map<string, ServerConnection>;
+};
+
 export async function resolveFleetTerminalApiBasePath({
   server,
   connections,
@@ -18,4 +23,12 @@ export async function resolveFleetTerminalApiBasePath({
     return pooled.terminalApiBasePath;
   }
   return await detectApiBasePath(server);
+}
+
+export function shouldAttemptFleetShellRun({ serverId, connections }: ResolveFleetShellRunSupportArgs): boolean {
+  const pooled = connections.get(serverId);
+  if (!pooled) {
+    return true;
+  }
+  return pooled.capabilities.shellRun;
 }
