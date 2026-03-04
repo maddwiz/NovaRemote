@@ -30,5 +30,8 @@ export function shouldAttemptFleetShellRun({ serverId, connections }: ResolveFle
   if (!pooled) {
     return true;
   }
+  if (pooled.capabilitiesLoading) {
+    return true;
+  }
   return pooled.capabilities.shellRun;
 }

@@ -108,4 +108,14 @@ describe("shouldAttemptFleetShellRun", () => {
 
     expect(shouldAttemptFleetShellRun({ serverId: server.id, connections })).toBe(true);
   });
+
+  it("returns true while pooled capabilities are still loading", () => {
+    const server = makeServer("spark");
+    const connection = makeConnection(server, "/tmux");
+    connection.capabilitiesLoading = true;
+    connection.capabilities.shellRun = false;
+    const connections = new Map<string, ServerConnection>([[server.id, connection]]);
+
+    expect(shouldAttemptFleetShellRun({ serverId: server.id, connections })).toBe(true);
+  });
 });
