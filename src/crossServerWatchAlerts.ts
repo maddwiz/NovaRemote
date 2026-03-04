@@ -70,7 +70,7 @@ export function evaluateCrossServerWatchAlerts({
     matches.forEach(({ session, match }) => {
       notifications.push({
         serverId: server.id,
-        title: "Watch alert",
+        title: `[${server.name}] Watch alert`,
         body: formatWatchAlertMessage(session, match, server.name),
       });
     });

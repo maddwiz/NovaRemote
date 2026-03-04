@@ -108,7 +108,7 @@ describe("evaluateCrossServerWatchAlerts", () => {
     expect(result.notifications).toEqual([
       {
         serverId: homelab.id,
-        title: "Watch alert",
+        title: "[Homelab] Watch alert",
         body: "[Homelab] Watch alert on session main: ERROR: build failed",
       },
     ]);
