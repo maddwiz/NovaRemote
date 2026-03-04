@@ -212,4 +212,121 @@ describe("useVrWorkspace", () => {
       renderer?.unmount();
     });
   });
+
+  it("switches to custom preset when panel transforms are edited", async () => {
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 3, initialPreset: "arc" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const panelId = buildVrPanelId("dgx", "main");
+    await act(async () => {
+      current().updatePanelTransform(panelId, { x: 1.2, y: 1.9, yaw: 14 });
+    });
+
+    expect(current().preset).toBe("custom");
+    const panel = current().panels.find((entry) => entry.id === panelId);
+    expect(panel?.transform.x).toBe(1.2);
+    expect(panel?.transform.y).toBe(1.9);
+    expect(panel?.transform.yaw).toBe(14);
+
+    const snapshot = current().exportSnapshot();
+    expect(snapshot.preset).toBe("custom");
+    expect(snapshot.customTransforms?.[panelId]?.x).toBe(1.2);
+    expect(snapshot.customTransforms?.[panelId]?.yaw).toBe(14);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("restores custom snapshots with panel order, focus, pins, and transforms", async () => {
+    const dgx = makeServer("dgx", "DGX Spark");
+    const homelab = makeServer("home", "Homelab");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [homelab.id, makeConnection(homelab, ["build-01"])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections, maxPanels: 4, initialPreset: "grid" });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const homePanel = buildVrPanelId("home", "build-01");
+    const dgxPanel = buildVrPanelId("dgx", "main");
+
+    await act(async () => {
+      current().restoreSnapshot({
+        version: "1.0.0",
+        preset: "custom",
+        focusedPanelId: homePanel,
+        panelIds: [homePanel, dgxPanel],
+        pinnedPanelIds: [homePanel],
+        customTransforms: {
+          [homePanel]: { x: 0.4, y: 1.82, z: -1.5, yaw: 18, width: 1.3, height: 0.75 },
+        },
+      });
+    });
+
+    expect(current().preset).toBe("custom");
+    expect(current().focusedPanelId).toBe(homePanel);
+    expect(current().panels.map((panel) => panel.id)).toEqual([homePanel, dgxPanel]);
+    expect(current().panels.find((panel) => panel.id === homePanel)?.pinned).toBe(true);
+    expect(current().panels.find((panel) => panel.id === homePanel)?.transform).toMatchObject({
+      x: 0.4,
+      y: 1.82,
+      z: -1.5,
+      yaw: 18,
+      width: 1.3,
+      height: 0.75,
+    });
+
+    const exported = current().exportSnapshot();
+    expect(exported.panelIds).toEqual([homePanel, dgxPanel]);
+    expect(exported.focusedPanelId).toBe(homePanel);
+    expect(exported.pinnedPanelIds).toEqual([homePanel]);
+    expect(exported.customTransforms?.[homePanel]?.x).toBe(0.4);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
