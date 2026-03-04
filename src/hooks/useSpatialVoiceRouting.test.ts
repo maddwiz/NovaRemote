@@ -184,8 +184,18 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const approveReadyForAllServers = resolveSpatialVoiceRoute({
+      transcript: "approve ready agents for all servers",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
     const denyPendingForCloud = resolveSpatialVoiceRoute({
       transcript: "deny all pending agents for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const denyPendingForAllServers = resolveSpatialVoiceRoute({
+      transcript: "deny all pending agents for all",
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
@@ -279,9 +289,15 @@ describe("resolveSpatialVoiceRoute", () => {
       kind: "approve_ready_agents",
       panelId: "home::build-01",
     });
+    expect(approveReadyForAllServers).toEqual({
+      kind: "approve_ready_agents",
+    });
     expect(denyPendingForCloud).toEqual({
       kind: "deny_all_pending_agents",
       panelId: "cloud::deploy",
+    });
+    expect(denyPendingForAllServers).toEqual({
+      kind: "deny_all_pending_agents",
     });
     expect(createAgent).toEqual({
       kind: "create_agent",

@@ -331,10 +331,22 @@ describe("useVrWorkspace", () => {
       serverIds: ["home"],
     });
 
+    const approveAllServersAction = current().applyVoiceTranscript("approve ready agents for all servers");
+    expect(approveAllServersAction).toEqual({
+      kind: "approve_ready_agents",
+      serverIds: ["dgx", "home"],
+    });
+
     const denyDgxAction = current().applyVoiceTranscript("deny all pending agents for dgx spark");
     expect(denyDgxAction).toEqual({
       kind: "deny_all_pending_agents",
       serverIds: ["dgx"],
+    });
+
+    const denyAllServersAction = current().applyVoiceTranscript("deny pending agents for all");
+    expect(denyAllServersAction).toEqual({
+      kind: "deny_all_pending_agents",
+      serverIds: ["dgx", "home"],
     });
 
     const pausePoolAction = current().applyVoiceTranscript("pause all streams");

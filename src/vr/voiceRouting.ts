@@ -57,6 +57,22 @@ function ctrlKeyFromChar(char: string): string {
   return `C-${letter}`;
 }
 
+function isAllServersTarget(target: string): boolean {
+  const normalized = target
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  return (
+    normalized === "all" ||
+    normalized === "all server" ||
+    normalized === "all servers" ||
+    normalized === "every server" ||
+    normalized === "every servers" ||
+    normalized === "everywhere"
+  );
+}
+
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
   const cleaned = transcript.trim();
   if (cleaned) {
@@ -65,6 +81,9 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
     );
     if (approveReadyAgentsMatch) {
       const target = approveReadyAgentsMatch[1] || null;
+      if (target && isAllServersTarget(target)) {
+        return { kind: "approve_ready_agents" };
+      }
       const panelId = target ? resolvePanelId(panels, focusedPanelId, target) : null;
       if (target && !panelId) {
         return { kind: "none" };
@@ -77,6 +96,9 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
     );
     if (denyPendingAgentsMatch) {
       const target = denyPendingAgentsMatch[1] || null;
+      if (target && isAllServersTarget(target)) {
+        return { kind: "deny_all_pending_agents" };
+      }
       const panelId = target ? resolvePanelId(panels, focusedPanelId, target) : null;
       if (target && !panelId) {
         return { kind: "none" };

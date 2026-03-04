@@ -338,6 +338,9 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     if (!target) {
       return { kind: "approve_ready_agents" };
     }
+    if (isAllServersTarget(target)) {
+      return { kind: "approve_ready_agents" };
+    }
     const targetPanel = findPanelByTarget(panels, target);
     if (!targetPanel) {
       return { kind: "none" };
@@ -351,6 +354,9 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
   if (denyPendingAgentsMatch) {
     const target = denyPendingAgentsMatch[1]?.trim() || "";
     if (!target) {
+      return { kind: "deny_all_pending_agents" };
+    }
+    if (isAllServersTarget(target)) {
       return { kind: "deny_all_pending_agents" };
     }
     const targetPanel = findPanelByTarget(panels, target);
