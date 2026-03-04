@@ -86,6 +86,24 @@ describe("parseVrVoiceIntent", () => {
       panelId: "home-build",
       opacity: 0.2,
     });
+    expect(parseVrVoiceIntent("mini for dgx spark", PANELS, "home-build")).toEqual({
+      kind: "panel_mini",
+      panelId: "dgx-main",
+    });
+    expect(parseVrVoiceIntent("expand homelab", PANELS, "dgx-main")).toEqual({
+      kind: "panel_expand",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("opacity 67 for build worker", PANELS, "dgx-main")).toEqual({
+      kind: "panel_opacity",
+      panelId: "home-build",
+      opacity: 0.67,
+    });
+    expect(parseVrVoiceIntent("set homelab opacity to 45%", PANELS, "dgx-main")).toEqual({
+      kind: "panel_opacity",
+      panelId: "home-build",
+      opacity: 0.45,
+    });
   });
 
   it("falls back to focused panel when not explicitly routed", () => {

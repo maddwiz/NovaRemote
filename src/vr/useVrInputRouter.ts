@@ -200,6 +200,14 @@ export function useVrInputRouter({
         });
         return action;
       }
+      if (action.kind === "snap_layout") {
+        publishHudStatus({
+          message: `Snapped layout ${action.preset}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
       if (action.kind === "overview") {
         workspace.setOverviewMode?.(true);
         onSetOverviewMode?.(true);

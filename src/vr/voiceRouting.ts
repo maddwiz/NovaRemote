@@ -17,7 +17,14 @@ export function findVrPanelByTarget(panels: VrRoutePanel[], target: string): VrR
   return findPanelByTarget(panels, target);
 }
 
-function resolvePanelId(panels: VrRoutePanel[], focusedPanelId: string | null): string | null {
+function resolvePanelId(panels: VrRoutePanel[], focusedPanelId: string | null, target?: string | null): string | null {
+  const cleanedTarget = target?.trim() || "";
+  if (cleanedTarget) {
+    const targetPanel = findVrPanelByTarget(panels, cleanedTarget);
+    if (targetPanel) {
+      return targetPanel.id;
+    }
+  }
   if (focusedPanelId && panels.some((panel) => panel.id === focusedPanelId)) {
     return focusedPanelId;
   }
@@ -26,18 +33,59 @@ function resolvePanelId(panels: VrRoutePanel[], focusedPanelId: string | null): 
 
 export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
   const cleaned = transcript.trim();
-  const panelId = resolvePanelId(panels, focusedPanelId);
-  if (cleaned && panelId) {
-    if (/^(?:mini|mini panel|minimize panel)$/i.test(cleaned)) {
+  if (cleaned) {
+    const miniMatch = cleaned.match(
+      /^(?:mini panel|mini|minimize panel|minimize)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+    );
+    if (miniMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, miniMatch[1] || miniMatch[2] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
       return { kind: "panel_mini", panelId };
     }
-    if (/^(?:expand|expand panel|maximize panel)$/i.test(cleaned)) {
+
+    const expandMatch = cleaned.match(
+      /^(?:expand panel|expand|maximize panel|maximize)(?:\s+(?:for|on)\s+(.+)|\s+(.+))?$/i
+    );
+    if (expandMatch) {
+      const panelId = resolvePanelId(panels, focusedPanelId, expandMatch[1] || expandMatch[2] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
       return { kind: "panel_expand", panelId };
     }
+
+    const opacityWithTarget = cleaned.match(/^(?:set\s+)?opacity(?:\s+to)?\s+(\d{1,3})%?\s+(?:for|on)\s+(.+)$/i);
+    if (opacityWithTarget) {
+      const raw = Number.parseInt(opacityWithTarget[1] || "0", 10);
+      const opacity = Math.max(0.2, Math.min(raw / 100, 1));
+      const panelId = resolvePanelId(panels, focusedPanelId, opacityWithTarget[2] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "panel_opacity", panelId, opacity };
+    }
+
+    const targetThenOpacity = cleaned.match(/^set\s+(.+?)\s+opacity(?:\s+to)?\s+(\d{1,3})%?$/i);
+    if (targetThenOpacity) {
+      const raw = Number.parseInt(targetThenOpacity[2] || "0", 10);
+      const opacity = Math.max(0.2, Math.min(raw / 100, 1));
+      const panelId = resolvePanelId(panels, focusedPanelId, targetThenOpacity[1] || null);
+      if (!panelId) {
+        return { kind: "none" };
+      }
+      return { kind: "panel_opacity", panelId, opacity };
+    }
+
     const opacityMatch = cleaned.match(/^(?:set\s+)?opacity(?:\s+to)?\s+(\d{1,3})%?$/i);
     if (opacityMatch) {
       const raw = Number.parseInt(opacityMatch[1] || "0", 10);
       const opacity = Math.max(0.2, Math.min(raw / 100, 1));
+      const panelId = resolvePanelId(panels, focusedPanelId);
+      if (!panelId) {
+        return { kind: "none" };
+      }
       return { kind: "panel_opacity", panelId, opacity };
     }
   }

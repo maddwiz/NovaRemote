@@ -1,4 +1,4 @@
-import { VrPanelState, VrPanelTransform } from "./contracts";
+import { VrLayoutPreset, VrPanelState, VrPanelTransform } from "./contracts";
 
 export type VrGestureDirection = "left" | "right";
 
@@ -14,7 +14,8 @@ export type VrGestureEvent =
     }
   | { kind: "pinch_resize"; panelId?: string; scale?: number }
   | { kind: "spread_overview" }
-  | { kind: "fist_pull_rotate"; direction?: VrGestureDirection; deltaX?: number };
+  | { kind: "fist_pull_rotate"; direction?: VrGestureDirection; deltaX?: number }
+  | { kind: "snap_layout"; preset?: Exclude<VrLayoutPreset, "custom"> };
 
 export type VrGestureAction =
   | { kind: "none" }
@@ -22,6 +23,7 @@ export type VrGestureAction =
   | { kind: "move"; panelId: string; patch: Partial<VrPanelTransform> }
   | { kind: "resize"; panelId: string; patch: Partial<VrPanelTransform> }
   | { kind: "overview" }
+  | { kind: "snap_layout"; preset: Exclude<VrLayoutPreset, "custom"> }
   | { kind: "rotate_workspace"; direction: VrGestureDirection };
 
 const MIN_WIDTH = 0.6;
@@ -62,6 +64,13 @@ export function resolveVrGestureAction({
   panels,
   focusedPanelId,
 }: ResolveVrGestureActionArgs): VrGestureAction {
+  if (event.kind === "snap_layout") {
+    return {
+      kind: "snap_layout",
+      preset: event.preset || "arc",
+    };
+  }
+
   if (event.kind === "spread_overview") {
     return { kind: "overview" };
   }

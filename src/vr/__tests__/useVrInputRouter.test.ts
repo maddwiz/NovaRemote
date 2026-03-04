@@ -298,6 +298,47 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("records snap layout HUD status for gesture layout actions", async () => {
+    const applyVoiceTranscript = vi.fn<
+      (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction
+    >(() => ({ kind: "none" }));
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({
+      kind: "snap_layout",
+      preset: "grid",
+    }));
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      current().dispatchGesture({ kind: "snap_layout", preset: "grid" });
+    });
+
+    expect(current().hudStatus?.message).toContain("Snapped layout grid");
+    expect(current().hudStatus?.severity).toBe("info");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("auto-clears HUD status after the configured timeout", async () => {
     vi.useFakeTimers();
     const applyVoiceTranscript = vi.fn<

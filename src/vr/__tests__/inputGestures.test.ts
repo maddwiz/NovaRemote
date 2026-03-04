@@ -89,6 +89,16 @@ describe("resolveVrGestureAction", () => {
 
     expect(action).toEqual({ kind: "overview" });
   });
+
+  it("maps snap layout gestures to preset actions", () => {
+    const action = resolveVrGestureAction({
+      event: { kind: "snap_layout", preset: "grid" },
+      panels: [makePanel("a")],
+      focusedPanelId: "a",
+    });
+
+    expect(action).toEqual({ kind: "snap_layout", preset: "grid" });
+  });
 });
 
 describe("inputGesturesTestUtils", () => {

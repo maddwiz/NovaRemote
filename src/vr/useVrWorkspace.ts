@@ -703,6 +703,10 @@ export function useVrWorkspace({
         rotateWorkspace(action.direction);
         return action;
       }
+      if (action.kind === "snap_layout") {
+        setPreset(action.preset);
+        return action;
+      }
       if (action.kind === "overview") {
         setOverviewMode(true);
         return action;

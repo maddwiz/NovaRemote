@@ -578,6 +578,12 @@ describe("useVrWorkspace", () => {
     expect(rotatedOrder).toEqual(vrWorkspaceTestUtils.rotateOrder(firstOrder, "left"));
 
     await act(async () => {
+      const snapAction = current().applyGesture({ kind: "snap_layout", preset: "grid" });
+      expect(snapAction).toEqual({ kind: "snap_layout", preset: "grid" });
+    });
+    expect(current().preset).toBe("grid");
+
+    await act(async () => {
       renderer?.unmount();
     });
   });
@@ -682,6 +688,12 @@ describe("useVrWorkspace", () => {
       expect(action).toEqual({ kind: "panel_expand", panelId });
     });
     expect(current().panels.find((panel) => panel.id === panelId)?.mini).toBe(false);
+
+    await act(async () => {
+      const action = current().applyVoiceTranscript("mini for dgx");
+      expect(action).toEqual({ kind: "panel_mini", panelId });
+    });
+    expect(current().panels.find((panel) => panel.id === panelId)?.mini).toBe(true);
 
     await act(async () => {
       renderer?.unmount();
