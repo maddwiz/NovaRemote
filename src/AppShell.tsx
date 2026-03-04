@@ -71,6 +71,7 @@ import { useAnalytics } from "./hooks/useAnalytics";
 import { useReferrals } from "./hooks/useReferrals";
 import { useSharedProfiles } from "./hooks/useSharedProfiles";
 import { useTerminalsViewModel } from "./hooks/useTerminalsViewModel";
+import { resolveFleetTerminalApiBasePath } from "./fleetTerminalBasePath";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -1219,8 +1220,11 @@ export default function AppShell() {
           const cwd = fleetCwd.trim() || server.defaultCwd || DEFAULT_CWD;
           const session = makeFleetSessionName();
           try {
-            const pooledConnection = poolConnections.get(server.id);
-            const terminalBasePath = pooledConnection?.terminalApiBasePath ?? (await detectTerminalApiBasePath(server));
+            const terminalBasePath = await resolveFleetTerminalApiBasePath({
+              server,
+              connections: poolConnections,
+              detectApiBasePath: detectTerminalApiBasePath,
+            });
 
             await apiRequest(server.baseUrl, server.token, `${terminalBasePath}/session`, {
               method: "POST",
