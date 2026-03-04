@@ -274,10 +274,9 @@ export function TerminalsScreen() {
     onSetSessionAlias,
     onAutoNameSession,
     onSetDraft,
-    onSetServerSessionDraft,
     onAdaptDraftForBackend,
     onSendControlChar,
-    onSendServerSessionDraft,
+    onSendServerSessionCommand,
     onSend,
     onClearDraft,
     onTogglePinSession,
@@ -367,10 +366,7 @@ export function TerminalsScreen() {
     if (!focusedServerId || !session || !command.trim()) {
       return;
     }
-    onSetServerSessionDraft(focusedServerId, session, command);
-    setTimeout(() => {
-      void onSendServerSessionDraft(focusedServerId, session);
-    }, 0);
+    onSendServerSessionCommand(focusedServerId, session, command, "shell");
   };
 
   const onStartPromptKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {

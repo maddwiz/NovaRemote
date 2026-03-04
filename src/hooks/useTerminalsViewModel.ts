@@ -4,7 +4,7 @@ import { Share } from "react-native";
 import { apiRequest } from "../api/client";
 import { TerminalsViewModel } from "../context/AppContext";
 import { DEFAULT_SPECTATE_TTL_SECONDS, FREE_SESSION_LIMIT, isLikelyAiSession } from "../constants";
-import { ProcessSignal } from "../types";
+import { ProcessSignal, TerminalSendMode } from "../types";
 
 export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsViewModel {
   const {
@@ -109,6 +109,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     setDrafts,
     setServerSessionDraft,
     sendServerSessionDraft,
+    sendServerSessionCommand,
     clearServerSessionDraft,
     sendServerSessionControlChar,
     recallNext,
@@ -572,6 +573,50 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         return;
       }
       void runWithStatus(`Sending to ${session}`, async () => {
+        const sent = await handleSend(session);
+        if (sent) {
+          await addCommand(session, sent);
+        }
+      });
+    },
+    onSendServerSessionCommand: (serverId, session, command, mode) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+      void runWithStatus(`Sending to ${session}`, async () => {
+        const trimmed = command.trim();
+        if (!trimmed) {
+          return;
+        }
+
+        const connection = connections.get(serverId);
+        const resolvedMode: TerminalSendMode =
+          mode || connection?.sendModes?.[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+
+        if (resolvedMode === "shell") {
+          const approved = await requestDangerApproval(trimmed, `Send to ${session}`);
+          if (!approved) {
+            return;
+          }
+        }
+
+        if (typeof sendServerSessionCommand === "function") {
+          await sendServerSessionCommand(serverId, session, trimmed, resolvedMode);
+          return;
+        }
+
+        if (typeof setServerSessionDraft === "function") {
+          setServerSessionDraft(serverId, session, trimmed);
+        } else if (activeServer?.id === serverId) {
+          setDrafts((prev: any) => ({ ...prev, [session]: trimmed }));
+        }
+
+        if (typeof sendServerSessionDraft === "function") {
+          await sendServerSessionDraft(serverId, session);
+          return;
+        }
+
+        if (activeServer?.id !== serverId) {
+          throw new Error("Focus the target server before sending direct commands.");
+        }
         const sent = await handleSend(session);
         if (sent) {
           await addCommand(session, sent);

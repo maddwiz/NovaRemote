@@ -124,6 +124,12 @@ export type TerminalsViewModel = {
   onSendServerSessionControlChar: (serverId: string, session: string, char: string) => void;
   onSend: (session: string) => void;
   onSendServerSessionDraft: (serverId: string, session: string) => void;
+  onSendServerSessionCommand: (
+    serverId: string,
+    session: string,
+    command: string,
+    mode?: TerminalSendMode
+  ) => void;
   onClearDraft: (session: string) => void;
   onClearServerSessionDraft: (serverId: string, session: string) => void;
   onTogglePinSession: (session: string) => void;

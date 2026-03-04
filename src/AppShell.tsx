@@ -1591,6 +1591,24 @@ export default function AppShell() {
     [poolConnections, sendTextToServerSession]
   );
 
+  const sendServerSessionCommand = useCallback(
+    async (serverId: string, session: string, command: string, mode?: TerminalSendMode) => {
+      const targetConnection = poolConnections.get(serverId);
+      if (!targetConnection) {
+        throw new Error("Selected server is not available.");
+      }
+
+      const trimmed = command.trim();
+      if (!trimmed) {
+        return;
+      }
+
+      const resolvedMode = mode || targetConnection.sendModes[session] || (isLikelyAiSession(session) ? "ai" : "shell");
+      await sendTextToServerSession(serverId, session, trimmed, resolvedMode, true);
+    },
+    [poolConnections, sendTextToServerSession]
+  );
+
   const sendServerSessionControlChar = useCallback(
     async (serverId: string, session: string, char: string) => {
       const targetConnection = poolConnections.get(serverId);
@@ -2340,6 +2358,7 @@ export default function AppShell() {
     setDrafts,
     setServerSessionDraft,
     sendServerSessionDraft,
+    sendServerSessionCommand,
     clearServerSessionDraft,
     sendServerSessionControlChar,
     recallNext,
