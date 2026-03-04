@@ -14,10 +14,10 @@ import { SpatialPanel, SpatialTerminalLayout } from "../components/SpatialTermin
 import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
 import { SpatialLayoutSnapshot, useSpatialLayoutPrefs } from "../hooks/useSpatialLayoutPrefs";
-import { useSpatialVoiceRouting } from "../hooks/useSpatialVoiceRouting";
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
+import { parseVrVoiceIntent, VrRoutePanel } from "../vr/voiceRouting";
 
 type SpatialPanelCandidate = {
   id: string;
@@ -342,16 +342,17 @@ export function GlassesModeScreen() {
     return allPanels.filter((panel) => !panelIds.includes(panel.id));
   }, [allPanels, panelIds]);
 
-  const { routeTranscript } = useSpatialVoiceRouting({
-    panels: allPanels.map((panel) => ({
-      id: panel.id,
-      serverId: panel.serverId,
-      serverName: panel.serverName,
-      session: panel.session,
-      sessionLabel: panel.sessionLabel,
-    })),
-    focusedPanelId,
-  });
+  const routePanels = useMemo<VrRoutePanel[]>(
+    () =>
+      allPanels.map((panel) => ({
+        id: panel.id,
+        serverId: panel.serverId,
+        serverName: panel.serverName,
+        session: panel.session,
+        sessionLabel: panel.sessionLabel,
+      })),
+    [allPanels]
+  );
 
   const panelUniverseIds = useMemo(() => allPanels.map((panel) => panel.id), [allPanels]);
   const serverScopeIds = useMemo(
@@ -386,12 +387,12 @@ export function GlassesModeScreen() {
 
   const applyTranscriptRoute = useCallback(
     (transcript: string, autoSend: boolean) => {
-      const route = routeTranscript(transcript);
-      if (route.kind === "focus_panel") {
+      const route = parseVrVoiceIntent(transcript, routePanels, focusedPanelId);
+      if (route.kind === "focus") {
         setFocusedPanelId(route.panelId);
         return;
       }
-      if (route.kind === "show_all") {
+      if (route.kind === "overview") {
         setOverviewMode(true);
         return;
       }
@@ -410,7 +411,7 @@ export function GlassesModeScreen() {
         setFocusedPanelId(panelIds[nextIndex]);
         return;
       }
-      if (route.kind !== "send_command") {
+      if (route.kind !== "send") {
         return;
       }
       const target = panelMap.get(route.panelId);
@@ -422,7 +423,7 @@ export function GlassesModeScreen() {
         onSendServerSessionCommand(target.serverId, target.session, route.command, "ai");
       }
     },
-    [focusedPanelId, onSendServerSessionCommand, onSetServerSessionDraft, panelIds, panelMap, routeTranscript]
+    [focusedPanelId, onSendServerSessionCommand, onSetServerSessionDraft, panelIds, panelMap, routePanels]
   );
 
   const stopVoiceForActivePanel = useCallback(() => {

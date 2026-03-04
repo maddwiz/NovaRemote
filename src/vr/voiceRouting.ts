@@ -11,6 +11,7 @@ export type VrVoiceIntent =
   | { kind: "focus"; panelId: string }
   | { kind: "send"; panelId: string; command: string }
   | { kind: "overview" }
+  | { kind: "minimize" }
   | { kind: "rotate_workspace"; direction: "left" | "right" };
 
 function normalize(value: string): string {
@@ -61,6 +62,14 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
   const normalized = normalize(raw);
   if (normalized === "overview" || normalized === "show all" || normalized === "show overview") {
     return { kind: "overview" };
+  }
+  if (
+    normalized === "minimize" ||
+    normalized === "minimize panels" ||
+    normalized === "focus mode" ||
+    normalized === "single panel"
+  ) {
+    return { kind: "minimize" };
   }
   if (normalized === "rotate left") {
     return { kind: "rotate_workspace", direction: "left" };

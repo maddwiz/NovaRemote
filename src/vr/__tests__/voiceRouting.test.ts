@@ -44,6 +44,7 @@ describe("parseVrVoiceIntent", () => {
 
   it("handles workspace overview and rotate", () => {
     expect(parseVrVoiceIntent("show all", PANELS, "dgx-main")).toEqual({ kind: "overview" });
+    expect(parseVrVoiceIntent("focus mode", PANELS, "dgx-main")).toEqual({ kind: "minimize" });
     expect(parseVrVoiceIntent("rotate left", PANELS, "dgx-main")).toEqual({
       kind: "rotate_workspace",
       direction: "left",
