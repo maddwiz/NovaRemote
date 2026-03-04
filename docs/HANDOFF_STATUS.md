@@ -27,6 +27,7 @@ Updated: 2026-03-04
 - [x] Workspace and VM host scoping in glasses flow
 - [x] Brand expansions (`meta_orion`, `meta_ray_ban`, `viture_pro`)
 - [x] Voice-channel controls and role-gated channel management in glasses route
+- [x] Voice `share live` / spectator-link routing in glasses + VR
 
 ## v1.4 VR Command Center
 
