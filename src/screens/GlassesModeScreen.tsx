@@ -533,6 +533,39 @@ export function GlassesModeScreen() {
     [panelMap]
   );
 
+  const addPanelToLayout = useCallback(
+    (panelId: string) => {
+      const targetPanel = panelMap.get(panelId);
+      if (!targetPanel) {
+        return;
+      }
+      setPanelIds((previous) => {
+        if (previous.includes(panelId)) {
+          return previous;
+        }
+        if (previous.length < maxPanels) {
+          return [...previous, panelId];
+        }
+        const removable = previous.find((entry) => entry !== focusedPanelId && !pinnedPanelIds.includes(entry));
+        if (!removable) {
+          return previous;
+        }
+        return previous.map((entry) => (entry === removable ? panelId : entry));
+      });
+      setFocusedPanelId(targetPanel.id);
+    },
+    [focusedPanelId, maxPanels, panelMap, pinnedPanelIds]
+  );
+
+  const removePanelFromLayout = useCallback(
+    (panelId: string) => {
+      unpinPanel(panelId);
+      setPanelIds((previous) => previous.filter((entry) => entry !== panelId));
+      setFocusedPanelId((previous) => (previous === panelId ? null : previous));
+    },
+    [unpinPanel]
+  );
+
   const applyTranscriptRoute = useCallback(
     (transcript: string, autoSend: boolean) => {
       const scopeRoute = resolveGlassesScopeRoute({
@@ -874,6 +907,40 @@ export function GlassesModeScreen() {
         setRouteStatus(`Requested live link for ${target.serverName} ${target.sessionLabel}`);
         return;
       }
+      if (route.kind === "add_panel") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        const alreadyVisible = panelIds.includes(target.id);
+        const canSwap = panelIds.some((panelId) => panelId !== focusedPanelId && !pinnedPanelIds.includes(panelId));
+        const canAdd = alreadyVisible || panelIds.length < maxPanels || canSwap;
+        if (!canAdd) {
+          setRouteStatus("All visible panels are pinned. Unpin one panel before adding another.");
+          return;
+        }
+        addPanelToLayout(target.id);
+        setRouteStatus(
+          alreadyVisible
+            ? `Focused ${target.serverName} ${target.sessionLabel}`
+            : `Added ${target.serverName} ${target.sessionLabel} to HUD`
+        );
+        return;
+      }
+      if (route.kind === "remove_panel") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        const wasVisible = panelIds.includes(target.id);
+        if (!wasVisible) {
+          setRouteStatus(`${target.serverName} ${target.sessionLabel} is already hidden.`);
+          return;
+        }
+        removePanelFromLayout(target.id);
+        setRouteStatus(`Removed ${target.serverName} ${target.sessionLabel} from HUD`);
+        return;
+      }
       if (route.kind === "pin_panel") {
         const target = panelMap.get(route.panelId);
         if (!target) {
@@ -921,6 +988,7 @@ export function GlassesModeScreen() {
       onDenyAllPendingAgentsForServer,
       onApproveReadyAgentsForServers,
       onDenyAllPendingAgentsForServers,
+      addPanelToLayout,
       onReconnectServer,
       onReconnectServers,
       onOpenServerSessionOnMac,
@@ -935,6 +1003,7 @@ export function GlassesModeScreen() {
       routeTranscript,
       sharedWorkspaces,
       unpinPanel,
+      removePanelFromLayout,
       activeWorkspaceId,
       createChannel,
       deleteChannel,
@@ -1307,23 +1376,7 @@ export function GlassesModeScreen() {
                   key={`add-panel-${panel.id}`}
                   style={styles.chip}
                   onPress={() => {
-                    setPanelIds((previous) => {
-                      if (previous.includes(panel.id)) {
-                        return previous;
-                      }
-                      const limit = Math.max(1, Math.min(brandProfile.maxPanels, 6));
-                      if (previous.length < limit) {
-                        return [...previous, panel.id];
-                      }
-                      const removable = previous.find(
-                        (panelId) => panelId !== focusedPanelId && !pinnedPanelIds.includes(panelId)
-                      );
-                      if (!removable) {
-                        return previous;
-                      }
-                      return previous.map((panelId) => (panelId === removable ? panel.id : panelId));
-                    });
-                    setFocusedPanelId(panel.id);
+                    addPanelToLayout(panel.id);
                   }}
                 >
                   <Text style={styles.chipText}>{`+ ${panel.serverName} / ${panel.sessionLabel}`}</Text>
@@ -1350,8 +1403,7 @@ export function GlassesModeScreen() {
             pinPanel(panelId);
           }}
           onRemovePanel={(panelId) => {
-            unpinPanel(panelId);
-            setPanelIds((previous) => previous.filter((entry) => entry !== panelId));
+            removePanelFromLayout(panelId);
           }}
           onCyclePanel={cyclePanels}
         />

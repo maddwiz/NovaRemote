@@ -211,6 +211,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "home::build-01",
     });
+    const addPanel = resolveSpatialVoiceRoute({
+      transcript: "add panel for homelab",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const removePanel = resolveSpatialVoiceRoute({
+      transcript: "hide panel for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
     const pausePool = resolveSpatialVoiceRoute({
       transcript: "pause all streams",
       panels: PANELS,
@@ -340,6 +350,14 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(unpinFocused).toEqual({
       kind: "unpin_panel",
       panelId: "home::build-01",
+    });
+    expect(addPanel).toEqual({
+      kind: "add_panel",
+      panelId: "home::build-01",
+    });
+    expect(removePanel).toEqual({
+      kind: "remove_panel",
+      panelId: "cloud::deploy",
     });
     expect(pausePool).toEqual({
       kind: "pause_pool",

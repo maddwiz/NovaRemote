@@ -62,6 +62,8 @@ export type VrWorkspaceVoiceAction =
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
   | { kind: "panel_pin"; panelId: string }
   | { kind: "panel_unpin"; panelId: string }
+  | { kind: "panel_add"; panelId: string }
+  | { kind: "panel_remove"; panelId: string }
   | { kind: "panel_mini"; panelId: string }
   | { kind: "panel_expand"; panelId: string }
   | { kind: "panel_opacity"; panelId: string; opacity: number }
@@ -97,7 +99,7 @@ export type UseVrWorkspaceResult = {
   setOverviewMode: (enabled: boolean) => void;
   focusPanel: (panelId: string) => void;
   rotateWorkspace: (direction: "left" | "right") => void;
-  addPanel: (serverId: string, session: string) => void;
+  addPanel: (serverId: string, session: string, focus?: boolean) => void;
   removePanel: (panelId: string) => void;
   togglePinPanel: (panelId: string) => void;
   setPanelMini: (panelId: string, mini: boolean) => void;
@@ -427,21 +429,18 @@ export function useVrWorkspace({
 
   const routePanels = useMemo<VrRoutePanel[]>(
     () =>
-      panels.map((panel) => {
-        const source = universeById.get(panel.id);
-        return {
-          id: panel.id,
-          serverId: panel.serverId,
-          serverName: panel.serverName,
-          vmHost: source?.vmHost,
-          vmType: source?.vmType,
-          vmName: source?.vmName,
-          vmId: source?.vmId,
-          session: panel.session,
-          sessionLabel: panel.sessionLabel,
-        };
-      }),
-    [panels, universeById]
+      universe.map((panel) => ({
+        id: panel.id,
+        serverId: panel.serverId,
+        serverName: panel.serverName,
+        vmHost: panel.vmHost,
+        vmType: panel.vmType,
+        vmName: panel.vmName,
+        vmId: panel.vmId,
+        session: panel.session,
+        sessionLabel: panel.sessionLabel,
+      })),
+    [universe]
   );
 
   const focusPanel = useCallback((panelId: string) => {
@@ -456,7 +455,7 @@ export function useVrWorkspace({
   }, []);
 
   const addPanel = useCallback(
-    (serverId: string, session: string) => {
+    (serverId: string, session: string, focus = true) => {
       const panelId = buildVrPanelId(serverId, session);
       if (!universeById.has(panelId)) {
         return;
@@ -468,14 +467,16 @@ export function useVrWorkspace({
         const next = [...prev, panelId];
         return applyPanelLimit(next, pinnedPanelIds, panelLimit, panelId);
       });
-      setFocusedPanelId(panelId);
+      if (focus) {
+        setFocusedPanelId(panelId);
+      }
     },
     [panelLimit, pinnedPanelIds, universeById]
   );
 
   const removePanel = useCallback((panelId: string) => {
     setPanelIds((prev) => prev.filter((id) => id !== panelId));
-    setPinnedPanelIds((prev) => prev.filter((id) => id !== panelId));
+    setPinnedPanelIds((prev) => (prev.includes(panelId) ? prev.filter((id) => id !== panelId) : prev));
     setPanelVisuals((prev) => {
       if (!(panelId in prev)) {
         return prev;
@@ -726,8 +727,13 @@ export function useVrWorkspace({
         return firstPanel ? universeById.get(firstPanel.id) || null : null;
       };
       if (intent.kind === "focus") {
-        focusPanel(intent.panelId);
-        return { kind: "focus", panelId: intent.panelId };
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        addPanel(panel.serverId, panel.session);
+        focusPanel(panel.id);
+        return { kind: "focus", panelId: panel.id };
       }
       if (intent.kind === "reconnect_server") {
         const panel = universeById.get(intent.panelId);
@@ -895,6 +901,22 @@ export function useVrWorkspace({
         setPanelPinned(intent.panelId, false);
         return { kind: "panel_unpin", panelId: intent.panelId };
       }
+      if (intent.kind === "panel_add") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        addPanel(panel.serverId, panel.session, false);
+        return { kind: "panel_add", panelId: panel.id };
+      }
+      if (intent.kind === "panel_remove") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        removePanel(panel.id);
+        return { kind: "panel_remove", panelId: panel.id };
+      }
       if (intent.kind === "panel_mini") {
         setPanelMini(intent.panelId, true);
         return { kind: "panel_mini", panelId: intent.panelId };
@@ -925,6 +947,8 @@ export function useVrWorkspace({
     [
       focusPanel,
       focusedPanelId,
+      addPanel,
+      removePanel,
       rotateWorkspace,
       routePanels,
       serverScopeIds,

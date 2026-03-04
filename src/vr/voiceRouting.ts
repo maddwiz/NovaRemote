@@ -22,6 +22,8 @@ export type VrVoiceIntent =
   | { kind: "share_live"; panelId: string }
   | { kind: "panel_pin"; panelId: string }
   | { kind: "panel_unpin"; panelId: string }
+  | { kind: "panel_add"; panelId: string }
+  | { kind: "panel_remove"; panelId: string }
   | { kind: "overview" }
   | { kind: "minimize" }
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
@@ -379,6 +381,18 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
   if (route.kind === "unpin_panel") {
     return {
       kind: "panel_unpin",
+      panelId: route.panelId,
+    };
+  }
+  if (route.kind === "add_panel") {
+    return {
+      kind: "panel_add",
+      panelId: route.panelId,
+    };
+  }
+  if (route.kind === "remove_panel") {
+    return {
+      kind: "panel_remove",
       panelId: route.panelId,
     };
   }

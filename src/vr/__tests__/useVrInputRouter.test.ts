@@ -605,6 +605,8 @@ describe("useVrInputRouter", () => {
       .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
       .mockReturnValueOnce({ kind: "panel_pin", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_unpin", panelId: "dgx::main" })
+      .mockReturnValueOnce({ kind: "panel_add", panelId: "home::build" })
+      .mockReturnValueOnce({ kind: "panel_remove", panelId: "home::build" })
       .mockReturnValueOnce({ kind: "panel_mini", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_expand", panelId: "dgx::main" })
       .mockReturnValueOnce({ kind: "panel_opacity", panelId: "dgx::main", opacity: 0.45 });
@@ -639,6 +641,16 @@ describe("useVrInputRouter", () => {
       await current().dispatchVoice("unpin panel");
     });
     expect(current().hudStatus?.message).toContain("Unpinned panel dgx::main");
+
+    await act(async () => {
+      await current().dispatchVoice("add panel for home");
+    });
+    expect(current().hudStatus?.message).toContain("Added panel home::build");
+
+    await act(async () => {
+      await current().dispatchVoice("remove panel for home");
+    });
+    expect(current().hudStatus?.message).toContain("Removed panel home::build");
 
     await act(async () => {
       await current().dispatchVoice("mini panel");

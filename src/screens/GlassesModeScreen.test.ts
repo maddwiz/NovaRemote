@@ -591,6 +591,68 @@ describe("GlassesModeScreen", () => {
     });
   });
 
+  it("routes spatial add/remove panel commands to the HUD layout", async () => {
+    const routeTranscript = vi
+      .fn<(transcript: string) => { kind: string; panelId?: string }>()
+      .mockReturnValueOnce({ kind: "remove_panel", panelId: "home::build" })
+      .mockReturnValueOnce({ kind: "add_panel", panelId: "home::build" });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "hide panel for home",
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(() => screen.root.findByProps({ children: "Removed Home build from HUD" })).not.toThrow();
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "add panel for home",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(() => screen.root.findByProps({ children: "Added Home build to HUD" })).not.toThrow();
+    expect(routeTranscript).toHaveBeenNthCalledWith(1, "hide panel for home");
+    expect(routeTranscript).toHaveBeenNthCalledWith(2, "add panel for home");
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
   it("handles voice channel create commands with explicit workspace targeting", async () => {
     const createChannel = vi.fn((input: { workspaceId: string; name: string }) => ({
       id: "voice-2",

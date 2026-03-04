@@ -601,6 +601,24 @@ export function useVrInputRouter({
         return action;
       }
 
+      if (action.kind === "panel_add") {
+        publishHudStatus({
+          message: `Added panel ${action.panelId}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+
+      if (action.kind === "panel_remove") {
+        publishHudStatus({
+          message: `Removed panel ${action.panelId}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+
       if (action.kind === "panel_mini") {
         publishHudStatus({
           message: `Mini panel ${action.panelId}`,

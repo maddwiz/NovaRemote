@@ -247,6 +247,26 @@ describe("useVrWorkspace", () => {
       session: "build-01",
     });
 
+    let removePanelAction: ReturnType<UseVrWorkspaceResult["applyVoiceTranscript"]> = { kind: "none" };
+    await act(async () => {
+      removePanelAction = current().applyVoiceTranscript("remove panel for homelab");
+    });
+    expect(removePanelAction).toEqual({
+      kind: "panel_remove",
+      panelId: buildVrPanelId("home", "build-01"),
+    });
+    expect(current().panels.some((panel) => panel.id === buildVrPanelId("home", "build-01"))).toBe(false);
+
+    let addPanelAction: ReturnType<UseVrWorkspaceResult["applyVoiceTranscript"]> = { kind: "none" };
+    await act(async () => {
+      addPanelAction = current().applyVoiceTranscript("add panel for homelab");
+    });
+    expect(addPanelAction).toEqual({
+      kind: "panel_add",
+      panelId: buildVrPanelId("home", "build-01"),
+    });
+    expect(current().panels.some((panel) => panel.id === buildVrPanelId("home", "build-01"))).toBe(true);
+
     const reconnectServerAction = current().applyVoiceTranscript("reconnect homelab");
     expect(reconnectServerAction).toEqual({
       kind: "reconnect_server",
