@@ -988,6 +988,7 @@ export function useConnectionPool({
   const serverFingerprintRef = useRef<Record<string, string>>({});
   const lifecyclePausedRef = useRef(false);
   const healthPingInFlightRef = useRef(false);
+  const healthPingTriggerRef = useRef<(() => Promise<void>) | null>(null);
   const pollInFlightRef = useRef<Set<string>>(new Set());
   const sendInFlightRef = useRef<Set<string>>(new Set());
 
@@ -1807,6 +1808,15 @@ export function useConnectionPool({
     };
   }, [enabled, fetchTail]);
 
+  const healthScopeKey = useMemo(
+    () =>
+      Object.values(state)
+        .map((connection) => `${connection.server.id}:${connection.connected ? 1 : 0}`)
+        .sort()
+        .join("|"),
+    [state]
+  );
+
   useEffect(() => {
     if (!enabled) {
       return;
@@ -1859,6 +1869,7 @@ export function useConnectionPool({
         healthPingInFlightRef.current = false;
       }
     };
+    healthPingTriggerRef.current = pingAll;
 
     void pingAll();
     const interval = setInterval(() => {
@@ -1867,10 +1878,23 @@ export function useConnectionPool({
 
     return () => {
       cancelled = true;
+      if (healthPingTriggerRef.current === pingAll) {
+        healthPingTriggerRef.current = null;
+      }
       healthPingInFlightRef.current = false;
       clearInterval(interval);
     };
   }, [enabled]);
+
+  useEffect(() => {
+    if (!enabled || !healthScopeKey) {
+      return;
+    }
+    const ping = healthPingTriggerRef.current;
+    if (ping) {
+      void ping();
+    }
+  }, [enabled, healthScopeKey]);
 
   useEffect(() => {
     if (initialFocusedServerId && servers.some((server) => server.id === initialFocusedServerId)) {
