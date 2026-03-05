@@ -44,6 +44,7 @@ type TeamSettings = {
   enforceDangerConfirm: boolean | null;
   commandBlocklist: string[];
   sessionTimeoutMinutes: number | null;
+  requireSessionRecording: boolean | null;
 };
 
 type TeamUsage = {
@@ -60,6 +61,15 @@ type TeamInviteResult = {
   inviteLink?: string;
   expiresAt?: string;
 };
+
+function defaultTeamSettings(): TeamSettings {
+  return {
+    enforceDangerConfirm: null,
+    commandBlocklist: [],
+    sessionTimeoutMinutes: null,
+    requireSessionRecording: null,
+  };
+}
 
 export function normalizeTeamIdentity(value: unknown): TeamIdentity | null {
   if (!value || typeof value !== "object") {
@@ -236,7 +246,7 @@ function normalizeTeamServers(value: unknown): ServerProfile[] {
 
 function normalizeTeamSettings(value: unknown): TeamSettings {
   if (!value || typeof value !== "object") {
-    return { enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null };
+    return defaultTeamSettings();
   }
   const parsed = value as Record<string, unknown>;
   const enforceDangerConfirm =
@@ -245,6 +255,14 @@ function normalizeTeamSettings(value: unknown): TeamSettings {
       : typeof parsed.requireDangerConfirm === "boolean"
         ? parsed.requireDangerConfirm
         : null;
+  const requireSessionRecording =
+    typeof parsed.requireSessionRecording === "boolean"
+      ? parsed.requireSessionRecording
+      : typeof parsed.enforceSessionRecording === "boolean"
+        ? parsed.enforceSessionRecording
+        : typeof parsed.mandatorySessionRecording === "boolean"
+          ? parsed.mandatorySessionRecording
+          : null;
   const commandBlocklist = normalizeCommandBlocklist(
     parsed.commandBlocklist || parsed.commandBlockList || parsed.blockedCommands || parsed.commandDenylist
   );
@@ -255,6 +273,7 @@ function normalizeTeamSettings(value: unknown): TeamSettings {
     enforceDangerConfirm,
     commandBlocklist,
     sessionTimeoutMinutes,
+    requireSessionRecording,
   };
 }
 
@@ -353,9 +372,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
   const [teamServers, setTeamServers] = useState<ServerProfile[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamSettings, setTeamSettings] = useState<TeamSettings>({
-    enforceDangerConfirm: null,
-    commandBlocklist: [],
-    sessionTimeoutMinutes: null,
+    ...defaultTeamSettings(),
   });
   const [teamUsage, setTeamUsage] = useState<TeamUsage>({
     activeMembers: 0,
@@ -421,12 +438,12 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!currentIdentity) {
         setTeamServers([]);
         setTeamMembers([]);
-        setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
+        setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
         return {
           servers: [],
           members: [],
-          settings: { enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null },
+          settings: defaultTeamSettings(),
           usage: { activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 },
         };
       }
@@ -535,7 +552,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     setIdentity(null);
     setTeamServers([]);
     setTeamMembers([]);
-    setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
+    setTeamSettings(defaultTeamSettings());
     setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
     setError(null);
     await persistIdentity(null);
@@ -691,7 +708,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!identity) {
         setTeamServers([]);
         setTeamMembers([]);
-        setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
+        setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
       }
       return;

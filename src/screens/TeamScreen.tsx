@@ -27,6 +27,7 @@ type TeamScreenProps = {
     enforceDangerConfirm: boolean | null;
     commandBlocklist: string[];
     sessionTimeoutMinutes: number | null;
+    requireSessionRecording: boolean | null;
   };
   usage?: {
     activeMembers: number;
@@ -210,6 +211,15 @@ export function TeamScreen({
             {`Session timeout: ${settings.sessionTimeoutMinutes ? `${settings.sessionTimeoutMinutes} min` : "disabled"}`}
           </Text>
           <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
+          <Text style={styles.emptyText}>
+            {`Session recording: ${
+              settings.requireSessionRecording === null
+                ? "user controlled"
+                : settings.requireSessionRecording
+                  ? "enforced on"
+                  : "enforced off"
+            }`}
+          </Text>
           <Text style={styles.emptyText}>{`Audit queue: ${auditPendingCount}`}</Text>
           <Text style={styles.emptyText}>
             {`Last audit sync: ${auditLastSyncAt ? new Date(auditLastSyncAt).toLocaleTimeString() : "never"}`}

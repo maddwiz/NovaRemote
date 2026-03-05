@@ -79,16 +79,19 @@ describe("team auth helpers", () => {
         enforceDangerConfirm: true,
         commandBlocklist: ["rm\\s+-rf", ""],
         sessionTimeoutMinutes: "30",
+        mandatorySessionRecording: true,
       })
     ).toEqual({
       enforceDangerConfirm: true,
       commandBlocklist: ["rm\\s+-rf"],
       sessionTimeoutMinutes: 30,
+      requireSessionRecording: true,
     });
     expect(teamAuthTestUtils.normalizeTeamSettings({})).toEqual({
       enforceDangerConfirm: null,
       commandBlocklist: [],
       sessionTimeoutMinutes: null,
+      requireSessionRecording: null,
     });
     expect(
       teamAuthTestUtils.normalizeTeamUsage({

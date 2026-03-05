@@ -95,6 +95,7 @@ describe("TeamScreen", () => {
             enforceDangerConfirm: true,
             commandBlocklist: ["rm -rf"],
             sessionTimeoutMinutes: 15,
+            requireSessionRecording: null,
           }}
           loading={false}
           busy={false}
@@ -196,6 +197,7 @@ describe("TeamScreen", () => {
             enforceDangerConfirm: true,
             commandBlocklist: [],
             sessionTimeoutMinutes: null,
+            requireSessionRecording: null,
           }}
           loading={false}
           busy={false}

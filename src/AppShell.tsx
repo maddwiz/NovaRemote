@@ -1733,6 +1733,33 @@ export default function AppShell() {
       void Haptics.selectionAsync();
     },
   });
+  const teamSessionRecordingRequired = teamSettings.requireSessionRecording === true;
+
+  const toggleRecordingWithPolicy = useCallback(
+    (session: string) => {
+      if (teamSessionRecordingRequired && recordings[session]?.active) {
+        setStatus({
+          text: "Session recording is managed by team admin and cannot be stopped.",
+          error: true,
+        });
+        return;
+      }
+      toggleRecording(session);
+    },
+    [recordings, setStatus, teamSessionRecordingRequired, toggleRecording]
+  );
+
+  useEffect(() => {
+    if (!teamSessionRecordingRequired) {
+      return;
+    }
+    allSessions.forEach((session) => {
+      if (recordings[session]?.active) {
+        return;
+      }
+      toggleRecording(session);
+    });
+  }, [allSessions, recordings, teamSessionRecordingRequired, toggleRecording]);
 
   const { processes, processesBusy, refreshProcesses } = useProcessManager({
     activeServer,
@@ -3075,7 +3102,7 @@ export default function AppShell() {
     setTerminalBackgroundOpacity,
     flushSessionQueue,
     removeQueuedCommand,
-    toggleRecording,
+    toggleRecording: toggleRecordingWithPolicy,
     openPlayback,
     deleteRecordingWithPlaybackCleanup,
     setGlassesEnabled,
