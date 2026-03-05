@@ -118,7 +118,7 @@ Updated: 2026-03-05
   - [~] fleet approval request/review + approved-execution matching is wired in-app and surfaced in dashboard scaffold; production orchestration rollout remains pending
   - [x] inactivity timeout / session auto-disconnect policies
 - [ ] Separate NovaRemote Cloud backend + web admin dashboard rollout
-- [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`) plus temp-dir bootstrap verification (`cloud:verify-bootstrap`) and interactive dashboard scaffold wiring (team members, approvals, SSO provider toggles, export requests); production deployment and hardening remain pending
+- [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`) plus temp-dir bootstrap verification (`cloud:verify-bootstrap`), interactive dashboard scaffold wiring (team members, approvals, SSO provider toggles, export requests), and deployment templates (`Dockerfile`, `render.yaml`, scaffold CI workflows); production rollout/hardening remains pending
 - [~] NovaSpine context orchestration is implemented in-app; full autonomous agent lifecycle orchestration remains roadmap work
 - [~] Presence-aware voice channels are implemented in-app; full multi-user collaboration voice/presence channels remain roadmap work
 

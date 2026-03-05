@@ -34,9 +34,15 @@ assert_contains() {
 }
 
 assert_file "${API_DIR}/src/server.ts"
+assert_file "${API_DIR}/Dockerfile"
+assert_file "${API_DIR}/render.yaml"
+assert_file "${API_DIR}/.github/workflows/ci.yml"
 assert_file "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml"
 assert_file "${API_DIR}/contracts/NOVAREMOTE_CLOUD_CONTRACT_SOURCE.txt"
 assert_file "${DASHBOARD_DIR}/src/App.tsx"
+assert_file "${DASHBOARD_DIR}/Dockerfile"
+assert_file "${DASHBOARD_DIR}/render.yaml"
+assert_file "${DASHBOARD_DIR}/.github/workflows/ci.yml"
 assert_file "${DASHBOARD_DIR}/contracts/novaremote-cloud-openapi.v1.yaml"
 assert_file "${DASHBOARD_DIR}/contracts/NOVAREMOTE_CLOUD_CONTRACT_SOURCE.txt"
 
@@ -52,5 +58,7 @@ assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/aud
 
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/sso/providers"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Request JSON Export"
+assert_contains "${API_DIR}/render.yaml" "healthCheckPath: /healthz"
+assert_contains "${DASHBOARD_DIR}/render.yaml" "staticPublishPath: dist"
 
 echo "Cloud bootstrap verification passed."

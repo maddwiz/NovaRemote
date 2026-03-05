@@ -77,6 +77,12 @@ The generated dashboard scaffold currently wires:
 - SSO provider toggle controls (`OIDC`/`SAML`)
 - cloud audit export request actions (`JSON`/`CSV`)
 
+Each generated repo also includes deployment starters:
+
+- `Dockerfile`
+- `render.yaml`
+- `.github/workflows/ci.yml`
+
 Use:
 
 - `EXPO_PUBLIC_NOVA_CLOUD_URL=http://localhost:8788`

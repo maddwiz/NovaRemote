@@ -1020,6 +1020,122 @@ dist/
 TXT
 fi
 
+if [[ ! -f "${API_REPO}/Dockerfile" ]]; then
+  cat > "${API_REPO}/Dockerfile" <<'DOCKER'
+FROM node:20-alpine
+WORKDIR /app
+ENV NODE_ENV=production
+ENV PORT=8788
+COPY package*.json ./
+RUN npm ci --omit=dev
+COPY tsconfig.json ./
+COPY src ./src
+RUN npm run build
+EXPOSE 8788
+CMD ["node", "dist/server.js"]
+DOCKER
+fi
+
+if [[ ! -f "${API_REPO}/render.yaml" ]]; then
+  cat > "${API_REPO}/render.yaml" <<'YAML'
+services:
+  - type: web
+    name: novaremote-cloud
+    env: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm run start
+    healthCheckPath: /healthz
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: NOVA_CLOUD_JWT_SECRET
+        sync: false
+      - key: NOVA_CLOUD_TOKEN_TTL_SECONDS
+        value: "7200"
+YAML
+fi
+
+mkdir -p "${API_REPO}/.github/workflows"
+if [[ ! -f "${API_REPO}/.github/workflows/ci.yml" ]]; then
+  cat > "${API_REPO}/.github/workflows/ci.yml" <<'YAML'
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  api:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
+YAML
+fi
+
+if [[ ! -f "${DASHBOARD_REPO}/Dockerfile" ]]; then
+  cat > "${DASHBOARD_REPO}/Dockerfile" <<'DOCKER'
+FROM node:20-alpine AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci
+COPY . .
+RUN npm run build
+
+FROM nginx:1.27-alpine
+COPY --from=build /app/dist /usr/share/nginx/html
+EXPOSE 80
+CMD ["nginx", "-g", "daemon off;"]
+DOCKER
+fi
+
+if [[ ! -f "${DASHBOARD_REPO}/render.yaml" ]]; then
+  cat > "${DASHBOARD_REPO}/render.yaml" <<'YAML'
+services:
+  - type: web
+    name: novaremote-cloud-dashboard
+    env: static
+    buildCommand: npm install && npm run build
+    staticPublishPath: dist
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: VITE_NOVA_CLOUD_URL
+        sync: false
+YAML
+fi
+
+mkdir -p "${DASHBOARD_REPO}/.github/workflows"
+if [[ ! -f "${DASHBOARD_REPO}/.github/workflows/ci.yml" ]]; then
+  cat > "${DASHBOARD_REPO}/.github/workflows/ci.yml" <<'YAML'
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm install
+      - run: npm run typecheck
+      - run: npm run build
+YAML
+fi
+
 init_repo "${API_REPO}"
 init_repo "${DASHBOARD_REPO}"
 
