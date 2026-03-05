@@ -271,4 +271,48 @@ describe("TeamScreen", () => {
       renderer?.unmount();
     });
   });
+
+  it("routes fleet approval review actions for team managers", async () => {
+    const onApproveFleetApproval = vi.fn(async () => undefined);
+    const onDenyFleetApproval = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          fleetApprovals={[
+            {
+              id: "approval-1",
+              command: "docker compose up -d",
+              requestedByUserId: "user-2",
+              requestedByEmail: "ops@example.com",
+              targets: ["dgx", "home"],
+              createdAt: "2026-03-05T00:00:00.000Z",
+              updatedAt: "2026-03-05T00:00:00.000Z",
+              status: "pending",
+            },
+          ]}
+          loading={false}
+          busy={false}
+          canManage
+          onApproveFleetApproval={onApproveFleetApproval}
+          onDenyFleetApproval={onDenyFleetApproval}
+        />
+      );
+    });
+
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Approve fleet request approval-1" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Deny fleet request approval-1" }).props.onPress();
+    });
+
+    expect(onApproveFleetApproval).toHaveBeenCalledWith("approval-1");
+    expect(onDenyFleetApproval).toHaveBeenCalledWith("approval-1");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

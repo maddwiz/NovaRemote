@@ -84,7 +84,7 @@ Updated: 2026-03-05
   - [x] clear broker cache on logout
   - [x] immediate dangerous-command audit sync
   - [x] enforce session-recording policy
-  - [x] enforce fleet-execution policy approval gate (admin-gated confirm flow)
+  - [x] enforce fleet-execution policy approval gate with in-app request/review actions
   - [x] derive runtime server permission level from broker token permissions
 
 ## v2.0+ NovaAdapt / Team Roadmap
@@ -101,7 +101,7 @@ Updated: 2026-03-05
   - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud dashboard export remains pending
 - [ ] Fleet governance expansion:
   - [x] command blocklist + policy enforcement
-  - [~] fleet approval workflow is admin-gated + enforced confirm in-app; multi-user cloud approval flow remains pending
+  - [~] fleet approval request/review flow is wired in-app (request + approve/deny); cloud dashboard orchestration remains pending
   - [x] inactivity timeout / session auto-disconnect policies
 - [ ] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [ ] Full agent lifecycle + NovaSpine memory orchestration is still roadmap work

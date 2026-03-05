@@ -102,6 +102,20 @@ export type TeamMember = {
   role: TeamRole;
 };
 
+export type TeamFleetApprovalStatus = "pending" | "approved" | "denied" | "expired";
+
+export type TeamFleetApproval = {
+  id: string;
+  command: string;
+  requestedByUserId: string;
+  requestedByEmail: string;
+  targets: string[];
+  createdAt: string;
+  updatedAt: string;
+  status: TeamFleetApprovalStatus;
+  note?: string;
+};
+
 export type TokenBrokerPermission = "read" | "write" | "execute" | "admin";
 
 export type TokenBrokerResult = {

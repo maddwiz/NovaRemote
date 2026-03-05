@@ -686,6 +686,7 @@ export default function AppShell() {
     identity: teamIdentity,
     teamServers,
     teamMembers,
+    fleetApprovals,
     teamSettings,
     teamUsage,
     error: teamAuthError,
@@ -693,6 +694,9 @@ export default function AppShell() {
     loginWithPassword: loginTeamWithPassword,
     inviteMember: inviteTeamMember,
     updateMemberRole: updateTeamMemberRole,
+    requestFleetApproval,
+    approveFleetApproval,
+    denyFleetApproval,
     logout: logoutTeam,
     refreshTeamContext,
   } = useTeamAuth({
@@ -1532,14 +1536,20 @@ export default function AppShell() {
     const targetLabel = `${selectedServers.length} target${selectedServers.length === 1 ? "" : "s"}`;
 
     if (teamSettings.requireFleetApproval && teamIdentity?.role !== "admin") {
+      const note = `targets=${selectedServers.map((server) => server.name).join(",")} cwd=${fleetCwd.trim() || DEFAULT_CWD}`;
+      await requestFleetApproval({
+        command,
+        targets: selectedServers.map((server) => server.id),
+        note,
+      });
       recordAuditEvent({
-        action: "command_dangerous_denied",
+        action: "settings_changed",
         serverId: "",
         serverName: "fleet",
-        detail: `Fleet execution blocked: admin approval required (${targetLabel})`,
-        approved: false,
+        detail: `fleet_approval_requested ${targetLabel}`,
+        approved: null,
       });
-      throw new Error("Fleet execution requires team admin approval by policy.");
+      throw new Error("Fleet approval requested. An admin must approve before execution.");
     }
 
     const approved = await requestDangerApproval(
@@ -1648,6 +1658,7 @@ export default function AppShell() {
     poolConnections,
     recordAuditEvent,
     requestDangerApproval,
+    requestFleetApproval,
     teamIdentity?.role,
     teamSettings.requireFleetApproval,
   ]);
@@ -3759,6 +3770,7 @@ export default function AppShell() {
               authError={teamAuthError}
               canInvite={hasTeamPermission("team:invite")}
               canManage={hasTeamPermission("team:manage")}
+              fleetApprovals={fleetApprovals}
               auditPendingCount={pendingAuditEvents}
               auditLastSyncAt={auditLastSyncAt}
               onLogin={async (input) => {
@@ -3794,6 +3806,31 @@ export default function AppShell() {
                     serverId: "",
                     serverName: "team",
                     detail: `team_role_update=${memberId}:${role}`,
+                  });
+                });
+              }}
+              onApproveFleetApproval={async (approvalId, note) => {
+                await runWithStatus("Approving fleet request", async () => {
+                  markActivity();
+                  await approveFleetApproval(approvalId, note);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `fleet_approval_approved=${approvalId}`,
+                  });
+                });
+              }}
+              onDenyFleetApproval={async (approvalId, note) => {
+                await runWithStatus("Denying fleet request", async () => {
+                  markActivity();
+                  await denyFleetApproval(approvalId, note);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `fleet_approval_denied=${approvalId}`,
+                    approved: false,
                   });
                 });
               }}

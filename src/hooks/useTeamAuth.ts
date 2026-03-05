@@ -11,7 +11,15 @@ import {
   TEAM_TOKEN_REFRESH_INTERVAL_MS,
 } from "../constants";
 import { normalizeCommandBlocklist, normalizeSessionTimeoutMinutes } from "../teamPolicy";
-import { ServerProfile, TeamAuthProvider, TeamIdentity, TeamMember, TeamPermission, TeamRole } from "../types";
+import {
+  ServerProfile,
+  TeamAuthProvider,
+  TeamFleetApproval,
+  TeamIdentity,
+  TeamMember,
+  TeamPermission,
+  TeamRole,
+} from "../types";
 
 const TEAM_PROVIDERS: TeamAuthProvider[] = ["novaremote_cloud", "saml", "oidc", "ldap_proxy"];
 const TEAM_ROLES: TeamRole[] = ["admin", "operator", "viewer", "billing"];
@@ -371,6 +379,68 @@ function normalizeTeamMembers(value: unknown): TeamMember[] {
   return Array.from(byId.values());
 }
 
+function normalizeFleetApprovalStatus(value: unknown): TeamFleetApproval["status"] {
+  const raw = normalizeRequiredString(value).toLowerCase();
+  if (raw === "approved" || raw === "denied" || raw === "expired") {
+    return raw;
+  }
+  return "pending";
+}
+
+function normalizeFleetApproval(value: unknown): TeamFleetApproval | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  const id = normalizeRequiredString(parsed.id);
+  const command = normalizeRequiredString(parsed.command);
+  const requestedByUserId = normalizeRequiredString(parsed.requestedByUserId || parsed.requested_by_user_id);
+  const requestedByEmail = normalizeRequiredString(parsed.requestedByEmail || parsed.requested_by_email);
+  const createdAt = normalizeRequiredString(parsed.createdAt || parsed.created_at);
+  const updatedAt = normalizeRequiredString(parsed.updatedAt || parsed.updated_at) || createdAt;
+  const targets = Array.isArray(parsed.targets)
+    ? parsed.targets.map((entry) => normalizeRequiredString(entry)).filter(Boolean)
+    : [];
+
+  if (!id || !command || !requestedByUserId || !requestedByEmail || !createdAt) {
+    return null;
+  }
+
+  return {
+    id,
+    command,
+    requestedByUserId,
+    requestedByEmail,
+    targets,
+    createdAt,
+    updatedAt,
+    status: normalizeFleetApprovalStatus(parsed.status),
+    note: normalizeOptionalString(parsed.note),
+  };
+}
+
+function normalizeFleetApprovals(value: unknown): TeamFleetApproval[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const byId = new Map<string, TeamFleetApproval>();
+  value.forEach((entry) => {
+    const normalized = normalizeFleetApproval(entry);
+    if (normalized) {
+      byId.set(normalized.id, normalized);
+    }
+  });
+  return Array.from(byId.values()).sort((a, b) => {
+    if (a.status === "pending" && b.status !== "pending") {
+      return -1;
+    }
+    if (a.status !== "pending" && b.status === "pending") {
+      return 1;
+    }
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
 function hasTeamPermission(identity: TeamIdentity | null, permission: TeamPermission): boolean {
   if (!identity) {
     return false;
@@ -384,6 +454,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [teamServers, setTeamServers] = useState<ServerProfile[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [fleetApprovals, setFleetApprovals] = useState<TeamFleetApproval[]>([]);
   const [teamSettings, setTeamSettings] = useState<TeamSettings>({
     ...defaultTeamSettings(),
   });
@@ -451,17 +522,32 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!currentIdentity) {
         setTeamServers([]);
         setTeamMembers([]);
+        setFleetApprovals([]);
         setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
         return {
           servers: [],
           members: [],
+          approvals: [],
           settings: defaultTeamSettings(),
           usage: { activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 },
         };
       }
 
-      const [serversPayload, membersPayload, settingsPayload, usagePayload] = await Promise.all([
+      const approvalsPromise =
+        hasTeamPermission(currentIdentity, "team:manage") || hasTeamPermission(currentIdentity, "fleet:execute")
+          ? cloudRequest<{ approvals?: unknown }>(
+              "/v1/team/fleet/approvals",
+              { method: "GET" },
+              {
+                accessToken: currentIdentity.accessToken,
+                cloudUrl: cloudUrl || getNovaCloudUrl(),
+                fetchImpl,
+              }
+            ).catch(() => ({ approvals: [] }))
+          : Promise.resolve<{ approvals?: unknown }>({ approvals: [] });
+
+      const [serversPayload, membersPayload, settingsPayload, usagePayload, approvalsPayload] = await Promise.all([
         cloudRequest<{ servers?: unknown }>(
           "/v1/team/servers",
           { method: "GET" },
@@ -498,17 +584,20 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
             fetchImpl,
           }
         ).catch(() => ({ usage: {} })),
+        approvalsPromise,
       ]);
 
       const servers = normalizeTeamServers(serversPayload.servers || serversPayload);
       const members = normalizeTeamMembers(membersPayload.members || membersPayload);
+      const approvals = normalizeFleetApprovals(approvalsPayload.approvals || approvalsPayload);
       const settings = normalizeTeamSettings(settingsPayload.settings || settingsPayload);
       const usage = normalizeTeamUsage(usagePayload.usage || usagePayload);
       setTeamServers(servers);
       setTeamMembers(members);
+      setFleetApprovals(approvals);
       setTeamSettings(settings);
       setTeamUsage(usage);
-      return { servers, members, settings, usage };
+      return { servers, members, approvals, settings, usage };
     },
     [cloudUrl, fetchImpl, identity]
   );
@@ -613,6 +702,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     setIdentity(null);
     setTeamServers([]);
     setTeamMembers([]);
+    setFleetApprovals([]);
     setTeamSettings(defaultTeamSettings());
     setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
     setError(null);
@@ -764,11 +854,120 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
   );
 
+  const requestFleetApproval = useCallback(
+    async (input: { command: string; targets: string[]; note?: string }) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before requesting fleet approval.");
+      }
+      if (!hasTeamPermission(identity, "fleet:execute")) {
+        throw new Error("You do not have permission to request fleet execution.");
+      }
+
+      const command = input.command.trim();
+      const targets = input.targets.map((entry) => entry.trim()).filter(Boolean);
+      const note = normalizeOptionalString(input.note);
+      if (!command) {
+        throw new Error("Fleet command is required for approval request.");
+      }
+      if (targets.length === 0) {
+        throw new Error("At least one target server is required for approval request.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const payload = await cloudRequest<Record<string, unknown>>(
+          "/v1/team/fleet/approvals",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              command,
+              targets,
+              note: note || undefined,
+            }),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        const approval = normalizeFleetApproval(payload.approval || payload);
+        await refreshTeamContext(identity);
+        return approval;
+      } catch (requestError) {
+        setError(requestError instanceof Error ? requestError.message : String(requestError));
+        onError?.(requestError);
+        throw requestError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
+  const reviewFleetApproval = useCallback(
+    async (approvalId: string, action: "approve" | "deny", note?: string) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before reviewing approvals.");
+      }
+      if (!hasTeamPermission(identity, "team:manage")) {
+        throw new Error("You do not have permission to review fleet approvals.");
+      }
+      const normalizedApprovalId = approvalId.trim();
+      if (!normalizedApprovalId) {
+        throw new Error("Approval ID is required.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        await cloudRequest<Record<string, unknown>>(
+          `/v1/team/fleet/approvals/${encodeURIComponent(normalizedApprovalId)}/${action}`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              note: normalizeOptionalString(note),
+            }),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        await refreshTeamContext(identity);
+      } catch (reviewError) {
+        setError(reviewError instanceof Error ? reviewError.message : String(reviewError));
+        onError?.(reviewError);
+        throw reviewError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
+  const approveFleetApproval = useCallback(
+    async (approvalId: string, note?: string) => {
+      await reviewFleetApproval(approvalId, "approve", note);
+    },
+    [reviewFleetApproval]
+  );
+
+  const denyFleetApproval = useCallback(
+    async (approvalId: string, note?: string) => {
+      await reviewFleetApproval(approvalId, "deny", note);
+    },
+    [reviewFleetApproval]
+  );
+
   useEffect(() => {
     if (!enabled || !identity) {
       if (!identity) {
         setTeamServers([]);
         setTeamMembers([]);
+        setFleetApprovals([]);
         setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
       }
@@ -812,6 +1011,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       identity,
       teamServers,
       teamMembers,
+      fleetApprovals,
       teamSettings,
       teamUsage,
       error,
@@ -824,6 +1024,9 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       refreshSession,
       inviteMember,
       updateMemberRole,
+      requestFleetApproval,
+      approveFleetApproval,
+      denyFleetApproval,
       logout,
       setIdentityForTesting: setIdentity,
     }),
@@ -831,13 +1034,17 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       busy,
       cloudUrl,
       error,
+      fleetApprovals,
       hasPermission,
       identity,
       loading,
+      approveFleetApproval,
+      denyFleetApproval,
       loginWithPassword,
       loginWithSso,
       logout,
       inviteMember,
+      requestFleetApproval,
       refreshSession,
       refreshTeamContext,
       teamMembers,
@@ -854,6 +1061,7 @@ export const teamAuthTestUtils = {
   shouldRefreshTeamIdentity,
   normalizeTeamServers,
   normalizeTeamMembers,
+  normalizeFleetApprovals,
   normalizeTeamSettings,
   normalizeTeamUsage,
 };

@@ -50,6 +50,10 @@ type TeamAuthHandle = {
   loginWithSso: (input: { provider: "saml" | "oidc"; idToken?: string; accessToken?: string }) => Promise<TeamIdentity>;
   inviteMember: (input: { email: string; role?: TeamIdentity["role"] }) => Promise<unknown>;
   updateMemberRole: (memberId: string, role: TeamIdentity["role"]) => Promise<void>;
+  requestFleetApproval: (input: { command: string; targets: string[]; note?: string }) => Promise<unknown>;
+  approveFleetApproval: (approvalId: string, note?: string) => Promise<void>;
+  denyFleetApproval: (approvalId: string, note?: string) => Promise<void>;
+  fleetApprovals: Array<{ id: string; status: string }>;
   teamMembers: Array<{ id: string; role: string }>;
 };
 
@@ -62,7 +66,7 @@ function buildIdentity(overrides: Partial<TeamIdentity> = {}): TeamIdentity {
     teamId: "team-1",
     teamName: "Ops",
     role: "admin",
-    permissions: ["team:invite", "team:manage", "servers:read"],
+    permissions: ["team:invite", "team:manage", "servers:read", "fleet:execute"],
     accessToken: "access-token",
     refreshToken: "refresh-token",
     tokenExpiresAt: Date.now() + 1_000,
@@ -86,6 +90,17 @@ beforeEach(() => {
   secureStoreMock.deleteItemAsync.mockClear();
   cloudClientMock.cloudRequest.mockReset();
   let memberRole: TeamIdentity["role"] = "viewer";
+  let approvals: Array<{
+    id: string;
+    command: string;
+    requestedByUserId: string;
+    requestedByEmail: string;
+    targets: string[];
+    createdAt: string;
+    updatedAt: string;
+    status: "pending" | "approved" | "denied";
+    note?: string;
+  }> = [];
   cloudClientMock.cloudRequest.mockImplementation(async (path: string, init?: RequestInit) => {
     if (path === "/v1/auth/refresh") {
       return {
@@ -124,6 +139,36 @@ beforeEach(() => {
     }
     if (path === "/v1/team/settings") {
       return { settings: {} };
+    }
+    if (path === "/v1/team/fleet/approvals") {
+      if (init?.method === "POST") {
+        const rawBody = String(init?.body || "{}");
+        const payload = JSON.parse(rawBody) as { command?: string; targets?: string[]; note?: string };
+        const created = {
+          id: `approval-${approvals.length + 1}`,
+          command: String(payload.command || ""),
+          requestedByUserId: "user-1",
+          requestedByEmail: "dev@example.com",
+          targets: Array.isArray(payload.targets) ? payload.targets : [],
+          createdAt: "2026-03-05T00:00:00.000Z",
+          updatedAt: "2026-03-05T00:00:00.000Z",
+          status: "pending" as const,
+          note: payload.note,
+        };
+        approvals = [created, ...approvals];
+        return { approval: created };
+      }
+      return { approvals };
+    }
+    if (path.startsWith("/v1/team/fleet/approvals/") && path.endsWith("/approve")) {
+      const id = String(path).split("/")[5] || "";
+      approvals = approvals.map((entry) => (entry.id === id ? { ...entry, status: "approved" as const } : entry));
+      return {};
+    }
+    if (path.startsWith("/v1/team/fleet/approvals/") && path.endsWith("/deny")) {
+      const id = String(path).split("/")[5] || "";
+      approvals = approvals.map((entry) => (entry.id === id ? { ...entry, status: "denied" as const } : entry));
+      return {};
     }
     if (path === "/v1/team/invites") {
       return { inviteCode: "INV-123" };
@@ -353,6 +398,51 @@ describe("useTeamAuth hook", () => {
       cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/members/member-1")
     ).toBe(true);
     expect(latestOrThrow(latest).teamMembers.find((entry) => entry.id === "member-1")?.role).toBe("operator");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("creates and reviews fleet approvals when policy workflows are enabled", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).requestFleetApproval({
+        command: "docker compose up -d",
+        targets: ["dgx", "home"],
+      });
+    });
+    await flush();
+
+    expect(latestOrThrow(latest).fleetApprovals[0]?.status).toBe("pending");
+    const approvalId = latestOrThrow(latest).fleetApprovals[0]?.id || "";
+
+    await act(async () => {
+      await latestOrThrow(latest).approveFleetApproval(approvalId);
+    });
+    await flush();
+    expect(latestOrThrow(latest).fleetApprovals.find((entry) => entry.id === approvalId)?.status).toBe("approved");
+
+    await act(async () => {
+      await latestOrThrow(latest).denyFleetApproval(approvalId);
+    });
+    await flush();
+    expect(latestOrThrow(latest).fleetApprovals.find((entry) => entry.id === approvalId)?.status).toBe("denied");
 
     await act(async () => {
       renderer?.unmount();

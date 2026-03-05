@@ -123,5 +123,31 @@ describe("team auth helpers", () => {
     ]);
     expect(members).toHaveLength(2);
     expect(members.find((entry) => entry.id === "m2")?.role).toBe("operator");
+
+    const approvals = teamAuthTestUtils.normalizeFleetApprovals([
+      {
+        id: "a-1",
+        command: "docker compose up -d",
+        requestedByUserId: "u-1",
+        requestedByEmail: "u@example.com",
+        targets: ["dgx"],
+        createdAt: "2026-03-05T00:00:00.000Z",
+        updatedAt: "2026-03-05T00:00:00.000Z",
+        status: "pending",
+      },
+      {
+        id: "a-2",
+        command: "kubectl rollout restart deploy/app",
+        requestedByUserId: "u-2",
+        requestedByEmail: "u2@example.com",
+        targets: ["home"],
+        createdAt: "2026-03-04T00:00:00.000Z",
+        updatedAt: "2026-03-04T00:00:00.000Z",
+        status: "approved",
+      },
+    ]);
+    expect(approvals).toHaveLength(2);
+    expect(approvals[0]?.id).toBe("a-1");
+    expect(approvals[1]?.status).toBe("approved");
   });
 });

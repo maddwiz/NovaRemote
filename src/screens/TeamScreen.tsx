@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { TeamBadge } from "../components/TeamBadge";
 import { styles } from "../theme/styles";
-import { TeamIdentity, TeamMember, TeamRole } from "../types";
+import { TeamFleetApproval, TeamIdentity, TeamMember, TeamRole } from "../types";
 
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
@@ -37,6 +37,9 @@ type TeamScreenProps = {
   canManage?: boolean;
   onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
   onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
+  fleetApprovals?: TeamFleetApproval[];
+  onApproveFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
+  onDenyFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
   auditPendingCount?: number;
   auditLastSyncAt?: number | null;
   onSyncAudit?: () => Promise<void>;
@@ -61,6 +64,9 @@ export function TeamScreen({
   canManage = false,
   onInviteMember,
   onChangeMemberRole,
+  fleetApprovals = [],
+  onApproveFleetApproval,
+  onDenyFleetApproval,
   auditPendingCount = 0,
   auditLastSyncAt = null,
   onSyncAudit,
@@ -77,6 +83,8 @@ export function TeamScreen({
   const [teamStatus, setTeamStatus] = useState<string>("");
   const canLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
+  const canReviewFleetApprovals = Boolean(identity && canManage && !busy && (onApproveFleetApproval || onDenyFleetApproval));
+  const pendingFleetApprovals = fleetApprovals.filter((approval) => approval.status === "pending");
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
   const canExportAuditJson = Boolean(identity && onExportAuditJson && !busy);
   const canExportAuditCsv = Boolean(identity && onExportAuditCsv && !busy);
@@ -150,6 +158,40 @@ export function TeamScreen({
         });
     },
     [busy, canManage, onChangeMemberRole]
+  );
+
+  const handleApproveFleetApproval = useCallback(
+    (approval: TeamFleetApproval) => {
+      if (!onApproveFleetApproval || !canReviewFleetApprovals) {
+        return;
+      }
+      setTeamStatus("");
+      void onApproveFleetApproval(approval.id)
+        .then(() => {
+          setTeamStatus(`Approved fleet request ${approval.id}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canReviewFleetApprovals, onApproveFleetApproval]
+  );
+
+  const handleDenyFleetApproval = useCallback(
+    (approval: TeamFleetApproval) => {
+      if (!onDenyFleetApproval || !canReviewFleetApprovals) {
+        return;
+      }
+      setTeamStatus("");
+      void onDenyFleetApproval(approval.id)
+        .then(() => {
+          setTeamStatus(`Denied fleet request ${approval.id}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canReviewFleetApprovals, onDenyFleetApproval]
   );
 
   const handleSyncAudit = useCallback(() => {
@@ -258,6 +300,7 @@ export function TeamScreen({
             {`Session timeout: ${settings.sessionTimeoutMinutes ? `${settings.sessionTimeoutMinutes} min` : "disabled"}`}
           </Text>
           <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
+          <Text style={styles.emptyText}>{`Fleet approvals pending: ${pendingFleetApprovals.length}`}</Text>
           <Text style={styles.emptyText}>
             {`Fleet approval: ${
               settings.requireFleetApproval === null
@@ -389,6 +432,49 @@ export function TeamScreen({
               <Text style={styles.actionDangerText}>Sign Out</Text>
             </Pressable>
           ) : null}
+        </View>
+      ) : null}
+
+      {!loading && identity && fleetApprovals.length > 0 ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>{`Fleet Approvals (${pendingFleetApprovals.length} pending)`}</Text>
+          {fleetApprovals.map((approval) => (
+            <View key={approval.id} style={styles.serverCard}>
+              <Text style={styles.serverSubtitle}>{`#${approval.id} • ${approval.status}`}</Text>
+              <Text style={styles.serverUrl}>{approval.command}</Text>
+              <Text style={styles.emptyText}>{`Requested by ${approval.requestedByEmail}`}</Text>
+              <Text style={styles.emptyText}>
+                {`Targets: ${approval.targets.length > 0 ? approval.targets.join(", ") : "none"}`}
+              </Text>
+              {approval.note ? <Text style={styles.emptyText}>{`Note: ${approval.note}`}</Text> : null}
+              {approval.status === "pending" ? (
+                <View style={styles.rowInlineSpace}>
+                  {onApproveFleetApproval ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Approve fleet request ${approval.id}`}
+                      style={[styles.actionButton, !canReviewFleetApprovals ? styles.buttonDisabled : null]}
+                      onPress={() => handleApproveFleetApproval(approval)}
+                      disabled={!canReviewFleetApprovals}
+                    >
+                      <Text style={styles.actionButtonText}>Approve</Text>
+                    </Pressable>
+                  ) : null}
+                  {onDenyFleetApproval ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Deny fleet request ${approval.id}`}
+                      style={[styles.actionDangerButton, !canReviewFleetApprovals ? styles.buttonDisabled : null]}
+                      onPress={() => handleDenyFleetApproval(approval)}
+                      disabled={!canReviewFleetApprovals}
+                    >
+                      <Text style={styles.actionDangerText}>Deny</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ) : null}
+            </View>
+          ))}
         </View>
       ) : null}
 
