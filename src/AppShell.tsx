@@ -92,6 +92,7 @@ import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
 import { evaluateCrossServerWatchAlerts } from "./crossServerWatchAlerts";
 import { findAgentIdsByName, hasExactAgentName } from "./agentMatching";
+import { findBlockedCommandPattern, resolveSessionTimeoutMs } from "./teamPolicy";
 import {
   AiEnginePreference,
   FleetRunResult,
@@ -661,6 +662,7 @@ export default function AppShell() {
   const voiceLoopRestartTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
   const appOpenTrackedRef = useRef<boolean>(false);
   const crossServerWatchRulesRef = useRef<Record<string, Record<string, WatchRule>>>({});
+  const lastActivityAtRef = useRef<number>(Date.now());
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -669,6 +671,10 @@ export default function AppShell() {
   const setError = useCallback((error: unknown) => {
     const message = error instanceof Error ? error.message : String(error);
     setStatus({ text: message, error: true });
+  }, []);
+
+  const markActivity = useCallback(() => {
+    lastActivityAtRef.current = Date.now();
   }, []);
 
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
@@ -913,15 +919,39 @@ export default function AppShell() {
     connections: poolConnections,
     focusedServerId,
   });
+  const teamSessionTimeoutMs = useMemo(
+    () => resolveSessionTimeoutMs(teamSettings.sessionTimeoutMinutes),
+    [teamSettings.sessionTimeoutMinutes]
+  );
+
+  const assertCommandAllowed = useCallback(
+    (command: string, context: string) => {
+      const blockedPattern = findBlockedCommandPattern(command, teamSettings.commandBlocklist);
+      if (!blockedPattern) {
+        return;
+      }
+      recordAuditEvent({
+        action: "command_dangerous_denied",
+        serverId: focusedServerId || "",
+        serverName: activeServer?.name || "",
+        session: "",
+        detail: `${context}: blocked by pattern ${blockedPattern}`.slice(0, 400),
+        approved: false,
+      });
+      throw new Error(`Command blocked by team policy (${blockedPattern}).`);
+    },
+    [activeServer?.name, focusedServerId, recordAuditEvent, teamSettings.commandBlocklist]
+  );
 
   const focusServer = useCallback(
     (serverId: string) => {
+      markActivity();
       setPoolFocusedServerId(serverId);
       void useServer(serverId).catch((error) => {
         setError(error);
       });
     },
-    [setError, setPoolFocusedServerId, useServer]
+    [markActivity, setError, setPoolFocusedServerId, useServer]
   );
 
   const editServer = useCallback(
@@ -1073,6 +1103,7 @@ export default function AppShell() {
       throw new Error("Connect to a server first.");
     }
 
+    markActivity();
     const trimmedPrompt = startPrompt.trim();
     const session = await createPoolSession(
       focusedServerId,
@@ -1097,6 +1128,7 @@ export default function AppShell() {
     connected,
     createPoolSession,
     focusedServerId,
+    markActivity,
     recordAuditEvent,
     startCwd,
     startKind,
@@ -1110,6 +1142,7 @@ export default function AppShell() {
       if (!targetConnection || !targetConnection.connected) {
         throw new Error("Target server is disconnected.");
       }
+      markActivity();
       return await createPoolSession(
         serverId,
         targetConnection.server.defaultCwd || DEFAULT_CWD,
@@ -1118,7 +1151,7 @@ export default function AppShell() {
         false
       );
     },
-    [createPoolSession, poolConnections]
+    [createPoolSession, markActivity, poolConnections]
   );
 
   const sendCommand = useCallback(
@@ -1126,6 +1159,8 @@ export default function AppShell() {
       if (!focusedServerId) {
         throw new Error("Connect to a server first.");
       }
+      markActivity();
+      assertCommandAllowed(command, `Send to ${session}`);
       await sendPoolCommand(focusedServerId, session, command, mode, clearDraft);
       recordAuditEvent({
         action: "command_sent",
@@ -1135,7 +1170,7 @@ export default function AppShell() {
         detail: `${mode}:${command.slice(0, 400)}`,
       });
     },
-    [activeServer?.name, focusedServerId, recordAuditEvent, sendPoolCommand]
+    [activeServer?.name, assertCommandAllowed, focusedServerId, markActivity, recordAuditEvent, sendPoolCommand]
   );
 
   const handleSend = useCallback(
@@ -1171,6 +1206,7 @@ export default function AppShell() {
       if (!focusedServerId) {
         throw new Error("Connect to a server first.");
       }
+      markActivity();
       await sendPoolControlChar(focusedServerId, session, controlChar);
       recordAuditEvent({
         action: "command_sent",
@@ -1180,7 +1216,7 @@ export default function AppShell() {
         detail: `control:${controlChar}`,
       });
     },
-    [activeServer?.name, focusedServerId, recordAuditEvent, sendPoolControlChar]
+    [activeServer?.name, focusedServerId, markActivity, recordAuditEvent, sendPoolControlChar]
   );
 
   const handleOpenOnMac = useCallback(
@@ -1381,6 +1417,8 @@ export default function AppShell() {
     if (!command) {
       throw new Error("Fleet command is required.");
     }
+    markActivity();
+    assertCommandAllowed(command, "Fleet command");
 
     const selectedServers = brokeredServers.filter((server) => fleetTargets.includes(server.id));
     if (selectedServers.length === 0) {
@@ -1470,7 +1508,17 @@ export default function AppShell() {
     } finally {
       setFleetBusy(false);
     }
-  }, [brokeredServers, fleetCommand, fleetCwd, fleetTargets, fleetWaitMs, poolConnections, recordAuditEvent]);
+  }, [
+    assertCommandAllowed,
+    brokeredServers,
+    fleetCommand,
+    fleetCwd,
+    fleetTargets,
+    fleetWaitMs,
+    markActivity,
+    poolConnections,
+    recordAuditEvent,
+  ]);
 
   const sendViaExternalLlmToServer = useCallback(
     async (serverId: string, session: string, prompt: string) => {
@@ -2333,6 +2381,7 @@ export default function AppShell() {
   }, [isPro]);
 
   const requestDangerApproval = useCallback(async (command: string, context: string) => {
+    assertCommandAllowed(command, context);
     if (!requireDangerConfirm || !isDangerousShellCommand(command)) {
       return true;
     }
@@ -2345,7 +2394,7 @@ export default function AppShell() {
         context,
       });
     });
-  }, [requireDangerConfirm]);
+  }, [assertCommandAllowed, requireDangerConfirm]);
 
   const deleteRecordingWithPlaybackCleanup = useCallback(
     (session: string) => {
@@ -2375,6 +2424,43 @@ export default function AppShell() {
       sub.remove();
     };
   }, [connectPoolAll, disconnectPoolAll, lock, unlocked]);
+
+  useEffect(() => {
+    if (!unlocked) {
+      return;
+    }
+    markActivity();
+  }, [markActivity, unlocked]);
+
+  useEffect(() => {
+    if (!unlocked || !teamSessionTimeoutMs) {
+      return;
+    }
+    const interval = setInterval(() => {
+      const idleMs = Date.now() - lastActivityAtRef.current;
+      if (idleMs < teamSessionTimeoutMs) {
+        return;
+      }
+      disconnectPoolAll();
+      lock();
+      setStatus({
+        text: `Disconnected after ${teamSettings.sessionTimeoutMinutes}m inactivity (team policy).`,
+        error: true,
+      });
+      markActivity();
+    }, 15000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [
+    disconnectPoolAll,
+    lock,
+    markActivity,
+    teamSessionTimeoutMs,
+    teamSettings.sessionTimeoutMinutes,
+    unlocked,
+  ]);
 
   useEffect(() => {
     if (glassesMode.voiceLoop) {
@@ -3007,6 +3093,7 @@ export default function AppShell() {
             <TabBar
               route={route}
               onChange={(next) => {
+                markActivity();
                 void Haptics.selectionAsync();
                 if (next === "snippets" && !isPro) {
                   setPaywallVisible(true);
@@ -3480,6 +3567,7 @@ export default function AppShell() {
             <TeamScreen
               identity={teamIdentity}
               members={teamMembers}
+              settings={teamSettings}
               loading={teamLoading}
               busy={teamBusy}
               onRefresh={() => {

@@ -8,18 +8,36 @@ import { TeamIdentity, TeamMember } from "../types";
 type TeamScreenProps = {
   identity: TeamIdentity | null;
   members: TeamMember[];
+  settings?: {
+    enforceDangerConfirm: boolean | null;
+    commandBlocklist: string[];
+    sessionTimeoutMinutes: number | null;
+  };
   loading: boolean;
   busy: boolean;
   onRefresh?: () => void;
 };
 
-export function TeamScreen({ identity, members, loading, busy, onRefresh }: TeamScreenProps) {
+export function TeamScreen({ identity, members, settings, loading, busy, onRefresh }: TeamScreenProps) {
   return (
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Team</Text>
       {!identity ? <Text style={styles.emptyText}>Sign in with your team account to view members and roles.</Text> : null}
       {identity ? <TeamBadge teamName={identity.teamName} role={identity.role} /> : null}
       {identity ? <Text style={styles.serverSubtitle}>{identity.email}</Text> : null}
+      {identity && settings ? (
+        <>
+          <Text style={styles.emptyText}>
+            {`Danger confirm: ${
+              settings.enforceDangerConfirm === null ? "user controlled" : settings.enforceDangerConfirm ? "enforced on" : "enforced off"
+            }`}
+          </Text>
+          <Text style={styles.emptyText}>
+            {`Session timeout: ${settings.sessionTimeoutMinutes ? `${settings.sessionTimeoutMinutes} min` : "disabled"}`}
+          </Text>
+          <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
+        </>
+      ) : null}
 
       {onRefresh ? (
         <Pressable

@@ -74,10 +74,22 @@ describe("team auth helpers", () => {
     expect(servers[0]?.source).toBe("team");
     expect(servers[0]?.baseUrl).toBe("https://dgx.example.com");
 
-    expect(teamAuthTestUtils.normalizeTeamSettings({ enforceDangerConfirm: true })).toEqual({
+    expect(
+      teamAuthTestUtils.normalizeTeamSettings({
+        enforceDangerConfirm: true,
+        commandBlocklist: ["rm\\s+-rf", ""],
+        sessionTimeoutMinutes: "30",
+      })
+    ).toEqual({
       enforceDangerConfirm: true,
+      commandBlocklist: ["rm\\s+-rf"],
+      sessionTimeoutMinutes: 30,
     });
-    expect(teamAuthTestUtils.normalizeTeamSettings({})).toEqual({ enforceDangerConfirm: null });
+    expect(teamAuthTestUtils.normalizeTeamSettings({})).toEqual({
+      enforceDangerConfirm: null,
+      commandBlocklist: [],
+      sessionTimeoutMinutes: null,
+    });
 
     const members = teamAuthTestUtils.normalizeTeamMembers([
       { id: "m1", name: "Alice", email: "alice@example.com", role: "admin" },

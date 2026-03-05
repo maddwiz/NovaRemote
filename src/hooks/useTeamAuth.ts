@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { normalizeBaseUrl } from "../api/client";
 import { cloudRequest, getNovaCloudUrl } from "../api/cloudClient";
 import { DEFAULT_CWD, DEFAULT_TERMINAL_BACKEND, STORAGE_TEAM_IDENTITY } from "../constants";
+import { normalizeCommandBlocklist, normalizeSessionTimeoutMinutes } from "../teamPolicy";
 import { ServerProfile, TeamAuthProvider, TeamIdentity, TeamMember, TeamPermission, TeamRole } from "../types";
 
 const TEAM_PROVIDERS: TeamAuthProvider[] = ["novaremote_cloud", "saml", "oidc", "ldap_proxy"];
@@ -35,6 +36,8 @@ type TeamAuthResponse = {
 
 type TeamSettings = {
   enforceDangerConfirm: boolean | null;
+  commandBlocklist: string[];
+  sessionTimeoutMinutes: number | null;
 };
 
 export function normalizeTeamIdentity(value: unknown): TeamIdentity | null {
@@ -212,7 +215,7 @@ function normalizeTeamServers(value: unknown): ServerProfile[] {
 
 function normalizeTeamSettings(value: unknown): TeamSettings {
   if (!value || typeof value !== "object") {
-    return { enforceDangerConfirm: null };
+    return { enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null };
   }
   const parsed = value as Record<string, unknown>;
   const enforceDangerConfirm =
@@ -221,8 +224,16 @@ function normalizeTeamSettings(value: unknown): TeamSettings {
       : typeof parsed.requireDangerConfirm === "boolean"
         ? parsed.requireDangerConfirm
         : null;
+  const commandBlocklist = normalizeCommandBlocklist(
+    parsed.commandBlocklist || parsed.commandBlockList || parsed.blockedCommands || parsed.commandDenylist
+  );
+  const sessionTimeoutMinutes = normalizeSessionTimeoutMinutes(
+    parsed.sessionTimeoutMinutes || parsed.sessionTimeoutMin || parsed.inactivityTimeoutMinutes
+  );
   return {
     enforceDangerConfirm,
+    commandBlocklist,
+    sessionTimeoutMinutes,
   };
 }
 
@@ -270,7 +281,11 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [teamServers, setTeamServers] = useState<ServerProfile[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
-  const [teamSettings, setTeamSettings] = useState<TeamSettings>({ enforceDangerConfirm: null });
+  const [teamSettings, setTeamSettings] = useState<TeamSettings>({
+    enforceDangerConfirm: null,
+    commandBlocklist: [],
+    sessionTimeoutMinutes: null,
+  });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -329,8 +344,12 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!currentIdentity) {
         setTeamServers([]);
         setTeamMembers([]);
-        setTeamSettings({ enforceDangerConfirm: null });
-        return { servers: [], members: [], settings: { enforceDangerConfirm: null } };
+        setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
+        return {
+          servers: [],
+          members: [],
+          settings: { enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null },
+        };
       }
 
       const [serversPayload, membersPayload, settingsPayload] = await Promise.all([
@@ -426,7 +445,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     setIdentity(null);
     setTeamServers([]);
     setTeamMembers([]);
-    setTeamSettings({ enforceDangerConfirm: null });
+    setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
     setError(null);
     await persistIdentity(null);
   }, [persistIdentity]);
@@ -480,7 +499,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!identity) {
         setTeamServers([]);
         setTeamMembers([]);
-        setTeamSettings({ enforceDangerConfirm: null });
+        setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
       }
       return;
     }
