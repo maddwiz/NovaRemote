@@ -74,6 +74,7 @@ Updated: 2026-03-05
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
 - [x] Team screen in app with login, members, roles, invites, usage, and audit sync controls
 - [~] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
+- [x] RevenueCat entitlement tier recognition (`pro`/`team`/`enterprise`) in app gating state
 - [x] Team-enforced safety policy overrides (managed settings cannot be disabled locally)
 - [x] Team policy/runtime additions:
   - [x] auto-refresh team identity session

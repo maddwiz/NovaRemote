@@ -2,14 +2,26 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { Platform } from "react-native";
 import Purchases, { CustomerInfo, LOG_LEVEL, PurchasesOfferings, PurchasesPackage } from "react-native-purchases";
 
+type SubscriptionTier = "free" | "pro" | "team" | "enterprise";
+
 type RevenueCatState = {
   ready: boolean;
   isPro: boolean;
+  isTeam: boolean;
+  isEnterprise: boolean;
+  subscriptionTier: SubscriptionTier;
   offerings: PurchasesOfferings | null;
   proPackage: PurchasesPackage | null;
 };
 
-const ENTITLEMENT_ID = "pro";
+function entitlementId(envKey: string, fallback: string): string {
+  const raw = typeof process !== "undefined" ? process.env[envKey] || "" : "";
+  return raw.trim() || fallback;
+}
+
+const PRO_ENTITLEMENT_ID = entitlementId("EXPO_PUBLIC_RC_ENTITLEMENT_PRO", "pro");
+const TEAM_ENTITLEMENT_ID = entitlementId("EXPO_PUBLIC_RC_ENTITLEMENT_TEAM", "team");
+const ENTERPRISE_ENTITLEMENT_ID = entitlementId("EXPO_PUBLIC_RC_ENTITLEMENT_ENTERPRISE", "enterprise");
 
 function resolveApiKey(): string | undefined {
   if (Platform.OS === "ios") {
@@ -21,17 +33,54 @@ function resolveApiKey(): string | undefined {
   return undefined;
 }
 
-function hasPro(info: CustomerInfo | null): boolean {
-  if (!info) {
-    return false;
+function resolveTier(info: CustomerInfo | null): { isPro: boolean; isTeam: boolean; isEnterprise: boolean; subscriptionTier: SubscriptionTier } {
+  const active = info?.entitlements.active || {};
+  const isEnterprise = Boolean(active[ENTERPRISE_ENTITLEMENT_ID]);
+  const isTeam = Boolean(active[TEAM_ENTITLEMENT_ID]);
+  const hasProOnly = Boolean(active[PRO_ENTITLEMENT_ID]);
+
+  if (isEnterprise) {
+    return {
+      isPro: true,
+      isTeam: true,
+      isEnterprise: true,
+      subscriptionTier: "enterprise",
+    };
   }
-  return Boolean(info.entitlements.active[ENTITLEMENT_ID]);
+
+  if (isTeam) {
+    return {
+      isPro: true,
+      isTeam: true,
+      isEnterprise: false,
+      subscriptionTier: "team",
+    };
+  }
+
+  if (hasProOnly) {
+    return {
+      isPro: true,
+      isTeam: false,
+      isEnterprise: false,
+      subscriptionTier: "pro",
+    };
+  }
+
+  return {
+    isPro: false,
+    isTeam: false,
+    isEnterprise: false,
+    subscriptionTier: "free",
+  };
 }
 
 export function useRevenueCat() {
   const [state, setState] = useState<RevenueCatState>({
     ready: false,
     isPro: false,
+    isTeam: false,
+    isEnterprise: false,
+    subscriptionTier: "free",
     offerings: null,
     proPackage: null,
   });
@@ -63,10 +112,11 @@ export function useRevenueCat() {
 
         const current = offerings.current;
         const proPackage = current?.monthly || current?.annual || current?.availablePackages?.[0] || null;
+        const tier = resolveTier(customerInfo);
 
         setState({
           ready: true,
-          isPro: hasPro(customerInfo),
+          ...tier,
           offerings,
           proPackage,
         });
@@ -92,10 +142,11 @@ export function useRevenueCat() {
     const [customerInfo, offerings] = await Promise.all([Purchases.getCustomerInfo(), Purchases.getOfferings()]);
     const current = offerings.current;
     const proPackage = current?.monthly || current?.annual || current?.availablePackages?.[0] || null;
+    const tier = resolveTier(customerInfo);
 
     setState((prev) => ({
       ...prev,
-      isPro: hasPro(customerInfo),
+      ...tier,
       offerings,
       proPackage,
     }));
@@ -107,16 +158,16 @@ export function useRevenueCat() {
     }
 
     const result = await Purchases.purchasePackage(state.proPackage);
-    const pro = hasPro(result.customerInfo);
-    setState((prev) => ({ ...prev, isPro: pro }));
-    return pro;
+    const tier = resolveTier(result.customerInfo);
+    setState((prev) => ({ ...prev, ...tier }));
+    return tier.isPro;
   }, [state.proPackage]);
 
   const restore = useCallback(async () => {
     const info = await Purchases.restorePurchases();
-    const pro = hasPro(info);
-    setState((prev) => ({ ...prev, isPro: pro }));
-    return pro;
+    const tier = resolveTier(info);
+    setState((prev) => ({ ...prev, ...tier }));
+    return tier.isPro;
   }, []);
 
   const priceLabel = useMemo(() => {
@@ -127,6 +178,10 @@ export function useRevenueCat() {
     available,
     ready: state.ready,
     isPro: state.isPro,
+    isTeam: state.isTeam,
+    isEnterprise: state.isEnterprise,
+    subscriptionTier: state.subscriptionTier,
+    isPaid: state.isPro,
     offerings: state.offerings,
     proPackage: state.proPackage,
     priceLabel,
