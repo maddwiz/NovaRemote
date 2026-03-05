@@ -23,6 +23,7 @@ export type VrHudStatus = {
 export type UseVrInputRouterArgs = {
   workspace: WorkspaceInputBridge;
   onSendCommand: (serverId: string, session: string, command: string) => Promise<void> | void;
+  onCreateSession?: (serverId: string, kind: "ai" | "shell", prompt?: string) => Promise<string> | string;
   onSendControlChar?: (serverId: string, session: string, char: string) => Promise<void> | void;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
@@ -86,6 +87,7 @@ function resolveActionCount(result: void | number | boolean | string[] | null | 
 export function useVrInputRouter({
   workspace,
   onSendCommand,
+  onCreateSession,
   onSendControlChar,
   onReconnectServer,
   onReconnectServers,
@@ -164,6 +166,32 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to send command",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "create_session") {
+        if (!onCreateSession) {
+          publishHudStatus({
+            message: "Session creation routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const session = await onCreateSession(action.serverId, action.sessionKind, action.prompt);
+          publishHudStatus({
+            message: `Started ${action.sessionKind} session ${session} on ${action.serverId}`,
+            severity: "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to create session",
             severity: "error",
             at: now(),
           });
@@ -673,6 +701,33 @@ export function useVrInputRouter({
         return action;
       }
 
+      if (action.kind === "resize_panel") {
+        publishHudStatus({
+          message: `Resized panel ${action.panelId} to ${action.scale}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+
+      if (action.kind === "move_panel") {
+        publishHudStatus({
+          message: `Moved panel ${action.panelId} to ${action.position}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+
+      if (action.kind === "swap_panels") {
+        publishHudStatus({
+          message: `Swapped panels ${action.panelIdA} and ${action.panelIdB}`,
+          severity: "info",
+          at: now(),
+        });
+        return action;
+      }
+
       if (action.kind === "panel_add") {
         publishHudStatus({
           message: `Added panel ${action.panelId}`,
@@ -750,6 +805,7 @@ export function useVrInputRouter({
       onSetAgentStatus,
       onSetAgentGoal,
       onQueueAgentCommand,
+      onCreateSession,
       onSendCommand,
       onSendControlChar,
       onSetOverviewMode,

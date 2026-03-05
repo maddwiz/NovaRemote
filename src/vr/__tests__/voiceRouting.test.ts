@@ -148,6 +148,42 @@ describe("parseVrVoiceIntent", () => {
       name: "deploy bot",
       allServers: true,
     });
+    expect(parseVrVoiceIntent("open codex on homelab", PANELS, "dgx-main")).toEqual({
+      kind: "create_session",
+      serverId: "homelab",
+      sessionKind: "ai",
+      prompt: undefined,
+    });
+    expect(parseVrVoiceIntent("new terminal", PANELS, "home-build")).toEqual({
+      kind: "create_session",
+      serverId: "homelab",
+      sessionKind: "shell",
+      prompt: undefined,
+    });
+    expect(parseVrVoiceIntent("close this", PANELS, "home-build")).toEqual({
+      kind: "close_panel",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("fullscreen homelab", PANELS, "dgx-main")).toEqual({
+      kind: "resize_panel",
+      panelId: "home-build",
+      scale: "fullscreen",
+    });
+    expect(parseVrVoiceIntent("double size", PANELS, "dgx-main")).toEqual({
+      kind: "resize_panel",
+      panelId: "dgx-main",
+      scale: "double",
+    });
+    expect(parseVrVoiceIntent("move to left", PANELS, "home-build")).toEqual({
+      kind: "move_panel",
+      panelId: "home-build",
+      position: "left",
+    });
+    expect(parseVrVoiceIntent("swap dgx spark and homelab", PANELS, "home-build")).toEqual({
+      kind: "swap_panels",
+      panelIdA: "dgx-main",
+      panelIdB: "home-build",
+    });
     expect(parseVrVoiceIntent("remove agent build watcher", PANELS, "dgx-main")).toEqual({
       kind: "remove_agent",
       name: "build watcher",

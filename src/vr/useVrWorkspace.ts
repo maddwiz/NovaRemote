@@ -22,6 +22,7 @@ export type VrWorkspacePanel = VrPanelState & {
 export type VrWorkspaceVoiceAction =
   | { kind: "none" }
   | { kind: "focus"; panelId: string }
+  | { kind: "create_session"; serverId: string; sessionKind: "ai" | "shell"; prompt?: string }
   | { kind: "reconnect_server"; panelId: string; serverId: string }
   | { kind: "reconnect_all"; serverIds: string[] }
   | { kind: "create_agent"; serverIds: string[]; name: string }
@@ -69,6 +70,9 @@ export type VrWorkspaceVoiceAction =
   | { kind: "layout_preset"; preset: Exclude<VrLayoutPreset, "custom"> }
   | { kind: "panel_pin"; panelId: string }
   | { kind: "panel_unpin"; panelId: string }
+  | { kind: "resize_panel"; panelId: string; scale: "double" | "half" | "fullscreen" | "normal" }
+  | { kind: "move_panel"; panelId: string; position: "left" | "center" | "right" | "above" | "below" }
+  | { kind: "swap_panels"; panelIdA: string; panelIdB: string }
   | { kind: "panel_add"; panelId: string }
   | { kind: "panel_remove"; panelId: string }
   | { kind: "panel_mini"; panelId: string }
@@ -742,6 +746,22 @@ export function useVrWorkspace({
         focusPanel(panel.id);
         return { kind: "focus", panelId: panel.id };
       }
+      if (intent.kind === "create_session") {
+        return {
+          kind: "create_session",
+          serverId: intent.serverId,
+          sessionKind: intent.sessionKind,
+          prompt: intent.prompt,
+        };
+      }
+      if (intent.kind === "close_panel") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        removePanel(panel.id);
+        return { kind: "panel_remove", panelId: panel.id };
+      }
       if (intent.kind === "reconnect_server") {
         const panel = universeById.get(intent.panelId);
         if (!panel) {
@@ -933,6 +953,60 @@ export function useVrWorkspace({
         setPanelPinned(intent.panelId, false);
         return { kind: "panel_unpin", panelId: intent.panelId };
       }
+      if (intent.kind === "resize_panel") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        if (intent.scale === "fullscreen") {
+          setPanelMini(panel.id, false);
+          updatePanelTransform(panel.id, { x: 0, y: 1.45, z: -1.35, width: 1.75, height: 1.0, yaw: 0 });
+          focusPanel(panel.id);
+          return { kind: "resize_panel", panelId: panel.id, scale: "fullscreen" };
+        }
+        if (intent.scale === "normal") {
+          setPanelMini(panel.id, false);
+          updatePanelTransform(panel.id, { width: 1.05, height: 0.62 });
+          return { kind: "resize_panel", panelId: panel.id, scale: "normal" };
+        }
+        if (intent.scale === "double") {
+          setPanelMini(panel.id, false);
+          updatePanelTransform(panel.id, { width: 1.45, height: 0.88 });
+          return { kind: "resize_panel", panelId: panel.id, scale: "double" };
+        }
+        setPanelMini(panel.id, false);
+        updatePanelTransform(panel.id, { width: 0.72, height: 0.44 });
+        return { kind: "resize_panel", panelId: panel.id, scale: "half" };
+      }
+      if (intent.kind === "move_panel") {
+        const panel = universeById.get(intent.panelId);
+        if (!panel) {
+          return { kind: "none" };
+        }
+        const positionPatch =
+          intent.position === "left"
+            ? { x: -0.95, y: 1.45, z: -1.95 }
+            : intent.position === "right"
+              ? { x: 0.95, y: 1.45, z: -1.95 }
+              : intent.position === "above"
+                ? { x: 0, y: 2.05, z: -2.05 }
+                : intent.position === "below"
+                  ? { x: 0, y: 0.95, z: -1.85 }
+                  : { x: 0, y: 1.45, z: -1.8 };
+        updatePanelTransform(panel.id, positionPatch);
+        focusPanel(panel.id);
+        return { kind: "move_panel", panelId: panel.id, position: intent.position };
+      }
+      if (intent.kind === "swap_panels") {
+        const panelA = panels.find((entry) => entry.id === intent.panelIdA);
+        const panelB = panels.find((entry) => entry.id === intent.panelIdB);
+        if (!panelA || !panelB) {
+          return { kind: "none" };
+        }
+        updatePanelTransform(panelA.id, panelB.transform);
+        updatePanelTransform(panelB.id, panelA.transform);
+        return { kind: "swap_panels", panelIdA: panelA.id, panelIdB: panelB.id };
+      }
       if (intent.kind === "panel_add") {
         const panel = universeById.get(intent.panelId);
         if (!panel) {
@@ -980,6 +1054,7 @@ export function useVrWorkspace({
       focusPanel,
       focusedPanelId,
       addPanel,
+      panels,
       removePanel,
       rotateWorkspace,
       routePanels,
@@ -987,6 +1062,7 @@ export function useVrWorkspace({
       setPanelMini,
       setPanelOpacity,
       setPanelPinned,
+      updatePanelTransform,
       universeById,
     ]
   );

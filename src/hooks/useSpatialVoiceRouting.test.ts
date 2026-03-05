@@ -170,6 +170,118 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(reconnectAll).toEqual({ kind: "reconnect_all" });
   });
 
+  it("recognizes voice session and panel management commands", () => {
+    const createAiFocused = resolveSpatialVoiceRoute({
+      transcript: "open codex",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const createAiTargeted = resolveSpatialVoiceRoute({
+      transcript: "start ai on dgx spark",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const createShellTargeted = resolveSpatialVoiceRoute({
+      transcript: "new terminal on homelab",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const closeFocused = resolveSpatialVoiceRoute({
+      transcript: "close this",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const closeTargeted = resolveSpatialVoiceRoute({
+      transcript: "dismiss deploy",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const resizeFocused = resolveSpatialVoiceRoute({
+      transcript: "double size",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const resizeTargeted = resolveSpatialVoiceRoute({
+      transcript: "fullscreen cloud vm",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const resizeNormal = resolveSpatialVoiceRoute({
+      transcript: "normal size",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const moveFocused = resolveSpatialVoiceRoute({
+      transcript: "move to left",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const moveTargeted = resolveSpatialVoiceRoute({
+      transcript: "pull up deploy",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const swapPanels = resolveSpatialVoiceRoute({
+      transcript: "swap homelab and cloud vm",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+
+    expect(createAiFocused).toEqual({
+      kind: "create_session",
+      serverId: "home",
+      sessionKind: "ai",
+    });
+    expect(createAiTargeted).toEqual({
+      kind: "create_session",
+      serverId: "dgx",
+      sessionKind: "ai",
+    });
+    expect(createShellTargeted).toEqual({
+      kind: "create_session",
+      serverId: "home",
+      sessionKind: "shell",
+    });
+    expect(closeFocused).toEqual({
+      kind: "close_panel",
+      panelId: "home::build-01",
+    });
+    expect(closeTargeted).toEqual({
+      kind: "close_panel",
+      panelId: "cloud::deploy",
+    });
+    expect(resizeFocused).toEqual({
+      kind: "resize_panel",
+      panelId: "home::build-01",
+      scale: "double",
+    });
+    expect(resizeTargeted).toEqual({
+      kind: "resize_panel",
+      panelId: "cloud::deploy",
+      scale: "fullscreen",
+    });
+    expect(resizeNormal).toEqual({
+      kind: "resize_panel",
+      panelId: "home::build-01",
+      scale: "normal",
+    });
+    expect(moveFocused).toEqual({
+      kind: "move_panel",
+      panelId: "home::build-01",
+      position: "left",
+    });
+    expect(moveTargeted).toEqual({
+      kind: "move_panel",
+      panelId: "cloud::deploy",
+      position: "center",
+    });
+    expect(swapPanels).toEqual({
+      kind: "swap_panels",
+      panelIdA: "home::build-01",
+      panelIdB: "cloud::deploy",
+    });
+  });
+
   it("recognizes control and lifecycle commands", () => {
     const interrupt = resolveSpatialVoiceRoute({
       transcript: "interrupt for homelab",

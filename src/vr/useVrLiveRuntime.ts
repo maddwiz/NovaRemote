@@ -20,6 +20,7 @@ export type UseVrLiveRuntimeArgs = {
   pauseWorkspaceStreamsOnAppBackground?: boolean;
   onReconnectServer?: (serverId: string) => Promise<void> | void;
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
+  onCreateSession?: (serverId: string, kind: "ai" | "shell", prompt?: string) => Promise<string> | string;
   onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onRemoveAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onSetAgentStatus?: (
@@ -73,6 +74,7 @@ export function useVrLiveRuntime({
   pauseWorkspaceStreamsOnAppBackground = true,
   onReconnectServer,
   onReconnectServers,
+  onCreateSession,
   onCreateAgent,
   onRemoveAgent,
   onSetAgentStatus,
@@ -331,6 +333,7 @@ export function useVrLiveRuntime({
     workspace,
     onSetOverviewMode: workspace.setOverviewMode,
     onSendCommand: sendServerCommand,
+    onCreateSession,
     onSendControlChar: sendServerControlChar,
     onReconnectServer,
     onReconnectServers,

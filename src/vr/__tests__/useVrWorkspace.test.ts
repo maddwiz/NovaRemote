@@ -280,6 +280,22 @@ describe("useVrWorkspace", () => {
       serverIds: ["dgx", "home"],
     });
 
+    const createAiSessionAction = current().applyVoiceTranscript("open codex on homelab");
+    expect(createAiSessionAction).toEqual({
+      kind: "create_session",
+      serverId: "home",
+      sessionKind: "ai",
+      prompt: undefined,
+    });
+
+    const createShellSessionAction = current().applyVoiceTranscript("new terminal");
+    expect(createShellSessionAction).toEqual({
+      kind: "create_session",
+      serverId: "dgx",
+      sessionKind: "shell",
+      prompt: undefined,
+    });
+
     const createAgentAction = current().applyVoiceTranscript("create agent build watcher");
     expect(createAgentAction).toEqual({
       kind: "create_agent",
@@ -463,6 +479,33 @@ describe("useVrWorkspace", () => {
     const resumePoolAction = current().applyVoiceTranscript("resume pool");
     expect(resumePoolAction).toEqual({
       kind: "resume_pool",
+    });
+
+    const resizeAction = current().applyVoiceTranscript("fullscreen dgx spark");
+    expect(resizeAction).toEqual({
+      kind: "resize_panel",
+      panelId: buildVrPanelId("dgx", "main"),
+      scale: "fullscreen",
+    });
+
+    const moveAction = current().applyVoiceTranscript("move homelab to left");
+    expect(moveAction).toEqual({
+      kind: "move_panel",
+      panelId: buildVrPanelId("home", "build-01"),
+      position: "left",
+    });
+
+    const swapAction = current().applyVoiceTranscript("swap dgx spark and homelab");
+    expect(swapAction).toEqual({
+      kind: "swap_panels",
+      panelIdA: buildVrPanelId("dgx", "main"),
+      panelIdB: buildVrPanelId("home", "build-01"),
+    });
+
+    const closePanelAction = current().applyVoiceTranscript("close homelab");
+    expect(closePanelAction).toEqual({
+      kind: "panel_remove",
+      panelId: buildVrPanelId("home", "build-01"),
     });
 
     await act(async () => {

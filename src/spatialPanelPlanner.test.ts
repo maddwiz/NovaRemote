@@ -78,7 +78,7 @@ describe("buildSpatialPanels", () => {
   const panels = [
     panel({ id: "dgx::main", serverId: "dgx", serverName: "DGX", session: "main" }),
     panel({ id: "home::build", serverId: "home", serverName: "Homelab", session: "build", sessionLabel: "Build" }),
-    panel({ id: "cloud::deploy", serverId: "cloud", serverName: "Cloud", session: "deploy" }),
+    panel({ id: "cloud::deploy", serverId: "cloud", serverName: "Cloud", session: "deploy", sessionLabel: "deploy" }),
   ];
 
   it("returns an empty layout when there are no panel ids", () => {
@@ -105,6 +105,7 @@ describe("buildSpatialPanels", () => {
         pinned: true,
         focused: true,
         output: "",
+        scale: 1,
       },
     ]);
   });
@@ -135,5 +136,52 @@ describe("buildSpatialPanels", () => {
     expect(result.map((entry) => entry.position)).toEqual(["center", "left", "right", "above", "below"]);
     expect(result.find((entry) => entry.id === "edge::logs")?.pinned).toBe(true);
     expect(result.find((entry) => entry.id === "cloud::deploy")?.focused).toBe(true);
+  });
+
+  it("applies preferred positions, panel scales, and fullscreen focus", () => {
+    const overview = buildSpatialPanels(
+      panels,
+      "home::build",
+      ["dgx::main", "home::build", "cloud::deploy"],
+      [],
+      true,
+      {
+        panelPositions: {
+          "home::build": "left",
+          "dgx::main": "center",
+        },
+        panelScales: {
+          "home::build": 2,
+        },
+      }
+    );
+
+    expect(overview.find((entry) => entry.id === "home::build")?.position).toBe("left");
+    expect(overview.find((entry) => entry.id === "home::build")?.scale).toBe(2);
+
+    const fullscreen = buildSpatialPanels(
+      panels,
+      "home::build",
+      ["dgx::main", "home::build", "cloud::deploy"],
+      [],
+      true,
+      {
+        fullscreenPanelId: "cloud::deploy",
+      }
+    );
+    expect(fullscreen).toEqual([
+      {
+        id: "cloud::deploy",
+        serverId: "cloud",
+        serverName: "Cloud",
+        session: "deploy",
+        sessionLabel: "deploy",
+        position: "center",
+        pinned: false,
+        focused: true,
+        output: "",
+        scale: 1,
+      },
+    ]);
   });
 });

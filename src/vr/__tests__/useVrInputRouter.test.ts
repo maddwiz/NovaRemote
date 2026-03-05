@@ -127,6 +127,50 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("dispatches create-session voice actions through session creation callback", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({
+        kind: "create_session",
+        serverId: "home",
+        sessionKind: "ai",
+      });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onCreateSession = vi.fn(async () => "ai-9");
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onCreateSession,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("open codex on homelab");
+    });
+
+    expect(onCreateSession).toHaveBeenCalledWith("home", "ai", undefined);
+    expect(current().hudStatus?.message).toContain("Started ai session ai-9 on home");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("dispatches control-char voice actions through the control callback", async () => {
     const applyVoiceTranscript = vi.fn<
       (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction

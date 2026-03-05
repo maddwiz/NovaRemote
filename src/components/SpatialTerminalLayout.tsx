@@ -16,28 +16,36 @@ export type SpatialPanel = {
   pinned: boolean;
   focused: boolean;
   output: string;
+  scale: number;
 };
 
 type SpatialTerminalLayoutProps = {
   panels: SpatialPanel[];
+  fullscreenPanelId?: string | null;
   onFocusPanel: (panelId: string) => void;
   onTogglePinPanel: (panelId: string) => void;
   onRemovePanel: (panelId: string) => void;
   onCyclePanel: (direction: "next" | "prev") => void;
 };
 
-function panelShellStyle(position: SpatialPanelPosition, focused: boolean) {
+function panelShellStyle(position: SpatialPanelPosition, focused: boolean, scale: number, fullscreen: boolean) {
+  const normalizedScale = Number.isFinite(scale) ? Math.max(0.5, Math.min(scale, 2)) : 1;
+  const scaledStyle = normalizedScale === 1 ? null : { transform: [{ scale: normalizedScale }] };
+  if (fullscreen) {
+    return [styles.spatialPanel, styles.spatialPanelFullscreen, focused ? styles.spatialPanelFocused : null, scaledStyle];
+  }
   if (position === "center") {
-    return [styles.spatialPanel, styles.spatialPanelCenter, focused ? styles.spatialPanelFocused : null];
+    return [styles.spatialPanel, styles.spatialPanelCenter, focused ? styles.spatialPanelFocused : null, scaledStyle];
   }
   if (position === "left" || position === "right") {
-    return [styles.spatialPanel, styles.spatialPanelSide, focused ? styles.spatialPanelFocused : null];
+    return [styles.spatialPanel, styles.spatialPanelSide, focused ? styles.spatialPanelFocused : null, scaledStyle];
   }
-  return [styles.spatialPanel, styles.spatialPanelEdge, focused ? styles.spatialPanelFocused : null];
+  return [styles.spatialPanel, styles.spatialPanelEdge, focused ? styles.spatialPanelFocused : null, scaledStyle];
 }
 
 export function SpatialTerminalLayout({
   panels,
+  fullscreenPanelId = null,
   onFocusPanel,
   onTogglePinPanel,
   onRemovePanel,
@@ -70,7 +78,7 @@ export function SpatialTerminalLayout({
     [onCyclePanel]
   );
 
-  const renderPanel = (panel: SpatialPanel | undefined) => {
+  const renderPanel = (panel: SpatialPanel | undefined, fullscreen: boolean = false) => {
     if (!panel) {
       return <View style={[styles.spatialPanel, styles.spatialPanelEmpty]} />;
     }
@@ -80,7 +88,7 @@ export function SpatialTerminalLayout({
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Focus ${panel.serverName} ${panel.sessionLabel}`}
-        style={panelShellStyle(panel.position, panel.focused)}
+        style={panelShellStyle(panel.position, panel.focused, panel.scale, fullscreen)}
         onPress={() => onFocusPanel(panel.id)}
         onLongPress={() => onTogglePinPanel(panel.id)}
       >
@@ -111,6 +119,13 @@ export function SpatialTerminalLayout({
       </Pressable>
     );
   };
+
+  if (fullscreenPanelId) {
+    const fullscreenPanel = panels.find((panel) => panel.id === fullscreenPanelId);
+    if (fullscreenPanel) {
+      return <View style={styles.spatialLayoutFullscreen}>{renderPanel(fullscreenPanel, true)}</View>;
+    }
+  }
 
   return (
     <View style={styles.spatialLayout} {...panResponder.panHandlers}>

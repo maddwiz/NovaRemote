@@ -10,10 +10,17 @@ export type VoiceRoutePanel = {
   sessionLabel: string;
 };
 
+export type VoiceRoutePanelPosition = "left" | "center" | "right" | "above" | "below";
+
 export type VoiceRoute =
   | { kind: "none" }
   | { kind: "show_all" }
   | { kind: "minimize" }
+  | { kind: "create_session"; serverId: string; sessionKind: "ai" | "shell"; prompt?: string }
+  | { kind: "close_panel"; panelId: string }
+  | { kind: "resize_panel"; panelId: string; scale: "double" | "half" | "fullscreen" | "normal" }
+  | { kind: "move_panel"; panelId: string; position: VoiceRoutePanelPosition }
+  | { kind: "swap_panels"; panelIdA: string; panelIdB: string }
   | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
   | { kind: "remove_agent"; name: string; panelId?: string; allServers?: boolean }
   | { kind: "set_agent_status"; name: string; status: "idle" | "monitoring" | "executing" | "waiting_approval"; panelId?: string; allServers?: boolean }
@@ -279,6 +286,137 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     normalized === "single panel"
   ) {
     return { kind: "minimize" };
+  }
+
+  const createAiMatch = cleaned.match(
+    /^(?:open|start|new|launch)\s+(?:codex|ai|ai\s+session|ai\s+cli|codex\s+cli|assistant)(?:\s+(?:on|for)\s+(.+))?$/i
+  );
+  if (createAiMatch) {
+    const targetName = createAiMatch[1]?.trim() || "";
+    const targetPanel = targetName ? findPanelByTarget(panels, targetName) : null;
+    const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
+    const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
+    const serverId = targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || null;
+    if (serverId) {
+      return { kind: "create_session", serverId, sessionKind: "ai" };
+    }
+  }
+
+  const createShellMatch = cleaned.match(
+    /^(?:open|start|new|launch)\s+(?:terminal|shell|session|bash|zsh)(?:\s+(?:on|for)\s+(.+))?$/i
+  );
+  if (createShellMatch) {
+    const targetName = createShellMatch[1]?.trim() || "";
+    const targetPanel = targetName ? findPanelByTarget(panels, targetName) : null;
+    const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
+    const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
+    const serverId = targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || null;
+    if (serverId) {
+      return { kind: "create_session", serverId, sessionKind: "shell" };
+    }
+  }
+
+  if (/^remove\s+(?:this(?:\s+panel)?|that(?:\s+panel)?)$/i.test(cleaned)) {
+    const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
+    if (fallbackPanelId) {
+      return { kind: "close_panel", panelId: fallbackPanelId };
+    }
+  }
+
+  const closeMatch = cleaned.match(
+    /^(?:close|dismiss|kill|shut)\s+(?:this(?:\s+panel)?|that(?:\s+panel)?|panel|terminal|(.+))$/i
+  );
+  if (closeMatch) {
+    const targetName = closeMatch[1]?.trim() || "";
+    if (targetName) {
+      const targetPanel = findPanelByTarget(panels, targetName);
+      if (targetPanel) {
+        return { kind: "close_panel", panelId: targetPanel.id };
+      }
+    }
+    const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
+    if (fallbackPanelId) {
+      return { kind: "close_panel", panelId: fallbackPanelId };
+    }
+  }
+
+  const resizeTargetMatch = cleaned.match(
+    /^(double|fullscreen|maximize|enlarge|shrink|minimize)\s+(.+)$/i
+  );
+  if (resizeTargetMatch) {
+    const verb = normalizeForMatch(resizeTargetMatch[1] || "");
+    const targetName = resizeTargetMatch[2]?.trim() || "";
+    const targetPanel = findPanelByTarget(panels, targetName);
+    if (targetPanel) {
+      const scale =
+        verb === "shrink" || verb === "minimize"
+          ? "half"
+          : verb === "fullscreen" || verb === "maximize"
+            ? "fullscreen"
+            : "double";
+      return { kind: "resize_panel", panelId: targetPanel.id, scale };
+    }
+  }
+
+  const resizePatterns: Array<{ pattern: RegExp; scale: "double" | "half" | "fullscreen" | "normal" }> = [
+    { pattern: /^(?:double\s+(?:size|this)|make\s+(?:it\s+)?bigger|enlarge|grow|scale\s+up|bigger)$/i, scale: "double" },
+    { pattern: /^(?:half\s+(?:size|this)|make\s+(?:it\s+)?smaller|shrink(?:\s+this)?|scale\s+down|smaller)$/i, scale: "half" },
+    { pattern: /^(?:full\s*screen|go\s+full|maximize|max(?:\s+size)?)$/i, scale: "fullscreen" },
+    { pattern: /^(?:normal\s+(?:size|mode)|reset\s+(?:size|scale)|default\s+size|restore(?:\s+size)?)$/i, scale: "normal" },
+  ];
+  for (const { pattern, scale } of resizePatterns) {
+    if (!pattern.test(cleaned)) {
+      continue;
+    }
+    const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
+    if (fallbackPanelId) {
+      return { kind: "resize_panel", panelId: fallbackPanelId, scale };
+    }
+  }
+
+  const swapMatch = cleaned.match(
+    /^(?:swap|switch|exchange)\s+(.+?)\s+(?:and|with)\s+(.+)$/i
+  );
+  if (swapMatch) {
+    const panelA = findPanelByTarget(panels, swapMatch[1]?.trim() || "");
+    const panelB = findPanelByTarget(panels, swapMatch[2]?.trim() || "");
+    if (panelA && panelB && panelA.id !== panelB.id) {
+      return { kind: "swap_panels", panelIdA: panelA.id, panelIdB: panelB.id };
+    }
+  }
+
+  const moveMatch = cleaned.match(
+    /^(?:move|put|pull|place|bring)(?:\s+(?:this|that|it|(.+?)))?\s+(?:to\s+(?:the\s+)?)?(?:in\s+front(?:\s+of\s+me)?|(left|right|center|above|below|top|bottom|middle|front))$/i
+  );
+  if (moveMatch) {
+    const targetName = moveMatch[1]?.trim() || "";
+    const rawPosition = (moveMatch[2] || "center").toLowerCase();
+    const positionMap: Record<string, VoiceRoutePanelPosition> = {
+      left: "left",
+      right: "right",
+      center: "center",
+      front: "center",
+      middle: "center",
+      above: "above",
+      top: "above",
+      below: "below",
+      bottom: "below",
+    };
+    const position = positionMap[rawPosition] || "center";
+    const targetPanel = targetName ? findPanelByTarget(panels, targetName) : null;
+    const panelId = targetPanel?.id || resolveFocusedPanelId(panels, focusedPanelId);
+    if (panelId) {
+      return { kind: "move_panel", panelId, position };
+    }
+  }
+
+  const pullUpMatch = cleaned.match(/^pull\s+up\s+(.+)$/i);
+  if (pullUpMatch) {
+    const targetName = pullUpMatch[1]?.trim() || "";
+    const targetPanel = findPanelByTarget(panels, targetName);
+    if (targetPanel) {
+      return { kind: "move_panel", panelId: targetPanel.id, position: "center" };
+    }
   }
 
   if (

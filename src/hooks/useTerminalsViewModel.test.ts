@@ -143,6 +143,7 @@ function makeBaseArgs() {
     reconnectAllServers: vi.fn(),
     connectAllServers: vi.fn(),
     disconnectAllServers: vi.fn(),
+    createSessionForServer: vi.fn(async () => "session-created"),
     createAgentForServer: vi.fn(async () => []),
     setAgentGoalForServer: vi.fn(async () => []),
     createAgentForServers: vi.fn(async () => []),
@@ -327,6 +328,17 @@ describe("useTerminalsViewModel", () => {
     await expect(model.onDenyAllPendingAgentsForServer("dgx")).resolves.toEqual(["agent-b"]);
     expect(approveReadyAgentsForServer).toHaveBeenCalledWith("dgx");
     expect(denyAllPendingAgentsForServer).toHaveBeenCalledWith("dgx");
+  });
+
+  it("routes cross-server session creation through async callback", async () => {
+    const createSessionForServer = vi.fn(async (_serverId: string, _kind: "ai" | "shell", _prompt: string) => "ai-4");
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      createSessionForServer,
+    });
+
+    await expect(model.onCreateSession("dgx", "ai", "hello")).resolves.toBe("ai-4");
+    expect(createSessionForServer).toHaveBeenCalledWith("dgx", "ai", "hello");
   });
 
   it("routes server-scoped agent create and goal actions through async callbacks", async () => {

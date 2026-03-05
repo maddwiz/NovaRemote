@@ -6,6 +6,11 @@ export type VrRoutePanel = VoiceRoutePanel;
 export type VrVoiceIntent =
   | { kind: "none" }
   | { kind: "focus"; panelId: string }
+  | { kind: "create_session"; serverId: string; sessionKind: "ai" | "shell"; prompt?: string }
+  | { kind: "close_panel"; panelId: string }
+  | { kind: "resize_panel"; panelId: string; scale: "double" | "half" | "fullscreen" | "normal" }
+  | { kind: "move_panel"; panelId: string; position: "left" | "center" | "right" | "above" | "below" }
+  | { kind: "swap_panels"; panelIdA: string; panelIdB: string }
   | { kind: "reconnect_server"; panelId: string }
   | { kind: "reconnect_all" }
   | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
@@ -267,6 +272,41 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
   }
   if (route.kind === "focus_panel") {
     return { kind: "focus", panelId: route.panelId };
+  }
+  if (route.kind === "create_session") {
+    return {
+      kind: "create_session",
+      serverId: route.serverId,
+      sessionKind: route.sessionKind,
+      prompt: route.prompt,
+    };
+  }
+  if (route.kind === "close_panel") {
+    return {
+      kind: "close_panel",
+      panelId: route.panelId,
+    };
+  }
+  if (route.kind === "resize_panel") {
+    return {
+      kind: "resize_panel",
+      panelId: route.panelId,
+      scale: route.scale,
+    };
+  }
+  if (route.kind === "move_panel") {
+    return {
+      kind: "move_panel",
+      panelId: route.panelId,
+      position: route.position,
+    };
+  }
+  if (route.kind === "swap_panels") {
+    return {
+      kind: "swap_panels",
+      panelIdA: route.panelIdA,
+      panelIdB: route.panelIdB,
+    };
   }
   if (route.kind === "reconnect_server") {
     return {

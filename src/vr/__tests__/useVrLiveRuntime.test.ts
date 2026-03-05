@@ -754,6 +754,7 @@ describe("useVrLiveRuntime", () => {
     >(async () => undefined);
     const onReconnectServer = vi.fn(async () => undefined);
     const onReconnectServers = vi.fn(async () => undefined);
+    const onCreateSession = vi.fn(async () => "ai-7");
     const onCreateAgent = vi.fn(async () => true);
     const onRemoveAgent = vi.fn(async () => 1);
     const onSetAgentStatus = vi.fn(async () => 1);
@@ -779,6 +780,7 @@ describe("useVrLiveRuntime", () => {
         maxPanels: 3,
         onReconnectServer,
         onReconnectServers,
+        onCreateSession,
         onCreateAgent,
         onRemoveAgent,
         onSetAgentStatus,
@@ -858,6 +860,12 @@ describe("useVrLiveRuntime", () => {
     });
     expect(onReconnectServers).toHaveBeenCalledWith(["dgx"]);
     expect(current().hudStatus?.message).toContain("Reconnect queued for 1 servers");
+
+    await act(async () => {
+      await current().dispatchVoice("open codex on dgx");
+    });
+    expect(onCreateSession).toHaveBeenCalledWith("dgx", "ai", undefined);
+    expect(current().hudStatus?.message).toContain("Started ai session ai-7 on dgx");
 
     await act(async () => {
       await current().dispatchVoice("create agent build watcher");

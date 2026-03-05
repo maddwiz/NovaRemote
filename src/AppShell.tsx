@@ -1023,6 +1023,23 @@ export default function AppShell() {
     return session;
   }, [activeServer, connected, createPoolSession, focusedServerId, startCwd, startKind, startOpenOnMac, startPrompt]);
 
+  const createSessionForServer = useCallback(
+    async (serverId: string, kind: "ai" | "shell", prompt: string = ""): Promise<string> => {
+      const targetConnection = poolConnections.get(serverId);
+      if (!targetConnection || !targetConnection.connected) {
+        throw new Error("Target server is disconnected.");
+      }
+      return await createPoolSession(
+        serverId,
+        targetConnection.server.defaultCwd || DEFAULT_CWD,
+        kind,
+        prompt.trim(),
+        false
+      );
+    },
+    [createPoolSession, poolConnections]
+  );
+
   const sendCommand = useCallback(
     async (session: string, command: string, mode: TerminalSendMode, clearDraft: boolean = false) => {
       if (!focusedServerId) {
@@ -2727,6 +2744,7 @@ export default function AppShell() {
     reconnectAllServers,
     connectAllServers,
     disconnectAllServers,
+    createSessionForServer,
     createAgentForServer,
     setAgentStatusForServer,
     setAgentGoalForServer,

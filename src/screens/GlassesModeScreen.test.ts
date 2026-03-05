@@ -119,6 +119,7 @@ function makeTerminalsBase(connections: Map<string, ServerConnection>) {
     connections,
     focusedServerId: "dgx",
     onFocusServer: vi.fn(),
+    onCreateSession: vi.fn(async () => "ai-1"),
     onReconnectServer: vi.fn(),
     onReconnectServers: vi.fn(),
     onConnectAllServers: vi.fn(),
@@ -799,6 +800,129 @@ describe("GlassesModeScreen", () => {
       screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
     });
     expect(onSetAgentStatusForServers).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "executing");
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("routes session creation and panel lifecycle voice commands", async () => {
+    const routeTranscript = vi
+      .fn<
+        (
+          transcript: string
+        ) => {
+          kind: string;
+          serverId?: string;
+          sessionKind?: "ai" | "shell";
+          panelId?: string;
+          panelIdA?: string;
+          panelIdB?: string;
+          position?: "left" | "center" | "right" | "above" | "below";
+          scale?: "double" | "half" | "fullscreen" | "normal";
+        }
+      >()
+      .mockReturnValueOnce({ kind: "create_session", serverId: "home", sessionKind: "ai" })
+      .mockReturnValueOnce({ kind: "resize_panel", panelId: "home::build", scale: "fullscreen" })
+      .mockReturnValueOnce({ kind: "move_panel", panelId: "home::build", position: "left" })
+      .mockReturnValueOnce({ kind: "swap_panels", panelIdA: "home::build", panelIdB: "dgx::main" })
+      .mockReturnValueOnce({ kind: "close_panel", panelId: "home::build" });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const onCreateSession = vi.fn(async () => "ai-22");
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "open codex on home",
+      onCreateSession,
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(onCreateSession).toHaveBeenCalledWith("home", "ai", undefined);
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "fullscreen home build",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(() => screen.root.findByProps({ children: "Fullscreen Home build" })).not.toThrow();
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "move home build to left",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(() => screen.root.findByProps({ children: "Moved Home build to left" })).not.toThrow();
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "swap home and dgx",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(() => screen.root.findByProps({ children: "Swapped build and main" })).not.toThrow();
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "close home build",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(() => screen.root.findByProps({ children: "Closed Home build" })).not.toThrow();
 
     await act(async () => {
       screen.unmount();

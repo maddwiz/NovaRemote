@@ -10,7 +10,7 @@ import {
   View,
 } from "react-native";
 
-import { SpatialTerminalLayout } from "../components/SpatialTerminalLayout";
+import { SpatialPanelPosition, SpatialTerminalLayout } from "../components/SpatialTerminalLayout";
 import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";
 import { resolveGlassesScopeRoute } from "../glassesScopeRouting";
@@ -166,6 +166,7 @@ export function GlassesModeScreen() {
     connections,
     focusedServerId,
     onFocusServer,
+    onCreateSession,
     onReconnectServer,
     onReconnectServers,
     onConnectAllServers,
@@ -238,6 +239,9 @@ export function GlassesModeScreen() {
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const [activeVmHostScope, setActiveVmHostScope] = useState<string | null>(null);
   const [routeStatus, setRouteStatus] = useState<string | null>(null);
+  const [panelScales, setPanelScales] = useState<Record<string, number>>({});
+  const [fullscreenPanelId, setFullscreenPanelId] = useState<string | null>(null);
+  const [panelPositions, setPanelPositions] = useState<Record<string, SpatialPanelPosition>>({});
   const [newChannelNamesByWorkspace, setNewChannelNamesByWorkspace] = useState<Record<string, string>>({});
   const maxPanels = Math.max(1, Math.min(brandProfile.maxPanels, 6));
 
@@ -338,6 +342,7 @@ export function GlassesModeScreen() {
   const ambientFloorDbRef = useRef<number | null>(null);
   const dynamicThresholdDbRef = useRef<number | null>(null);
   const pendingAutoRouteRef = useRef<boolean>(false);
+  const pendingCreatedPanelIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     voiceStartRef.current = onVoiceStartCapture;
@@ -398,6 +403,21 @@ export function GlassesModeScreen() {
 
       return sameStringArray(previous, next) ? previous : next;
     });
+    setPanelScales((previous) => {
+      const nextEntries = Object.entries(previous).filter(([panelId]) => availableSet.has(panelId));
+      if (nextEntries.length === Object.keys(previous).length) {
+        return previous;
+      }
+      return Object.fromEntries(nextEntries);
+    });
+    setPanelPositions((previous) => {
+      const nextEntries = Object.entries(previous).filter(([panelId]) => availableSet.has(panelId));
+      if (nextEntries.length === Object.keys(previous).length) {
+        return previous;
+      }
+      return Object.fromEntries(nextEntries) as Record<string, SpatialPanelPosition>;
+    });
+    setFullscreenPanelId((previous) => (previous && availableSet.has(previous) ? previous : null));
   }, [allPanels, maxPanels, pinnedPanelIds]);
 
   useEffect(() => {
@@ -408,6 +428,16 @@ export function GlassesModeScreen() {
       return panelIds[0] || null;
     });
   }, [panelIds]);
+
+  useEffect(() => {
+    const pendingPanelId = pendingCreatedPanelIdRef.current;
+    if (!pendingPanelId || !panelMap.has(pendingPanelId)) {
+      return;
+    }
+    setPanelIds((previous) => ensurePanelVisible(previous, pinnedPanelIds, pendingPanelId, maxPanels));
+    setFocusedPanelId(pendingPanelId);
+    pendingCreatedPanelIdRef.current = null;
+  }, [maxPanels, panelMap, pinnedPanelIds]);
 
   useEffect(() => {
     if (!activeWorkspaceId) {
@@ -449,8 +479,13 @@ export function GlassesModeScreen() {
   }, [activePanel]);
 
   const arrangedPanels = useMemo(
-    () => buildSpatialPanels(allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode),
-    [allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode]
+    () =>
+      buildSpatialPanels(allPanels, focusedPanelId, panelIds, pinnedPanelIds, overviewMode, {
+        panelScales,
+        panelPositions,
+        fullscreenPanelId,
+      }),
+    [allPanels, focusedPanelId, fullscreenPanelId, overviewMode, panelIds, panelPositions, panelScales, pinnedPanelIds]
   );
 
   const availablePanelChoices = useMemo(() => {
@@ -565,10 +600,35 @@ export function GlassesModeScreen() {
     (panelId: string) => {
       unpinPanel(panelId);
       setPanelIds((previous) => previous.filter((entry) => entry !== panelId));
+      setFullscreenPanelId((previous) => (previous === panelId ? null : previous));
       setFocusedPanelId((previous) => (previous === panelId ? null : previous));
     },
     [unpinPanel]
   );
+
+  const movePanelToPosition = useCallback((panelId: string, target: SpatialPanelPosition) => {
+    setPanelPositions((previous) => {
+      const next: Record<string, SpatialPanelPosition> = { ...previous };
+      const occupiedBy = Object.entries(next).find(([, position]) => position === target)?.[0];
+      const currentPosition = next[panelId] || "center";
+      if (occupiedBy && occupiedBy !== panelId) {
+        next[occupiedBy] = currentPosition;
+      }
+      next[panelId] = target;
+      return next;
+    });
+  }, []);
+
+  const swapPanelPositions = useCallback((panelIdA: string, panelIdB: string) => {
+    setPanelPositions((previous) => {
+      const next: Record<string, SpatialPanelPosition> = { ...previous };
+      const positionA = next[panelIdA] || "center";
+      const positionB = next[panelIdB] || "right";
+      next[panelIdA] = positionB;
+      next[panelIdB] = positionA;
+      return next;
+    });
+  }, []);
 
   const applyTranscriptRoute = useCallback(
     (transcript: string, autoSend: boolean) => {
@@ -738,6 +798,80 @@ export function GlassesModeScreen() {
         const firstServerId = Array.from(connections.keys())[0];
         return firstServerId ? [firstServerId] : [];
       };
+      if (route.kind === "create_session") {
+        void onCreateSession(route.serverId, route.sessionKind, route.prompt)
+          .then((session) => {
+            const newPanelId = `${route.serverId}::${session}`;
+            pendingCreatedPanelIdRef.current = newPanelId;
+            setPanelScales((previous) => ({ ...previous, [newPanelId]: 1 }));
+            setFullscreenPanelId(null);
+            setRouteStatus(`Started ${route.sessionKind} session ${session}`);
+          })
+          .catch((error) => {
+            setRouteStatus(error instanceof Error ? error.message : "Failed to create session");
+          });
+        return;
+      }
+      if (route.kind === "close_panel") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        removePanelFromLayout(target.id);
+        setRouteStatus(`Closed ${target.serverName} ${target.sessionLabel}`);
+        return;
+      }
+      if (route.kind === "resize_panel") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        if (route.scale === "fullscreen") {
+          setFullscreenPanelId(target.id);
+          setFocusedPanelId(target.id);
+          setRouteStatus(`Fullscreen ${target.serverName} ${target.sessionLabel}`);
+          return;
+        }
+        setFullscreenPanelId(null);
+        if (route.scale === "normal") {
+          setPanelScales((previous) => {
+            if (!(target.id in previous)) {
+              return previous;
+            }
+            const next = { ...previous };
+            delete next[target.id];
+            return next;
+          });
+          setRouteStatus(`Reset size for ${target.serverName} ${target.sessionLabel}`);
+          return;
+        }
+        const factor = route.scale === "double" ? 2 : 0.5;
+        setPanelScales((previous) => ({ ...previous, [target.id]: factor }));
+        setRouteStatus(`${route.scale === "double" ? "Enlarged" : "Shrunk"} ${target.serverName} ${target.sessionLabel}`);
+        return;
+      }
+      if (route.kind === "move_panel") {
+        const target = panelMap.get(route.panelId);
+        if (!target) {
+          return;
+        }
+        setFullscreenPanelId(null);
+        movePanelToPosition(target.id, route.position);
+        setFocusedPanelId(target.id);
+        setRouteStatus(`Moved ${target.serverName} ${target.sessionLabel} to ${route.position}`);
+        return;
+      }
+      if (route.kind === "swap_panels") {
+        const panelA = panelMap.get(route.panelIdA);
+        const panelB = panelMap.get(route.panelIdB);
+        if (!panelA || !panelB) {
+          return;
+        }
+        setFullscreenPanelId(null);
+        swapPanelPositions(panelA.id, panelB.id);
+        setRouteStatus(`Swapped ${panelA.sessionLabel} and ${panelB.sessionLabel}`);
+        return;
+      }
       if (route.kind === "focus_panel") {
         setPanelIds((previous) => ensurePanelVisible(previous, pinnedPanelIds, route.panelId, maxPanels));
         setFocusedPanelId(route.panelId);
@@ -1049,6 +1183,7 @@ export function GlassesModeScreen() {
       focusedPanelId,
       focusedServerId,
       onConnectAllServers,
+      onCreateSession,
       onCreateAgentForServer,
       onSetAgentStatusForServer,
       onSetAgentGoalForServer,
@@ -1079,6 +1214,8 @@ export function GlassesModeScreen() {
       routeTranscript,
       sharedWorkspaces,
       unpinPanel,
+      movePanelToPosition,
+      swapPanelPositions,
       removePanelFromLayout,
       activeWorkspaceId,
       createChannel,
@@ -1468,6 +1605,7 @@ export function GlassesModeScreen() {
       {panelIds.length > 0 ? (
         <SpatialTerminalLayout
           panels={arrangedPanels}
+          fullscreenPanelId={fullscreenPanelId}
           onFocusPanel={(panelId) => {
             setFocusedPanelId(panelId);
           }}

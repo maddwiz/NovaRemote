@@ -106,6 +106,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     reconnectAllServers,
     connectAllServers,
     disconnectAllServers,
+    createSessionForServer,
     createAgentForServer,
     setAgentStatusForServer,
     setAgentGoalForServer,
@@ -257,6 +258,16 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       denied.push(...next);
     }
     return denied;
+  };
+
+  const runCreateSession = async (serverId: string, kind: "ai" | "shell", prompt: string = ""): Promise<string> => {
+    if (typeof createSessionForServer === "function") {
+      const session = await createSessionForServer(serverId, kind, prompt);
+      if (typeof session === "string" && session.trim()) {
+        return session;
+      }
+    }
+    throw new Error("Session creation is unavailable for the selected server.");
   };
 
   const runCreateAgentForServer = async (serverId: string, name: string): Promise<string[]> => {
@@ -523,6 +534,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     },
     onOpenServers: () => setRoute("servers"),
     onFocusServer: focusServer,
+    onCreateSession: runCreateSession,
     onReconnectServer: reconnectServer,
     onReconnectServers: reconnectServers,
     onReconnectAllServers: reconnectAllServers,

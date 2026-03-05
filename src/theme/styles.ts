@@ -792,6 +792,9 @@ export const styles = StyleSheet.create({
   spatialLayout: {
     gap: 8,
   },
+  spatialLayoutFullscreen: {
+    minHeight: 320,
+  },
   spatialLayoutEdgeRow: {
     minHeight: 86,
   },
@@ -813,6 +816,9 @@ export const styles = StyleSheet.create({
     backgroundColor: "rgba(6, 13, 28, 0.96)",
     overflow: "hidden",
     minHeight: 86,
+  },
+  spatialPanelFullscreen: {
+    minHeight: 320,
   },
   spatialPanelCenter: {
     minHeight: 220,

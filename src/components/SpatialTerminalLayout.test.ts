@@ -15,6 +15,7 @@ function makePanel(overrides: Partial<SpatialPanel>): SpatialPanel {
     pinned: false,
     focused: true,
     output: "line-1\nline-2\n",
+    scale: 1,
     ...overrides,
   };
 }
@@ -140,6 +141,28 @@ describe("SpatialTerminalLayout", () => {
 
     const pressables = renderer.root.findAll((node) => String(node.type) === "Pressable");
     expect(pressables.length).toBeGreaterThan(0);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("renders only the fullscreen panel when fullscreen id is set", async () => {
+    const centerPanel = makePanel({ id: "dgx::main", sessionLabel: "main" });
+    const sidePanel = makePanel({ id: "home::build", position: "left", sessionLabel: "build", focused: false });
+    const renderer = await renderLayout({
+      panels: [centerPanel, sidePanel],
+      fullscreenPanelId: "home::build",
+      onFocusPanel: () => {},
+      onTogglePinPanel: () => {},
+      onRemovePanel: () => {},
+      onCyclePanel: () => {},
+    });
+
+    const focusButtons = renderer.root.findAll((node) => node.props?.accessibilityLabel?.startsWith?.("Focus "));
+    const labels = focusButtons.map((node) => String(node.props?.accessibilityLabel || ""));
+    expect(labels.some((label) => label.includes("build"))).toBe(true);
+    expect(labels.some((label) => label.includes("main"))).toBe(false);
 
     await act(async () => {
       renderer.unmount();

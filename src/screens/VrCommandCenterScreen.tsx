@@ -40,6 +40,7 @@ export function VrCommandCenterScreen() {
   const {
     connections,
     focusedServerId,
+    onCreateSession,
     onReconnectServer,
     onReconnectServers,
     onShareServerSessionLive,
@@ -147,6 +148,7 @@ export function VrCommandCenterScreen() {
     pauseWorkspaceStreamsOnAppBackground: true,
     onReconnectServer,
     onReconnectServers,
+    onCreateSession,
     onCreateAgent: onCreateAgentForServers,
     onRemoveAgent: onRemoveAgentForServers,
     onSetAgentStatus: onSetAgentStatusForServers,
