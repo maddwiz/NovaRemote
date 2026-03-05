@@ -97,7 +97,7 @@ Updated: 2026-03-05
   - [~] SSO (`SAML`/`OIDC`) app-side token-exchange hook added; provider dashboard + backend rollout remains pending
   - [~] in-app role/invite controls + member filtering are implemented; centralized cloud admin UX remains pending
 - [ ] Compliance expansion:
-  - [ ] mandatory session recording policies
+  - [~] team-managed session recording enforcement is in-app; cloud admin policy governance remains pending
   - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud dashboard export remains pending
 - [ ] Fleet governance expansion:
   - [x] command blocklist + policy enforcement
