@@ -789,7 +789,12 @@ export default function AppShell() {
     enabled: unlocked,
     onError: setError,
   });
-  const { record: recordAuditEvent } = useAuditLog({
+  const {
+    record: recordAuditEvent,
+    pendingCount: pendingAuditEvents,
+    lastSyncAt: auditLastSyncAt,
+    syncNow: syncAuditNow,
+  } = useAuditLog({
     identity: teamIdentity,
     enabled: unlocked,
     onError: setError,
@@ -3664,6 +3669,8 @@ export default function AppShell() {
               authError={teamAuthError}
               canInvite={hasTeamPermission("team:invite")}
               canManage={hasTeamPermission("team:manage")}
+              auditPendingCount={pendingAuditEvents}
+              auditLastSyncAt={auditLastSyncAt}
               onLogin={async (input) => {
                 await runWithStatus("Signing in to team", async () => {
                   markActivity();
@@ -3716,6 +3723,12 @@ export default function AppShell() {
                 void runWithStatus("Refreshing team context", async () => {
                   markActivity();
                   await refreshTeamContext();
+                });
+              }}
+              onSyncAudit={async () => {
+                await runWithStatus("Syncing audit log", async () => {
+                  markActivity();
+                  await syncAuditNow();
                 });
               }}
             />

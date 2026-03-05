@@ -38,6 +38,9 @@ type TeamScreenProps = {
   canManage?: boolean;
   onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
   onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
+  auditPendingCount?: number;
+  auditLastSyncAt?: number | null;
+  onSyncAudit?: () => Promise<void>;
 };
 
 export function TeamScreen({
@@ -54,6 +57,9 @@ export function TeamScreen({
   canManage = false,
   onInviteMember,
   onChangeMemberRole,
+  auditPendingCount = 0,
+  auditLastSyncAt = null,
+  onSyncAudit,
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -63,6 +69,7 @@ export function TeamScreen({
   const [teamStatus, setTeamStatus] = useState<string>("");
   const canLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
+  const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
 
   const handleLogin = useCallback(() => {
     if (!onLogin || !canLogin) {
@@ -119,6 +126,20 @@ export function TeamScreen({
     },
     [busy, canManage, onChangeMemberRole]
   );
+
+  const handleSyncAudit = useCallback(() => {
+    if (!onSyncAudit || !canSyncAudit) {
+      return;
+    }
+    setTeamStatus("");
+    void onSyncAudit()
+      .then(() => {
+        setTeamStatus("Audit log synced.");
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [canSyncAudit, onSyncAudit]);
 
   return (
     <View style={styles.panel}>
@@ -182,6 +203,10 @@ export function TeamScreen({
             {`Session timeout: ${settings.sessionTimeoutMinutes ? `${settings.sessionTimeoutMinutes} min` : "disabled"}`}
           </Text>
           <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
+          <Text style={styles.emptyText}>{`Audit queue: ${auditPendingCount}`}</Text>
+          <Text style={styles.emptyText}>
+            {`Last audit sync: ${auditLastSyncAt ? new Date(auditLastSyncAt).toLocaleTimeString() : "never"}`}
+          </Text>
         </>
       ) : null}
       {authError ? <Text style={styles.emptyText}>{authError}</Text> : null}
@@ -231,6 +256,17 @@ export function TeamScreen({
 
       {identity ? (
         <View style={styles.rowInlineSpace}>
+          {onSyncAudit ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Sync audit log"
+              style={[styles.actionButton, !canSyncAudit ? styles.buttonDisabled : null]}
+              onPress={handleSyncAudit}
+              disabled={!canSyncAudit}
+            >
+              <Text style={styles.actionButtonText}>{busy ? "Syncing..." : "Sync Audit"}</Text>
+            </Pressable>
+          ) : null}
           {onRefresh ? (
             <Pressable
               accessibilityRole="button"

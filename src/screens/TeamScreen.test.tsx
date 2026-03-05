@@ -182,4 +182,36 @@ describe("TeamScreen", () => {
       renderer?.unmount();
     });
   });
+
+  it("triggers audit sync when requested", async () => {
+    const onSyncAudit = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          settings={{
+            enforceDangerConfirm: true,
+            commandBlocklist: [],
+            sessionTimeoutMinutes: null,
+          }}
+          loading={false}
+          busy={false}
+          onSyncAudit={onSyncAudit}
+        />
+      );
+    });
+
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Sync audit log" }).props.onPress();
+    });
+
+    expect(onSyncAudit).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
