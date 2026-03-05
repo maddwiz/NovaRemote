@@ -109,6 +109,12 @@ This creates:
 - `../NovaRemoteCloud` (backend scaffold)
 - `../NovaRemoteCloudDashboard` (admin web scaffold)
 
+Verify scaffold + contract sync health:
+
+```bash
+npm run cloud:verify-bootstrap
+```
+
 Cloud API contract source of truth:
 
 - `docs/contracts/novaremote-cloud-openapi.v1.yaml`

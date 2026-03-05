@@ -28,6 +28,12 @@ npm run cloud:bootstrap-repos -- \
   --dashboard-remote git@github.com:YOUR_ORG/NovaRemoteCloudDashboard.git
 ```
 
+Bootstrap verification (temp-dir smoke check):
+
+```bash
+npm run cloud:verify-bootstrap
+```
+
 ## 2. Contract Sync
 
 Cloud API contract source of truth in this repo:
