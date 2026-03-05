@@ -76,6 +76,8 @@ Updated: 2026-03-05
 - [x] In-app audit queue export actions (`JSON` / `CSV`)
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
 - [x] Team screen in app with login, members, roles, invites, usage, and audit sync controls
+- [x] Team invite lifecycle in app: list invites, create invite, and revoke pending invites
+- [x] Team cloud dashboard bridge in app (dashboard URL surfaced + quick-open action)
 - [x] Per-member usage telemetry surfaced in TeamScreen cards (sessions/commands/fleet)
 - [x] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
 - [x] RevenueCat entitlement tier recognition (`pro`/`team`/`enterprise`) in app gating state
@@ -104,7 +106,7 @@ Updated: 2026-03-05
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
 - [ ] Enterprise IAM expansion:
   - [~] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode are implemented; provider dashboard + backend rollout remains pending
-  - [~] in-app role/invite controls + member filtering + member server-assignment controls are implemented; centralized cloud admin UX remains pending
+  - [~] in-app role/invite controls + member filtering + member server-assignment controls are implemented, plus invite revoke + dashboard deep-link; centralized cloud admin UX rollout remains pending
 - [ ] Compliance expansion:
   - [~] team-managed session recording enforcement is in-app; cloud admin policy governance remains pending
   - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud dashboard export remains pending

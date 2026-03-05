@@ -3,7 +3,7 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { TeamBadge } from "../components/TeamBadge";
 import { styles } from "../theme/styles";
-import { ServerProfile, TeamFleetApproval, TeamIdentity, TeamMember, TeamRole } from "../types";
+import { ServerProfile, TeamFleetApproval, TeamIdentity, TeamInvite, TeamMember, TeamRole } from "../types";
 
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
@@ -86,7 +86,11 @@ type TeamScreenProps = {
   canManage?: boolean;
   canManageSettings?: boolean;
   teamServers?: ServerProfile[];
+  teamInvites?: TeamInvite[];
+  cloudDashboardUrl?: string;
+  onOpenCloudDashboard?: () => void;
   onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
+  onRevokeInvite?: (inviteId: string) => Promise<void>;
   onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
   onSetMemberServers?: (memberId: string, serverIds: string[]) => Promise<void>;
   onUpdateSettings?: (input: TeamSettingsInput) => Promise<void>;
@@ -118,7 +122,11 @@ export function TeamScreen({
   canManage = false,
   canManageSettings = false,
   teamServers = [],
+  teamInvites = [],
+  cloudDashboardUrl,
+  onOpenCloudDashboard,
   onInviteMember,
+  onRevokeInvite,
   onChangeMemberRole,
   onSetMemberServers,
   onUpdateSettings,
@@ -152,6 +160,7 @@ export function TeamScreen({
   const canPasswordLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
   const canSsoLogin = ssoToken.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
+  const canManageInvites = Boolean(identity && (canInvite || canManage) && onRevokeInvite && !busy);
   const canManageMemberServers = Boolean(identity && canManage && onSetMemberServers && teamServers.length > 0 && !busy);
   const canEditTeamPolicies = Boolean(identity && canManageSettings && onUpdateSettings && settings && !busy);
   const canReviewFleetApprovals = Boolean(identity && canManage && !busy && (onApproveFleetApproval || onDenyFleetApproval));
@@ -159,6 +168,8 @@ export function TeamScreen({
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
   const canExportAuditJson = Boolean(identity && onExportAuditJson && !busy);
   const canExportAuditCsv = Boolean(identity && onExportAuditCsv && !busy);
+  const canOpenCloudDashboard = Boolean(identity && cloudDashboardUrl && onOpenCloudDashboard && !busy);
+  const pendingInvites = teamInvites.filter((invite) => invite.status === "pending");
   const normalizedMemberQuery = memberQuery.trim().toLowerCase();
   const visibleMembers = members.filter((member) => {
     if (memberRoleFilter !== "all" && member.role !== memberRoleFilter) {
@@ -264,6 +275,23 @@ export function TeamScreen({
         setTeamStatus(error instanceof Error ? error.message : String(error));
       });
   }, [canSubmitInvite, inviteEmail, inviteRole, onInviteMember]);
+
+  const handleRevokeInvite = useCallback(
+    (invite: TeamInvite) => {
+      if (!onRevokeInvite || !canManageInvites || invite.status !== "pending") {
+        return;
+      }
+      setTeamStatus("");
+      void onRevokeInvite(invite.id)
+        .then(() => {
+          setTeamStatus(`Revoked invite for ${invite.email}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canManageInvites, onRevokeInvite]
+  );
 
   const handleChangeMemberRole = useCallback(
     (member: TeamMember, nextRole: TeamRole) => {
@@ -398,6 +426,18 @@ export function TeamScreen({
         setTeamStatus(error instanceof Error ? error.message : String(error));
       });
   }, [canExportAuditCsv, onExportAuditCsv]);
+
+  const handleOpenCloudDashboard = useCallback(() => {
+    if (!onOpenCloudDashboard || !canOpenCloudDashboard) {
+      return;
+    }
+    setTeamStatus("");
+    try {
+      onOpenCloudDashboard();
+    } catch (error) {
+      setTeamStatus(error instanceof Error ? error.message : String(error));
+    }
+  }, [canOpenCloudDashboard, onOpenCloudDashboard]);
 
   const handleSaveTeamPolicies = useCallback(() => {
     if (!onUpdateSettings || !canEditTeamPolicies || !settings) {
@@ -559,6 +599,7 @@ export function TeamScreen({
           </Text>
           <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
           <Text style={styles.emptyText}>{`Fleet approvals pending: ${pendingFleetApprovals.length}`}</Text>
+          <Text style={styles.emptyText}>{`Invites pending: ${pendingInvites.length}`}</Text>
           <Text style={styles.emptyText}>{`Fleet approval: ${policyValueLabel(settings.requireFleetApproval)}`}</Text>
           <Text style={styles.emptyText}>{`Session recording: ${policyValueLabel(settings.requireSessionRecording)}`}</Text>
           <Text style={styles.emptyText}>{`Audit queue: ${auditPendingCount}`}</Text>
@@ -750,6 +791,49 @@ export function TeamScreen({
           >
             <Text style={styles.buttonPrimaryText}>{busy ? "Sending..." : "Send Invite"}</Text>
           </Pressable>
+        </View>
+      ) : null}
+
+      {identity && teamInvites.length > 0 ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>{`Team Invites (${pendingInvites.length} pending)`}</Text>
+          {teamInvites.map((invite) => (
+            <View key={invite.id} style={styles.panel}>
+              <Text style={styles.emptyText}>{`${invite.email} • ${invite.role} • ${invite.status}`}</Text>
+              {invite.expiresAt ? (
+                <Text style={styles.emptyText}>{`Expires ${new Date(invite.expiresAt).toLocaleString()}`}</Text>
+              ) : null}
+              {invite.inviteCode ? <Text style={styles.emptyText}>{`Code: ${invite.inviteCode}`}</Text> : null}
+              {invite.status === "pending" && canManageInvites ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Revoke invite ${invite.id}`}
+                  style={styles.actionDangerButton}
+                  onPress={() => handleRevokeInvite(invite)}
+                >
+                  <Text style={styles.actionDangerText}>Revoke Invite</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {identity && cloudDashboardUrl ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>Cloud Dashboard</Text>
+          <Text style={styles.emptyText}>{cloudDashboardUrl}</Text>
+          {onOpenCloudDashboard ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open cloud dashboard"
+              style={[styles.actionButton, !canOpenCloudDashboard ? styles.buttonDisabled : null]}
+              onPress={handleOpenCloudDashboard}
+              disabled={!canOpenCloudDashboard}
+            >
+              <Text style={styles.actionButtonText}>Open Dashboard</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 

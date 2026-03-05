@@ -687,14 +687,17 @@ export default function AppShell() {
     identity: teamIdentity,
     teamServers,
     teamMembers,
+    teamInvites,
     fleetApprovals,
     teamSettings,
     teamUsage,
     error: teamAuthError,
+    cloudDashboardUrl,
     hasPermission: hasTeamPermission,
     loginWithPassword: loginTeamWithPassword,
     loginWithSso: loginTeamWithSso,
     inviteMember: inviteTeamMember,
+    revokeInvite: revokeTeamInvite,
     updateTeamSettings,
     updateMemberRole: updateTeamMemberRole,
     updateMemberServers: updateTeamMemberServers,
@@ -3803,6 +3806,8 @@ export default function AppShell() {
               canManage={hasTeamPermission("team:manage")}
               canManageSettings={hasTeamPermission("team:manage") || hasTeamPermission("settings:manage")}
               teamServers={teamServers}
+              teamInvites={teamInvites}
+              cloudDashboardUrl={cloudDashboardUrl}
               fleetApprovals={fleetApprovals}
               auditPendingCount={pendingAuditEvents}
               auditLastSyncAt={auditLastSyncAt}
@@ -3839,6 +3844,18 @@ export default function AppShell() {
                     serverId: "",
                     serverName: "team",
                     detail: `team_invite=${email.toLowerCase()}:${role}`,
+                  });
+                });
+              }}
+              onRevokeInvite={async (inviteId) => {
+                await runWithStatus("Revoking invite", async () => {
+                  markActivity();
+                  await revokeTeamInvite(inviteId);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_invite_revoke=${inviteId}`,
                   });
                 });
               }}
@@ -3913,6 +3930,15 @@ export default function AppShell() {
                     serverName: "team",
                     detail: "team_logout",
                   });
+                });
+              }}
+              onOpenCloudDashboard={() => {
+                if (!cloudDashboardUrl) {
+                  return;
+                }
+                void runWithStatus("Opening cloud dashboard", async () => {
+                  markActivity();
+                  await Linking.openURL(cloudDashboardUrl);
                 });
               }}
               onRefresh={() => {

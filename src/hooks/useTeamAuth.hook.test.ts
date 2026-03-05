@@ -47,8 +47,10 @@ import { useTeamAuth } from "./useTeamAuth";
 
 type TeamAuthHandle = {
   identity: TeamIdentity | null;
+  cloudDashboardUrl: string;
   loginWithSso: (input: { provider: "saml" | "oidc"; idToken?: string; accessToken?: string }) => Promise<TeamIdentity>;
   inviteMember: (input: { email: string; role?: TeamIdentity["role"] }) => Promise<unknown>;
+  revokeInvite: (inviteId: string) => Promise<void>;
   updateTeamSettings: (input: {
     enforceDangerConfirm?: boolean | null;
     commandBlocklist?: string[];
@@ -70,6 +72,7 @@ type TeamAuthHandle = {
     requireFleetApproval: boolean | null;
   };
   teamMembers: Array<{ id: string; role: string; serverIds?: string[] }>;
+  teamInvites: Array<{ id: string; status: string; email: string }>;
 };
 
 function buildIdentity(overrides: Partial<TeamIdentity> = {}): TeamIdentity {
@@ -106,6 +109,25 @@ beforeEach(() => {
   cloudClientMock.cloudRequest.mockReset();
   let memberRole: TeamIdentity["role"] = "viewer";
   let memberServerIds: string[] = [];
+  let invites: Array<{
+    id: string;
+    email: string;
+    role: TeamIdentity["role"];
+    status: "pending" | "accepted" | "expired" | "revoked";
+    inviteCode?: string;
+    createdAt: string;
+    expiresAt?: string;
+  }> = [
+    {
+      id: "invite-seed-1",
+      email: "seed@example.com",
+      role: "viewer",
+      status: "pending",
+      inviteCode: "INV-SEED",
+      createdAt: "2026-03-05T00:00:00.000Z",
+      expiresAt: "2026-03-10T00:00:00.000Z",
+    },
+  ];
   let teamSettingsState = {
     enforceDangerConfirm: null as boolean | null,
     commandBlocklist: [] as string[],
@@ -211,7 +233,35 @@ beforeEach(() => {
       return {};
     }
     if (path === "/v1/team/invites") {
-      return { inviteCode: "INV-123" };
+      const method = String(init?.method || "GET").toUpperCase();
+      if (method === "POST") {
+        const rawBody = String(init?.body || "{}");
+        const payload = JSON.parse(rawBody) as { email?: string; role?: TeamIdentity["role"] };
+        const created = {
+          id: `invite-${invites.length + 1}`,
+          email: String(payload.email || "").toLowerCase(),
+          role: (payload.role || "viewer") as TeamIdentity["role"],
+          status: "pending" as const,
+          inviteCode: "INV-123",
+          createdAt: "2026-03-05T00:00:00.000Z",
+          expiresAt: "2026-03-10T00:00:00.000Z",
+        };
+        invites = [created, ...invites];
+        return { invite: created };
+      }
+      return { invites };
+    }
+    if (path.startsWith("/v1/team/invites/")) {
+      const inviteId = String(path).split("/")[4] || "";
+      invites = invites.map((entry) =>
+        entry.id === inviteId
+          ? {
+              ...entry,
+              status: "revoked" as const,
+            }
+          : entry
+      );
+      return {};
     }
     return {};
   });
@@ -260,6 +310,7 @@ describe("useTeamAuth hook", () => {
       cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/auth/refresh")
     ).toBe(true);
     expect(latestOrThrow(latest).identity?.accessToken).toBe("refreshed-token");
+    expect(latestOrThrow(latest).cloudDashboardUrl).toBe("https://cloud.novaremote.dev");
 
     await act(async () => {
       renderer?.unmount();
@@ -368,6 +419,40 @@ describe("useTeamAuth hook", () => {
       role: "operator",
       inviteCode: "INV-123",
     });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("lists and revokes team invites when invite permissions are granted", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+    await flush();
+
+    expect(latestOrThrow(latest).teamInvites.some((invite) => invite.id === "invite-seed-1")).toBe(true);
+
+    await act(async () => {
+      await latestOrThrow(latest).revokeInvite("invite-seed-1");
+    });
+    await flush();
+
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/invites/invite-seed-1")
+    ).toBe(true);
+    expect(latestOrThrow(latest).teamInvites.find((invite) => invite.id === "invite-seed-1")?.status).toBe("revoked");
 
     await act(async () => {
       renderer?.unmount();

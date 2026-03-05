@@ -13,6 +13,8 @@ import {
 import { normalizeCommandBlocklist, normalizeSessionTimeoutMinutes } from "../teamPolicy";
 import {
   ServerProfile,
+  TeamInvite,
+  TeamInviteStatus,
   TeamAuthProvider,
   TeamFleetApproval,
   TeamIdentity,
@@ -23,6 +25,7 @@ import {
 
 const TEAM_PROVIDERS: TeamAuthProvider[] = ["novaremote_cloud", "saml", "oidc", "ldap_proxy"];
 const TEAM_ROLES: TeamRole[] = ["admin", "operator", "viewer", "billing"];
+const TEAM_INVITE_STATUSES: TeamInviteStatus[] = ["pending", "accepted", "expired", "revoked"];
 const TEAM_PERMISSIONS: TeamPermission[] = [
   "servers:read",
   "servers:write",
@@ -71,13 +74,7 @@ type TeamUsage = {
   fleetExecutions: number;
 };
 
-type TeamInviteResult = {
-  email: string;
-  role: TeamRole;
-  inviteCode?: string;
-  inviteLink?: string;
-  expiresAt?: string;
-};
+type TeamInviteResult = TeamInvite;
 
 type TeamSsoProvider = "saml" | "oidc";
 
@@ -423,6 +420,67 @@ function normalizeTeamMembers(value: unknown): TeamMember[] {
   return Array.from(byId.values());
 }
 
+function normalizeInviteStatus(value: unknown): TeamInviteStatus {
+  const normalized = normalizeRequiredString(value).toLowerCase();
+  if (TEAM_INVITE_STATUSES.includes(normalized as TeamInviteStatus)) {
+    return normalized as TeamInviteStatus;
+  }
+  return "pending";
+}
+
+function normalizeTeamInvite(value: unknown): TeamInvite | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  const id =
+    normalizeOptionalString(parsed.id) ||
+    normalizeOptionalString(parsed.inviteId) ||
+    normalizeOptionalString(parsed.invite_id);
+  const email = normalizeRequiredString(parsed.email).toLowerCase();
+  const role = normalizeRole(parsed.role) || "viewer";
+  const createdAt =
+    normalizeOptionalString(parsed.createdAt) ||
+    normalizeOptionalString(parsed.created_at) ||
+    new Date().toISOString();
+  if (!id || !email) {
+    return null;
+  }
+  return {
+    id,
+    email,
+    role,
+    status: normalizeInviteStatus(parsed.status),
+    inviteCode: normalizeOptionalString(parsed.inviteCode || parsed.code),
+    inviteLink: normalizeOptionalString(parsed.inviteLink || parsed.url),
+    createdAt,
+    expiresAt: normalizeOptionalString(parsed.expiresAt || parsed.expires_at),
+    revokedAt: normalizeOptionalString(parsed.revokedAt || parsed.revoked_at),
+  };
+}
+
+function normalizeTeamInvites(value: unknown): TeamInvite[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const deduped = new Map<string, TeamInvite>();
+  value.forEach((entry) => {
+    const normalized = normalizeTeamInvite(entry);
+    if (normalized) {
+      deduped.set(normalized.id, normalized);
+    }
+  });
+  return Array.from(deduped.values()).sort((a, b) => {
+    if (a.status === "pending" && b.status !== "pending") {
+      return -1;
+    }
+    if (a.status !== "pending" && b.status === "pending") {
+      return 1;
+    }
+    return b.createdAt.localeCompare(a.createdAt);
+  });
+}
+
 function normalizeFleetApprovalStatus(value: unknown): TeamFleetApproval["status"] {
   const raw = normalizeRequiredString(value).toLowerCase();
   if (raw === "approved" || raw === "denied" || raw === "expired") {
@@ -442,12 +500,21 @@ function normalizeFleetApproval(value: unknown): TeamFleetApproval | null {
   const requestedByEmail = normalizeRequiredString(parsed.requestedByEmail || parsed.requested_by_email);
   const createdAt = normalizeRequiredString(parsed.createdAt || parsed.created_at);
   const updatedAt = normalizeRequiredString(parsed.updatedAt || parsed.updated_at) || createdAt;
+  const expiresAt = normalizeOptionalString(parsed.expiresAt || parsed.expires_at);
   const targets = Array.isArray(parsed.targets)
     ? parsed.targets.map((entry) => normalizeRequiredString(entry)).filter(Boolean)
     : [];
 
   if (!id || !command || !requestedByUserId || !requestedByEmail || !createdAt) {
     return null;
+  }
+
+  let status = normalizeFleetApprovalStatus(parsed.status);
+  if (status === "pending" && expiresAt) {
+    const expiresMs = Date.parse(expiresAt);
+    if (Number.isFinite(expiresMs) && expiresMs <= Date.now()) {
+      status = "expired";
+    }
   }
 
   return {
@@ -458,8 +525,9 @@ function normalizeFleetApproval(value: unknown): TeamFleetApproval | null {
     targets,
     createdAt,
     updatedAt,
-    status: normalizeFleetApprovalStatus(parsed.status),
+    status,
     note: normalizeOptionalString(parsed.note),
+    expiresAt: expiresAt || undefined,
   };
 }
 
@@ -492,12 +560,28 @@ function hasTeamPermission(identity: TeamIdentity | null, permission: TeamPermis
   return identity.role === "admin" || identity.permissions.includes(permission);
 }
 
+function toDashboardUrl(rawCloudUrl: string): string {
+  const trimmed = rawCloudUrl.trim().replace(/\/+$/, "");
+  if (!trimmed) {
+    return "https://cloud.novaremote.dev";
+  }
+  const normalized = trimmed.replace(/^https?:\/\//i, "");
+  if (normalized.startsWith("api.")) {
+    return `https://${normalized.replace(/^api\./, "cloud.")}`;
+  }
+  if (normalized.includes("/api")) {
+    return `https://${normalized.split("/api")[0]}`;
+  }
+  return `https://${normalized}`;
+}
+
 export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: UseTeamAuthArgs = {}) {
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [teamServers, setTeamServers] = useState<ServerProfile[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([]);
   const [fleetApprovals, setFleetApprovals] = useState<TeamFleetApproval[]>([]);
   const [teamSettings, setTeamSettings] = useState<TeamSettings>({
     ...defaultTeamSettings(),
@@ -566,12 +650,14 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!currentIdentity) {
         setTeamServers([]);
         setTeamMembers([]);
+        setTeamInvites([]);
         setFleetApprovals([]);
         setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
         return {
           servers: [],
           members: [],
+          invites: [],
           approvals: [],
           settings: defaultTeamSettings(),
           usage: { activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 },
@@ -590,8 +676,20 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
               }
             ).catch(() => ({ approvals: [] }))
           : Promise.resolve<{ approvals?: unknown }>({ approvals: [] });
+      const invitesPromise =
+        hasTeamPermission(currentIdentity, "team:invite") || hasTeamPermission(currentIdentity, "team:manage")
+          ? cloudRequest<{ invites?: unknown }>(
+              "/v1/team/invites",
+              { method: "GET" },
+              {
+                accessToken: currentIdentity.accessToken,
+                cloudUrl: cloudUrl || getNovaCloudUrl(),
+                fetchImpl,
+              }
+            ).catch(() => ({ invites: [] }))
+          : Promise.resolve<{ invites?: unknown }>({ invites: [] });
 
-      const [serversPayload, membersPayload, settingsPayload, usagePayload, approvalsPayload] = await Promise.all([
+      const [serversPayload, membersPayload, settingsPayload, usagePayload, approvalsPayload, invitesPayload] = await Promise.all([
         cloudRequest<{ servers?: unknown }>(
           "/v1/team/servers",
           { method: "GET" },
@@ -629,19 +727,22 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
           }
         ).catch(() => ({ usage: {} })),
         approvalsPromise,
+        invitesPromise,
       ]);
 
       const servers = normalizeTeamServers(serversPayload.servers || serversPayload);
       const members = normalizeTeamMembers(membersPayload.members || membersPayload);
       const approvals = normalizeFleetApprovals(approvalsPayload.approvals || approvalsPayload);
+      const invites = normalizeTeamInvites(invitesPayload.invites || invitesPayload);
       const settings = normalizeTeamSettings(settingsPayload.settings || settingsPayload);
       const usage = normalizeTeamUsage(usagePayload.usage || usagePayload);
       setTeamServers(servers);
       setTeamMembers(members);
+      setTeamInvites(invites);
       setFleetApprovals(approvals);
       setTeamSettings(settings);
       setTeamUsage(usage);
-      return { servers, members, approvals, settings, usage };
+      return { servers, members, invites, approvals, settings, usage };
     },
     [cloudUrl, fetchImpl, identity]
   );
@@ -746,6 +847,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     setIdentity(null);
     setTeamServers([]);
     setTeamMembers([]);
+    setTeamInvites([]);
     setFleetApprovals([]);
     setTeamSettings(defaultTeamSettings());
     setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
@@ -833,14 +935,21 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
             fetchImpl,
           }
         );
+        const invite =
+          normalizeTeamInvite(payload.invite || payload) ||
+          ({
+            id: normalizeOptionalString(payload.id) || normalizeOptionalString(payload.inviteCode) || `invite-${Date.now()}`,
+            email,
+            role,
+            status: "pending",
+            inviteCode: normalizeOptionalString(payload.inviteCode || payload.code),
+            inviteLink: normalizeOptionalString(payload.inviteLink || payload.url),
+            createdAt: new Date().toISOString(),
+            expiresAt: normalizeOptionalString(payload.expiresAt || payload.expires_at),
+          } satisfies TeamInvite);
+        setTeamInvites((previous) => normalizeTeamInvites([invite, ...previous]));
         await refreshTeamContext(identity);
-        return {
-          email,
-          role,
-          inviteCode: normalizeOptionalString(payload.inviteCode || payload.code),
-          inviteLink: normalizeOptionalString(payload.inviteLink || payload.url),
-          expiresAt: normalizeOptionalString(payload.expiresAt || payload.expires_at),
-        };
+        return invite;
       } catch (inviteError) {
         setError(inviteError instanceof Error ? inviteError.message : String(inviteError));
         onError?.(inviteError);
@@ -891,6 +1000,54 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         setError(updateError instanceof Error ? updateError.message : String(updateError));
         onError?.(updateError);
         throw updateError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
+  const revokeInvite = useCallback(
+    async (inviteId: string) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before managing invites.");
+      }
+      if (!hasTeamPermission(identity, "team:invite") && !hasTeamPermission(identity, "team:manage")) {
+        throw new Error("You do not have permission to manage invites.");
+      }
+      const normalizedInviteId = inviteId.trim();
+      if (!normalizedInviteId) {
+        throw new Error("Invite ID is required.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        await cloudRequest<Record<string, unknown>>(
+          `/v1/team/invites/${encodeURIComponent(normalizedInviteId)}`,
+          { method: "DELETE" },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        setTeamInvites((previous) =>
+          previous.map((invite) =>
+            invite.id === normalizedInviteId
+              ? {
+                  ...invite,
+                  status: "revoked",
+                  revokedAt: new Date().toISOString(),
+                }
+              : invite
+          )
+        );
+        await refreshTeamContext(identity);
+      } catch (revokeError) {
+        setError(revokeError instanceof Error ? revokeError.message : String(revokeError));
+        onError?.(revokeError);
+        throw revokeError;
       } finally {
         setBusy(false);
       }
@@ -1140,6 +1297,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!identity) {
         setTeamServers([]);
         setTeamMembers([]);
+        setTeamInvites([]);
         setFleetApprovals([]);
         setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
@@ -1184,11 +1342,13 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       identity,
       teamServers,
       teamMembers,
+      teamInvites,
       fleetApprovals,
       teamSettings,
       teamUsage,
       error,
       cloudUrl: cloudUrl || getNovaCloudUrl(),
+      cloudDashboardUrl: toDashboardUrl(cloudUrl || getNovaCloudUrl()),
       loggedIn: Boolean(identity),
       hasPermission,
       loginWithPassword,
@@ -1196,6 +1356,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       refreshTeamContext,
       refreshSession,
       inviteMember,
+      revokeInvite,
       updateMemberRole,
       updateMemberServers,
       updateTeamSettings,
@@ -1223,9 +1384,11 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       refreshSession,
       refreshTeamContext,
       teamMembers,
+      teamInvites,
       teamServers,
       teamSettings,
       teamUsage,
+      revokeInvite,
       updateMemberServers,
       updateTeamSettings,
       updateMemberRole,
@@ -1238,7 +1401,9 @@ export const teamAuthTestUtils = {
   shouldRefreshTeamIdentity,
   normalizeTeamServers,
   normalizeTeamMembers,
+  normalizeTeamInvites,
   normalizeFleetApprovals,
   normalizeTeamSettings,
   normalizeTeamUsage,
+  toDashboardUrl,
 };

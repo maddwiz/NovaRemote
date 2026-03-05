@@ -233,6 +233,20 @@ paths:
                   usage:
                     $ref: "#/components/schemas/TeamUsage"
   /v1/team/invites:
+    get:
+      summary: List active and historical team invites
+      responses:
+        "200":
+          description: Team invites
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  invites:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TeamInvite"
     post:
       summary: Invite a new member
       requestBody:
@@ -257,12 +271,20 @@ paths:
               schema:
                 type: object
                 properties:
-                  inviteCode:
-                    type: string
-                  inviteLink:
-                    type: string
-                  expiresAt:
-                    type: string
+                  invite:
+                    $ref: "#/components/schemas/TeamInvite"
+  /v1/team/invites/{inviteId}:
+    delete:
+      summary: Revoke a pending invite
+      parameters:
+        - in: path
+          name: inviteId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Invite revoked
   /v1/team/fleet/approvals:
     get:
       summary: List fleet approval records
@@ -375,6 +397,29 @@ paths:
                     type: integer
                   rejected:
                     type: integer
+  /v1/audit/exports:
+    post:
+      summary: Request a cloud-hosted audit export job
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [format]
+              properties:
+                format:
+                  type: string
+                  enum: [json, csv]
+                rangeHours:
+                  type: integer
+      responses:
+        "200":
+          description: Export job prepared
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuditExportJob"
 components:
   securitySchemes:
     bearerAuth:
@@ -512,6 +557,31 @@ components:
           type: integer
         lastActiveAt:
           type: string
+    TeamInvite:
+      type: object
+      required: [id, email, role, status, createdAt]
+      properties:
+        id:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum: [admin, operator, viewer, billing]
+        status:
+          type: string
+          enum: [pending, accepted, expired, revoked]
+        inviteCode:
+          type: string
+        inviteLink:
+          type: string
+        createdAt:
+          type: string
+        expiresAt:
+          type: string
+        revokedAt:
+          type: string
     TeamSettings:
       type: object
       properties:
@@ -586,6 +656,28 @@ components:
           type: string
           enum: [pending, approved, denied, expired]
         note:
+          type: string
+        expiresAt:
+          type: string
+    AuditExportJob:
+      type: object
+      required: [exportId, format, status, createdAt]
+      properties:
+        exportId:
+          type: string
+        format:
+          type: string
+          enum: [json, csv]
+        status:
+          type: string
+          enum: [pending, ready, failed]
+        createdAt:
+          type: string
+        expiresAt:
+          type: string
+        downloadUrl:
+          type: string
+        detail:
           type: string
     AuditEvent:
       type: object

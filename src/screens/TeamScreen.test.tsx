@@ -528,4 +528,70 @@ describe("TeamScreen", () => {
       renderer?.unmount();
     });
   });
+
+  it("renders team invites and routes revoke action", async () => {
+    const onRevokeInvite = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          teamInvites={[
+            {
+              id: "invite-1",
+              email: "new-user@example.com",
+              role: "viewer",
+              status: "pending",
+              inviteCode: "INV-ABC123",
+              createdAt: "2026-03-05T00:00:00.000Z",
+              expiresAt: "2026-03-10T00:00:00.000Z",
+            },
+          ]}
+          loading={false}
+          busy={false}
+          canInvite
+          onRevokeInvite={onRevokeInvite}
+        />
+      );
+    });
+
+    expect(() => renderer?.root.findByProps({ children: "Team Invites (1 pending)" })).not.toThrow();
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Revoke invite invite-1" }).props.onPress();
+    });
+    expect(onRevokeInvite).toHaveBeenCalledWith("invite-1");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("routes cloud dashboard open action when configured", async () => {
+    const onOpenCloudDashboard = vi.fn();
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          cloudDashboardUrl="https://cloud.novaremote.dev"
+          onOpenCloudDashboard={onOpenCloudDashboard}
+          loading={false}
+          busy={false}
+        />
+      );
+    });
+
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Open cloud dashboard" }).props.onPress();
+    });
+    expect(onOpenCloudDashboard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

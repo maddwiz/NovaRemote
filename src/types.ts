@@ -119,6 +119,21 @@ export type TeamFleetApproval = {
   updatedAt: string;
   status: TeamFleetApprovalStatus;
   note?: string;
+  expiresAt?: string;
+};
+
+export type TeamInviteStatus = "pending" | "accepted" | "expired" | "revoked";
+
+export type TeamInvite = {
+  id: string;
+  email: string;
+  role: TeamRole;
+  status: TeamInviteStatus;
+  inviteCode?: string;
+  inviteLink?: string;
+  createdAt: string;
+  expiresAt?: string;
+  revokedAt?: string;
 };
 
 export type TokenBrokerPermission = "read" | "write" | "execute" | "admin";

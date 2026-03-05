@@ -161,9 +161,45 @@ describe("team auth helpers", () => {
         updatedAt: "2026-03-04T00:00:00.000Z",
         status: "approved",
       },
+      {
+        id: "a-3",
+        command: "deploy old",
+        requestedByUserId: "u-3",
+        requestedByEmail: "u3@example.com",
+        targets: ["legacy"],
+        createdAt: "2026-03-01T00:00:00.000Z",
+        updatedAt: "2026-03-01T00:00:00.000Z",
+        status: "pending",
+        expiresAt: "2020-01-01T00:00:00.000Z",
+      },
     ]);
-    expect(approvals).toHaveLength(2);
+    expect(approvals).toHaveLength(3);
     expect(approvals[0]?.id).toBe("a-1");
-    expect(approvals[1]?.status).toBe("approved");
+    expect(approvals.find((entry) => entry.id === "a-2")?.status).toBe("approved");
+    expect(approvals.find((entry) => entry.id === "a-3")?.status).toBe("expired");
+
+    const invites = teamAuthTestUtils.normalizeTeamInvites([
+      {
+        id: "invite-1",
+        email: "new@example.com",
+        role: "viewer",
+        status: "pending",
+        inviteCode: "INV-123",
+        createdAt: "2026-03-05T00:00:00.000Z",
+      },
+      {
+        inviteId: "invite-2",
+        email: "old@example.com",
+        role: "operator",
+        status: "accepted",
+        created_at: "2026-03-01T00:00:00.000Z",
+      },
+    ]);
+    expect(invites).toHaveLength(2);
+    expect(invites[0]?.id).toBe("invite-1");
+    expect(invites[1]?.status).toBe("accepted");
+
+    expect(teamAuthTestUtils.toDashboardUrl("https://api.novaremote.dev")).toBe("https://cloud.novaremote.dev");
+    expect(teamAuthTestUtils.toDashboardUrl("https://example.com/api")).toBe("https://example.com");
   });
 });

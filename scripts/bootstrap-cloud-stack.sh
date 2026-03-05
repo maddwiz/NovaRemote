@@ -196,6 +196,7 @@ type FleetApproval = {
   updatedAt: string;
   status: "pending" | "approved" | "denied" | "expired";
   note?: string;
+  expiresAt?: string;
 };
 
 const app = express();
@@ -239,6 +240,17 @@ const teamMembers: Array<{ id: string; name: string; email: string; role: TeamRo
 ];
 
 const fleetApprovals: FleetApproval[] = [];
+const teamInvites: Array<{
+  id: string;
+  email: string;
+  role: TeamRole;
+  status: "pending" | "accepted" | "expired" | "revoked";
+  inviteCode?: string;
+  inviteLink?: string;
+  createdAt: string;
+  expiresAt?: string;
+  revokedAt?: string;
+}> = [];
 const auditEvents: unknown[] = [];
 const teamSettings = {
   enforceDangerConfirm: true,
@@ -363,15 +375,39 @@ app.get("/v1/team/usage", (_req, res) => {
   });
 });
 
+app.get("/v1/team/invites", (_req, res) => {
+  res.json({ invites: teamInvites });
+});
+
 app.post("/v1/team/invites", (req, res) => {
   const parsed = inviteSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid invite payload" });
   }
-  res.json({
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+  const invite = {
+    id: `invite-${randomUUID().slice(0, 8)}`,
+    email: parsed.data.email.toLowerCase(),
+    role: parsed.data.role,
+    status: "pending" as const,
     inviteCode: `INV-${Math.random().toString(36).slice(2, 8).toUpperCase()}`,
-    inviteLink: "https://cloud.novaremote.dev/invite/demo"
-  });
+    inviteLink: `https://cloud.novaremote.dev/invite/${randomUUID().slice(0, 8)}`,
+    createdAt: now.toISOString(),
+    expiresAt
+  };
+  teamInvites.unshift(invite);
+  res.json({ invite });
+});
+
+app.delete("/v1/team/invites/:inviteId", (req, res) => {
+  const invite = teamInvites.find((entry) => entry.id === req.params.inviteId);
+  if (!invite) {
+    return res.status(404).json({ detail: "Invite not found" });
+  }
+  invite.status = "revoked";
+  invite.revokedAt = new Date().toISOString();
+  res.json({ ok: true });
 });
 
 app.get("/v1/team/fleet/approvals", (_req, res) => {
@@ -380,6 +416,7 @@ app.get("/v1/team/fleet/approvals", (_req, res) => {
 
 app.post("/v1/team/fleet/approvals", (req, res) => {
   const now = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const approval: FleetApproval = {
     id: `fa-${randomUUID().slice(0, 8)}`,
     command: String(req.body?.command || "").trim(),
@@ -389,7 +426,8 @@ app.post("/v1/team/fleet/approvals", (req, res) => {
     createdAt: now,
     updatedAt: now,
     status: "pending",
-    note: typeof req.body?.note === "string" ? req.body.note : undefined
+    note: typeof req.body?.note === "string" ? req.body.note : undefined,
+    expiresAt
   };
   fleetApprovals.unshift(approval);
   res.json({ approval });
@@ -421,6 +459,25 @@ app.post("/v1/audit/events", (req, res) => {
   const events = Array.isArray(req.body?.events) ? req.body.events : [];
   auditEvents.push(...events);
   res.json({ accepted: events.length, rejected: 0 });
+});
+
+app.post("/v1/audit/exports", (req, res) => {
+  const format = String(req.body?.format || "").toLowerCase();
+  if (format !== "json" && format !== "csv") {
+    return res.status(400).json({ detail: "format must be json or csv" });
+  }
+  const exportId = `audit-exp-${randomUUID().slice(0, 10)}`;
+  const createdAt = new Date().toISOString();
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  res.json({
+    exportId,
+    format,
+    status: "ready",
+    createdAt,
+    expiresAt,
+    downloadUrl: `https://cloud.novaremote.dev/exports/${exportId}.${format}`,
+    detail: `Snapshot contains ${auditEvents.length} events`
+  });
 });
 
 const port = Number.parseInt(process.env.PORT || "8788", 10);
