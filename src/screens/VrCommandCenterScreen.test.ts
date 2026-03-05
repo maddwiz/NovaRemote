@@ -234,6 +234,7 @@ describe("VrCommandCenterScreen", () => {
       onReconnectServers: vi.fn(),
       onShareServerSessionLive: vi.fn(),
       onCreateAgentForServers: vi.fn(async () => []),
+      onSetAgentStatusForServers: vi.fn(async () => []),
       onSetAgentGoalForServers: vi.fn(async () => []),
       onQueueAgentCommandForServers: vi.fn(async () => []),
       onApproveReadyAgentsForServers: vi.fn(async () => []),
@@ -868,6 +869,7 @@ describe("VrCommandCenterScreen", () => {
     const runtime = makeRuntime();
     const createAgent = vi.fn(async () => ["agent-a"]);
     const removeAgent = vi.fn(async () => ["agent-a"]);
+    const setStatus = vi.fn(async () => ["agent-a"]);
     const setGoal = vi.fn(async () => ["agent-a"]);
     const queueCommand = vi.fn(async () => ["agent-a"]);
     const approveReady = vi.fn(async () => ["agent-a"]);
@@ -884,6 +886,7 @@ describe("VrCommandCenterScreen", () => {
       terminalsOverrides: {
         onCreateAgentForServers: createAgent,
         onRemoveAgentForServers: removeAgent,
+        onSetAgentStatusForServers: setStatus,
         onSetAgentGoalForServers: setGoal,
         onQueueAgentCommandForServers: queueCommand,
         onApproveReadyAgentsForServers: approveReady,
@@ -913,6 +916,14 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Set VR agent goal" }).props.onPress();
     });
     expect(setGoal).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "keep deploy green");
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Set VR agent status target Execute" }).props.onPress();
+    });
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Set VR agent status" }).props.onPress();
+    });
+    expect(setStatus).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "executing");
 
     await act(async () => {
       renderer.root.findByProps({ accessibilityLabel: "Remove VR agent" }).props.onPress();

@@ -61,7 +61,10 @@ export function VrCommandCenterScreen() {
   const [agentNameInput, setAgentNameInput] = useState<string>("");
   const [agentGoalInput, setAgentGoalInput] = useState<string>("");
   const [agentCommandInput, setAgentCommandInput] = useState<string>("");
-  const [agentStatus, setAgentStatus] = useState<string | null>(null);
+  const [agentLifecycleStatus, setAgentLifecycleStatus] = useState<"idle" | "monitoring" | "executing" | "waiting_approval">(
+    "monitoring"
+  );
+  const [agentStatusMessage, setAgentStatusMessage] = useState<string | null>(null);
   const [activeWorkspaceId, setActiveWorkspaceId] = useState<string | null>(null);
   const { workspaces: sharedWorkspaces } = useSharedWorkspaces();
   const [newChannelNamesByWorkspace, setNewChannelNamesByWorkspace] = useState<Record<string, string>>({});
@@ -458,15 +461,15 @@ export function VrCommandCenterScreen() {
       fn: (serverIds: string[]) => Promise<string[]>
     ) => {
       if (agentTargetServerIds.length === 0) {
-        setAgentStatus("No target servers selected for agent action.");
+        setAgentStatusMessage("No target servers selected for agent action.");
         return;
       }
       try {
         const changed = await fn(agentTargetServerIds);
         const count = Array.isArray(changed) ? changed.length : 0;
-        setAgentStatus(`${label} on ${agentTargetServerIds.length} server(s)${count ? ` • affected ${count}` : ""}.`);
+        setAgentStatusMessage(`${label} on ${agentTargetServerIds.length} server(s)${count ? ` • affected ${count}` : ""}.`);
       } catch (error) {
-        setAgentStatus(error instanceof Error ? error.message : String(error));
+        setAgentStatusMessage(error instanceof Error ? error.message : String(error));
       }
     },
     [agentTargetServerIds]
@@ -629,6 +632,28 @@ export function VrCommandCenterScreen() {
           placeholder="Command (example: npm run deploy)"
           placeholderTextColor="#7f7aa8"
         />
+        <View style={styles.chipRow}>
+          {[
+            { key: "idle", label: "Idle" },
+            { key: "monitoring", label: "Monitor" },
+            { key: "executing", label: "Execute" },
+            { key: "waiting_approval", label: "Wait Approval" },
+          ].map((entry) => (
+            <Pressable
+              key={`vr-agent-status-${entry.key}`}
+              accessibilityRole="button"
+              accessibilityLabel={`Set VR agent status target ${entry.label}`}
+              style={[styles.chip, agentLifecycleStatus === entry.key ? styles.chipActive : null]}
+              onPress={() => {
+                setAgentLifecycleStatus(entry.key as "idle" | "monitoring" | "executing" | "waiting_approval");
+              }}
+            >
+              <Text style={[styles.chipText, agentLifecycleStatus === entry.key ? styles.chipTextActive : null]}>
+                {entry.label}
+              </Text>
+            </Pressable>
+          ))}
+        </View>
         <View style={styles.vrRuntimeActionRow}>
           <Pressable
             accessibilityRole="button"
@@ -663,6 +688,27 @@ export function VrCommandCenterScreen() {
             }}
           >
             <Text style={styles.actionButtonText}>Goal</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Set VR agent status"
+            style={[
+              styles.actionButton,
+              !agentNameInput.trim() || agentTargetServerIds.length === 0 || !onSetAgentStatusForServers
+                ? styles.buttonDisabled
+                : null,
+            ]}
+            disabled={!agentNameInput.trim() || agentTargetServerIds.length === 0 || !onSetAgentStatusForServers}
+            onPress={() => {
+              if (!onSetAgentStatusForServers) {
+                return;
+              }
+              void runAgentAction("Updated agent status", (serverIds) =>
+                onSetAgentStatusForServers(serverIds, agentNameInput.trim(), agentLifecycleStatus)
+              );
+            }}
+          >
+            <Text style={styles.actionButtonText}>Status</Text>
           </Pressable>
           <Pressable
             accessibilityRole="button"
@@ -730,7 +776,7 @@ export function VrCommandCenterScreen() {
             <Text style={styles.actionButtonText}>Deny</Text>
           </Pressable>
         </View>
-        {agentStatus ? <Text style={styles.emptyText}>{agentStatus}</Text> : null}
+        {agentStatusMessage ? <Text style={styles.emptyText}>{agentStatusMessage}</Text> : null}
       </View>
 
       <View style={styles.vrRuntimeActionRow}>
