@@ -47,6 +47,7 @@ import { useTeamAuth } from "./useTeamAuth";
 
 type TeamAuthHandle = {
   identity: TeamIdentity | null;
+  loginWithSso: (input: { provider: "saml" | "oidc"; idToken?: string; accessToken?: string }) => Promise<TeamIdentity>;
   inviteMember: (input: { email: string; role?: TeamIdentity["role"] }) => Promise<unknown>;
   updateMemberRole: (memberId: string, role: TeamIdentity["role"]) => Promise<void>;
   teamMembers: Array<{ id: string; role: string }>;
@@ -91,6 +92,16 @@ beforeEach(() => {
         identity: buildIdentity({
           accessToken: "refreshed-token",
           refreshToken: "refreshed-refresh-token",
+          tokenExpiresAt: Date.now() + 60 * 60 * 1000,
+        }),
+      };
+    }
+    if (path === "/v1/auth/sso/exchange") {
+      return {
+        identity: buildIdentity({
+          provider: "oidc",
+          accessToken: "sso-access-token",
+          refreshToken: "sso-refresh-token",
           tokenExpiresAt: Date.now() + 60 * 60 * 1000,
         }),
       };
@@ -164,6 +175,38 @@ describe("useTeamAuth hook", () => {
       cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/auth/refresh")
     ).toBe(true);
     expect(latestOrThrow(latest).identity?.accessToken).toBe("refreshed-token");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("logs in through OIDC token exchange when SSO is used", async () => {
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).loginWithSso({
+        provider: "oidc",
+        idToken: "oidc-id-token",
+      });
+    });
+    await flush();
+
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/auth/sso/exchange")
+    ).toBe(true);
+    expect(latestOrThrow(latest).identity?.accessToken).toBe("sso-access-token");
 
     await act(async () => {
       renderer?.unmount();

@@ -63,6 +63,8 @@ type TeamInviteResult = {
   expiresAt?: string;
 };
 
+type TeamSsoProvider = "saml" | "oidc";
+
 function defaultTeamSettings(): TeamSettings {
   return {
     enforceDangerConfirm: null,
@@ -559,6 +561,54 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     [cloudUrl, fetchImpl, onError, persistIdentity, refreshTeamContext]
   );
 
+  const loginWithSso = useCallback(
+    async (input: { provider: TeamSsoProvider; idToken?: string; accessToken?: string; inviteCode?: string }) => {
+      const provider = input.provider;
+      const idToken = normalizeOptionalString(input.idToken);
+      const accessToken = normalizeOptionalString(input.accessToken);
+      const inviteCode = normalizeOptionalString(input.inviteCode);
+      if (!idToken && !accessToken) {
+        throw new Error("SSO login requires an idToken or accessToken.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const payload = await cloudRequest<TeamAuthResponse>(
+          "/v1/auth/sso/exchange",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              provider,
+              idToken: idToken || undefined,
+              accessToken: accessToken || undefined,
+              inviteCode: inviteCode || undefined,
+            }),
+          },
+          {
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        const nextIdentity = parseTeamAuthIdentity(payload);
+        if (!nextIdentity) {
+          throw new Error("Team SSO response is missing identity details.");
+        }
+        setIdentity(nextIdentity);
+        await persistIdentity(nextIdentity);
+        await refreshTeamContext(nextIdentity);
+        return nextIdentity;
+      } catch (loginError) {
+        setError(loginError instanceof Error ? loginError.message : String(loginError));
+        onError?.(loginError);
+        throw loginError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, onError, persistIdentity, refreshTeamContext]
+  );
+
   const logout = useCallback(async () => {
     setIdentity(null);
     setTeamServers([]);
@@ -769,6 +819,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       loggedIn: Boolean(identity),
       hasPermission,
       loginWithPassword,
+      loginWithSso,
       refreshTeamContext,
       refreshSession,
       inviteMember,
@@ -784,6 +835,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       identity,
       loading,
       loginWithPassword,
+      loginWithSso,
       logout,
       inviteMember,
       refreshSession,

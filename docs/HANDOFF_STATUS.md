@@ -94,7 +94,7 @@ Updated: 2026-03-05
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
 - [ ] Enterprise IAM expansion:
-  - [ ] SSO (`SAML`/`OIDC`) providers
+  - [~] SSO (`SAML`/`OIDC`) app-side token-exchange hook added; provider dashboard + backend rollout remains pending
   - [ ] centralized team/user role admin UX
 - [ ] Compliance expansion:
   - [ ] mandatory session recording policies
