@@ -919,6 +919,35 @@ export function App() {
     [accessToken, loadTeamData]
   );
 
+  const reviewApproval = useCallback(
+    async (approvalId: string, action: "approve" | "deny") => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before reviewing approvals.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`${action === "approve" ? "Approving" : "Denying"} ${approvalId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/fleet/approvals/${approvalId}/${action}`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
   useEffect(() => {
     void loadHealth();
   }, [loadHealth]);
@@ -973,9 +1002,21 @@ export function App() {
         <h2 className="title">Fleet Approvals ({approvals.length})</h2>
         {approvals.length === 0 ? <p className="muted">No approvals loaded.</p> : null}
         {approvals.map((approval) => (
-          <p key={approval.id} className="muted">
-            {approval.status} • {approval.command} • {approval.requestedByEmail}
-          </p>
+          <div key={approval.id} className="providerRow">
+            <p className="muted">
+              {approval.status} • {approval.command} • {approval.requestedByEmail}
+            </p>
+            {approval.status === "pending" ? (
+              <div className="actions">
+                <button disabled={busy} onClick={() => void reviewApproval(approval.id, "approve")}>
+                  Approve
+                </button>
+                <button disabled={busy} onClick={() => void reviewApproval(approval.id, "deny")}>
+                  Deny
+                </button>
+              </div>
+            ) : null}
+          </div>
         ))}
       </section>
 

@@ -73,7 +73,7 @@ npm run dev
 
 The generated dashboard scaffold currently wires:
 
-- team member list + fleet approval feed
+- team member list + fleet approval feed with approve/deny actions
 - SSO provider toggle controls (`OIDC`/`SAML`)
 - cloud audit export request actions (`JSON`/`CSV`)
 
