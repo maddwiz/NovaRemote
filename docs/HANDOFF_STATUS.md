@@ -71,6 +71,7 @@ Updated: 2026-03-05
   - [x] non-admin edit/delete restrictions for team-managed servers
   - [x] permission-level badges/metadata in server UX
 - [x] `useAuditLog` local queue + periodic cloud sync
+- [x] In-app audit queue export actions (`JSON` / `CSV`)
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
 - [x] Team screen in app with login, members, roles, invites, usage, and audit sync controls
 - [x] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
@@ -96,11 +97,11 @@ Updated: 2026-03-05
   - [ ] centralized team/user role admin UX
 - [ ] Compliance expansion:
   - [ ] mandatory session recording policies
-  - [ ] cloud audit export (`CSV`/`JSON`)
+  - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud dashboard export remains pending
 - [ ] Fleet governance expansion:
-  - [ ] command blocklist + policy enforcement
+  - [x] command blocklist + policy enforcement
   - [ ] fleet approval workflows
-  - [ ] inactivity timeout / session auto-disconnect policies
+  - [x] inactivity timeout / session auto-disconnect policies
 - [ ] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [ ] Full agent lifecycle + NovaSpine memory orchestration is still roadmap work
 - [ ] Full team collaboration voice/presence channels remains roadmap work

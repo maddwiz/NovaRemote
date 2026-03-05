@@ -808,6 +808,7 @@ export default function AppShell() {
     pendingCount: pendingAuditEvents,
     lastSyncAt: auditLastSyncAt,
     syncNow: syncAuditNow,
+    exportSnapshot: exportAuditSnapshot,
   } = useAuditLog({
     identity: teamIdentity,
     enabled: unlocked,
@@ -3779,6 +3780,26 @@ export default function AppShell() {
                 await runWithStatus("Syncing audit log", async () => {
                   markActivity();
                   await syncAuditNow();
+                });
+              }}
+              onExportAuditJson={async () => {
+                await runWithStatus("Exporting audit log (JSON)", async () => {
+                  markActivity();
+                  const payload = exportAuditSnapshot("json");
+                  await Share.share({
+                    title: `novaremote-audit-${new Date().toISOString().slice(0, 10)}.json`,
+                    message: payload,
+                  });
+                });
+              }}
+              onExportAuditCsv={async () => {
+                await runWithStatus("Exporting audit log (CSV)", async () => {
+                  markActivity();
+                  const payload = exportAuditSnapshot("csv");
+                  await Share.share({
+                    title: `novaremote-audit-${new Date().toISOString().slice(0, 10)}.csv`,
+                    message: payload,
+                  });
                 });
               }}
             />

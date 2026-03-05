@@ -187,8 +187,10 @@ describe("TeamScreen", () => {
     });
   });
 
-  it("triggers audit sync when requested", async () => {
+  it("triggers audit sync and exports when requested", async () => {
     const onSyncAudit = vi.fn(async () => undefined);
+    const onExportAuditJson = vi.fn(async () => undefined);
+    const onExportAuditCsv = vi.fn(async () => undefined);
     let renderer: TestRenderer.ReactTestRenderer | null = null;
 
     await act(async () => {
@@ -205,15 +207,21 @@ describe("TeamScreen", () => {
           loading={false}
           busy={false}
           onSyncAudit={onSyncAudit}
+          onExportAuditJson={onExportAuditJson}
+          onExportAuditCsv={onExportAuditCsv}
         />
       );
     });
 
     await act(async () => {
       renderer?.root.findByProps({ accessibilityLabel: "Sync audit log" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Export audit log as JSON" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Export audit log as CSV" }).props.onPress();
     });
 
     expect(onSyncAudit).toHaveBeenCalledTimes(1);
+    expect(onExportAuditJson).toHaveBeenCalledTimes(1);
+    expect(onExportAuditCsv).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       renderer?.unmount();

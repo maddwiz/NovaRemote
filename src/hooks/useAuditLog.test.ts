@@ -62,6 +62,7 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 type AuditLogHandle = {
   record: (...args: unknown[]) => unknown;
   syncNow: () => Promise<{ synced: number; remaining: number }>;
+  exportSnapshot: (format?: "json" | "csv") => string;
   pendingCount: number;
   events: AuditEvent[];
 };
@@ -163,6 +164,31 @@ describe("audit log helpers", () => {
     ];
     const pruned = auditLogTestUtils.pruneAuditEvents(events, 2);
     expect(pruned.map((entry) => entry.id)).toEqual(["2", "3"]);
+  });
+
+  it("serializes events to csv with escaped cells", () => {
+    const csv = auditLogTestUtils.serializeAuditEvents(
+      [
+        {
+          id: "evt-1",
+          timestamp: 1700000000000,
+          userId: "u-1",
+          userEmail: "u@example.com",
+          serverId: "srv-1",
+          serverName: "Server, One",
+          session: "main",
+          action: "command_sent",
+          detail: "echo \"hello,world\"",
+          approved: null,
+          deviceId: "device-1",
+          appVersion: "1.2.3",
+        },
+      ],
+      "csv"
+    );
+    expect(csv).toContain("timestamp_iso");
+    expect(csv).toContain("\"Server, One\"");
+    expect(csv).toContain("\"echo \"\"hello,world\"\"\"");
   });
 });
 
@@ -279,6 +305,42 @@ describe("useAuditLog", () => {
 
     expect(latestOrThrow(latest).pendingCount).toBe(0);
     expect(cloudClientMock.cloudRequest).toHaveBeenCalled();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("exports queued events as json and csv snapshots", async () => {
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: false }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      latest?.record({
+        action: "command_sent",
+        serverId: "server-1",
+        serverName: "DGX",
+        session: "main",
+        detail: "uname -a",
+      });
+    });
+    await flush();
+
+    const json = latestOrThrow(latest).exportSnapshot("json");
+    const csv = latestOrThrow(latest).exportSnapshot("csv");
+    expect(json).toContain("\"action\": \"command_sent\"");
+    expect(csv).toContain("command_sent");
+    expect(csv).toContain("uname -a");
 
     await act(async () => {
       renderer?.unmount();

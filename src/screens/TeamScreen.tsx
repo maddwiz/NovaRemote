@@ -38,6 +38,8 @@ type TeamScreenProps = {
   auditPendingCount?: number;
   auditLastSyncAt?: number | null;
   onSyncAudit?: () => Promise<void>;
+  onExportAuditJson?: () => Promise<void>;
+  onExportAuditCsv?: () => Promise<void>;
 };
 
 export function TeamScreen({
@@ -60,6 +62,8 @@ export function TeamScreen({
   auditPendingCount = 0,
   auditLastSyncAt = null,
   onSyncAudit,
+  onExportAuditJson,
+  onExportAuditCsv,
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -70,6 +74,8 @@ export function TeamScreen({
   const canLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
+  const canExportAuditJson = Boolean(identity && onExportAuditJson && !busy);
+  const canExportAuditCsv = Boolean(identity && onExportAuditCsv && !busy);
 
   const handleLogin = useCallback(() => {
     if (!onLogin || !canLogin) {
@@ -142,6 +148,34 @@ export function TeamScreen({
         setTeamStatus(error instanceof Error ? error.message : String(error));
       });
   }, [canSyncAudit, onSyncAudit]);
+
+  const handleExportAuditJson = useCallback(() => {
+    if (!onExportAuditJson || !canExportAuditJson) {
+      return;
+    }
+    setTeamStatus("");
+    void onExportAuditJson()
+      .then(() => {
+        setTeamStatus("Audit JSON export prepared.");
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [canExportAuditJson, onExportAuditJson]);
+
+  const handleExportAuditCsv = useCallback(() => {
+    if (!onExportAuditCsv || !canExportAuditCsv) {
+      return;
+    }
+    setTeamStatus("");
+    void onExportAuditCsv()
+      .then(() => {
+        setTeamStatus("Audit CSV export prepared.");
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [canExportAuditCsv, onExportAuditCsv]);
 
   return (
     <View style={styles.panel}>
@@ -283,6 +317,28 @@ export function TeamScreen({
               disabled={!canSyncAudit}
             >
               <Text style={styles.actionButtonText}>{busy ? "Syncing..." : "Sync Audit"}</Text>
+            </Pressable>
+          ) : null}
+          {onExportAuditJson ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Export audit log as JSON"
+              style={[styles.actionButton, !canExportAuditJson ? styles.buttonDisabled : null]}
+              onPress={handleExportAuditJson}
+              disabled={!canExportAuditJson}
+            >
+              <Text style={styles.actionButtonText}>{busy ? "Exporting..." : "Export JSON"}</Text>
+            </Pressable>
+          ) : null}
+          {onExportAuditCsv ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Export audit log as CSV"
+              style={[styles.actionButton, !canExportAuditCsv ? styles.buttonDisabled : null]}
+              onPress={handleExportAuditCsv}
+              disabled={!canExportAuditCsv}
+            >
+              <Text style={styles.actionButtonText}>{busy ? "Exporting..." : "Export CSV"}</Text>
             </Pressable>
           ) : null}
           {onRefresh ? (

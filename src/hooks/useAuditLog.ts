@@ -38,6 +38,8 @@ type AuditSyncResponse = {
   accepted?: unknown;
 } & Record<string, unknown>;
 
+type AuditExportFormat = "json" | "csv";
+
 function normalizeAuditEvent(value: unknown): AuditEvent | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -70,6 +72,63 @@ function normalizeAuditQueue(value: unknown): AuditEvent[] {
     return [];
   }
   return value.map((entry) => normalizeAuditEvent(entry)).filter((entry): entry is AuditEvent => Boolean(entry));
+}
+
+function formatAuditTimestamp(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "";
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function escapeCsvCell(value: unknown): string {
+  const text = String(value ?? "");
+  if (!text) {
+    return "";
+  }
+  if (!/[",\n\r]/.test(text)) {
+    return text;
+  }
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+export function serializeAuditEvents(events: AuditEvent[], format: AuditExportFormat): string {
+  if (format === "json") {
+    return JSON.stringify(events, null, 2);
+  }
+
+  const headers = [
+    "id",
+    "timestamp_iso",
+    "timestamp_ms",
+    "action",
+    "user_id",
+    "user_email",
+    "server_id",
+    "server_name",
+    "session",
+    "detail",
+    "approved",
+    "device_id",
+    "app_version",
+  ];
+  const rows = events.map((event) => [
+    event.id,
+    formatAuditTimestamp(event.timestamp),
+    event.timestamp,
+    event.action,
+    event.userId,
+    event.userEmail,
+    event.serverId,
+    event.serverName,
+    event.session,
+    event.detail,
+    event.approved === null ? "" : event.approved ? "true" : "false",
+    event.deviceId,
+    event.appVersion,
+  ]);
+
+  return [headers, ...rows].map((row) => row.map((cell) => escapeCsvCell(cell)).join(",")).join("\n");
 }
 
 export function pruneAuditEvents(events: AuditEvent[], limit: number): AuditEvent[] {
@@ -265,6 +324,13 @@ export function useAuditLog({
     }
   }, [enabled, events, identity?.accessToken, onError, sendSnapshot, syncEnabled]);
 
+  const exportSnapshot = useCallback(
+    (format: AuditExportFormat = "json") => {
+      return serializeAuditEvents(events, format);
+    },
+    [events]
+  );
+
   useEffect(() => {
     if (!enabled || !syncEnabled || !identity?.accessToken) {
       return;
@@ -289,12 +355,14 @@ export function useAuditLog({
       record,
       clear,
       syncNow,
+      exportSnapshot,
     }),
-    [clear, deviceId, events, lastError, lastSyncAt, loading, record, syncNow, syncing]
+    [clear, deviceId, events, exportSnapshot, lastError, lastSyncAt, loading, record, syncNow, syncing]
   );
 }
 
 export const auditLogTestUtils = {
   pruneAuditEvents,
   buildAuditEvent,
+  serializeAuditEvents,
 };
