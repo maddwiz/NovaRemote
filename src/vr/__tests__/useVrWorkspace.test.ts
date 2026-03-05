@@ -78,6 +78,9 @@ beforeEach(() => {
     if (joined.includes("react-test-renderer is deprecated")) {
       return;
     }
+    if (joined.includes("not wrapped in act")) {
+      return;
+    }
     process.stderr.write(`${joined}\n`);
   });
   vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
