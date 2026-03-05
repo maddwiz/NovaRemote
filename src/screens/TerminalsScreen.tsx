@@ -354,6 +354,7 @@ export function TerminalsScreen() {
     joinChannel,
     leaveChannel,
     toggleMute,
+    setActiveSpeaker,
   } = useVoiceChannels();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
@@ -423,6 +424,21 @@ export function TerminalsScreen() {
       setShowAllServerTerminals(false);
     }
   }, [connectedServerCount, showAllServerTerminals]);
+
+  useEffect(() => {
+    if (typeof setActiveSpeaker !== "function") {
+      return;
+    }
+    const joinedChannel = voiceChannels.find((channel) => channel.joined);
+    if (!joinedChannel) {
+      return;
+    }
+    const nextSpeakerId = voiceRecording ? "local-user" : null;
+    if ((joinedChannel.activeSpeakerId || null) === nextSpeakerId) {
+      return;
+    }
+    setActiveSpeaker(joinedChannel.id, nextSpeakerId);
+  }, [setActiveSpeaker, voiceChannels, voiceRecording]);
 
   useEffect(() => {
     const valid = new Set(processes.map((entry) => entry.pid));

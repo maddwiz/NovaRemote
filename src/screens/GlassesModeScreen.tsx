@@ -230,6 +230,7 @@ export function GlassesModeScreen() {
     joinChannel,
     leaveChannel,
     toggleMute,
+    setActiveSpeaker,
   } = useVoiceChannels();
   const [panelIds, setPanelIds] = useState<string[]>([]);
   const [pinnedPanelIds, setPinnedPanelIds] = useState<string[]>([]);
@@ -332,6 +333,21 @@ export function GlassesModeScreen() {
       return next;
     });
   }, []);
+
+  useEffect(() => {
+    if (typeof setActiveSpeaker !== "function") {
+      return;
+    }
+    const joinedChannel = voiceChannels.find((channel) => channel.joined);
+    if (!joinedChannel) {
+      return;
+    }
+    const nextSpeakerId = voiceRecording ? "local-user" : null;
+    if ((joinedChannel.activeSpeakerId || null) === nextSpeakerId) {
+      return;
+    }
+    setActiveSpeaker(joinedChannel.id, nextSpeakerId);
+  }, [setActiveSpeaker, voiceChannels, voiceRecording]);
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);

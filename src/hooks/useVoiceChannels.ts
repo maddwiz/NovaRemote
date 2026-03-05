@@ -18,10 +18,18 @@ export type UseVoiceChannelsResult = {
   joinChannel: (channelId: string) => void;
   leaveChannel: (channelId: string) => void;
   toggleMute: (channelId: string) => void;
+  setChannelParticipantActive: (channelId: string, participantId: string, active: boolean) => void;
+  setActiveSpeaker: (channelId: string, participantId: string | null) => void;
 };
+
+const LOCAL_VOICE_PARTICIPANT_ID = "local-user";
 
 function normalizeChannelName(value: string): string {
   return value.trim().replace(/\s+/g, " ");
+}
+
+function normalizeParticipantId(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 function normalizeVoiceChannel(value: unknown): VoiceChannel | null {
@@ -39,6 +47,18 @@ function normalizeVoiceChannel(value: unknown): VoiceChannel | null {
   const id = typeof parsed.id === "string" && parsed.id ? parsed.id : `voice-${makeId()}`;
   const createdAt = typeof parsed.createdAt === "string" && parsed.createdAt ? parsed.createdAt : new Date().toISOString();
   const updatedAt = typeof parsed.updatedAt === "string" && parsed.updatedAt ? parsed.updatedAt : createdAt;
+  const activeParticipantIds = Array.isArray(parsed.activeParticipantIds)
+    ? Array.from(
+        new Set(
+          parsed.activeParticipantIds
+            .map((entry) => (typeof entry === "string" ? normalizeParticipantId(entry) : ""))
+            .filter(Boolean)
+        )
+      )
+    : [];
+  const activeSpeakerIdRaw = typeof parsed.activeSpeakerId === "string" ? normalizeParticipantId(parsed.activeSpeakerId) : "";
+  const activeSpeakerId = activeSpeakerIdRaw || null;
+  const lastSpokeAt = typeof parsed.lastSpokeAt === "string" ? parsed.lastSpokeAt : null;
 
   return {
     id,
@@ -46,6 +66,9 @@ function normalizeVoiceChannel(value: unknown): VoiceChannel | null {
     name,
     joined: Boolean(parsed.joined),
     muted: Boolean(parsed.muted),
+    activeParticipantIds,
+    activeSpeakerId,
+    lastSpokeAt,
     createdAt,
     updatedAt,
   };
@@ -65,25 +88,44 @@ function sortChannels(channels: VoiceChannel[]): VoiceChannel[] {
     });
 }
 
-function joinWorkspaceChannel(channels: VoiceChannel[], channelId: string): VoiceChannel[] {
+function joinWorkspaceChannel(
+  channels: VoiceChannel[],
+  channelId: string,
+  participantId: string = LOCAL_VOICE_PARTICIPANT_ID
+): VoiceChannel[] {
   const target = channels.find((channel) => channel.id === channelId);
   if (!target) {
     return channels;
   }
 
   const now = new Date().toISOString();
+  const normalizedParticipantId = normalizeParticipantId(participantId);
   return sortChannels(
     channels.map((channel) => {
       if (channel.workspaceId !== target.workspaceId) {
         return channel;
       }
       if (channel.id === channelId) {
-        return { ...channel, joined: true, updatedAt: now };
+        const activeParticipantIds = Array.from(
+          new Set([...(channel.activeParticipantIds || []), normalizedParticipantId].filter(Boolean))
+        );
+        return {
+          ...channel,
+          joined: true,
+          activeParticipantIds,
+          updatedAt: now,
+        };
       }
       if (!channel.joined) {
         return channel;
       }
-      return { ...channel, joined: false, updatedAt: now };
+      return {
+        ...channel,
+        joined: false,
+        activeSpeakerId: channel.activeSpeakerId === normalizedParticipantId ? null : channel.activeSpeakerId || null,
+        activeParticipantIds: (channel.activeParticipantIds || []).filter((id) => id !== normalizedParticipantId),
+        updatedAt: now,
+      };
     })
   );
 }
@@ -162,6 +204,9 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
       name,
       joined: false,
       muted: false,
+      activeParticipantIds: [],
+      activeSpeakerId: null,
+      lastSpokeAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -214,6 +259,11 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
             ? {
                 ...channel,
                 joined: false,
+                activeSpeakerId:
+                  channel.activeSpeakerId === LOCAL_VOICE_PARTICIPANT_ID ? null : channel.activeSpeakerId || null,
+                activeParticipantIds: (channel.activeParticipantIds || []).filter(
+                  (participantId) => participantId !== LOCAL_VOICE_PARTICIPANT_ID
+                ),
                 updatedAt: now,
               }
             : channel
@@ -239,6 +289,64 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
     );
   }, []);
 
+  const setChannelParticipantActive = useCallback((channelId: string, participantId: string, active: boolean) => {
+    const normalizedParticipantId = normalizeParticipantId(participantId);
+    if (!normalizedParticipantId) {
+      return;
+    }
+    const now = new Date().toISOString();
+    setChannels((previous) =>
+      sortChannels(
+        previous.map((channel) => {
+          if (channel.id !== channelId) {
+            return channel;
+          }
+          const activeParticipantIds = new Set(channel.activeParticipantIds || []);
+          if (active) {
+            activeParticipantIds.add(normalizedParticipantId);
+          } else {
+            activeParticipantIds.delete(normalizedParticipantId);
+          }
+          const nextActiveSpeakerId =
+            !active && channel.activeSpeakerId === normalizedParticipantId
+              ? null
+              : channel.activeSpeakerId || null;
+          return {
+            ...channel,
+            activeParticipantIds: Array.from(activeParticipantIds),
+            activeSpeakerId: nextActiveSpeakerId,
+            updatedAt: now,
+          };
+        })
+      )
+    );
+  }, []);
+
+  const setActiveSpeaker = useCallback((channelId: string, participantId: string | null) => {
+    const normalizedParticipantId = participantId ? normalizeParticipantId(participantId) : "";
+    const now = new Date().toISOString();
+    setChannels((previous) =>
+      sortChannels(
+        previous.map((channel) => {
+          if (channel.id !== channelId) {
+            return channel;
+          }
+          const activeParticipantIds = new Set(channel.activeParticipantIds || []);
+          if (normalizedParticipantId) {
+            activeParticipantIds.add(normalizedParticipantId);
+          }
+          return {
+            ...channel,
+            activeParticipantIds: Array.from(activeParticipantIds),
+            activeSpeakerId: normalizedParticipantId || null,
+            lastSpokeAt: normalizedParticipantId ? now : channel.lastSpokeAt || null,
+            updatedAt: now,
+          };
+        })
+      )
+    );
+  }, []);
+
   return useMemo(
     () => ({
       channels,
@@ -249,13 +357,27 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
       joinChannel,
       leaveChannel,
       toggleMute,
+      setChannelParticipantActive,
+      setActiveSpeaker,
     }),
-    [channels, createChannel, deleteChannel, pruneWorkspaceChannels, joinChannel, leaveChannel, loading, toggleMute]
+    [
+      channels,
+      createChannel,
+      deleteChannel,
+      pruneWorkspaceChannels,
+      joinChannel,
+      leaveChannel,
+      loading,
+      toggleMute,
+      setChannelParticipantActive,
+      setActiveSpeaker,
+    ]
   );
 }
 
 export const voiceChannelsTestUtils = {
   normalizeVoiceChannel,
   normalizeChannelName,
+  normalizeParticipantId,
   joinWorkspaceChannel,
 };

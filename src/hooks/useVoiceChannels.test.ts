@@ -59,6 +59,7 @@ afterEach(() => {
 describe("voice channel helpers", () => {
   it("normalizes names and channels", () => {
     expect(voiceChannelsTestUtils.normalizeChannelName("  Team   Alpha ")).toBe("Team Alpha");
+    expect(voiceChannelsTestUtils.normalizeParticipantId("  Local-User ")).toBe("local-user");
     expect(
       voiceChannelsTestUtils.normalizeVoiceChannel(
         {
@@ -66,9 +67,23 @@ describe("voice channel helpers", () => {
           workspaceId: "workspace-1",
           name: "Ops",
           joined: true,
+          activeParticipantIds: ["Local-User"],
+          activeSpeakerId: "LOCAL-USER",
         }
       )?.workspaceId
     ).toBe("workspace-1");
+    expect(
+      voiceChannelsTestUtils.normalizeVoiceChannel(
+        {
+          id: "voice-1",
+          workspaceId: "workspace-1",
+          name: "Ops",
+          joined: true,
+          activeParticipantIds: ["Local-User"],
+          activeSpeakerId: "LOCAL-USER",
+        }
+      )?.activeSpeakerId
+    ).toBe("local-user");
   });
 });
 
@@ -166,12 +181,14 @@ describe("useVoiceChannels", () => {
 
     expect(current().channels[0]?.joined).toBe(true);
     expect(current().channels[0]?.muted).toBe(true);
+    expect(current().channels[0]?.activeParticipantIds).toContain("local-user");
 
     await act(async () => {
       current().leaveChannel(channelId);
     });
 
     expect(current().channels[0]?.joined).toBe(false);
+    expect(current().channels[0]?.activeParticipantIds).not.toContain("local-user");
 
     await act(async () => {
       renderer?.unmount();
@@ -245,6 +262,55 @@ describe("useVoiceChannels", () => {
 
     expect(current().channels).toHaveLength(1);
     expect(current().channels[0]?.id).toBe(firstId);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("tracks active speaker and participant presence", async () => {
+    let latest: UseVoiceChannelsResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVoiceChannels();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    let channelId = "";
+    await act(async () => {
+      const created = current().createChannel({ workspaceId: "workspace-a", name: "Incident" });
+      channelId = created?.id || "";
+      current().joinChannel(channelId);
+    });
+
+    await act(async () => {
+      current().setChannelParticipantActive(channelId, "engineer-2", true);
+      current().setActiveSpeaker(channelId, "engineer-2");
+    });
+
+    const channelAfterSpeak = current().channels.find((channel) => channel.id === channelId);
+    expect(channelAfterSpeak?.activeParticipantIds).toContain("engineer-2");
+    expect(channelAfterSpeak?.activeSpeakerId).toBe("engineer-2");
+    expect(channelAfterSpeak?.lastSpokeAt).toBeTruthy();
+
+    await act(async () => {
+      current().setChannelParticipantActive(channelId, "engineer-2", false);
+    });
+
+    const channelAfterLeave = current().channels.find((channel) => channel.id === channelId);
+    expect(channelAfterLeave?.activeParticipantIds).not.toContain("engineer-2");
+    expect(channelAfterLeave?.activeSpeakerId).toBeNull();
 
     await act(async () => {
       renderer?.unmount();

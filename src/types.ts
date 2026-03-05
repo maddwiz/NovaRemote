@@ -503,6 +503,9 @@ export type VoiceChannel = {
   name: string;
   joined: boolean;
   muted: boolean;
+  activeParticipantIds?: string[];
+  activeSpeakerId?: string | null;
+  lastSpokeAt?: string | null;
   createdAt: string;
   updatedAt: string;
 };

@@ -127,6 +127,8 @@ export function WorkspaceVoiceChannelsPanel({
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                 {workspaceChannels.map((channel) => {
                   const active = channel.joined;
+                  const activeParticipants = channel.activeParticipantIds || [];
+                  const onlineCount = activeParticipants.length;
                   return (
                     <Pressable
                       accessibilityRole="button"
@@ -146,12 +148,15 @@ export function WorkspaceVoiceChannelsPanel({
                       }}
                     >
                       <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
-                        {`#${channel.name}${channel.muted ? " (muted)" : ""}`}
+                        {`#${channel.name}${onlineCount > 0 ? ` • ${onlineCount} online` : ""}${channel.muted ? " (muted)" : ""}`}
                       </Text>
                     </Pressable>
                   );
                 })}
               </ScrollView>
+            ) : null}
+            {joinedChannel?.activeSpeakerId ? (
+              <Text style={styles.emptyText}>{`Active speaker: ${joinedChannel.activeSpeakerId}`}</Text>
             ) : null}
             {permissions.canManageChannels && workspaceChannels.length > 0 ? (
               <View style={styles.actionsWrap}>
