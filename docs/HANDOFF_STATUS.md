@@ -1,6 +1,6 @@
 # NovaRemote Handoff Status
 
-Updated: 2026-03-04
+Updated: 2026-03-05
 
 ## v1.2 Connection Pool + Switcher
 
@@ -46,6 +46,8 @@ Updated: 2026-03-04
 
 - [~] Early NovaAdapt runtime/panel scaffolding exists
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
+- [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
+- [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
 - [ ] Full agent lifecycle + NovaSpine memory orchestration is still roadmap work
 - [ ] Full team collaboration voice/presence channels remains roadmap work
 
