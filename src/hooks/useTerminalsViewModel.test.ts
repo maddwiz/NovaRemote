@@ -372,6 +372,59 @@ describe("useTerminalsViewModel", () => {
     );
   });
 
+  it("blocks process kill actions for team viewer servers", async () => {
+    apiRequestMock.mockClear();
+    const recordAuditEvent = vi.fn();
+    const setStatus = vi.fn();
+    const runWithStatus = vi.fn(async (_label: string, action: () => Promise<void>) => {
+      try {
+        await action();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      }
+    });
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      activeServer: {
+        id: "team-1",
+        name: "Team Server",
+        baseUrl: "https://team.test",
+        token: "token",
+        defaultCwd: "/workspace",
+        source: "team",
+        permissionLevel: "viewer",
+      },
+      connected: true,
+      capabilities: {
+        terminal: true,
+        tmux: true,
+        codex: false,
+        files: true,
+        shellRun: false,
+        macAttach: false,
+        stream: true,
+        sysStats: false,
+        processes: true,
+        collaboration: false,
+        spectate: false,
+      },
+      runWithStatus,
+      recordAuditEvent,
+    });
+
+    model.onKillProcess(4321, "TERM");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(apiRequestMock).not.toHaveBeenCalled();
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "command_dangerous_denied",
+        serverId: "team-1",
+      })
+    );
+  });
+
   it("routes server-scoped agent approval actions through async callbacks", async () => {
     const approveReadyAgentsForServer = vi.fn(async (_serverId: string) => ["agent-a"]);
     const denyAllPendingAgentsForServer = vi.fn(async (_serverId: string) => ["agent-b"]);

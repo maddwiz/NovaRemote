@@ -943,6 +943,29 @@ export default function AppShell() {
     [activeServer?.name, focusedServerId, recordAuditEvent, teamSettings.commandBlocklist]
   );
 
+  const assertServerWritable = useCallback(
+    (serverId: string, context: string) => {
+      const server =
+        poolConnections.get(serverId)?.server ||
+        brokeredServers.find((entry) => entry.id === serverId) ||
+        servers.find((entry) => entry.id === serverId) ||
+        null;
+      if (!server || server.source !== "team" || server.permissionLevel !== "viewer") {
+        return;
+      }
+      recordAuditEvent({
+        action: "command_dangerous_denied",
+        serverId,
+        serverName: server.name,
+        session: "",
+        detail: `${context}: denied for viewer role`,
+        approved: false,
+      });
+      throw new Error(`${server.name} is read-only for your viewer role.`);
+    },
+    [brokeredServers, poolConnections, recordAuditEvent, servers]
+  );
+
   const focusServer = useCallback(
     (serverId: string) => {
       markActivity();
@@ -1104,6 +1127,7 @@ export default function AppShell() {
     }
 
     markActivity();
+    assertServerWritable(focusedServerId, "Create session");
     const trimmedPrompt = startPrompt.trim();
     const session = await createPoolSession(
       focusedServerId,
@@ -1128,6 +1152,7 @@ export default function AppShell() {
     connected,
     createPoolSession,
     focusedServerId,
+    assertServerWritable,
     markActivity,
     recordAuditEvent,
     startCwd,
@@ -1143,6 +1168,7 @@ export default function AppShell() {
         throw new Error("Target server is disconnected.");
       }
       markActivity();
+      assertServerWritable(serverId, "Create session");
       return await createPoolSession(
         serverId,
         targetConnection.server.defaultCwd || DEFAULT_CWD,
@@ -1151,7 +1177,7 @@ export default function AppShell() {
         false
       );
     },
-    [createPoolSession, markActivity, poolConnections]
+    [assertServerWritable, createPoolSession, markActivity, poolConnections]
   );
 
   const sendCommand = useCallback(
@@ -1160,6 +1186,7 @@ export default function AppShell() {
         throw new Error("Connect to a server first.");
       }
       markActivity();
+      assertServerWritable(focusedServerId, "Send command");
       assertCommandAllowed(command, `Send to ${session}`);
       await sendPoolCommand(focusedServerId, session, command, mode, clearDraft);
       recordAuditEvent({
@@ -1170,7 +1197,15 @@ export default function AppShell() {
         detail: `${mode}:${command.slice(0, 400)}`,
       });
     },
-    [activeServer?.name, assertCommandAllowed, focusedServerId, markActivity, recordAuditEvent, sendPoolCommand]
+    [
+      activeServer?.name,
+      assertCommandAllowed,
+      assertServerWritable,
+      focusedServerId,
+      markActivity,
+      recordAuditEvent,
+      sendPoolCommand,
+    ]
   );
 
   const handleSend = useCallback(
@@ -1196,9 +1231,10 @@ export default function AppShell() {
       if (!focusedServerId) {
         throw new Error("Connect to a server first.");
       }
+      assertServerWritable(focusedServerId, "Stop session");
       await stopPoolSession(focusedServerId, session);
     },
-    [focusedServerId, stopPoolSession]
+    [assertServerWritable, focusedServerId, stopPoolSession]
   );
 
   const sendControlChar = useCallback(
@@ -1207,6 +1243,7 @@ export default function AppShell() {
         throw new Error("Connect to a server first.");
       }
       markActivity();
+      assertServerWritable(focusedServerId, "Send control");
       await sendPoolControlChar(focusedServerId, session, controlChar);
       recordAuditEvent({
         action: "command_sent",
@@ -1216,7 +1253,14 @@ export default function AppShell() {
         detail: `control:${controlChar}`,
       });
     },
-    [activeServer?.name, focusedServerId, markActivity, recordAuditEvent, sendPoolControlChar]
+    [
+      activeServer?.name,
+      assertServerWritable,
+      focusedServerId,
+      markActivity,
+      recordAuditEvent,
+      sendPoolControlChar,
+    ]
   );
 
   const handleOpenOnMac = useCallback(
@@ -1424,6 +1468,9 @@ export default function AppShell() {
     if (selectedServers.length === 0) {
       throw new Error("Select at least one target server.");
     }
+    selectedServers.forEach((server) => {
+      assertServerWritable(server.id, "Fleet execution");
+    });
 
     const waitMs = Math.max(400, Math.min(Number.parseInt(fleetWaitMs, 10) || DEFAULT_FLEET_WAIT_MS, 120000));
 
@@ -1510,6 +1557,7 @@ export default function AppShell() {
     }
   }, [
     assertCommandAllowed,
+    assertServerWritable,
     brokeredServers,
     fleetCommand,
     fleetCwd,
@@ -2381,6 +2429,9 @@ export default function AppShell() {
   }, [isPro]);
 
   const requestDangerApproval = useCallback(async (command: string, context: string) => {
+    if (focusedServerId) {
+      assertServerWritable(focusedServerId, context);
+    }
     assertCommandAllowed(command, context);
     if (!requireDangerConfirm || !isDangerousShellCommand(command)) {
       return true;
@@ -2394,7 +2445,7 @@ export default function AppShell() {
         context,
       });
     });
-  }, [assertCommandAllowed, requireDangerConfirm]);
+  }, [assertCommandAllowed, assertServerWritable, focusedServerId, requireDangerConfirm]);
 
   const deleteRecordingWithPlaybackCleanup = useCallback(
     (session: string) => {
@@ -3475,6 +3526,9 @@ export default function AppShell() {
                 onSaveFile={(path, content) => {
                   void runWithStatus("Saving remote file", async () => {
                     markActivity();
+                    if (focusedServerId) {
+                      assertServerWritable(focusedServerId, "Write file");
+                    }
                     await writeFile(path, content);
                     recordAuditEvent({
                       action: "file_written",

@@ -968,6 +968,18 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         if (!activeServer || !connected || !capabilities.processes) {
           throw new Error("Process manager is unavailable on the active server.");
         }
+        if (activeServer.source === "team" && activeServer.permissionLevel === "viewer") {
+          if (typeof recordAuditEvent === "function") {
+            recordAuditEvent({
+              action: "command_dangerous_denied",
+              serverId: activeServer.id,
+              serverName: activeServer.name,
+              detail: `Process kill denied for viewer role (pid=${pid})`,
+              approved: false,
+            });
+          }
+          throw new Error(`${activeServer.name} is read-only for your viewer role.`);
+        }
         await apiRequest(activeServer.baseUrl, activeServer.token, "/proc/kill", {
           method: "POST",
           body: JSON.stringify({ pid, signal }),
@@ -988,6 +1000,18 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       void runWithStatus(`Sending ${signal} to ${pids.length} process(es)`, async () => {
         if (!activeServer || !connected || !capabilities.processes) {
           throw new Error("Process manager is unavailable on the active server.");
+        }
+        if (activeServer.source === "team" && activeServer.permissionLevel === "viewer") {
+          if (typeof recordAuditEvent === "function") {
+            recordAuditEvent({
+              action: "command_dangerous_denied",
+              serverId: activeServer.id,
+              serverName: activeServer.name,
+              detail: `Process kill denied for viewer role (count=${pids.length})`,
+              approved: false,
+            });
+          }
+          throw new Error(`${activeServer.name} is read-only for your viewer role.`);
         }
         const uniquePids = Array.from(new Set(pids.filter((pid) => Number.isFinite(pid) && pid > 0)));
         if (uniquePids.length === 0) {
