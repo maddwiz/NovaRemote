@@ -11,6 +11,7 @@ const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing
 type TeamScreenProps = {
   identity: TeamIdentity | null;
   members: TeamMember[];
+  planTier?: "free" | "pro" | "team" | "enterprise";
   settings?: {
     enforceDangerConfirm: boolean | null;
     commandBlocklist: string[];
@@ -41,6 +42,7 @@ type TeamScreenProps = {
 export function TeamScreen({
   identity,
   members,
+  planTier = "free",
   settings,
   usage,
   loading,
@@ -190,6 +192,7 @@ export function TeamScreen({
       ) : null}
       {identity ? <TeamBadge teamName={identity.teamName} role={identity.role} /> : null}
       {identity ? <Text style={styles.serverSubtitle}>{identity.email}</Text> : null}
+      {identity ? <Text style={styles.emptyText}>{`Plan: ${planTier}`}</Text> : null}
       {identity && settings ? (
         <>
           <Text style={styles.emptyText}>

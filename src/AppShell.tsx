@@ -706,7 +706,7 @@ export default function AppShell() {
     setRequireDangerConfirm,
   } = useSafetyPolicy({ enforcedDangerConfirm: teamSettings.enforceDangerConfirm });
   const { permissionStatus, requestPermission, notify } = useNotifications();
-  const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
+  const { available: rcAvailable, isPro, subscriptionTier, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet, exportSnippets, importSnippets } = useSnippets();
   const { terminalTheme, setPreset: setTerminalPreset, setFontFamily: setTerminalFontFamily, setFontSize: setTerminalFontSize, setBackgroundOpacity: setTerminalBackgroundOpacity } = useTerminalTheme();
   const {
@@ -3691,6 +3691,7 @@ export default function AppShell() {
             <TeamScreen
               identity={teamIdentity}
               members={teamMembers}
+              planTier={subscriptionTier}
               settings={teamSettings}
               usage={teamUsage}
               loading={teamLoading}

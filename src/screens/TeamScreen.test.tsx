@@ -97,12 +97,15 @@ describe("TeamScreen", () => {
             sessionTimeoutMinutes: 15,
             requireSessionRecording: null,
           }}
+          planTier="team"
           loading={false}
           busy={false}
           onLogout={onLogout}
         />
       );
     });
+
+    expect(() => renderer?.root.findByProps({ children: "Plan: team" })).not.toThrow();
 
     act(() => {
       renderer?.root.findByProps({ accessibilityLabel: "Sign out from team account" }).props.onPress();
