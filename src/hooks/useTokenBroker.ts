@@ -110,14 +110,32 @@ export function derivePermissionLevelFromBrokerPermissions(
   return "viewer";
 }
 
-export function applyBrokerTokens(servers: ServerProfile[], tokenCache: TokenCache): ServerProfile[] {
+function isAuthDeniedError(error: unknown): boolean {
+  if (!error) {
+    return false;
+  }
+  const message = error instanceof Error ? error.message : String(error);
+  return /^401\b/.test(message) || /^403\b/.test(message);
+}
+
+export function applyBrokerTokens(
+  servers: ServerProfile[],
+  tokenCache: TokenCache,
+  requireBrokerTokenForTeam: boolean = false
+): ServerProfile[] {
   return servers.map((server) => {
     if (!isTeamManagedServer(server)) {
       return server;
     }
     const tokenEntry = tokenCache[server.id];
     if (!tokenEntry?.token) {
-      return server;
+      if (!requireBrokerTokenForTeam) {
+        return server;
+      }
+      return {
+        ...server,
+        token: "",
+      };
     }
     const permissionLevel = derivePermissionLevelFromBrokerPermissions(tokenEntry.permissions);
     return {
@@ -236,6 +254,16 @@ export function useTokenBroker({
         setTokenCache((prev) => ({ ...prev, [server.id]: normalized }));
         return normalized;
       } catch (error) {
+        if (isAuthDeniedError(error) && isTeamManagedServer(server)) {
+          setTokenCache((prev) => {
+            if (!prev[server.id]) {
+              return prev;
+            }
+            const next = { ...prev };
+            delete next[server.id];
+            return next;
+          });
+        }
         setLastError(error instanceof Error ? error.message : String(error));
         onError?.(error);
         throw error;
@@ -268,6 +296,16 @@ export function useTokenBroker({
     if (!enabled || !identity) {
       return;
     }
+    void refreshExpiringTokens().catch((error) => {
+      setLastError(error instanceof Error ? error.message : String(error));
+      onError?.(error);
+    });
+  }, [enabled, identity, onError, refreshExpiringTokens]);
+
+  useEffect(() => {
+    if (!enabled || !identity) {
+      return;
+    }
     const timer = setInterval(() => {
       void refreshExpiringTokens().catch((error) => {
         setLastError(error instanceof Error ? error.message : String(error));
@@ -287,7 +325,10 @@ export function useTokenBroker({
     return next;
   }, [tokenCache]);
 
-  const brokeredServers = useMemo(() => applyBrokerTokens(servers, tokenCache), [servers, tokenCache]);
+  const brokeredServers = useMemo(
+    () => applyBrokerTokens(servers, tokenCache, Boolean(identity)),
+    [identity, servers, tokenCache]
+  );
 
   return useMemo(
     () => ({
@@ -317,4 +358,5 @@ export const tokenBrokerTestUtils = {
   shouldRefreshToken,
   applyBrokerTokens,
   derivePermissionLevelFromBrokerPermissions,
+  isAuthDeniedError,
 };

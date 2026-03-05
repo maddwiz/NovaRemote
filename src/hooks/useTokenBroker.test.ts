@@ -57,9 +57,21 @@ describe("token broker helpers", () => {
     expect(merged.find((entry) => entry.id === "team")?.permissionLevel).toBe("viewer");
   });
 
+  it("clears team tokens when broker token is required but unavailable", () => {
+    const team = buildServer({ id: "team", source: "team", token: "legacy-team-token", permissionLevel: "admin" });
+    const merged = tokenBrokerTestUtils.applyBrokerTokens([team], {}, true);
+    expect(merged[0]?.token).toBe("");
+  });
+
   it("derives runtime permission level from broker permissions", () => {
     expect(tokenBrokerTestUtils.derivePermissionLevelFromBrokerPermissions(["read"])).toBe("viewer");
     expect(tokenBrokerTestUtils.derivePermissionLevelFromBrokerPermissions(["read", "execute"])).toBe("operator");
     expect(tokenBrokerTestUtils.derivePermissionLevelFromBrokerPermissions(["admin"])).toBe("admin");
+  });
+
+  it("detects auth-denied broker errors", () => {
+    expect(tokenBrokerTestUtils.isAuthDeniedError(new Error("401 unauthorized"))).toBe(true);
+    expect(tokenBrokerTestUtils.isAuthDeniedError(new Error("403 forbidden"))).toBe(true);
+    expect(tokenBrokerTestUtils.isAuthDeniedError(new Error("500 error"))).toBe(false);
   });
 });

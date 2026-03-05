@@ -91,6 +91,7 @@ Updated: 2026-03-05
   - [x] fleet-approval review notes captured in TeamScreen and forwarded to approve/deny actions
   - [x] self-approval guard for fleet requests (another team member must approve)
   - [x] derive runtime server permission level from broker token permissions
+  - [x] token broker now provisions immediately on team login and purges cached tokens on 401/403 revocation responses
 
 ## v2.0+ NovaAdapt / Team Roadmap
 

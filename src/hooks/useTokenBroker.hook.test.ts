@@ -202,6 +202,7 @@ describe("useTokenBroker hook", () => {
       renderer?.unmount();
     });
   });
+
 });
 
 function latestOrThrow(value: TokenBrokerHandle | null): TokenBrokerHandle {
