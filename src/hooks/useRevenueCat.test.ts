@@ -38,7 +38,12 @@ type RevenueCatHandle = {
   subscriptionTier: "free" | "pro" | "team" | "enterprise";
   isPaid: boolean;
   priceLabel: string | null;
+  proPriceLabel: string | null;
+  teamPriceLabel: string | null;
+  enterprisePriceLabel: string | null;
   purchasePro: () => Promise<boolean>;
+  purchaseTeam: () => Promise<boolean>;
+  purchaseEnterprise: () => Promise<boolean>;
   restore: () => Promise<boolean>;
 };
 
@@ -223,6 +228,70 @@ describe("useRevenueCat", () => {
     expect(latestOrThrow(latest).isTeam).toBe(false);
     expect(latestOrThrow(latest).isEnterprise).toBe(false);
     expect(purchasesMock.restorePurchases).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("routes team and enterprise purchases through tier-specific packages", async () => {
+    purchasesMock.getCustomerInfo.mockResolvedValueOnce(buildCustomerInfo([]));
+    purchasesMock.getOfferings.mockResolvedValueOnce({
+      current: {
+        availablePackages: [
+          {
+            identifier: "pro_monthly",
+            product: { identifier: "novaremote_pro_monthly", title: "NovaRemote Pro", priceString: "$4.99" },
+          },
+          {
+            identifier: "team_monthly",
+            product: { identifier: "novaremote_team_monthly", title: "NovaRemote Team", priceString: "$19.99" },
+          },
+          {
+            identifier: "enterprise_monthly",
+            product: {
+              identifier: "novaremote_enterprise_monthly",
+              title: "NovaRemote Enterprise",
+              priceString: "$99.99",
+            },
+          },
+        ],
+      },
+    } as any);
+    purchasesMock.purchasePackage
+      .mockResolvedValueOnce({ customerInfo: buildCustomerInfo(["team"]) })
+      .mockResolvedValueOnce({ customerInfo: buildCustomerInfo(["enterprise"]) });
+
+    let latest: RevenueCatHandle | null = null;
+    function Harness() {
+      latest = useRevenueCat();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await waitFor(() => Boolean(latest && latest.ready), "revenuecat hook ready");
+
+    expect(latestOrThrow(latest).proPriceLabel).toBe("$4.99");
+    expect(latestOrThrow(latest).teamPriceLabel).toBe("$19.99");
+    expect(latestOrThrow(latest).enterprisePriceLabel).toBe("$99.99");
+
+    await act(async () => {
+      await latestOrThrow(latest).purchaseTeam();
+    });
+    const purchaseCalls = purchasesMock.purchasePackage.mock.calls as unknown as Array<[unknown]>;
+    const teamCall = purchaseCalls[0]?.[0] as { identifier?: string };
+    expect(teamCall?.identifier).toBe("team_monthly");
+    expect(latestOrThrow(latest).subscriptionTier).toBe("team");
+
+    await act(async () => {
+      await latestOrThrow(latest).purchaseEnterprise();
+    });
+    const enterpriseCall = purchaseCalls[1]?.[0] as { identifier?: string };
+    expect(enterpriseCall?.identifier).toBe("enterprise_monthly");
+    expect(latestOrThrow(latest).subscriptionTier).toBe("enterprise");
 
     await act(async () => {
       renderer?.unmount();

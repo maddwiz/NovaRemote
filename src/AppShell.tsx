@@ -706,7 +706,18 @@ export default function AppShell() {
     setRequireDangerConfirm,
   } = useSafetyPolicy({ enforcedDangerConfirm: teamSettings.enforceDangerConfirm });
   const { permissionStatus, requestPermission, notify } = useNotifications();
-  const { available: rcAvailable, isPro, subscriptionTier, priceLabel, purchasePro, restore } = useRevenueCat();
+  const {
+    available: rcAvailable,
+    isPro,
+    subscriptionTier,
+    proPriceLabel,
+    teamPriceLabel,
+    enterprisePriceLabel,
+    purchasePro,
+    purchaseTeam,
+    purchaseEnterprise,
+    restore,
+  } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet, exportSnippets, importSnippets } = useSnippets();
   const { terminalTheme, setPreset: setTerminalPreset, setFontFamily: setTerminalFontFamily, setFontSize: setTerminalFontSize, setBackgroundOpacity: setTerminalBackgroundOpacity } = useTerminalTheme();
   const {
@@ -3971,21 +3982,58 @@ export default function AppShell() {
 
       <PaywallModal
         visible={paywallVisible}
-        priceLabel={priceLabel}
+        subscriptionTier={subscriptionTier}
+        proPriceLabel={proPriceLabel}
+        teamPriceLabel={teamPriceLabel}
+        enterprisePriceLabel={enterprisePriceLabel}
         onClose={() => setPaywallVisible(false)}
-        onUpgrade={() => {
+        onUpgradePro={() => {
           void runWithStatus("Purchasing Pro", async () => {
-            track("purchase_attempt", { flow: "upgrade" });
+            track("purchase_attempt", { flow: "upgrade", tier: "pro" });
             if (!rcAvailable) {
               throw new Error("RevenueCat keys are not configured yet.");
             }
             const pro = await purchasePro();
             if (pro) {
-              track("purchase_success", { flow: "upgrade" });
+              track("purchase_success", { flow: "upgrade", tier: "pro" });
               setPaywallVisible(false);
             }
           });
         }}
+        onUpgradeTeam={
+          teamPriceLabel
+            ? () => {
+                void runWithStatus("Purchasing Team", async () => {
+                  track("purchase_attempt", { flow: "upgrade", tier: "team" });
+                  if (!rcAvailable) {
+                    throw new Error("RevenueCat keys are not configured yet.");
+                  }
+                  const pro = await purchaseTeam();
+                  if (pro) {
+                    track("purchase_success", { flow: "upgrade", tier: "team" });
+                    setPaywallVisible(false);
+                  }
+                });
+              }
+            : undefined
+        }
+        onUpgradeEnterprise={
+          enterprisePriceLabel
+            ? () => {
+                void runWithStatus("Purchasing Enterprise", async () => {
+                  track("purchase_attempt", { flow: "upgrade", tier: "enterprise" });
+                  if (!rcAvailable) {
+                    throw new Error("RevenueCat keys are not configured yet.");
+                  }
+                  const pro = await purchaseEnterprise();
+                  if (pro) {
+                    track("purchase_success", { flow: "upgrade", tier: "enterprise" });
+                    setPaywallVisible(false);
+                  }
+                });
+              }
+            : undefined
+        }
         onRestore={() => {
           void runWithStatus("Restoring purchases", async () => {
             track("purchase_attempt", { flow: "restore" });

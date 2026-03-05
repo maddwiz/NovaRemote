@@ -5,13 +5,36 @@ import { styles } from "../theme/styles";
 
 type PaywallModalProps = {
   visible: boolean;
-  priceLabel: string | null;
+  subscriptionTier: "free" | "pro" | "team" | "enterprise";
+  proPriceLabel: string | null;
+  teamPriceLabel: string | null;
+  enterprisePriceLabel: string | null;
   onClose: () => void;
-  onUpgrade: () => void;
+  onUpgradePro: () => void;
+  onUpgradeTeam?: () => void;
+  onUpgradeEnterprise?: () => void;
   onRestore: () => void;
 };
 
-export function PaywallModal({ visible, priceLabel, onClose, onUpgrade, onRestore }: PaywallModalProps) {
+export function PaywallModal({
+  visible,
+  subscriptionTier,
+  proPriceLabel,
+  teamPriceLabel,
+  enterprisePriceLabel,
+  onClose,
+  onUpgradePro,
+  onUpgradeTeam,
+  onUpgradeEnterprise,
+  onRestore,
+}: PaywallModalProps) {
+  const canUpgradeTeam =
+    Boolean(onUpgradeTeam && teamPriceLabel) &&
+    (subscriptionTier === "free" || subscriptionTier === "pro");
+  const canUpgradeEnterprise =
+    Boolean(onUpgradeEnterprise && enterprisePriceLabel) &&
+    subscriptionTier !== "enterprise";
+
   return (
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <SafeAreaView style={styles.overlayBackdrop}>
@@ -25,7 +48,10 @@ export function PaywallModal({ visible, priceLabel, onClose, onUpgrade, onRestor
           <Text style={styles.emptyText}>Pro: unlimited servers/sessions, AI assist, fleet, glasses/VR, recordings.</Text>
           <Text style={styles.emptyText}>Team: Pro + shared fleet, role access, token broker, audit logging (5 seats).</Text>
           <Text style={styles.emptyText}>Enterprise: Team + SSO, unlimited seats, compliance controls, SLA support.</Text>
-          <Text style={styles.serverTitle}>{priceLabel ? `Pro ${priceLabel}` : "Pro subscription"}</Text>
+          <Text style={styles.serverTitle}>{`Current plan: ${subscriptionTier}`}</Text>
+          <Text style={styles.serverSubtitle}>{proPriceLabel ? `Pro ${proPriceLabel}` : "Pro subscription"}</Text>
+          {teamPriceLabel ? <Text style={styles.serverSubtitle}>{`Team ${teamPriceLabel}`}</Text> : null}
+          {enterprisePriceLabel ? <Text style={styles.serverSubtitle}>{`Enterprise ${enterprisePriceLabel}`}</Text> : null}
 
           <View style={styles.rowInlineSpace}>
             <Pressable
@@ -33,7 +59,7 @@ export function PaywallModal({ visible, priceLabel, onClose, onUpgrade, onRestor
               accessibilityLabel="Upgrade to NovaRemote Pro"
               accessibilityHint="Starts the in-app purchase flow."
               style={[styles.buttonPrimary, styles.flexButton]}
-              onPress={onUpgrade}
+              onPress={onUpgradePro}
             >
               <Text style={styles.buttonPrimaryText}>Upgrade</Text>
             </Pressable>
@@ -46,6 +72,26 @@ export function PaywallModal({ visible, priceLabel, onClose, onUpgrade, onRestor
               <Text style={styles.buttonGhostText}>Restore</Text>
             </Pressable>
           </View>
+          {canUpgradeTeam ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Upgrade to NovaRemote Team"
+              style={styles.actionButton}
+              onPress={onUpgradeTeam}
+            >
+              <Text style={styles.actionButtonText}>Upgrade Team</Text>
+            </Pressable>
+          ) : null}
+          {canUpgradeEnterprise ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Upgrade to NovaRemote Enterprise"
+              style={styles.actionButton}
+              onPress={onUpgradeEnterprise}
+            >
+              <Text style={styles.actionButtonText}>Upgrade Enterprise</Text>
+            </Pressable>
+          ) : null}
 
           <Pressable accessibilityRole="button" accessibilityLabel="Close paywall" style={styles.buttonGhost} onPress={onClose}>
             <Text style={styles.buttonGhostText}>Maybe Later</Text>

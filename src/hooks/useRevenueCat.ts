@@ -12,6 +12,8 @@ type RevenueCatState = {
   subscriptionTier: SubscriptionTier;
   offerings: PurchasesOfferings | null;
   proPackage: PurchasesPackage | null;
+  teamPackage: PurchasesPackage | null;
+  enterprisePackage: PurchasesPackage | null;
 };
 
 function entitlementId(envKey: string, fallback: string): string {
@@ -19,9 +21,17 @@ function entitlementId(envKey: string, fallback: string): string {
   return raw.trim() || fallback;
 }
 
+function packageId(envKey: string): string {
+  const raw = typeof process !== "undefined" ? process.env[envKey] || "" : "";
+  return raw.trim().toLowerCase();
+}
+
 const PRO_ENTITLEMENT_ID = entitlementId("EXPO_PUBLIC_RC_ENTITLEMENT_PRO", "pro");
 const TEAM_ENTITLEMENT_ID = entitlementId("EXPO_PUBLIC_RC_ENTITLEMENT_TEAM", "team");
 const ENTERPRISE_ENTITLEMENT_ID = entitlementId("EXPO_PUBLIC_RC_ENTITLEMENT_ENTERPRISE", "enterprise");
+const PRO_PACKAGE_ID = packageId("EXPO_PUBLIC_RC_PACKAGE_PRO");
+const TEAM_PACKAGE_ID = packageId("EXPO_PUBLIC_RC_PACKAGE_TEAM");
+const ENTERPRISE_PACKAGE_ID = packageId("EXPO_PUBLIC_RC_PACKAGE_ENTERPRISE");
 
 function resolveApiKey(): string | undefined {
   if (Platform.OS === "ios") {
@@ -74,6 +84,104 @@ function resolveTier(info: CustomerInfo | null): { isPro: boolean; isTeam: boole
   };
 }
 
+function normalize(value: string | undefined | null): string {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function packageSearchFields(pkg: PurchasesPackage): string[] {
+  const raw = pkg as PurchasesPackage & {
+    product?: {
+      identifier?: string;
+      title?: string;
+      productCategory?: string;
+    };
+  };
+  return [
+    normalize(pkg.identifier),
+    normalize(raw.product?.identifier),
+    normalize(raw.product?.title),
+    normalize(raw.product?.productCategory),
+  ].filter(Boolean);
+}
+
+function includesToken(pkg: PurchasesPackage, token: string): boolean {
+  const normalizedToken = normalize(token);
+  if (!normalizedToken) {
+    return false;
+  }
+  const fields = packageSearchFields(pkg);
+  return fields.some((field) => field.split(" ").includes(normalizedToken) || field.includes(normalizedToken));
+}
+
+function packageMatchesExplicitId(pkg: PurchasesPackage, value: string): boolean {
+  if (!value) {
+    return false;
+  }
+  const normalizedValue = normalize(value);
+  if (!normalizedValue) {
+    return false;
+  }
+  const fields = packageSearchFields(pkg);
+  return fields.some((field) => field === normalizedValue || field.includes(normalizedValue));
+}
+
+function classifyPackages(offerings: PurchasesOfferings | null): {
+  proPackage: PurchasesPackage | null;
+  teamPackage: PurchasesPackage | null;
+  enterprisePackage: PurchasesPackage | null;
+} {
+  const current = offerings?.current;
+  const available = current?.availablePackages || [];
+
+  const matchesTeam = (pkg: PurchasesPackage) => includesToken(pkg, "team");
+  const matchesEnterprise = (pkg: PurchasesPackage) => includesToken(pkg, "enterprise");
+  const matchesPro = (pkg: PurchasesPackage) => includesToken(pkg, "pro");
+
+  const enterprisePackage =
+    available.find((pkg) => packageMatchesExplicitId(pkg, ENTERPRISE_PACKAGE_ID)) ||
+    available.find((pkg) => matchesEnterprise(pkg)) ||
+    null;
+
+  const teamPackage =
+    available.find((pkg) => packageMatchesExplicitId(pkg, TEAM_PACKAGE_ID)) ||
+    available.find((pkg) => matchesTeam(pkg)) ||
+    null;
+
+  const explicitPro =
+    available.find((pkg) => packageMatchesExplicitId(pkg, PRO_PACKAGE_ID)) ||
+    null;
+
+  const monthly = current?.monthly || null;
+  const annual = current?.annual || null;
+  const defaultProCandidate = [monthly, annual, ...available].find((pkg) => {
+    if (!pkg) {
+      return false;
+    }
+    if (enterprisePackage && pkg.identifier === enterprisePackage.identifier) {
+      return false;
+    }
+    if (teamPackage && pkg.identifier === teamPackage.identifier) {
+      return false;
+    }
+    return true;
+  }) || null;
+
+  const proPackage =
+    explicitPro ||
+    available.find((pkg) => matchesPro(pkg) && !matchesTeam(pkg) && !matchesEnterprise(pkg)) ||
+    defaultProCandidate;
+
+  return {
+    proPackage,
+    teamPackage,
+    enterprisePackage,
+  };
+}
+
 export function useRevenueCat() {
   const [state, setState] = useState<RevenueCatState>({
     ready: false,
@@ -83,6 +191,8 @@ export function useRevenueCat() {
     subscriptionTier: "free",
     offerings: null,
     proPackage: null,
+    teamPackage: null,
+    enterprisePackage: null,
   });
   const [available, setAvailable] = useState<boolean>(false);
 
@@ -110,15 +220,16 @@ export function useRevenueCat() {
           return;
         }
 
-        const current = offerings.current;
-        const proPackage = current?.monthly || current?.annual || current?.availablePackages?.[0] || null;
         const tier = resolveTier(customerInfo);
+        const { proPackage, teamPackage, enterprisePackage } = classifyPackages(offerings);
 
         setState({
           ready: true,
           ...tier,
           offerings,
           proPackage,
+          teamPackage,
+          enterprisePackage,
         });
       } catch {
         if (mounted) {
@@ -140,28 +251,47 @@ export function useRevenueCat() {
     }
 
     const [customerInfo, offerings] = await Promise.all([Purchases.getCustomerInfo(), Purchases.getOfferings()]);
-    const current = offerings.current;
-    const proPackage = current?.monthly || current?.annual || current?.availablePackages?.[0] || null;
     const tier = resolveTier(customerInfo);
+    const { proPackage, teamPackage, enterprisePackage } = classifyPackages(offerings);
 
     setState((prev) => ({
       ...prev,
       ...tier,
       offerings,
       proPackage,
+      teamPackage,
+      enterprisePackage,
     }));
   }, [available]);
 
-  const purchasePro = useCallback(async () => {
-    if (!state.proPackage) {
-      throw new Error("No pro package is available.");
+  const purchaseForTier = useCallback(async (tier: Exclude<SubscriptionTier, "free">) => {
+    const selectedPackage =
+      tier === "enterprise"
+        ? state.enterprisePackage
+        : tier === "team"
+          ? state.teamPackage
+          : state.proPackage;
+    if (!selectedPackage) {
+      throw new Error(`No ${tier} package is available.`);
     }
 
-    const result = await Purchases.purchasePackage(state.proPackage);
-    const tier = resolveTier(result.customerInfo);
-    setState((prev) => ({ ...prev, ...tier }));
-    return tier.isPro;
-  }, [state.proPackage]);
+    const result = await Purchases.purchasePackage(selectedPackage);
+    const tierState = resolveTier(result.customerInfo);
+    setState((prev) => ({ ...prev, ...tierState }));
+    return tierState.isPro;
+  }, [state.enterprisePackage, state.proPackage, state.teamPackage]);
+
+  const purchasePro = useCallback(async () => {
+    return purchaseForTier("pro");
+  }, [purchaseForTier]);
+
+  const purchaseTeam = useCallback(async () => {
+    return purchaseForTier("team");
+  }, [purchaseForTier]);
+
+  const purchaseEnterprise = useCallback(async () => {
+    return purchaseForTier("enterprise");
+  }, [purchaseForTier]);
 
   const restore = useCallback(async () => {
     const info = await Purchases.restorePurchases();
@@ -170,9 +300,15 @@ export function useRevenueCat() {
     return tier.isPro;
   }, []);
 
-  const priceLabel = useMemo(() => {
+  const proPriceLabel = useMemo(() => {
     return state.proPackage?.product.priceString || null;
   }, [state.proPackage]);
+  const teamPriceLabel = useMemo(() => {
+    return state.teamPackage?.product.priceString || null;
+  }, [state.teamPackage]);
+  const enterprisePriceLabel = useMemo(() => {
+    return state.enterprisePackage?.product.priceString || null;
+  }, [state.enterprisePackage]);
 
   return {
     available,
@@ -184,9 +320,17 @@ export function useRevenueCat() {
     isPaid: state.isPro,
     offerings: state.offerings,
     proPackage: state.proPackage,
-    priceLabel,
+    teamPackage: state.teamPackage,
+    enterprisePackage: state.enterprisePackage,
+    proPriceLabel,
+    teamPriceLabel,
+    enterprisePriceLabel,
+    priceLabel: proPriceLabel,
     refresh,
+    purchaseForTier,
     purchasePro,
+    purchaseTeam,
+    purchaseEnterprise,
     restore,
   };
 }
