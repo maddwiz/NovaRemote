@@ -3,7 +3,15 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { TeamBadge } from "../components/TeamBadge";
 import { styles } from "../theme/styles";
-import { ServerProfile, TeamFleetApproval, TeamIdentity, TeamInvite, TeamMember, TeamRole } from "../types";
+import {
+  ServerProfile,
+  TeamAuditExportJob,
+  TeamFleetApproval,
+  TeamIdentity,
+  TeamInvite,
+  TeamMember,
+  TeamRole,
+} from "../types";
 
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
@@ -102,6 +110,10 @@ type TeamScreenProps = {
   onSyncAudit?: () => Promise<void>;
   onExportAuditJson?: () => Promise<void>;
   onExportAuditCsv?: () => Promise<void>;
+  cloudAuditExportJob?: TeamAuditExportJob | null;
+  onRequestCloudAuditExportJson?: () => Promise<void>;
+  onRequestCloudAuditExportCsv?: () => Promise<void>;
+  onOpenCloudAuditExport?: () => void;
 };
 
 export function TeamScreen({
@@ -138,6 +150,10 @@ export function TeamScreen({
   onSyncAudit,
   onExportAuditJson,
   onExportAuditCsv,
+  cloudAuditExportJob,
+  onRequestCloudAuditExportJson,
+  onRequestCloudAuditExportCsv,
+  onOpenCloudAuditExport,
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
@@ -168,6 +184,9 @@ export function TeamScreen({
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
   const canExportAuditJson = Boolean(identity && onExportAuditJson && !busy);
   const canExportAuditCsv = Boolean(identity && onExportAuditCsv && !busy);
+  const canRequestCloudAuditExportJson = Boolean(identity && onRequestCloudAuditExportJson && !busy);
+  const canRequestCloudAuditExportCsv = Boolean(identity && onRequestCloudAuditExportCsv && !busy);
+  const canOpenCloudAuditExport = Boolean(identity && cloudAuditExportJob?.downloadUrl && onOpenCloudAuditExport && !busy);
   const canOpenCloudDashboard = Boolean(identity && cloudDashboardUrl && onOpenCloudDashboard && !busy);
   const pendingInvites = teamInvites.filter((invite) => invite.status === "pending");
   const normalizedMemberQuery = memberQuery.trim().toLowerCase();
@@ -438,6 +457,46 @@ export function TeamScreen({
       setTeamStatus(error instanceof Error ? error.message : String(error));
     }
   }, [canOpenCloudDashboard, onOpenCloudDashboard]);
+
+  const handleRequestCloudAuditExportJson = useCallback(() => {
+    if (!onRequestCloudAuditExportJson || !canRequestCloudAuditExportJson) {
+      return;
+    }
+    setTeamStatus("");
+    void onRequestCloudAuditExportJson()
+      .then(() => {
+        setTeamStatus("Requested cloud audit export (JSON).");
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [canRequestCloudAuditExportJson, onRequestCloudAuditExportJson]);
+
+  const handleRequestCloudAuditExportCsv = useCallback(() => {
+    if (!onRequestCloudAuditExportCsv || !canRequestCloudAuditExportCsv) {
+      return;
+    }
+    setTeamStatus("");
+    void onRequestCloudAuditExportCsv()
+      .then(() => {
+        setTeamStatus("Requested cloud audit export (CSV).");
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [canRequestCloudAuditExportCsv, onRequestCloudAuditExportCsv]);
+
+  const handleOpenCloudAuditExport = useCallback(() => {
+    if (!onOpenCloudAuditExport || !canOpenCloudAuditExport) {
+      return;
+    }
+    setTeamStatus("");
+    try {
+      onOpenCloudAuditExport();
+    } catch (error) {
+      setTeamStatus(error instanceof Error ? error.message : String(error));
+    }
+  }, [canOpenCloudAuditExport, onOpenCloudAuditExport]);
 
   const handleSaveTeamPolicies = useCallback(() => {
     if (!onUpdateSettings || !canEditTeamPolicies || !settings) {
@@ -894,6 +953,65 @@ export function TeamScreen({
               <Text style={styles.actionDangerText}>Sign Out</Text>
             </Pressable>
           ) : null}
+        </View>
+      ) : null}
+
+      {identity ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>Cloud Audit Exports</Text>
+          {cloudAuditExportJob ? (
+            <>
+              <Text style={styles.emptyText}>
+                {`Last export: ${cloudAuditExportJob.format.toUpperCase()} • ${cloudAuditExportJob.status}`}
+              </Text>
+              <Text style={styles.emptyText}>
+                {`Created: ${new Date(cloudAuditExportJob.createdAt).toLocaleString()}`}
+              </Text>
+              {cloudAuditExportJob.expiresAt ? (
+                <Text style={styles.emptyText}>
+                  {`Expires: ${new Date(cloudAuditExportJob.expiresAt).toLocaleString()}`}
+                </Text>
+              ) : null}
+              {cloudAuditExportJob.detail ? <Text style={styles.emptyText}>{cloudAuditExportJob.detail}</Text> : null}
+            </>
+          ) : (
+            <Text style={styles.emptyText}>No cloud exports requested yet.</Text>
+          )}
+          <View style={styles.rowInlineSpace}>
+            {onRequestCloudAuditExportJson ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Request cloud audit export as JSON"
+                style={[styles.actionButton, !canRequestCloudAuditExportJson ? styles.buttonDisabled : null]}
+                onPress={handleRequestCloudAuditExportJson}
+                disabled={!canRequestCloudAuditExportJson}
+              >
+                <Text style={styles.actionButtonText}>Request JSON</Text>
+              </Pressable>
+            ) : null}
+            {onRequestCloudAuditExportCsv ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Request cloud audit export as CSV"
+                style={[styles.actionButton, !canRequestCloudAuditExportCsv ? styles.buttonDisabled : null]}
+                onPress={handleRequestCloudAuditExportCsv}
+                disabled={!canRequestCloudAuditExportCsv}
+              >
+                <Text style={styles.actionButtonText}>Request CSV</Text>
+              </Pressable>
+            ) : null}
+            {onOpenCloudAuditExport ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open latest cloud audit export"
+                style={[styles.actionButton, !canOpenCloudAuditExport ? styles.buttonDisabled : null]}
+                onPress={handleOpenCloudAuditExport}
+                disabled={!canOpenCloudAuditExport}
+              >
+                <Text style={styles.actionButtonText}>Open Export</Text>
+              </Pressable>
+            ) : null}
+          </View>
         </View>
       ) : null}
 

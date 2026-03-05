@@ -136,6 +136,18 @@ export type TeamInvite = {
   revokedAt?: string;
 };
 
+export type TeamAuditExportStatus = "pending" | "ready" | "failed";
+
+export type TeamAuditExportJob = {
+  exportId: string;
+  format: "json" | "csv";
+  status: TeamAuditExportStatus;
+  createdAt: string;
+  expiresAt?: string;
+  downloadUrl?: string;
+  detail?: string;
+};
+
 export type TokenBrokerPermission = "read" | "write" | "execute" | "admin";
 
 export type TokenBrokerResult = {

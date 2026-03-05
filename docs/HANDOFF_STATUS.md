@@ -109,7 +109,7 @@ Updated: 2026-03-05
   - [~] in-app role/invite controls + member filtering + member server-assignment controls are implemented, plus invite revoke + dashboard deep-link; centralized cloud admin UX rollout remains pending
 - [ ] Compliance expansion:
   - [~] team-managed session recording enforcement is in-app; cloud admin policy governance remains pending
-  - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud dashboard export remains pending
+  - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud audit export job requests + latest export deep-link are now wired, while full cloud dashboard export management remains pending
 - [ ] Fleet governance expansion:
   - [x] command blocklist + policy enforcement
   - [~] fleet approval request/review + approved-execution matching is wired in-app; cloud dashboard orchestration remains pending

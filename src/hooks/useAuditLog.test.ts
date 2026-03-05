@@ -41,7 +41,7 @@ vi.mock("../constants", async (importOriginal) => {
 });
 
 import { auditLogTestUtils, useAuditLog } from "./useAuditLog";
-import { AuditEvent, TeamIdentity } from "../types";
+import { AuditEvent, TeamAuditExportJob, TeamIdentity } from "../types";
 
 const identity: TeamIdentity = {
   provider: "novaremote_cloud",
@@ -63,6 +63,8 @@ type AuditLogHandle = {
   record: (...args: unknown[]) => unknown;
   syncNow: () => Promise<{ synced: number; remaining: number }>;
   exportSnapshot: (format?: "json" | "csv") => string;
+  requestCloudExport: (format: "json" | "csv", rangeHours?: number) => Promise<TeamAuditExportJob>;
+  lastCloudExportJob: TeamAuditExportJob | null;
   pendingCount: number;
   events: AuditEvent[];
 };
@@ -189,6 +191,18 @@ describe("audit log helpers", () => {
     expect(csv).toContain("timestamp_iso");
     expect(csv).toContain("\"Server, One\"");
     expect(csv).toContain("\"echo \"\"hello,world\"\"\"");
+  });
+
+  it("normalizes cloud export job payloads", () => {
+    const normalized = auditLogTestUtils.normalizeAuditExportJob({
+      exportId: "exp-1",
+      format: "csv",
+      status: "ready",
+      createdAt: "2026-03-05T00:00:00.000Z",
+      downloadUrl: "https://cloud.novaremote.dev/exports/exp-1.csv",
+    });
+    expect(normalized?.exportId).toBe("exp-1");
+    expect(normalized?.status).toBe("ready");
   });
 });
 
@@ -341,6 +355,47 @@ describe("useAuditLog", () => {
     expect(json).toContain("\"action\": \"command_sent\"");
     expect(csv).toContain("command_sent");
     expect(csv).toContain("uname -a");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("requests cloud-hosted export jobs and stores the last export metadata", async () => {
+    cloudClientMock.cloudRequest.mockResolvedValueOnce({
+      exportId: "exp-123",
+      format: "json",
+      status: "ready",
+      createdAt: "2026-03-05T00:00:00.000Z",
+      expiresAt: "2026-03-05T01:00:00.000Z",
+      downloadUrl: "https://cloud.novaremote.dev/exports/exp-123.json",
+    });
+
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: true }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    let job: TeamAuditExportJob | null = null;
+    await act(async () => {
+      job = await latestOrThrow(latest).requestCloudExport("json", 48);
+    });
+    await flush();
+
+    expect(job).toMatchObject({ exportId: "exp-123" });
+    expect(latestOrThrow(latest).lastCloudExportJob?.downloadUrl).toContain("exp-123.json");
+    const cloudCalls = cloudClientMock.cloudRequest.mock.calls as unknown as Array<[string, ...unknown[]]>;
+    expect(
+      cloudCalls.some((call) => String(call[0]) === "/v1/audit/exports")
+    ).toBe(true);
 
     await act(async () => {
       renderer?.unmount();

@@ -393,6 +393,48 @@ describe("TeamScreen", () => {
     });
   });
 
+  it("requests and opens cloud audit exports when configured", async () => {
+    const onRequestCloudAuditExportJson = vi.fn(async () => undefined);
+    const onRequestCloudAuditExportCsv = vi.fn(async () => undefined);
+    const onOpenCloudAuditExport = vi.fn();
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          loading={false}
+          busy={false}
+          cloudAuditExportJob={{
+            exportId: "exp-1",
+            format: "json",
+            status: "ready",
+            createdAt: "2026-03-05T00:00:00.000Z",
+            downloadUrl: "https://cloud.novaremote.dev/exports/exp-1.json",
+          }}
+          onRequestCloudAuditExportJson={onRequestCloudAuditExportJson}
+          onRequestCloudAuditExportCsv={onRequestCloudAuditExportCsv}
+          onOpenCloudAuditExport={onOpenCloudAuditExport}
+        />
+      );
+    });
+
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Request cloud audit export as JSON" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Request cloud audit export as CSV" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Open latest cloud audit export" }).props.onPress();
+    });
+
+    expect(onRequestCloudAuditExportJson).toHaveBeenCalledTimes(1);
+    expect(onRequestCloudAuditExportCsv).toHaveBeenCalledTimes(1);
+    expect(onOpenCloudAuditExport).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("filters team members by query and role", async () => {
     let renderer: TestRenderer.ReactTestRenderer | null = null;
 

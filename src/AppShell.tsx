@@ -820,6 +820,8 @@ export default function AppShell() {
     lastSyncAt: auditLastSyncAt,
     syncNow: syncAuditNow,
     exportSnapshot: exportAuditSnapshot,
+    requestCloudExport: requestCloudAuditExport,
+    lastCloudExportJob: lastCloudAuditExportJob,
   } = useAuditLog({
     identity: teamIdentity,
     enabled: unlocked,
@@ -3811,6 +3813,7 @@ export default function AppShell() {
               fleetApprovals={fleetApprovals}
               auditPendingCount={pendingAuditEvents}
               auditLastSyncAt={auditLastSyncAt}
+              cloudAuditExportJob={lastCloudAuditExportJob}
               onLogin={async (input) => {
                 await runWithStatus("Signing in to team", async () => {
                   markActivity();
@@ -3971,6 +3974,27 @@ export default function AppShell() {
                     title: `novaremote-audit-${new Date().toISOString().slice(0, 10)}.csv`,
                     message: payload,
                   });
+                });
+              }}
+              onRequestCloudAuditExportJson={async () => {
+                await runWithStatus("Requesting cloud audit export (JSON)", async () => {
+                  markActivity();
+                  await requestCloudAuditExport("json", 168);
+                });
+              }}
+              onRequestCloudAuditExportCsv={async () => {
+                await runWithStatus("Requesting cloud audit export (CSV)", async () => {
+                  markActivity();
+                  await requestCloudAuditExport("csv", 168);
+                });
+              }}
+              onOpenCloudAuditExport={() => {
+                if (!lastCloudAuditExportJob?.downloadUrl) {
+                  return;
+                }
+                void runWithStatus("Opening cloud audit export", async () => {
+                  markActivity();
+                  await Linking.openURL(lastCloudAuditExportJob.downloadUrl || "");
                 });
               }}
             />

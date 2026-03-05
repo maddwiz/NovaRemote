@@ -9,7 +9,7 @@ import {
   TEAM_AUDIT_SYNC_INTERVAL_MS,
   makeId,
 } from "../constants";
-import { AuditAction, AuditEvent, TeamIdentity } from "../types";
+import { AuditAction, AuditEvent, TeamAuditExportJob, TeamIdentity } from "../types";
 
 type UseAuditLogArgs = {
   identity: TeamIdentity | null;
@@ -90,6 +90,43 @@ function escapeCsvCell(value: unknown): string {
     return text;
   }
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function normalizeAuditExportJob(value: unknown): TeamAuditExportJob | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  const exportId =
+    (typeof parsed.exportId === "string" && parsed.exportId.trim()) ||
+    (typeof parsed.id === "string" && parsed.id.trim()) ||
+    "";
+  const formatRaw = typeof parsed.format === "string" ? parsed.format.trim().toLowerCase() : "";
+  const format = formatRaw === "csv" ? "csv" : formatRaw === "json" ? "json" : null;
+  const statusRaw = typeof parsed.status === "string" ? parsed.status.trim().toLowerCase() : "";
+  const status = statusRaw === "ready" || statusRaw === "failed" || statusRaw === "pending" ? statusRaw : "pending";
+  const createdAt =
+    (typeof parsed.createdAt === "string" && parsed.createdAt) ||
+    (typeof parsed.created_at === "string" && parsed.created_at) ||
+    "";
+  if (!exportId || !format || !createdAt) {
+    return null;
+  }
+  return {
+    exportId,
+    format,
+    status,
+    createdAt,
+    expiresAt:
+      (typeof parsed.expiresAt === "string" && parsed.expiresAt) ||
+      (typeof parsed.expires_at === "string" && parsed.expires_at) ||
+      undefined,
+    downloadUrl:
+      (typeof parsed.downloadUrl === "string" && parsed.downloadUrl) ||
+      (typeof parsed.download_url === "string" && parsed.download_url) ||
+      undefined,
+    detail: typeof parsed.detail === "string" ? parsed.detail : undefined,
+  };
 }
 
 export function serializeAuditEvents(events: AuditEvent[], format: AuditExportFormat): string {
@@ -175,6 +212,7 @@ export function useAuditLog({
   const [deviceId, setDeviceId] = useState<string>("unknown-device");
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
+  const [lastCloudExportJob, setLastCloudExportJob] = useState<TeamAuditExportJob | null>(null);
 
   useEffect(() => {
     let mounted = true;
@@ -331,6 +369,43 @@ export function useAuditLog({
     [events]
   );
 
+  const requestCloudExport = useCallback(
+    async (format: AuditExportFormat, rangeHours?: number): Promise<TeamAuditExportJob> => {
+      if (!enabled || !syncEnabled) {
+        throw new Error("Cloud audit export is disabled.");
+      }
+      if (!identity?.accessToken) {
+        throw new Error("Sign in to a team account before requesting cloud audit exports.");
+      }
+      const normalizedRangeHours =
+        typeof rangeHours === "number" && Number.isFinite(rangeHours) && rangeHours > 0
+          ? Math.round(rangeHours)
+          : undefined;
+      const payload = await cloudRequest<Record<string, unknown>>(
+        "/v1/audit/exports",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            format,
+            rangeHours: normalizedRangeHours,
+          }),
+        },
+        {
+          accessToken: identity.accessToken,
+          cloudUrl: cloudUrl || getNovaCloudUrl(),
+          fetchImpl,
+        }
+      );
+      const job = normalizeAuditExportJob(payload.export || payload);
+      if (!job) {
+        throw new Error("Cloud export response is invalid.");
+      }
+      setLastCloudExportJob(job);
+      return job;
+    },
+    [cloudUrl, enabled, fetchImpl, identity, syncEnabled]
+  );
+
   useEffect(() => {
     if (!enabled || !syncEnabled || !identity?.accessToken) {
       return;
@@ -352,12 +427,27 @@ export function useAuditLog({
       deviceId,
       lastError,
       lastSyncAt,
+      lastCloudExportJob,
       record,
       clear,
       syncNow,
       exportSnapshot,
+      requestCloudExport,
     }),
-    [clear, deviceId, events, exportSnapshot, lastError, lastSyncAt, loading, record, syncNow, syncing]
+    [
+      clear,
+      deviceId,
+      events,
+      exportSnapshot,
+      lastCloudExportJob,
+      lastError,
+      lastSyncAt,
+      loading,
+      record,
+      requestCloudExport,
+      syncNow,
+      syncing,
+    ]
   );
 }
 
@@ -365,4 +455,5 @@ export const auditLogTestUtils = {
   pruneAuditEvents,
   buildAuditEvent,
   serializeAuditEvents,
+  normalizeAuditExportJob,
 };
