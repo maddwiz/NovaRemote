@@ -687,6 +687,9 @@ export default function AppShell() {
     teamServers,
     teamMembers,
     teamSettings,
+    error: teamAuthError,
+    loginWithPassword: loginTeamWithPassword,
+    logout: logoutTeam,
     refreshTeamContext,
   } = useTeamAuth({
     enabled: unlocked,
@@ -3655,8 +3658,34 @@ export default function AppShell() {
               settings={teamSettings}
               loading={teamLoading}
               busy={teamBusy}
+              authError={teamAuthError}
+              onLogin={async (input) => {
+                await runWithStatus("Signing in to team", async () => {
+                  markActivity();
+                  await loginTeamWithPassword(input);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_login=${input.email.toLowerCase()}`,
+                  });
+                });
+              }}
+              onLogout={async () => {
+                await runWithStatus("Signing out of team", async () => {
+                  markActivity();
+                  await logoutTeam();
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: "team_logout",
+                  });
+                });
+              }}
               onRefresh={() => {
                 void runWithStatus("Refreshing team context", async () => {
+                  markActivity();
                   await refreshTeamContext();
                 });
               }}
