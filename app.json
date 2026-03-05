@@ -54,6 +54,7 @@
       ]
     ],
     "extra": {
+      "novaCloudUrl": "https://api.novaremote.dev",
       "eas": {
         "projectId": "7c6dd278-651a-47d4-952b-b3a328ab283a"
       }

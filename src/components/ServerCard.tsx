@@ -1,6 +1,7 @@
 import React from "react";
 import { Pressable, Text, View } from "react-native";
 
+import { canDeleteServerProfile, canEditServerProfile, isTeamManagedServer } from "../teamServers";
 import { styles } from "../theme/styles";
 import { ServerProfile } from "../types";
 
@@ -15,6 +16,9 @@ type ServerCardProps = {
 };
 
 export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare, onOpenSsh }: ServerCardProps) {
+  const teamManaged = isTeamManagedServer(server);
+  const canEdit = canEditServerProfile(server);
+  const canDelete = canDeleteServerProfile(server);
   const sshTarget = server.sshHost
     ? `${server.sshUser ? `${server.sshUser}@` : ""}${server.sshHost}${server.sshPort ? `:${server.sshPort}` : ""}`
     : null;
@@ -23,10 +27,12 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare,
     <View style={[styles.serverCard, isActive ? styles.serverCardActive : null]}>
       <View style={styles.serverCardHeader}>
         <Text style={styles.serverName}>{server.name}</Text>
+        {teamManaged ? <Text style={[styles.modePill, styles.modePillShell]}>{`TEAM ${server.permissionLevel || "viewer"}`}</Text> : null}
         <Text style={styles.serverUrl}>{server.baseUrl}</Text>
         <Text style={styles.emptyText}>{`Backend: ${server.terminalBackend || "auto"}`}</Text>
         {server.vmHost ? <Text style={styles.emptyText}>{`VM Host: ${server.vmHost}`}</Text> : null}
         {vmMeta ? <Text style={styles.emptyText}>{`VM: ${vmMeta}`}</Text> : null}
+        {teamManaged ? <Text style={styles.emptyText}>Managed by team admin</Text> : null}
         {sshTarget ? <Text style={styles.emptyText}>{`SSH: ${sshTarget}`}</Text> : null}
       </View>
       <View style={styles.actionsWrap}>
@@ -38,8 +44,14 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare,
         >
           <Text style={styles.actionButtonText}>{isActive ? "Active" : "Use"}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Edit server ${server.name}`} style={styles.actionButton} onPress={() => onEdit(server)}>
-          <Text style={styles.actionButtonText}>Edit</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Edit server ${server.name}`}
+          style={[styles.actionButton, !canEdit ? styles.buttonDisabled : null]}
+          onPress={() => onEdit(server)}
+          disabled={!canEdit}
+        >
+          <Text style={styles.actionButtonText}>{canEdit ? "Edit" : "Managed"}</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -64,10 +76,11 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare,
           accessibilityRole="button"
           accessibilityLabel={`Delete server ${server.name}`}
           accessibilityHint="Removes this server profile from the app."
-          style={styles.actionDangerButton}
+          style={[styles.actionDangerButton, !canDelete ? styles.buttonDisabled : null]}
           onPress={() => onDelete(server.id)}
+          disabled={!canDelete}
         >
-          <Text style={styles.actionDangerText}>Delete</Text>
+          <Text style={styles.actionDangerText}>{canDelete ? "Delete" : "Managed"}</Text>
         </Pressable>
       </View>
     </View>

@@ -2,6 +2,7 @@ import React from "react";
 import { Alert, Pressable, ScrollView, Text, View } from "react-native";
 
 import { useVmGroupPrefs } from "../hooks/useVmGroupPrefs";
+import { isTeamManagedServer } from "../teamServers";
 import { deriveServerRailStatus } from "../serverRailStatus";
 import {
   buildServerGroupMenuActions,
@@ -107,6 +108,9 @@ export function ServerSwitcherRail({
         <Text style={styles.serverRailName} numberOfLines={1}>
           {server.name}
         </Text>
+        {isTeamManagedServer(server) ? (
+          <Text style={[styles.modePill, styles.modePillShell]}>TEAM</Text>
+        ) : null}
         {activeSessions > 0 ? <Text style={styles.modePill}>{activeSessions}</Text> : null}
         {unread ? <View style={styles.serverRailUnreadBadge} /> : null}
       </Pressable>

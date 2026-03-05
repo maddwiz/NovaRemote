@@ -37,6 +37,10 @@ export const STORAGE_SHARED_WORKSPACES = "novaremote.shared_workspaces.v1";
 export const STORAGE_VOICE_CHANNELS = "novaremote.voice_channels.v1";
 export const STORAGE_VR_WORKSPACE_PREFIX = "novaremote.vr_workspace.v1";
 export const STORAGE_VM_GROUP_PREFS_PREFIX = "novaremote.vm_group_prefs.v1";
+export const STORAGE_TEAM_IDENTITY = "novaremote.team.identity.v1";
+export const STORAGE_TOKEN_BROKER_CACHE = "novaremote.team.token_broker.v1";
+export const STORAGE_AUDIT_LOG_QUEUE = "novaremote.audit.queue.v1";
+export const STORAGE_AUDIT_DEVICE_ID = "novaremote.audit.device_id.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
@@ -60,6 +64,11 @@ export const POLL_INTERVAL_MS = 1800;
 export const HEALTH_PING_INTERVAL_MS = 15000;
 export const POOL_HEALTH_INTERVAL_MS = 15000;
 export const POOL_MAX_RECONNECT_DELAY_MS = 30000;
+export const TEAM_TOKEN_REFRESH_BUFFER_MS = 5 * 60 * 1000;
+export const TEAM_TOKEN_REFRESH_INTERVAL_MS = 60 * 1000;
+export const TEAM_AUDIT_QUEUE_LIMIT = 10000;
+export const TEAM_AUDIT_SYNC_INTERVAL_MS = 60 * 1000;
+export const NOVA_CLOUD_DEFAULT_URL = "https://api.novaremote.dev";
 export const COLLAB_POLL_INTERVAL_MS = 7000;
 export const HISTORY_MAX_ITEMS = 50;
 export const FREE_SERVER_LIMIT = 1;
@@ -77,6 +86,7 @@ export function buildDefaultServer(): ServerProfile {
     baseUrl: DEFAULT_BASE_URL,
     token: "",
     defaultCwd: DEFAULT_CWD,
+    source: "local",
     terminalBackend: DEFAULT_TERMINAL_BACKEND,
   };
 }

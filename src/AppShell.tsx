@@ -41,6 +41,7 @@ import {
 } from "./constants";
 import { useAiAssist } from "./hooks/useAiAssist";
 import { useBiometricLock } from "./hooks/useBiometricLock";
+import { useAuditLog } from "./hooks/useAuditLog";
 import { useCommandHistory } from "./hooks/useCommandHistory";
 import { commandQueueStatus, useCommandQueue } from "./hooks/useCommandQueue";
 import { useCollaboration } from "./hooks/useCollaboration";
@@ -71,7 +72,9 @@ import { useVoiceCapture } from "./hooks/useVoiceCapture";
 import { useAnalytics } from "./hooks/useAnalytics";
 import { useReferrals } from "./hooks/useReferrals";
 import { useSharedProfiles } from "./hooks/useSharedProfiles";
+import { useTeamAuth } from "./hooks/useTeamAuth";
 import { useTerminalsViewModel } from "./hooks/useTerminalsViewModel";
+import { useTokenBroker } from "./hooks/useTokenBroker";
 import {
   isFleetShellRunUnavailableError,
   resolveFleetTerminalApiBasePath,
@@ -654,7 +657,13 @@ export default function AppShell() {
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
   const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
   const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
-  const { loading: safetyLoading, requireDangerConfirm, setRequireDangerConfirm } = useSafetyPolicy();
+  const { identity: teamIdentity } = useTeamAuth({ enabled: unlocked, onError: setError });
+  const {
+    loading: safetyLoading,
+    requireDangerConfirm,
+    managedByTeam: dangerConfirmManagedByTeam,
+    setRequireDangerConfirm,
+  } = useSafetyPolicy();
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet, exportSnippets, importSnippets } = useSnippets();
@@ -718,10 +727,21 @@ export default function AppShell() {
     deleteServer,
     useServer,
   } = useServers({ onError: setError, enabled: unlocked });
+  const { brokeredServers } = useTokenBroker({
+    identity: teamIdentity,
+    servers,
+    enabled: unlocked,
+    onError: setError,
+  });
+  const { record: recordAuditEvent } = useAuditLog({
+    identity: teamIdentity,
+    enabled: unlocked,
+    onError: setError,
+  });
 
   const { shellRunWaitMs, parsedShellRunWaitMs, setShellRunWaitMsInput } = useShellRunWait(activeServerId);
   const pool = useConnectionPool({
-    servers,
+    servers: brokeredServers,
     enabled: unlocked,
     initialFocusedServerId: activeServerId,
     shellRunWaitMs: parsedShellRunWaitMs,
@@ -1017,11 +1037,28 @@ export default function AppShell() {
       trimmedPrompt,
       startOpenOnMac
     );
+    recordAuditEvent({
+      action: "session_created",
+      serverId: focusedServerId,
+      serverName: activeServer.name,
+      session,
+      detail: `kind=${startKind}`,
+    });
     if (trimmedPrompt) {
       setStartPrompt("");
     }
     return session;
-  }, [activeServer, connected, createPoolSession, focusedServerId, startCwd, startKind, startOpenOnMac, startPrompt]);
+  }, [
+    activeServer,
+    connected,
+    createPoolSession,
+    focusedServerId,
+    recordAuditEvent,
+    startCwd,
+    startKind,
+    startOpenOnMac,
+    startPrompt,
+  ]);
 
   const createSessionForServer = useCallback(
     async (serverId: string, kind: "ai" | "shell", prompt: string = ""): Promise<string> => {
@@ -1046,8 +1083,15 @@ export default function AppShell() {
         throw new Error("Connect to a server first.");
       }
       await sendPoolCommand(focusedServerId, session, command, mode, clearDraft);
+      recordAuditEvent({
+        action: "command_sent",
+        serverId: focusedServerId,
+        serverName: activeServer?.name || "",
+        session,
+        detail: `${mode}:${command.slice(0, 400)}`,
+      });
     },
-    [focusedServerId, sendPoolCommand]
+    [activeServer?.name, focusedServerId, recordAuditEvent, sendPoolCommand]
   );
 
   const handleSend = useCallback(
@@ -1084,8 +1128,15 @@ export default function AppShell() {
         throw new Error("Connect to a server first.");
       }
       await sendPoolControlChar(focusedServerId, session, controlChar);
+      recordAuditEvent({
+        action: "command_sent",
+        serverId: focusedServerId,
+        serverName: activeServer?.name || "",
+        session,
+        detail: `control:${controlChar}`,
+      });
     },
-    [focusedServerId, sendPoolControlChar]
+    [activeServer?.name, focusedServerId, recordAuditEvent, sendPoolControlChar]
   );
 
   const handleOpenOnMac = useCallback(
@@ -1287,7 +1338,7 @@ export default function AppShell() {
       throw new Error("Fleet command is required.");
     }
 
-    const selectedServers = servers.filter((server) => fleetTargets.includes(server.id));
+    const selectedServers = brokeredServers.filter((server) => fleetTargets.includes(server.id));
     if (selectedServers.length === 0) {
       throw new Error("Select at least one target server.");
     }
@@ -1365,10 +1416,17 @@ export default function AppShell() {
       );
 
       setFleetResults(settled);
+      const okCount = settled.filter((entry) => entry.ok).length;
+      recordAuditEvent({
+        action: "fleet_executed",
+        serverId: "",
+        serverName: "fleet",
+        detail: `targets=${selectedServers.length} ok=${okCount} command=${command.slice(0, 240)}`,
+      });
     } finally {
       setFleetBusy(false);
     }
-  }, [fleetCommand, fleetCwd, fleetTargets, fleetWaitMs, poolConnections, servers]);
+  }, [brokeredServers, fleetCommand, fleetCwd, fleetTargets, fleetWaitMs, poolConnections, recordAuditEvent]);
 
   const sendViaExternalLlmToServer = useCallback(
     async (serverId: string, session: string, prompt: string) => {
@@ -2952,6 +3010,7 @@ export default function AppShell() {
               sharedTemplates={sharedTemplates}
               requireBiometric={requireBiometric}
               requireDangerConfirm={requireDangerConfirm}
+              dangerConfirmManagedByTeam={dangerConfirmManagedByTeam}
               onUseServer={(serverId) => {
                 void runWithStatus("Switching server", async () => {
                   await useServer(serverId);
@@ -2967,6 +3026,12 @@ export default function AppShell() {
                 const label = servers.find((entry) => entry.id === serverId)?.name || "server";
                 void runWithStatus(`Deleting ${label}`, async () => {
                   await deleteServer(serverId);
+                  recordAuditEvent({
+                    action: "server_removed",
+                    serverId,
+                    serverName: label,
+                    detail: "Server profile removed from device.",
+                  });
                 });
               }}
               onShareServer={(server) => {
@@ -3096,6 +3161,12 @@ export default function AppShell() {
                     return;
                   }
                   await saveServer();
+                  recordAuditEvent({
+                    action: "server_added",
+                    serverId: editingServerId || "",
+                    serverName: serverNameInput.trim() || "server",
+                    detail: editingServerId ? "Server profile updated." : "Server profile created.",
+                  });
                   track("server_saved", { editing: Boolean(editingServerId), server_count: servers.length });
                   setRoute("terminals");
                 });
@@ -3670,12 +3741,28 @@ export default function AppShell() {
         command={dangerPrompt.command}
         context={dangerPrompt.context}
         onCancel={() => {
+          recordAuditEvent({
+            action: "command_dangerous_denied",
+            serverId: focusedServerId || "",
+            serverName: activeServer?.name || "",
+            session: focusedSession || "",
+            detail: `${dangerPrompt.context}: ${dangerPrompt.command}`.slice(0, 400),
+            approved: false,
+          });
           setDangerPrompt({ visible: false, command: "", context: "" });
           const resolver = dangerResolverRef.current;
           dangerResolverRef.current = null;
           resolver?.(false);
         }}
         onConfirm={() => {
+          recordAuditEvent({
+            action: "command_dangerous_approved",
+            serverId: focusedServerId || "",
+            serverName: activeServer?.name || "",
+            session: focusedSession || "",
+            detail: `${dangerPrompt.context}: ${dangerPrompt.command}`.slice(0, 400),
+            approved: true,
+          });
           setDangerPrompt({ visible: false, command: "", context: "" });
           const resolver = dangerResolverRef.current;
           dangerResolverRef.current = null;

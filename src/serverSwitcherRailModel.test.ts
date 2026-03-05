@@ -111,14 +111,16 @@ describe("groupServersByVmHost", () => {
 describe("formatServerDetails", () => {
   it("renders fallback details when no pooled connection exists", () => {
     const server = makeServer({ id: "cloud", name: "Cloud", baseUrl: "", vmHost: "Rack A", vmType: "qemu" });
-    expect(formatServerDetails(server, undefined)).toBe("Status: disconnected\nVM: Rack A • qemu\nURL: not set\nSessions: 0");
+    expect(formatServerDetails(server, undefined)).toBe(
+      "Status: disconnected\nManaged: local\nVM: Rack A • qemu\nURL: not set\nSessions: 0"
+    );
   });
 
   it("renders pooled connection details when present", () => {
     const server = makeServer({ id: "dgx", name: "DGX", vmHost: "Rack A", vmType: "proxmox", vmName: "dgx-vm" });
     const details = formatServerDetails(server, makeConnection(server, "connected"));
     expect(details).toBe(
-      "Status: connected\nVM: Rack A • proxmox • dgx-vm\nSessions: 1 open / 2 total\nStreams: 1\nLatency: 14 ms"
+      "Status: connected\nManaged: local\nVM: Rack A • proxmox • dgx-vm\nSessions: 1 open / 2 total\nStreams: 1\nLatency: 14 ms"
     );
   });
 });

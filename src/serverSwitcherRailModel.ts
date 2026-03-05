@@ -1,4 +1,5 @@
 import { ServerConnection, ServerProfile, VmType } from "./types";
+import { isTeamManagedServer } from "./teamServers";
 import { deriveServerRailStatus } from "./serverRailStatus";
 
 export type ServerRailGroup = {
@@ -153,10 +154,14 @@ export function groupServersByVmHost(
 
 export function formatServerDetails(server: ServerProfile, connection: ServerConnection | undefined): string {
   const vmDetails = [server.vmHost, server.vmType, server.vmName || server.vmId].filter(Boolean).join(" • ");
+  const managementLine = isTeamManagedServer(server)
+    ? `Managed: team (${server.permissionLevel || "viewer"})`
+    : "Managed: local";
 
   if (!connection) {
     return [
       "Status: disconnected",
+      managementLine,
       vmDetails ? `VM: ${vmDetails}` : null,
       `URL: ${server.baseUrl || "not set"}`,
       "Sessions: 0",
@@ -168,6 +173,7 @@ export function formatServerDetails(server: ServerProfile, connection: ServerCon
   const latency = connection.health.latencyMs === null ? "n/a" : `${connection.health.latencyMs} ms`;
   return [
     `Status: ${connection.status}`,
+    managementLine,
     vmDetails ? `VM: ${vmDetails}` : null,
     `Sessions: ${connection.openSessions.length} open / ${connection.allSessions.length} total`,
     `Streams: ${connection.activeStreamCount}`,

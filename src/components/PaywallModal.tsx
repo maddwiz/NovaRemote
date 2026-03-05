@@ -21,6 +21,10 @@ export function PaywallModal({ visible, priceLabel, onClose, onUpgrade, onRestor
             Unlock AI command assist, fleet execution, watch alerts, glasses mode voice control, file editor, process manager,
             session recordings, offline queue, spectator links, iPad split view, and unlimited servers/sessions.
           </Text>
+          <Text style={styles.emptyText}>Free: 1 server, 2 sessions, core terminal controls.</Text>
+          <Text style={styles.emptyText}>Pro: unlimited servers/sessions, AI assist, fleet, glasses/VR, recordings.</Text>
+          <Text style={styles.emptyText}>Team: Pro + shared fleet, role access, token broker, audit logging (5 seats).</Text>
+          <Text style={styles.emptyText}>Enterprise: Team + SSO, unlimited seats, compliance controls, SLA support.</Text>
           <Text style={styles.serverTitle}>{priceLabel ? `Pro ${priceLabel}` : "Pro subscription"}</Text>
 
           <View style={styles.rowInlineSpace}>

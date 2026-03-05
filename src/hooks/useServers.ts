@@ -15,6 +15,7 @@ import {
   STORAGE_SERVERS,
   makeId,
 } from "../constants";
+import { canDeleteServerProfile, canEditServerProfile, normalizeServerProfile, normalizeTeamPermissionLevel } from "../teamServers";
 import { ServerProfile, VmType } from "../types";
 
 type UseServersArgs = {
@@ -201,6 +202,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     let nextActiveId = activeServerId;
 
     if (editingServerId) {
+      const editingServer = servers.find((server) => server.id === editingServerId);
+      if (editingServer && !canEditServerProfile(editingServer)) {
+        throw new Error("Team-managed servers are read-only and cannot be edited on this device.");
+      }
       nextServers = servers.map((server) =>
         server.id === editingServerId
           ? {
@@ -231,6 +236,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         baseUrl: cleanedBaseUrl,
         token: cleanedToken,
         defaultCwd: cleanedCwd,
+        source: "local",
         terminalBackend: serverBackendInput || DEFAULT_TERMINAL_BACKEND,
         vmHost: cleanedVmHost || undefined,
         vmType: cleanedVmType,
@@ -298,6 +304,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         baseUrl: cleanedBaseUrl,
         token: cleanedToken,
         defaultCwd: server.defaultCwd.trim(),
+        source: "local",
         terminalBackend: server.terminalBackend || DEFAULT_TERMINAL_BACKEND,
         vmHost: cleanedVmHost || undefined,
         vmType: cleanedVmType,
@@ -322,6 +329,10 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
 
   const deleteServer = useCallback(
     async (serverId: string) => {
+      const target = servers.find((server) => server.id === serverId);
+      if (target && !canDeleteServerProfile(target)) {
+        throw new Error("Team-managed servers are controlled by your team admin and cannot be deleted locally.");
+      }
       const nextServers = servers.filter((server) => server.id !== serverId);
       const nextActiveId = activeServerId === serverId ? nextServers[0]?.id ?? null : activeServerId;
       setServers(nextServers);
@@ -333,6 +344,29 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
       }
     },
     [activeServerId, beginCreateServer, editingServerId, persistServers, servers]
+  );
+
+  const replaceTeamServers = useCallback(
+    async (incomingTeamServers: ServerProfile[]) => {
+      const normalizedTeamServers = incomingTeamServers.map((server) =>
+        normalizeServerProfile({
+          ...server,
+          source: "team",
+          permissionLevel: normalizeTeamPermissionLevel(server.permissionLevel),
+          teamServerId: server.teamServerId || server.id,
+        })
+      );
+
+      const localServers = servers.filter((server) => server.source !== "team");
+      const nextServers = [...normalizedTeamServers, ...localServers];
+      const resolvedActive =
+        nextServers.find((server) => server.id === activeServerId)?.id ?? normalizedTeamServers[0]?.id ?? localServers[0]?.id ?? null;
+
+      setServers(nextServers);
+      setActiveServerId(resolvedActive);
+      await persistServers(nextServers, resolvedActive);
+    },
+    [activeServerId, persistServers, servers]
   );
 
   const useServer = useCallback(
@@ -375,7 +409,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
             const parsed = JSON.parse(savedServersRaw) as ServerProfile[];
             parsedServers = Array.isArray(parsed)
               ? parsed.map((entry) => ({
-                  ...entry,
+                  ...normalizeServerProfile(entry),
                   terminalBackend: entry.terminalBackend || DEFAULT_TERMINAL_BACKEND,
                   vmHost: entry.vmHost?.trim() || undefined,
                   vmType: normalizeVmType(entry.vmType),
@@ -474,5 +508,6 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
     saveServer,
     deleteServer,
     useServer,
+    replaceTeamServers,
   };
 }

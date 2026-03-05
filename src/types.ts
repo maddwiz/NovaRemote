@@ -61,12 +61,58 @@ export type SessionCollaborator = {
   lastSeenAt: number | null;
 };
 
+export type TeamAuthProvider = "novaremote_cloud" | "saml" | "oidc" | "ldap_proxy";
+
+export type TeamRole = "admin" | "operator" | "viewer" | "billing";
+
+export type TeamPermission =
+  | "servers:read"
+  | "servers:write"
+  | "servers:delete"
+  | "sessions:create"
+  | "sessions:send"
+  | "sessions:view"
+  | "fleet:execute"
+  | "settings:manage"
+  | "team:invite"
+  | "team:manage"
+  | "audit:read";
+
+export type TeamPermissionLevel = "admin" | "operator" | "viewer";
+
+export type TeamIdentity = {
+  provider: TeamAuthProvider;
+  userId: string;
+  email: string;
+  displayName: string;
+  avatarUrl?: string;
+  teamId: string;
+  teamName: string;
+  role: TeamRole;
+  permissions: TeamPermission[];
+  accessToken: string;
+  tokenExpiresAt: number;
+  refreshToken: string;
+};
+
+export type TokenBrokerPermission = "read" | "write" | "execute" | "admin";
+
+export type TokenBrokerResult = {
+  serverId: string;
+  token: string;
+  expiresAt: number;
+  permissions: TokenBrokerPermission[];
+};
+
 export type ServerProfile = {
   id: string;
   name: string;
   baseUrl: string;
   token: string;
   defaultCwd: string;
+  source?: "local" | "team";
+  teamServerId?: string;
+  permissionLevel?: TeamPermissionLevel;
   terminalBackend?: TerminalBackendKind;
   vmHost?: string;
   vmType?: VmType;
@@ -248,6 +294,36 @@ export type SessionRecording = {
   startedAt: number;
   stoppedAt: number | null;
   chunks: RecordingChunk[];
+};
+
+export type AuditAction =
+  | "session_created"
+  | "command_sent"
+  | "command_dangerous_approved"
+  | "command_dangerous_denied"
+  | "fleet_executed"
+  | "file_written"
+  | "file_deleted"
+  | "process_killed"
+  | "server_added"
+  | "server_removed"
+  | "spectate_link_created"
+  | "voice_command_sent"
+  | "settings_changed";
+
+export type AuditEvent = {
+  id: string;
+  timestamp: number;
+  userId: string;
+  userEmail: string;
+  serverId: string;
+  serverName: string;
+  session: string;
+  action: AuditAction;
+  detail: string;
+  approved: boolean | null;
+  deviceId: string;
+  appVersion: string;
 };
 
 export type SysStats = {

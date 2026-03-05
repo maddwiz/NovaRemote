@@ -45,6 +45,7 @@ type ServersScreenProps = {
   sharedTemplates: SharedServerTemplate[];
   requireBiometric: boolean;
   requireDangerConfirm: boolean;
+  dangerConfirmManagedByTeam?: boolean;
   onUseServer: (serverId: string) => void;
   onBeginEditServer: (server: ServerProfile) => void;
   onDeleteServer: (serverId: string) => void;
@@ -132,6 +133,7 @@ export function ServersScreen({
   sharedTemplates,
   requireBiometric,
   requireDangerConfirm,
+  dangerConfirmManagedByTeam = false,
   onUseServer,
   onBeginEditServer,
   onDeleteServer,
@@ -764,9 +766,13 @@ export function ServersScreen({
           trackColor={{ false: "#33596c", true: "#0ea8c8" }}
           thumbColor={requireDangerConfirm ? "#d4fdff" : "#d3dee5"}
           value={requireDangerConfirm}
+          disabled={dangerConfirmManagedByTeam}
           onValueChange={onSetRequireDangerConfirm}
         />
       </View>
+      {dangerConfirmManagedByTeam ? (
+        <Text style={styles.emptyText}>Managed by team admin: dangerous command confirmation is locked.</Text>
+      ) : null}
 
       <View style={styles.serverCard}>
         <Text style={styles.panelLabel}>Growth / Monetization</Text>

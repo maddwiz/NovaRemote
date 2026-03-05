@@ -6,7 +6,10 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_NOVA_CLOUD_URL": "https://api.novaremote.dev"
+      }
     },
     "development-simulator": {
       "developmentClient": true,
@@ -17,11 +20,17 @@
     },
     "preview": {
       "distribution": "internal",
-      "environment": "preview"
+      "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_NOVA_CLOUD_URL": "https://api.novaremote.dev"
+      }
     },
     "production": {
       "autoIncrement": true,
-      "environment": "production"
+      "environment": "production",
+      "env": {
+        "EXPO_PUBLIC_NOVA_CLOUD_URL": "https://api.novaremote.dev"
+      }
     }
   },
   "submit": {
