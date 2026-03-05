@@ -114,8 +114,8 @@ Updated: 2026-03-05
   - [x] inactivity timeout / session auto-disconnect policies
 - [ ] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`); production deployment and hardening remain pending
-- [ ] Full agent lifecycle + NovaSpine memory orchestration is still roadmap work
-- [ ] Full team collaboration voice/presence channels remains roadmap work
+- [~] NovaSpine context orchestration is implemented in-app; full autonomous agent lifecycle orchestration remains roadmap work
+- [~] Presence-aware voice channels are implemented in-app; full multi-user collaboration voice/presence channels remain roadmap work
 
 ## Notes
 
