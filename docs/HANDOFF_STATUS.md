@@ -54,7 +54,7 @@ Updated: 2026-03-05
 ## v1.4 VR Command Center
 
 - [x] In this repo: VR preview route/screen + pooled multi-server controls + tests
-- [ ] Separate production VR native app (`NovaRemoteVR`) still a broader standalone track
+- [~] Separate production VR native app (`NovaRemoteVR`) track has executable bootstrap + contract sync scripts; full native client implementation remains pending
 
 ## v1.5 VM Grouping
 
@@ -111,6 +111,7 @@ Updated: 2026-03-05
   - [~] fleet approval request/review + approved-execution matching is wired in-app; cloud dashboard orchestration remains pending
   - [x] inactivity timeout / session auto-disconnect policies
 - [ ] Separate NovaRemote Cloud backend + web admin dashboard rollout
+- [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`); production deployment and hardening remain pending
 - [ ] Full agent lifecycle + NovaSpine memory orchestration is still roadmap work
 - [ ] Full team collaboration voice/presence channels remains roadmap work
 

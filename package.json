@@ -16,6 +16,8 @@
     "ci": "npm run typecheck && npm run test && npm run doctor",
     "vr:bootstrap-repo": "bash ./scripts/bootstrap-vr-repo.sh",
     "vr:sync-contracts": "bash ./scripts/sync-vr-contracts.sh",
+    "cloud:bootstrap-repos": "bash ./scripts/bootstrap-cloud-stack.sh",
+    "cloud:sync-contracts": "bash ./scripts/sync-cloud-contracts.sh",
     "fix:ios:path-spaces": "node scripts/fix-ios-space-paths.mjs",
     "pods:install:ios": "cd ios && pod install",
     "prebuild:ios": "expo prebuild --platform ios --clean --no-install && npm run fix:ios:path-spaces && npm run pods:install:ios && npm run fix:ios:path-spaces",

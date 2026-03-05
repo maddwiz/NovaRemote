@@ -96,6 +96,27 @@ Target public one-liner once the reference server image is published:
 docker run --rm -p 8787:8787 -e NOVA_TOKEN=change-me ghcr.io/maddwiz/codex-remote:latest
 ```
 
+## Cloud Stack Bootstrap
+
+The Team/Enterprise control-plane repos can now be scaffolded from this repo:
+
+```bash
+npm run cloud:bootstrap-repos
+```
+
+This creates:
+
+- `../NovaRemoteCloud` (backend scaffold)
+- `../NovaRemoteCloudDashboard` (admin web scaffold)
+
+Cloud API contract source of truth:
+
+- `docs/contracts/novaremote-cloud-openapi.v1.yaml`
+
+Cloud track docs:
+
+- `docs/cloud/CLOUD_REPO_BOOTSTRAP.md`
+
 ## Requirements
 
 - Companion API server (see `docs/SERVER_SETUP.md`)

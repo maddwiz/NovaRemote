@@ -1,0 +1,628 @@
+openapi: 3.1.0
+info:
+  title: NovaRemote Cloud API
+  version: 1.0.0
+  description: Team auth, token brokerage, fleet governance, and audit metadata APIs for NovaRemote clients.
+servers:
+  - url: https://api.novaremote.dev
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      security: []
+      summary: Health check
+      responses:
+        "200":
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
+  /v1/auth/login:
+    post:
+      security: []
+      summary: Password-based team sign-in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Team identity and session tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthEnvelope"
+  /v1/auth/refresh:
+    post:
+      summary: Refresh team auth session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: Refreshed team identity
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthEnvelope"
+  /v1/auth/sso/exchange:
+    post:
+      security: []
+      summary: Exchange SSO token for team session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [provider]
+              properties:
+                provider:
+                  type: string
+                  enum: [saml, oidc]
+                idToken:
+                  type: string
+                accessToken:
+                  type: string
+                inviteCode:
+                  type: string
+      responses:
+        "200":
+          description: Team identity and session tokens
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthEnvelope"
+  /v1/tokens/provision:
+    post:
+      summary: Provision ephemeral companion token for a team server
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverId]
+              properties:
+                serverId:
+                  type: string
+                permissionLevel:
+                  type: string
+                  enum: [admin, operator, viewer]
+      responses:
+        "200":
+          description: Ephemeral token and permissions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokenProvisionResponse"
+  /v1/team/servers:
+    get:
+      summary: List team-managed servers visible to the user
+      responses:
+        "200":
+          description: Team server list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  servers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TeamServer"
+  /v1/team/members:
+    get:
+      summary: List team members and role metadata
+      responses:
+        "200":
+          description: Team member list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  members:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TeamMember"
+  /v1/team/members/{memberId}:
+    patch:
+      summary: Update member role
+      parameters:
+        - in: path
+          name: memberId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [role]
+              properties:
+                role:
+                  type: string
+                  enum: [admin, operator, viewer, billing]
+      responses:
+        "200":
+          description: Member updated
+  /v1/team/members/{memberId}/servers:
+    put:
+      summary: Update member server assignments
+      parameters:
+        - in: path
+          name: memberId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [serverIds]
+              properties:
+                serverIds:
+                  type: array
+                  items:
+                    type: string
+      responses:
+        "200":
+          description: Member server assignments updated
+  /v1/team/settings:
+    get:
+      summary: Retrieve team policy settings
+      responses:
+        "200":
+          description: Team settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    $ref: "#/components/schemas/TeamSettings"
+    patch:
+      summary: Update team policy settings
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamSettingsPatch"
+      responses:
+        "200":
+          description: Team settings
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    $ref: "#/components/schemas/TeamSettings"
+  /v1/team/usage:
+    get:
+      summary: Retrieve aggregate team usage counters
+      responses:
+        "200":
+          description: Team usage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  usage:
+                    $ref: "#/components/schemas/TeamUsage"
+  /v1/team/invites:
+    post:
+      summary: Invite a new member
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, role]
+              properties:
+                email:
+                  type: string
+                  format: email
+                role:
+                  type: string
+                  enum: [admin, operator, viewer, billing]
+      responses:
+        "200":
+          description: Invite created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  inviteCode:
+                    type: string
+                  inviteLink:
+                    type: string
+                  expiresAt:
+                    type: string
+  /v1/team/fleet/approvals:
+    get:
+      summary: List fleet approval records
+      responses:
+        "200":
+          description: Fleet approvals
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approvals:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/FleetApproval"
+    post:
+      summary: Request fleet approval for command execution
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [command, targets]
+              properties:
+                command:
+                  type: string
+                targets:
+                  type: array
+                  items:
+                    type: string
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Fleet approval request
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  approval:
+                    $ref: "#/components/schemas/FleetApproval"
+  /v1/team/fleet/approvals/{approvalId}/approve:
+    post:
+      summary: Approve a fleet request
+      parameters:
+        - in: path
+          name: approvalId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Fleet request approved
+  /v1/team/fleet/approvals/{approvalId}/deny:
+    post:
+      summary: Deny a fleet request
+      parameters:
+        - in: path
+          name: approvalId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                note:
+                  type: string
+      responses:
+        "200":
+          description: Fleet request denied
+  /v1/audit/events:
+    post:
+      summary: Ingest a batch of audit events
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [events]
+              properties:
+                events:
+                  type: array
+                  items:
+                    $ref: "#/components/schemas/AuditEvent"
+      responses:
+        "200":
+          description: Batch persisted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accepted:
+                    type: integer
+                  rejected:
+                    type: integer
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  schemas:
+    AuthEnvelope:
+      type: object
+      required: [identity]
+      properties:
+        identity:
+          $ref: "#/components/schemas/TeamIdentity"
+    LoginRequest:
+      type: object
+      required: [provider, email, password]
+      properties:
+        provider:
+          type: string
+          enum: [novaremote_cloud]
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+        inviteCode:
+          type: string
+    TeamIdentity:
+      type: object
+      required:
+        - provider
+        - userId
+        - email
+        - displayName
+        - teamId
+        - teamName
+        - role
+        - permissions
+        - accessToken
+        - refreshToken
+        - tokenExpiresAt
+      properties:
+        provider:
+          type: string
+          enum: [novaremote_cloud, saml, oidc, ldap_proxy]
+        userId:
+          type: string
+        email:
+          type: string
+        displayName:
+          type: string
+        avatarUrl:
+          type: string
+        teamId:
+          type: string
+        teamName:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator, viewer, billing]
+        permissions:
+          type: array
+          items:
+            type: string
+        accessToken:
+          type: string
+        refreshToken:
+          type: string
+        tokenExpiresAt:
+          type: integer
+    TokenProvisionResponse:
+      type: object
+      required: [serverId, token, expiresAt, permissions]
+      properties:
+        serverId:
+          type: string
+        token:
+          type: string
+        expiresAt:
+          type: integer
+        permissions:
+          type: array
+          items:
+            type: string
+            enum: [read, write, execute, admin]
+    TeamServer:
+      type: object
+      required: [id, name, baseUrl, defaultCwd, permissionLevel]
+      properties:
+        id:
+          type: string
+        teamServerId:
+          type: string
+        name:
+          type: string
+        baseUrl:
+          type: string
+        token:
+          type: string
+        defaultCwd:
+          type: string
+        permissionLevel:
+          type: string
+          enum: [admin, operator, viewer]
+        vmHost:
+          type: string
+        vmType:
+          type: string
+        vmName:
+          type: string
+        vmId:
+          type: string
+    TeamMember:
+      type: object
+      required: [id, name, email, role]
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        email:
+          type: string
+        role:
+          type: string
+          enum: [admin, operator, viewer, billing]
+        serverIds:
+          type: array
+          items:
+            type: string
+        sessionsCreated:
+          type: integer
+        commandsSent:
+          type: integer
+        fleetExecutions:
+          type: integer
+        lastActiveAt:
+          type: string
+    TeamSettings:
+      type: object
+      properties:
+        enforceDangerConfirm:
+          type: [boolean, "null"]
+        commandBlocklist:
+          type: array
+          items:
+            type: string
+        sessionTimeoutMinutes:
+          type: [integer, "null"]
+        requireSessionRecording:
+          type: [boolean, "null"]
+        requireFleetApproval:
+          type: [boolean, "null"]
+    TeamSettingsPatch:
+      type: object
+      properties:
+        enforceDangerConfirm:
+          type: [boolean, "null"]
+        commandBlocklist:
+          type: array
+          items:
+            type: string
+        sessionTimeoutMinutes:
+          type: [integer, "null"]
+        requireSessionRecording:
+          type: [boolean, "null"]
+        requireFleetApproval:
+          type: [boolean, "null"]
+    TeamUsage:
+      type: object
+      required: [activeMembers, sessionsCreated, commandsSent, fleetExecutions]
+      properties:
+        activeMembers:
+          type: integer
+        sessionsCreated:
+          type: integer
+        commandsSent:
+          type: integer
+        fleetExecutions:
+          type: integer
+    FleetApproval:
+      type: object
+      required:
+        - id
+        - command
+        - requestedByUserId
+        - requestedByEmail
+        - targets
+        - createdAt
+        - updatedAt
+        - status
+      properties:
+        id:
+          type: string
+        command:
+          type: string
+        requestedByUserId:
+          type: string
+        requestedByEmail:
+          type: string
+        targets:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+        updatedAt:
+          type: string
+        status:
+          type: string
+          enum: [pending, approved, denied, expired]
+        note:
+          type: string
+    AuditEvent:
+      type: object
+      required:
+        - id
+        - timestamp
+        - userId
+        - userEmail
+        - serverId
+        - serverName
+        - session
+        - action
+        - detail
+        - deviceId
+        - appVersion
+      properties:
+        id:
+          type: string
+        timestamp:
+          type: integer
+        userId:
+          type: string
+        userEmail:
+          type: string
+        serverId:
+          type: string
+        serverName:
+          type: string
+        session:
+          type: string
+        action:
+          type: string
+        detail:
+          type: string
+        approved:
+          type: [boolean, "null"]
+        deviceId:
+          type: string
+        appVersion:
+          type: string
