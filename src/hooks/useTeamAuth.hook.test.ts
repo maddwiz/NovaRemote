@@ -448,6 +448,84 @@ describe("useTeamAuth hook", () => {
       renderer?.unmount();
     });
   });
+
+  it("blocks fleet approval requests when fleet-execute permission is missing", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          role: "viewer",
+          permissions: ["servers:read"],
+        })
+      )
+    );
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await expect(
+        latestOrThrow(latest).requestFleetApproval({
+          command: "docker compose up -d",
+          targets: ["dgx"],
+        })
+      ).rejects.toThrow("You do not have permission to request fleet execution.");
+    });
+
+    const postedFleetApprovals = (cloudClientMock.cloudRequest.mock.calls as Array<[string, RequestInit?]>).some(
+      (call) => String(call[0]) === "/v1/team/fleet/approvals" && String(call[1]?.method || "GET").toUpperCase() === "POST"
+    );
+    expect(postedFleetApprovals).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("blocks fleet approval review when team-manage permission is missing", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          role: "operator",
+          permissions: ["fleet:execute", "servers:read"],
+        })
+      )
+    );
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await expect(latestOrThrow(latest).approveFleetApproval("approval-1")).rejects.toThrow(
+        "You do not have permission to review fleet approvals."
+      );
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
 
 function latestOrThrow(value: TeamAuthHandle | null): TeamAuthHandle {
