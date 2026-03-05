@@ -454,6 +454,26 @@ paths:
                   rejected:
                     type: integer
   /v1/audit/exports:
+    get:
+      summary: List cloud-hosted audit export jobs
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Export jobs
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exports:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditExportJob"
     post:
       summary: Request a cloud-hosted audit export job
       requestBody:

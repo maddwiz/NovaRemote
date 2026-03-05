@@ -282,6 +282,15 @@ const teamSsoProviders: TeamSsoProviderConfig[] = [
   }
 ];
 const auditEvents: unknown[] = [];
+const auditExportJobs: Array<{
+  exportId: string;
+  format: "json" | "csv";
+  status: "pending" | "ready" | "failed";
+  createdAt: string;
+  expiresAt?: string;
+  downloadUrl?: string;
+  detail?: string;
+}> = [];
 const teamSettings = {
   enforceDangerConfirm: true,
   commandBlocklist: [],
@@ -530,6 +539,15 @@ app.post("/v1/audit/events", (req, res) => {
   res.json({ accepted: events.length, rejected: 0 });
 });
 
+app.get("/v1/audit/exports", (req, res) => {
+  const limitRaw = Number.parseInt(String(req.query?.limit || "20"), 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 20;
+  const ordered = [...auditExportJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  res.json({
+    exports: ordered.slice(0, limit)
+  });
+});
+
 app.post("/v1/audit/exports", (req, res) => {
   const format = String(req.body?.format || "").toLowerCase();
   if (format !== "json" && format !== "csv") {
@@ -538,15 +556,17 @@ app.post("/v1/audit/exports", (req, res) => {
   const exportId = `audit-exp-${randomUUID().slice(0, 10)}`;
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  res.json({
+  const job = {
     exportId,
-    format,
-    status: "ready",
+    format: format as "json" | "csv",
+    status: "ready" as const,
     createdAt,
     expiresAt,
     downloadUrl: `https://cloud.novaremote.dev/exports/${exportId}.${format}`,
     detail: `Snapshot contains ${auditEvents.length} events`
-  });
+  };
+  auditExportJobs.unshift(job);
+  res.json(job);
 });
 
 const port = Number.parseInt(process.env.PORT || "8788", 10);

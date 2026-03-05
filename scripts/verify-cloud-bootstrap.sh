@@ -50,6 +50,7 @@ assert_contains "${API_DIR}/src/server.ts" "/v1/team/invites"
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/invites/:inviteId"
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/sso/providers"
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/sso/providers/:provider"
+assert_contains "${API_DIR}/src/server.ts" "app.get(\"/v1/audit/exports\""
 assert_contains "${API_DIR}/src/server.ts" "/v1/audit/exports"
 
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/team/invites/{inviteId}"
