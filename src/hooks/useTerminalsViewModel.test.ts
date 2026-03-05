@@ -1,9 +1,15 @@
 import { describe, expect, it, vi } from "vitest";
 
+const apiRequestMock = vi.hoisted(() => vi.fn(async () => ({})));
+
 vi.mock("../constants", () => ({
   DEFAULT_SPECTATE_TTL_SECONDS: 86400,
   FREE_SESSION_LIMIT: 2,
   isLikelyAiSession: (session: string) => session.startsWith("ai"),
+}));
+
+vi.mock("../api/client", () => ({
+  apiRequest: apiRequestMock,
 }));
 
 vi.mock("expo-haptics", () => ({
@@ -313,6 +319,57 @@ describe("useTerminalsViewModel", () => {
 
     expect(connectAllServers).toHaveBeenCalledTimes(1);
     expect(disconnectAllServers).toHaveBeenCalledTimes(1);
+  });
+
+  it("records audit events when process kill actions run", async () => {
+    apiRequestMock.mockClear();
+    const refreshProcesses = vi.fn(async () => undefined);
+    const recordAuditEvent = vi.fn();
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      activeServer: {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.test",
+        token: "token",
+        defaultCwd: "/workspace",
+      },
+      connected: true,
+      capabilities: {
+        terminal: true,
+        tmux: true,
+        codex: false,
+        files: true,
+        shellRun: false,
+        macAttach: false,
+        stream: true,
+        sysStats: false,
+        processes: true,
+        collaboration: false,
+        spectate: false,
+      },
+      refreshProcesses,
+      recordAuditEvent,
+    });
+
+    model.onKillProcess(123, "TERM");
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(apiRequestMock).toHaveBeenCalledWith(
+      "https://dgx.test",
+      "token",
+      "/proc/kill",
+      expect.objectContaining({
+        method: "POST",
+      })
+    );
+    expect(recordAuditEvent).toHaveBeenCalledWith(
+      expect.objectContaining({
+        action: "process_killed",
+        serverId: "dgx",
+      })
+    );
   });
 
   it("routes server-scoped agent approval actions through async callbacks", async () => {

@@ -2955,6 +2955,7 @@ export default function AppShell() {
     setSessionAiEngine,
     sendViaExternalLlm,
     track,
+    recordAuditEvent,
     requestDangerApproval,
     handleStartSession,
     toggleSessionVisible,
@@ -3144,6 +3145,7 @@ export default function AppShell() {
               dangerConfirmManagedByTeam={dangerConfirmManagedByTeam}
               onUseServer={(serverId) => {
                 void runWithStatus("Switching server", async () => {
+                  markActivity();
                   await useServer(serverId);
                   setPoolFocusedServerId(serverId);
                   setRoute("terminals");
@@ -3191,8 +3193,15 @@ export default function AppShell() {
               onSetServerGrafanaUrl={setServerGrafanaUrlInput}
               onSetAnalyticsEnabled={(value) => {
                 void runWithStatus("Updating analytics setting", async () => {
+                  markActivity();
                   await setAnalyticsEnabled(value);
                   setGrowthStatus(value ? "Anonymous analytics enabled." : "Anonymous analytics disabled.");
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: focusedServerId || "",
+                    serverName: activeServer?.name || "",
+                    detail: `analytics_enabled=${value}`,
+                  });
                   track("analytics_toggled", { enabled: value });
                 });
               }}
@@ -3275,12 +3284,26 @@ export default function AppShell() {
               onShowPaywall={() => setPaywallVisible(true)}
               onSetRequireBiometric={(value) => {
                 void runWithStatus("Updating lock setting", async () => {
+                  markActivity();
                   await setRequireBiometric(value);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "device",
+                    detail: `require_biometric=${value}`,
+                  });
                 });
               }}
               onSetRequireDangerConfirm={(value) => {
                 void runWithStatus("Updating safety setting", async () => {
+                  markActivity();
                   await setRequireDangerConfirm(value);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "device",
+                    detail: `require_danger_confirm=${value}`,
+                  });
                 });
               }}
               onToggleTokenMask={() => setTokenMasked((prev) => !prev)}
@@ -3451,7 +3474,15 @@ export default function AppShell() {
                 }}
                 onSaveFile={(path, content) => {
                   void runWithStatus("Saving remote file", async () => {
+                    markActivity();
                     await writeFile(path, content);
+                    recordAuditEvent({
+                      action: "file_written",
+                      serverId: focusedServerId || "",
+                      serverName: activeServer?.name || "",
+                      session: "",
+                      detail: `path=${path}`,
+                    });
                   });
                 }}
                 onInsertPath={(session, path) => {

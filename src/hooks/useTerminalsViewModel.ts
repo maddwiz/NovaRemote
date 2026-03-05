@@ -129,6 +129,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     setSessionAiEngine,
     sendViaExternalLlm,
     track,
+    recordAuditEvent,
     requestDangerApproval,
     handleStartSession,
     toggleSessionVisible,
@@ -972,6 +973,15 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
           body: JSON.stringify({ pid, signal }),
         });
         await refreshProcesses();
+        if (typeof recordAuditEvent === "function") {
+          recordAuditEvent({
+            action: "process_killed",
+            serverId: activeServer.id,
+            serverName: activeServer.name,
+            session: "",
+            detail: `pid=${pid} signal=${signal}`,
+          });
+        }
       });
     },
     onKillProcesses: (pids, signal) => {
@@ -992,6 +1002,15 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
           )
         );
         await refreshProcesses();
+        if (typeof recordAuditEvent === "function") {
+          recordAuditEvent({
+            action: "process_killed",
+            serverId: activeServer.id,
+            serverName: activeServer.name,
+            session: "",
+            detail: `pids=${uniquePids.join(",")} signal=${signal}`,
+          });
+        }
       });
     },
     onRefreshSessionPresence: (session) => {
