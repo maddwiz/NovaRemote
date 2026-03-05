@@ -174,7 +174,7 @@ describe("TeamScreen", () => {
     });
 
     act(() => {
-      renderer?.root.findByProps({ accessibilityLabel: "Change role for alice@example.com" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Set alice@example.com to operator" }).props.onPress();
     });
 
     expect(onChangeMemberRole).toHaveBeenCalledWith("member-1", "operator");

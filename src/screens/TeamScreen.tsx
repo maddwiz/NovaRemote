@@ -6,19 +6,7 @@ import { styles } from "../theme/styles";
 import { TeamIdentity, TeamMember, TeamRole } from "../types";
 
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
-
-function nextMemberRole(role: TeamRole): TeamRole {
-  if (role === "viewer") {
-    return "operator";
-  }
-  if (role === "operator") {
-    return "admin";
-  }
-  if (role === "admin") {
-    return "viewer";
-  }
-  return "viewer";
-}
+const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 
 type TeamScreenProps = {
   identity: TeamIdentity | null;
@@ -118,11 +106,13 @@ export function TeamScreen({
   }, [canSubmitInvite, inviteEmail, inviteRole, onInviteMember]);
 
   const handleChangeMemberRole = useCallback(
-    (member: TeamMember) => {
+    (member: TeamMember, nextRole: TeamRole) => {
       if (!onChangeMemberRole || !canManage || busy) {
         return;
       }
-      const nextRole = nextMemberRole(member.role);
+      if (member.role === nextRole) {
+        return;
+      }
       setTeamStatus("");
       void onChangeMemberRole(member.id, nextRole)
         .then(() => {
@@ -324,15 +314,23 @@ export function TeamScreen({
               <Text style={styles.serverUrl}>{member.email}</Text>
               <Text style={styles.emptyText}>{`Role: ${member.role}`}</Text>
               {canManage && onChangeMemberRole ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Change role for ${member.email}`}
-                  style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
-                  onPress={() => handleChangeMemberRole(member)}
-                  disabled={busy}
-                >
-                  <Text style={styles.actionButtonText}>{`Set ${nextMemberRole(member.role)}`}</Text>
-                </Pressable>
+                <View style={styles.modeRow}>
+                  {MEMBER_ROLE_OPTIONS.map((role) => {
+                    const selected = member.role === role;
+                    return (
+                      <Pressable
+                        key={`${member.id}:${role}`}
+                        accessibilityRole="button"
+                        accessibilityLabel={`Set ${member.email} to ${role}`}
+                        style={[styles.modeButton, selected ? styles.modeButtonOn : null, busy ? styles.buttonDisabled : null]}
+                        onPress={() => handleChangeMemberRole(member, role)}
+                        disabled={busy}
+                      >
+                        <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{role}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : null}
             </View>
           ))}
