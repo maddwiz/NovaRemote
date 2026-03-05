@@ -41,7 +41,7 @@ describe("token broker helpers", () => {
 
   it("overlays broker tokens for team servers only", () => {
     const local = buildServer({ id: "local", source: "local", token: "local-token" });
-    const team = buildServer({ id: "team", source: "team", token: "", permissionLevel: "viewer" });
+    const team = buildServer({ id: "team", source: "team", token: "", permissionLevel: "admin" });
 
     const merged = tokenBrokerTestUtils.applyBrokerTokens([local, team], {
       team: {
@@ -54,5 +54,12 @@ describe("token broker helpers", () => {
 
     expect(merged.find((entry) => entry.id === "local")?.token).toBe("local-token");
     expect(merged.find((entry) => entry.id === "team")?.token).toBe("team-ephemeral-token");
+    expect(merged.find((entry) => entry.id === "team")?.permissionLevel).toBe("viewer");
+  });
+
+  it("derives runtime permission level from broker permissions", () => {
+    expect(tokenBrokerTestUtils.derivePermissionLevelFromBrokerPermissions(["read"])).toBe("viewer");
+    expect(tokenBrokerTestUtils.derivePermissionLevelFromBrokerPermissions(["read", "execute"])).toBe("operator");
+    expect(tokenBrokerTestUtils.derivePermissionLevelFromBrokerPermissions(["admin"])).toBe("admin");
   });
 });

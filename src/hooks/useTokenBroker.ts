@@ -98,6 +98,18 @@ function normalizeTokenCache(value: unknown): TokenCache {
   return next;
 }
 
+export function derivePermissionLevelFromBrokerPermissions(
+  permissions: TokenBrokerPermission[]
+): "admin" | "operator" | "viewer" {
+  if (permissions.includes("admin")) {
+    return "admin";
+  }
+  if (permissions.includes("write") || permissions.includes("execute")) {
+    return "operator";
+  }
+  return "viewer";
+}
+
 export function applyBrokerTokens(servers: ServerProfile[], tokenCache: TokenCache): ServerProfile[] {
   return servers.map((server) => {
     if (!isTeamManagedServer(server)) {
@@ -107,9 +119,11 @@ export function applyBrokerTokens(servers: ServerProfile[], tokenCache: TokenCac
     if (!tokenEntry?.token) {
       return server;
     }
+    const permissionLevel = derivePermissionLevelFromBrokerPermissions(tokenEntry.permissions);
     return {
       ...server,
       token: tokenEntry.token,
+      permissionLevel,
     };
   });
 }
@@ -302,4 +316,5 @@ export function useTokenBroker({
 export const tokenBrokerTestUtils = {
   shouldRefreshToken,
   applyBrokerTokens,
+  derivePermissionLevelFromBrokerPermissions,
 };
