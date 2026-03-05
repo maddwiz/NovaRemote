@@ -134,6 +134,22 @@ function uniqueServerIds(serverIds: string[]): string[] {
   return next;
 }
 
+function buildTeamServerSignature(servers: ServerProfile[]): string {
+  return JSON.stringify(
+    servers
+      .filter((server) => server.source === "team")
+      .map((server) => ({
+        id: server.id,
+        name: server.name,
+        baseUrl: server.baseUrl,
+        defaultCwd: server.defaultCwd,
+        permissionLevel: server.permissionLevel || "viewer",
+        teamServerId: server.teamServerId || server.id,
+      }))
+      .sort((a, b) => a.id.localeCompare(b.id))
+  );
+}
+
 function countMatches(output: string, searchTerm: string): number {
   const term = searchTerm.trim();
   if (!term) {
@@ -657,13 +673,13 @@ export default function AppShell() {
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
   const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
   const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
-  const { identity: teamIdentity } = useTeamAuth({ enabled: unlocked, onError: setError });
+  const { identity: teamIdentity, teamServers, teamSettings } = useTeamAuth({ enabled: unlocked, onError: setError });
   const {
     loading: safetyLoading,
     requireDangerConfirm,
     managedByTeam: dangerConfirmManagedByTeam,
     setRequireDangerConfirm,
-  } = useSafetyPolicy();
+  } = useSafetyPolicy({ enforcedDangerConfirm: teamSettings.enforceDangerConfirm });
   const { permissionStatus, requestPermission, notify } = useNotifications();
   const { available: rcAvailable, isPro, priceLabel, purchasePro, restore } = useRevenueCat();
   const { snippets, upsertSnippet, deleteSnippet, exportSnippets, importSnippets } = useSnippets();
@@ -726,7 +742,23 @@ export default function AppShell() {
     saveServer,
     deleteServer,
     useServer,
+    replaceTeamServers,
   } = useServers({ onError: setError, enabled: unlocked });
+  const localTeamServerSignature = useMemo(() => buildTeamServerSignature(servers), [servers]);
+  const cloudTeamServerSignature = useMemo(() => buildTeamServerSignature(teamServers), [teamServers]);
+
+  useEffect(() => {
+    if (!unlocked) {
+      return;
+    }
+    if (localTeamServerSignature === cloudTeamServerSignature) {
+      return;
+    }
+    void replaceTeamServers(teamServers).catch((error) => {
+      setError(error);
+    });
+  }, [cloudTeamServerSignature, localTeamServerSignature, replaceTeamServers, setError, teamServers, unlocked]);
+
   const { brokeredServers } = useTokenBroker({
     identity: teamIdentity,
     servers,

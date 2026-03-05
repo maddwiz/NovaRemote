@@ -1,9 +1,10 @@
 import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { normalizeBaseUrl } from "../api/client";
 import { cloudRequest, getNovaCloudUrl } from "../api/cloudClient";
-import { STORAGE_TEAM_IDENTITY } from "../constants";
-import { TeamAuthProvider, TeamIdentity, TeamPermission, TeamRole } from "../types";
+import { DEFAULT_CWD, DEFAULT_TERMINAL_BACKEND, STORAGE_TEAM_IDENTITY } from "../constants";
+import { ServerProfile, TeamAuthProvider, TeamIdentity, TeamPermission, TeamRole } from "../types";
 
 const TEAM_PROVIDERS: TeamAuthProvider[] = ["novaremote_cloud", "saml", "oidc", "ldap_proxy"];
 const TEAM_ROLES: TeamRole[] = ["admin", "operator", "viewer", "billing"];
@@ -31,6 +32,10 @@ type UseTeamAuthArgs = {
 type TeamAuthResponse = {
   identity?: unknown;
 } & Record<string, unknown>;
+
+type TeamSettings = {
+  enforceDangerConfirm: boolean | null;
+};
 
 export function normalizeTeamIdentity(value: unknown): TeamIdentity | null {
   if (!value || typeof value !== "object") {
@@ -148,10 +153,85 @@ function parseTeamAuthIdentity(payload: TeamAuthResponse): TeamIdentity | null {
   return normalizeTeamIdentity(payload);
 }
 
+function normalizeTeamServer(value: unknown): ServerProfile | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  const id = normalizeRequiredString(parsed.id);
+  const name = normalizeRequiredString(parsed.name);
+  const baseUrl = normalizeBaseUrl(normalizeRequiredString(parsed.baseUrl));
+  const defaultCwd = normalizeOptionalString(parsed.defaultCwd) || DEFAULT_CWD;
+  const token = normalizeOptionalString(parsed.token) || "";
+  if (!id || !name || !baseUrl) {
+    return null;
+  }
+
+  const permissionLevelRaw = normalizeRequiredString(parsed.permissionLevel).toLowerCase();
+  const permissionLevel =
+    permissionLevelRaw === "admin" || permissionLevelRaw === "operator" || permissionLevelRaw === "viewer"
+      ? permissionLevelRaw
+      : "viewer";
+
+  return {
+    id,
+    name,
+    baseUrl,
+    token,
+    defaultCwd,
+    source: "team",
+    teamServerId: normalizeOptionalString(parsed.teamServerId) || id,
+    permissionLevel,
+    terminalBackend: DEFAULT_TERMINAL_BACKEND,
+    vmHost: normalizeOptionalString(parsed.vmHost),
+    vmType: normalizeOptionalString(parsed.vmType) as ServerProfile["vmType"],
+    vmName: normalizeOptionalString(parsed.vmName),
+    vmId: normalizeOptionalString(parsed.vmId),
+    sshHost: normalizeOptionalString(parsed.sshHost),
+    sshUser: normalizeOptionalString(parsed.sshUser),
+    sshPort: typeof parsed.sshPort === "number" ? parsed.sshPort : undefined,
+    portainerUrl: normalizeOptionalString(parsed.portainerUrl),
+    proxmoxUrl: normalizeOptionalString(parsed.proxmoxUrl),
+    grafanaUrl: normalizeOptionalString(parsed.grafanaUrl),
+  };
+}
+
+function normalizeTeamServers(value: unknown): ServerProfile[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const deduped = new Map<string, ServerProfile>();
+  value.forEach((entry) => {
+    const normalized = normalizeTeamServer(entry);
+    if (normalized) {
+      deduped.set(normalized.id, normalized);
+    }
+  });
+  return Array.from(deduped.values());
+}
+
+function normalizeTeamSettings(value: unknown): TeamSettings {
+  if (!value || typeof value !== "object") {
+    return { enforceDangerConfirm: null };
+  }
+  const parsed = value as Record<string, unknown>;
+  const enforceDangerConfirm =
+    typeof parsed.enforceDangerConfirm === "boolean"
+      ? parsed.enforceDangerConfirm
+      : typeof parsed.requireDangerConfirm === "boolean"
+        ? parsed.requireDangerConfirm
+        : null;
+  return {
+    enforceDangerConfirm,
+  };
+}
+
 export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: UseTeamAuthArgs = {}) {
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
+  const [teamServers, setTeamServers] = useState<ServerProfile[]>([]);
+  const [teamSettings, setTeamSettings] = useState<TeamSettings>({ enforceDangerConfirm: null });
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -204,6 +284,45 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     await SecureStore.setItemAsync(STORAGE_TEAM_IDENTITY, JSON.stringify(nextIdentity));
   }, []);
 
+  const refreshTeamContext = useCallback(
+    async (nextIdentity?: TeamIdentity | null) => {
+      const currentIdentity = nextIdentity ?? identity;
+      if (!currentIdentity) {
+        setTeamServers([]);
+        setTeamSettings({ enforceDangerConfirm: null });
+        return { servers: [], settings: { enforceDangerConfirm: null } };
+      }
+
+      const [serversPayload, settingsPayload] = await Promise.all([
+        cloudRequest<{ servers?: unknown }>(
+          "/v1/team/servers",
+          { method: "GET" },
+          {
+            accessToken: currentIdentity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        ),
+        cloudRequest<{ settings?: unknown }>(
+          "/v1/team/settings",
+          { method: "GET" },
+          {
+            accessToken: currentIdentity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        ),
+      ]);
+
+      const servers = normalizeTeamServers(serversPayload.servers || serversPayload);
+      const settings = normalizeTeamSettings(settingsPayload.settings || settingsPayload);
+      setTeamServers(servers);
+      setTeamSettings(settings);
+      return { servers, settings };
+    },
+    [cloudUrl, fetchImpl, identity]
+  );
+
   const loginWithPassword = useCallback(
     async (input: { email: string; password: string; inviteCode?: string }) => {
       const email = input.email.trim().toLowerCase();
@@ -239,6 +358,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         }
         setIdentity(nextIdentity);
         await persistIdentity(nextIdentity);
+        await refreshTeamContext(nextIdentity);
         return nextIdentity;
       } catch (loginError) {
         setError(loginError instanceof Error ? loginError.message : String(loginError));
@@ -248,11 +368,13 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         setBusy(false);
       }
     },
-    [cloudUrl, fetchImpl, onError, persistIdentity]
+    [cloudUrl, fetchImpl, onError, persistIdentity, refreshTeamContext]
   );
 
   const logout = useCallback(async () => {
     setIdentity(null);
+    setTeamServers([]);
+    setTeamSettings({ enforceDangerConfirm: null });
     setError(null);
     await persistIdentity(null);
   }, [persistIdentity]);
@@ -290,6 +412,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       }
       setIdentity(refreshed);
       await persistIdentity(refreshed);
+      await refreshTeamContext(refreshed);
       return refreshed;
     } catch (refreshError) {
       setError(refreshError instanceof Error ? refreshError.message : String(refreshError));
@@ -298,7 +421,21 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     } finally {
       setBusy(false);
     }
-  }, [cloudUrl, fetchImpl, identity, onError, persistIdentity]);
+  }, [cloudUrl, fetchImpl, identity, onError, persistIdentity, refreshTeamContext]);
+
+  useEffect(() => {
+    if (!enabled || !identity) {
+      if (!identity) {
+        setTeamServers([]);
+        setTeamSettings({ enforceDangerConfirm: null });
+      }
+      return;
+    }
+    void refreshTeamContext(identity).catch((contextError) => {
+      setError(contextError instanceof Error ? contextError.message : String(contextError));
+      onError?.(contextError);
+    });
+  }, [enabled, identity, onError, refreshTeamContext]);
 
   const hasPermission = useCallback(
     (permission: TeamPermission) => {
@@ -315,20 +452,38 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       loading,
       busy,
       identity,
+      teamServers,
+      teamSettings,
       error,
       cloudUrl: cloudUrl || getNovaCloudUrl(),
       loggedIn: Boolean(identity),
       hasPermission,
       loginWithPassword,
+      refreshTeamContext,
       refreshSession,
       logout,
       setIdentityForTesting: setIdentity,
     }),
-    [busy, cloudUrl, error, hasPermission, identity, loading, loginWithPassword, logout, refreshSession]
+    [
+      busy,
+      cloudUrl,
+      error,
+      hasPermission,
+      identity,
+      loading,
+      loginWithPassword,
+      logout,
+      refreshSession,
+      refreshTeamContext,
+      teamServers,
+      teamSettings,
+    ]
   );
 }
 
 export const teamAuthTestUtils = {
   normalizeTeamIdentity,
   shouldRefreshTeamIdentity,
+  normalizeTeamServers,
+  normalizeTeamSettings,
 };

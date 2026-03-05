@@ -54,4 +54,29 @@ describe("team auth helpers", () => {
     expect(teamAuthTestUtils.shouldRefreshTeamIdentity(identity, 8_000, 2_500)).toBe(true);
     expect(teamAuthTestUtils.shouldRefreshTeamIdentity(identity, 1_000, 2_500)).toBe(false);
   });
+
+  it("normalizes team servers and settings payloads", () => {
+    const servers = teamAuthTestUtils.normalizeTeamServers([
+      {
+        id: "srv-1",
+        name: "DGX",
+        baseUrl: "https://dgx.example.com/",
+        defaultCwd: "/home/dev",
+        permissionLevel: "operator",
+      },
+      {
+        id: "",
+        name: "bad",
+        baseUrl: "",
+      },
+    ]);
+    expect(servers).toHaveLength(1);
+    expect(servers[0]?.source).toBe("team");
+    expect(servers[0]?.baseUrl).toBe("https://dgx.example.com");
+
+    expect(teamAuthTestUtils.normalizeTeamSettings({ enforceDangerConfirm: true })).toEqual({
+      enforceDangerConfirm: true,
+    });
+    expect(teamAuthTestUtils.normalizeTeamSettings({})).toEqual({ enforceDangerConfirm: null });
+  });
 });
