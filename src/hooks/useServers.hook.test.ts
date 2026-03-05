@@ -155,6 +155,54 @@ describe("useServers hook", () => {
     });
   });
 
+  it("gives team servers URL precedence over matching local servers", async () => {
+    const localDuplicate = buildServer("local-dup", {
+      source: "local",
+      baseUrl: "https://dgx.novaremote.test",
+    });
+    const localUnique = buildServer("local-unique", {
+      source: "local",
+      baseUrl: "https://homelab.novaremote.test",
+    });
+    secureStoreMock.storage.set(STORAGE_SERVERS, JSON.stringify([localDuplicate, localUnique]));
+    secureStoreMock.storage.set(STORAGE_ACTIVE_SERVER_ID, localDuplicate.id);
+
+    const onError = vi.fn();
+    let latest: UseServersHandle | null = null;
+    function Harness() {
+      latest = useServers({ onError, enabled: true });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await waitFor(() => !latestOrThrow(latest).loadingSettings, "initial settings load");
+
+    const teamServer = buildServer("team-dgx", {
+      source: "team",
+      permissionLevel: "operator",
+      teamServerId: "team-dgx",
+      baseUrl: "https://dgx.novaremote.test",
+      token: "ephemeral-dgx",
+    });
+
+    await act(async () => {
+      await latestOrThrow(latest).replaceTeamServers([teamServer]);
+    });
+    await flush();
+
+    expect(latestOrThrow(latest).servers.map((server) => server.id)).toEqual(["team-dgx", "local-unique"]);
+    expect(latestOrThrow(latest).activeServerId).toBe("team-dgx");
+    expect(readSavedServers().map((server) => server.id)).toEqual(["team-dgx", "local-unique"]);
+    expect(onError).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("blocks editing and deleting team-managed servers while allowing local deletes", async () => {
     const local = buildServer("local-1", { source: "local" });
     const team = buildServer("team-1", {

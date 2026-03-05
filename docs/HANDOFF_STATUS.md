@@ -70,6 +70,7 @@ Updated: 2026-03-05
 - [x] Team server governance:
   - [x] non-admin edit/delete restrictions for team-managed servers
   - [x] permission-level badges/metadata in server UX
+  - [x] URL-precedence merge (team server replaces local duplicate for same base URL)
 - [x] `useAuditLog` local queue + periodic cloud sync
 - [x] In-app audit queue export actions (`JSON` / `CSV`)
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows

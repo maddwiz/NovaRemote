@@ -357,10 +357,32 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         })
       );
 
-      const localServers = servers.filter((server) => server.source !== "team");
+      const teamBaseUrls = new Set(
+        normalizedTeamServers
+          .map((server) => normalizeBaseUrl(server.baseUrl))
+          .filter(Boolean)
+      );
+
+      const localServers = servers.filter((server) => {
+        if (server.source === "team") {
+          return false;
+        }
+        const normalizedBaseUrl = normalizeBaseUrl(server.baseUrl);
+        return !normalizedBaseUrl || !teamBaseUrls.has(normalizedBaseUrl);
+      });
       const nextServers = [...normalizedTeamServers, ...localServers];
+
+      const activeServer = servers.find((server) => server.id === activeServerId) || null;
+      const activeBaseUrl = activeServer ? normalizeBaseUrl(activeServer.baseUrl) : "";
+      const matchingTeamActiveId = activeBaseUrl
+        ? normalizedTeamServers.find((server) => normalizeBaseUrl(server.baseUrl) === activeBaseUrl)?.id || null
+        : null;
       const resolvedActive =
-        nextServers.find((server) => server.id === activeServerId)?.id ?? normalizedTeamServers[0]?.id ?? localServers[0]?.id ?? null;
+        nextServers.find((server) => server.id === activeServerId)?.id ??
+        matchingTeamActiveId ??
+        normalizedTeamServers[0]?.id ??
+        localServers[0]?.id ??
+        null;
 
       setServers(nextServers);
       setActiveServerId(resolvedActive);
