@@ -30,6 +30,10 @@ type AuditRecordInput = {
   approved?: boolean | null;
 };
 
+type AuditRecordOptions = {
+  immediateSync?: boolean;
+};
+
 type AuditSyncResponse = {
   accepted?: unknown;
 } & Record<string, unknown>;
@@ -170,16 +174,57 @@ export function useAuditLog({
     void SecureStore.setItemAsync(STORAGE_AUDIT_LOG_QUEUE, JSON.stringify(events)).catch(() => {});
   }, [events, loading]);
 
+  const sendSnapshot = useCallback(
+    async (snapshot: AuditEvent[]) => {
+      if (!identity?.accessToken || snapshot.length === 0) {
+        return;
+      }
+      await cloudRequest<AuditSyncResponse>(
+        "/v1/audit/events",
+        {
+          method: "POST",
+          body: JSON.stringify({
+            teamId: identity.teamId,
+            events: snapshot,
+          }),
+        },
+        {
+          accessToken: identity.accessToken,
+          cloudUrl: cloudUrl || getNovaCloudUrl(),
+          fetchImpl,
+        }
+      );
+    },
+    [cloudUrl, fetchImpl, identity]
+  );
+
+  const enqueueEvent = useCallback((event: AuditEvent) => {
+    setEvents((prev) => pruneAuditEvents([...prev, event], TEAM_AUDIT_QUEUE_LIMIT));
+  }, []);
+
   const record = useCallback(
-    (input: AuditRecordInput) => {
+    (input: AuditRecordInput, options: AuditRecordOptions = {}) => {
       if (!enabled) {
         return null;
       }
       const event = buildAuditEvent(input, identity, deviceId, appVersion);
-      setEvents((prev) => pruneAuditEvents([...prev, event], TEAM_AUDIT_QUEUE_LIMIT));
+      if (options.immediateSync && syncEnabled && identity?.accessToken) {
+        setLastError(null);
+        void sendSnapshot([event])
+          .then(() => {
+            setLastSyncAt(Date.now());
+          })
+          .catch((error) => {
+            setLastError(error instanceof Error ? error.message : String(error));
+            onError?.(error);
+            enqueueEvent(event);
+          });
+        return event;
+      }
+      enqueueEvent(event);
       return event;
     },
-    [appVersion, deviceId, enabled, identity]
+    [appVersion, deviceId, enabled, enqueueEvent, identity, onError, sendSnapshot, syncEnabled]
   );
 
   const clear = useCallback(async () => {
@@ -202,21 +247,7 @@ export function useAuditLog({
     setLastError(null);
     try {
       const snapshot = events.slice();
-      await cloudRequest<AuditSyncResponse>(
-        "/v1/audit/events",
-        {
-          method: "POST",
-          body: JSON.stringify({
-            teamId: identity.teamId,
-            events: snapshot,
-          }),
-        },
-        {
-          accessToken: identity.accessToken,
-          cloudUrl: cloudUrl || getNovaCloudUrl(),
-          fetchImpl,
-        }
-      );
+      await sendSnapshot(snapshot);
 
       setEvents((prev) => {
         const sentIds = new Set(snapshot.map((event) => event.id));
@@ -232,7 +263,7 @@ export function useAuditLog({
     } finally {
       setSyncing(false);
     }
-  }, [cloudUrl, enabled, events, fetchImpl, identity, onError, syncEnabled]);
+  }, [enabled, events, identity?.accessToken, onError, sendSnapshot, syncEnabled]);
 
   useEffect(() => {
     if (!enabled || !syncEnabled || !identity?.accessToken) {

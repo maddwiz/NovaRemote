@@ -40,6 +40,14 @@ type TeamSettings = {
   sessionTimeoutMinutes: number | null;
 };
 
+type TeamInviteResult = {
+  email: string;
+  role: TeamRole;
+  inviteCode?: string;
+  inviteLink?: string;
+  expiresAt?: string;
+};
+
 export function normalizeTeamIdentity(value: unknown): TeamIdentity | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -275,6 +283,13 @@ function normalizeTeamMembers(value: unknown): TeamMember[] {
   return Array.from(byId.values());
 }
 
+function hasTeamPermission(identity: TeamIdentity | null, permission: TeamPermission): boolean {
+  if (!identity) {
+    return false;
+  }
+  return identity.role === "admin" || identity.permissions.includes(permission);
+}
+
 export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: UseTeamAuthArgs = {}) {
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
@@ -494,6 +509,107 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     }
   }, [cloudUrl, fetchImpl, identity, onError, persistIdentity, refreshTeamContext]);
 
+  const inviteMember = useCallback(
+    async (input: { email: string; role?: TeamRole }): Promise<TeamInviteResult> => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before sending invites.");
+      }
+      if (!hasTeamPermission(identity, "team:invite")) {
+        throw new Error("You do not have permission to invite team members.");
+      }
+
+      const email = input.email.trim().toLowerCase();
+      const role = normalizeRole(input.role || "viewer");
+      if (!email) {
+        throw new Error("Invite email is required.");
+      }
+      if (!role) {
+        throw new Error("Invite role is invalid.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const payload = await cloudRequest<Record<string, unknown>>(
+          "/v1/team/invites",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              email,
+              role,
+            }),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        await refreshTeamContext(identity);
+        return {
+          email,
+          role,
+          inviteCode: normalizeOptionalString(payload.inviteCode || payload.code),
+          inviteLink: normalizeOptionalString(payload.inviteLink || payload.url),
+          expiresAt: normalizeOptionalString(payload.expiresAt || payload.expires_at),
+        };
+      } catch (inviteError) {
+        setError(inviteError instanceof Error ? inviteError.message : String(inviteError));
+        onError?.(inviteError);
+        throw inviteError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
+  const updateMemberRole = useCallback(
+    async (memberId: string, role: TeamRole) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before managing members.");
+      }
+      if (!hasTeamPermission(identity, "team:manage")) {
+        throw new Error("You do not have permission to manage team members.");
+      }
+
+      const normalizedMemberId = memberId.trim();
+      const normalizedRole = normalizeRole(role);
+      if (!normalizedMemberId) {
+        throw new Error("Member ID is required.");
+      }
+      if (!normalizedRole) {
+        throw new Error("Role is invalid.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        await cloudRequest<Record<string, unknown>>(
+          `/v1/team/members/${encodeURIComponent(normalizedMemberId)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify({ role: normalizedRole }),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        setTeamMembers((prev) => prev.map((member) => (member.id === normalizedMemberId ? { ...member, role: normalizedRole } : member)));
+        await refreshTeamContext(identity);
+      } catch (updateError) {
+        setError(updateError instanceof Error ? updateError.message : String(updateError));
+        onError?.(updateError);
+        throw updateError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
   useEffect(() => {
     if (!enabled || !identity) {
       if (!identity) {
@@ -511,10 +627,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
 
   const hasPermission = useCallback(
     (permission: TeamPermission) => {
-      if (!identity) {
-        return false;
-      }
-      return identity.role === "admin" || identity.permissions.includes(permission);
+      return hasTeamPermission(identity, permission);
     },
     [identity]
   );
@@ -534,6 +647,8 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       loginWithPassword,
       refreshTeamContext,
       refreshSession,
+      inviteMember,
+      updateMemberRole,
       logout,
       setIdentityForTesting: setIdentity,
     }),
@@ -546,11 +661,13 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       loading,
       loginWithPassword,
       logout,
+      inviteMember,
       refreshSession,
       refreshTeamContext,
       teamMembers,
       teamServers,
       teamSettings,
+      updateMemberRole,
     ]
   );
 }

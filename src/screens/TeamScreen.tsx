@@ -3,7 +3,22 @@ import { Pressable, Text, TextInput, View } from "react-native";
 
 import { TeamBadge } from "../components/TeamBadge";
 import { styles } from "../theme/styles";
-import { TeamIdentity, TeamMember } from "../types";
+import { TeamIdentity, TeamMember, TeamRole } from "../types";
+
+const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
+
+function nextMemberRole(role: TeamRole): TeamRole {
+  if (role === "viewer") {
+    return "operator";
+  }
+  if (role === "operator") {
+    return "admin";
+  }
+  if (role === "admin") {
+    return "viewer";
+  }
+  return "viewer";
+}
 
 type TeamScreenProps = {
   identity: TeamIdentity | null;
@@ -19,6 +34,10 @@ type TeamScreenProps = {
   onLogin?: (input: { email: string; password: string; inviteCode?: string }) => Promise<void>;
   onLogout?: () => Promise<void>;
   onRefresh?: () => void;
+  canInvite?: boolean;
+  canManage?: boolean;
+  onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
+  onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
 };
 
 export function TeamScreen({
@@ -31,11 +50,19 @@ export function TeamScreen({
   onLogin,
   onLogout,
   onRefresh,
+  canInvite = false,
+  canManage = false,
+  onInviteMember,
+  onChangeMemberRole,
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
   const [inviteCode, setInviteCode] = useState<string>("");
+  const [inviteEmail, setInviteEmail] = useState<string>("");
+  const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
+  const [teamStatus, setTeamStatus] = useState<string>("");
   const canLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
+  const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
 
   const handleLogin = useCallback(() => {
     if (!onLogin || !canLogin) {
@@ -56,6 +83,42 @@ export function TeamScreen({
     }
     void onLogout();
   }, [busy, onLogout]);
+
+  const handleInviteMember = useCallback(() => {
+    if (!onInviteMember || !canSubmitInvite) {
+      return;
+    }
+    setTeamStatus("");
+    void onInviteMember({
+      email: inviteEmail.trim().toLowerCase(),
+      role: inviteRole,
+    })
+      .then(() => {
+        setInviteEmail("");
+        setTeamStatus(`Invite sent to ${inviteEmail.trim().toLowerCase()} as ${inviteRole}.`);
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [canSubmitInvite, inviteEmail, inviteRole, onInviteMember]);
+
+  const handleChangeMemberRole = useCallback(
+    (member: TeamMember) => {
+      if (!onChangeMemberRole || !canManage || busy) {
+        return;
+      }
+      const nextRole = nextMemberRole(member.role);
+      setTeamStatus("");
+      void onChangeMemberRole(member.id, nextRole)
+        .then(() => {
+          setTeamStatus(`Updated ${member.email} to ${nextRole}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [busy, canManage, onChangeMemberRole]
+  );
 
   return (
     <View style={styles.panel}>
@@ -122,6 +185,49 @@ export function TeamScreen({
         </>
       ) : null}
       {authError ? <Text style={styles.emptyText}>{authError}</Text> : null}
+      {teamStatus ? <Text style={styles.emptyText}>{teamStatus}</Text> : null}
+
+      {identity && canInvite && onInviteMember ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>Invite Member</Text>
+          <TextInput
+            style={styles.input}
+            value={inviteEmail}
+            onChangeText={setInviteEmail}
+            autoCapitalize="none"
+            autoCorrect={false}
+            keyboardType="email-address"
+            placeholder="member email"
+            placeholderTextColor="#7f7aa8"
+            accessibilityLabel="Team invite email"
+          />
+          <View style={styles.modeRow}>
+            {INVITE_ROLE_OPTIONS.map((role) => {
+              const selected = inviteRole === role;
+              return (
+                <Pressable
+                  key={role}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Invite role ${role}`}
+                  style={[styles.modeButton, selected ? styles.modeButtonOn : null]}
+                  onPress={() => setInviteRole(role)}
+                >
+                  <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{role}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Send team invite"
+            style={[styles.buttonPrimary, !canSubmitInvite ? styles.buttonDisabled : null]}
+            onPress={handleInviteMember}
+            disabled={!canSubmitInvite}
+          >
+            <Text style={styles.buttonPrimaryText}>{busy ? "Sending..." : "Send Invite"}</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {identity ? (
         <View style={styles.rowInlineSpace}>
@@ -159,6 +265,17 @@ export function TeamScreen({
               <Text style={styles.serverName}>{member.name}</Text>
               <Text style={styles.serverUrl}>{member.email}</Text>
               <Text style={styles.emptyText}>{`Role: ${member.role}`}</Text>
+              {canManage && onChangeMemberRole ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Change role for ${member.email}`}
+                  style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                  onPress={() => handleChangeMemberRole(member)}
+                  disabled={busy}
+                >
+                  <Text style={styles.actionButtonText}>{`Set ${nextMemberRole(member.role)}`}</Text>
+                </Pressable>
+              ) : null}
             </View>
           ))}
         </View>

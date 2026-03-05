@@ -1,9 +1,35 @@
-import { describe, expect, it, vi } from "vitest";
+import React from "react";
+import TestRenderer, { act } from "react-test-renderer";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const secureStoreMock = vi.hoisted(() => {
+  const storage = new Map<string, string>();
+  return {
+    storage,
+    getItemAsync: vi.fn(async (key: string) => storage.get(key) ?? null),
+    setItemAsync: vi.fn(async (key: string, value: string) => {
+      storage.set(key, value);
+    }),
+    deleteItemAsync: vi.fn(async (key: string) => {
+      storage.delete(key);
+    }),
+  };
+});
+
+const cloudClientMock = vi.hoisted(() => ({
+  cloudRequest: vi.fn(async () => ({})),
+  getNovaCloudUrl: vi.fn(() => "https://cloud.novaremote.dev"),
+}));
 
 vi.mock("expo-secure-store", () => ({
-  getItemAsync: vi.fn(async () => null),
-  setItemAsync: vi.fn(async () => {}),
-  deleteItemAsync: vi.fn(async () => {}),
+  getItemAsync: secureStoreMock.getItemAsync,
+  setItemAsync: secureStoreMock.setItemAsync,
+  deleteItemAsync: secureStoreMock.deleteItemAsync,
+}));
+
+vi.mock("../api/cloudClient", () => ({
+  cloudRequest: cloudClientMock.cloudRequest,
+  getNovaCloudUrl: cloudClientMock.getNovaCloudUrl,
 }));
 
 vi.mock("../constants", async (importOriginal) => {
@@ -14,7 +40,7 @@ vi.mock("../constants", async (importOriginal) => {
   };
 });
 
-import { auditLogTestUtils } from "./useAuditLog";
+import { auditLogTestUtils, useAuditLog } from "./useAuditLog";
 import { AuditEvent, TeamIdentity } from "../types";
 
 const identity: TeamIdentity = {
@@ -30,6 +56,44 @@ const identity: TeamIdentity = {
   tokenExpiresAt: Date.now() + 60_000,
   refreshToken: "refresh",
 };
+
+let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
+
+type AuditLogHandle = {
+  record: (...args: unknown[]) => unknown;
+  syncNow: () => Promise<{ synced: number; remaining: number }>;
+  pendingCount: number;
+  events: AuditEvent[];
+};
+
+async function flush() {
+  await act(async () => {
+    await Promise.resolve();
+  });
+}
+
+beforeEach(() => {
+  secureStoreMock.storage.clear();
+  secureStoreMock.getItemAsync.mockClear();
+  secureStoreMock.setItemAsync.mockClear();
+  secureStoreMock.deleteItemAsync.mockClear();
+  cloudClientMock.cloudRequest.mockClear();
+  cloudClientMock.cloudRequest.mockResolvedValue({});
+  consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
+    const joined = args.map((value) => String(value)).join(" ");
+    if (joined.includes("react-test-renderer is deprecated")) {
+      return;
+    }
+    process.stderr.write(`${joined}\n`);
+  });
+  vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
+});
+
+afterEach(() => {
+  consoleErrorSpy?.mockRestore();
+  consoleErrorSpy = null;
+  vi.unstubAllGlobals();
+});
 
 describe("audit log helpers", () => {
   it("builds normalized audit events", () => {
@@ -101,3 +165,130 @@ describe("audit log helpers", () => {
     expect(pruned.map((entry) => entry.id)).toEqual(["2", "3"]);
   });
 });
+
+describe("useAuditLog", () => {
+  it("syncs dangerous events immediately when requested", async () => {
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: true }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      latest?.record(
+        {
+          action: "command_dangerous_approved",
+          serverId: "server-1",
+          serverName: "DGX",
+          session: "main",
+          detail: "dangerous command",
+          approved: true,
+        },
+        { immediateSync: true }
+      );
+    });
+    await flush();
+
+    expect(cloudClientMock.cloudRequest).toHaveBeenCalledTimes(1);
+    const call = (cloudClientMock.cloudRequest.mock.calls[0] as unknown[]) || [];
+    const init = (call[1] as { body?: string } | undefined) || undefined;
+    const body = String(init?.body || "{}");
+    const payload = JSON.parse(body) as { events?: AuditEvent[] };
+    expect(payload.events?.[0]?.action).toBe("command_dangerous_approved");
+    expect(latestOrThrow(latest).pendingCount).toBe(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("falls back to queue if immediate sync fails", async () => {
+    cloudClientMock.cloudRequest.mockRejectedValueOnce(new Error("500 sync failure"));
+    const onError = vi.fn();
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: true, onError }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      latest?.record(
+        {
+          action: "command_dangerous_denied",
+          detail: "blocked",
+          approved: false,
+        },
+        { immediateSync: true }
+      );
+    });
+    await flush();
+
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect(latestOrThrow(latest).pendingCount).toBe(1);
+    expect(latestOrThrow(latest).events[0]?.action).toBe("command_dangerous_denied");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("syncs queued events through syncNow", async () => {
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: true }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      latest?.record({
+        action: "command_sent",
+        serverId: "server-1",
+        serverName: "DGX",
+        session: "main",
+        detail: "ls -la",
+      });
+    });
+    await flush();
+    expect(latestOrThrow(latest).pendingCount).toBe(1);
+
+    await act(async () => {
+      await latest?.syncNow();
+    });
+    await flush();
+
+    expect(latestOrThrow(latest).pendingCount).toBe(0);
+    expect(cloudClientMock.cloudRequest).toHaveBeenCalled();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+});
+
+function latestOrThrow(value: AuditLogHandle | null): AuditLogHandle {
+  if (!value) {
+    throw new Error("Hook did not initialize.");
+  }
+  return value;
+}

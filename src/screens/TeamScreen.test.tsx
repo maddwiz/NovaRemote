@@ -3,6 +3,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TeamScreen } from "./TeamScreen";
+import { TeamIdentity } from "../types";
 
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
@@ -24,6 +25,20 @@ afterEach(() => {
 });
 
 describe("TeamScreen", () => {
+  const identity: TeamIdentity = {
+    provider: "novaremote_cloud" as const,
+    userId: "user-1",
+    email: "dev@example.com",
+    displayName: "Dev",
+    teamId: "team-1",
+    teamName: "Ops",
+    role: "admin" as const,
+    permissions: ["team:manage", "team:invite"],
+    accessToken: "token",
+    tokenExpiresAt: Date.now() + 1000,
+    refreshToken: "refresh",
+  };
+
   it("submits login payload from team login form", async () => {
     const onLogin = vi.fn(async () => undefined);
     let renderer: TestRenderer.ReactTestRenderer | null = null;
@@ -67,19 +82,7 @@ describe("TeamScreen", () => {
     await act(async () => {
       renderer = TestRenderer.create(
         <TeamScreen
-          identity={{
-            provider: "novaremote_cloud",
-            userId: "user-1",
-            email: "dev@example.com",
-            displayName: "Dev",
-            teamId: "team-1",
-            teamName: "Ops",
-            role: "admin",
-            permissions: ["team:manage"],
-            accessToken: "token",
-            tokenExpiresAt: Date.now() + 1000,
-            refreshToken: "refresh",
-          }}
+          identity={identity}
           members={[
             {
               id: "member-1",
@@ -104,6 +107,76 @@ describe("TeamScreen", () => {
       renderer?.root.findByProps({ accessibilityLabel: "Sign out from team account" }).props.onPress();
     });
     expect(onLogout).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("submits invite payload with selected role", async () => {
+    const onInviteMember = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          loading={false}
+          busy={false}
+          canInvite
+          onInviteMember={onInviteMember}
+        />
+      );
+    });
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Team invite email" }).props.onChangeText("ALICE@EXAMPLE.COM");
+      renderer?.root.findByProps({ accessibilityLabel: "Invite role operator" }).props.onPress();
+    });
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Send team invite" }).props.onPress();
+    });
+
+    expect(onInviteMember).toHaveBeenCalledWith({
+      email: "alice@example.com",
+      role: "operator",
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("routes member role changes when management is enabled", async () => {
+    const onChangeMemberRole = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[
+            {
+              id: "member-1",
+              name: "Alice",
+              email: "alice@example.com",
+              role: "viewer",
+            },
+          ]}
+          loading={false}
+          busy={false}
+          canManage
+          onChangeMemberRole={onChangeMemberRole}
+        />
+      );
+    });
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Change role for alice@example.com" }).props.onPress();
+    });
+
+    expect(onChangeMemberRole).toHaveBeenCalledWith("member-1", "operator");
 
     await act(async () => {
       renderer?.unmount();

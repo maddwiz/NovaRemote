@@ -688,7 +688,10 @@ export default function AppShell() {
     teamMembers,
     teamSettings,
     error: teamAuthError,
+    hasPermission: hasTeamPermission,
     loginWithPassword: loginTeamWithPassword,
+    inviteMember: inviteTeamMember,
+    updateMemberRole: updateTeamMemberRole,
     logout: logoutTeam,
     refreshTeamContext,
   } = useTeamAuth({
@@ -3659,6 +3662,8 @@ export default function AppShell() {
               loading={teamLoading}
               busy={teamBusy}
               authError={teamAuthError}
+              canInvite={hasTeamPermission("team:invite")}
+              canManage={hasTeamPermission("team:manage")}
               onLogin={async (input) => {
                 await runWithStatus("Signing in to team", async () => {
                   markActivity();
@@ -3668,6 +3673,30 @@ export default function AppShell() {
                     serverId: "",
                     serverName: "team",
                     detail: `team_login=${input.email.toLowerCase()}`,
+                  });
+                });
+              }}
+              onInviteMember={async ({ email, role }) => {
+                await runWithStatus(`Sending invite to ${email}`, async () => {
+                  markActivity();
+                  await inviteTeamMember({ email, role });
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_invite=${email.toLowerCase()}:${role}`,
+                  });
+                });
+              }}
+              onChangeMemberRole={async (memberId, role) => {
+                await runWithStatus("Updating team member role", async () => {
+                  markActivity();
+                  await updateTeamMemberRole(memberId, role);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_role_update=${memberId}:${role}`,
                   });
                 });
               }}
@@ -4008,7 +4037,7 @@ export default function AppShell() {
             session: focusedSession || "",
             detail: `${dangerPrompt.context}: ${dangerPrompt.command}`.slice(0, 400),
             approved: false,
-          });
+          }, { immediateSync: true });
           setDangerPrompt({ visible: false, command: "", context: "" });
           const resolver = dangerResolverRef.current;
           dangerResolverRef.current = null;
@@ -4022,7 +4051,7 @@ export default function AppShell() {
             session: focusedSession || "",
             detail: `${dangerPrompt.context}: ${dangerPrompt.command}`.slice(0, 400),
             approved: true,
-          });
+          }, { immediateSync: true });
           setDangerPrompt({ visible: false, command: "", context: "" });
           const resolver = dangerResolverRef.current;
           dangerResolverRef.current = null;
