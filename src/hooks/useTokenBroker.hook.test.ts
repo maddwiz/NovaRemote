@@ -9,6 +9,7 @@ import { useTokenBroker } from "./useTokenBroker";
 type TokenBrokerHandle = {
   tokenCache: Record<string, { token: string; expiresAt: number; permissions: string[] }>;
   brokeredServers: ServerProfile[];
+  provisionServerToken: (server: ServerProfile) => Promise<unknown>;
 };
 
 const secureStoreMock = vi.hoisted(() => {
@@ -84,6 +85,17 @@ beforeEach(() => {
   secureStoreMock.setItemAsync.mockClear();
   secureStoreMock.deleteItemAsync.mockClear();
   cloudClientMock.cloudRequest.mockClear();
+  cloudClientMock.cloudRequest.mockImplementation(async (...args: unknown[]) => {
+    const path = String(args[0] || "");
+    if (path === "/v1/tokens/provision") {
+      return {
+        token: "ephemeral-token",
+        expiresAt: Date.now() + 60 * 60 * 1000,
+        permissions: ["read", "execute"],
+      };
+    }
+    return {};
+  });
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const joined = args.map((value) => String(value)).join(" ");
     if (joined.includes("react-test-renderer is deprecated")) {
@@ -101,6 +113,48 @@ afterEach(() => {
 });
 
 describe("useTokenBroker hook", () => {
+  it("provisions team tokens and derives runtime permission levels", async () => {
+    const teamServer = buildServer();
+    const localServer: ServerProfile = {
+      id: "local-server",
+      name: "Local",
+      baseUrl: "https://local.example.com",
+      token: "local-token",
+      defaultCwd: "/workspace",
+      source: "local",
+    };
+    let latest: TokenBrokerHandle | null = null;
+
+    function Harness({ identity }: { identity: TeamIdentity | null }) {
+      latest = useTokenBroker({
+        identity,
+        servers: [teamServer, localServer],
+        enabled: true,
+      }) as TokenBrokerHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness, { identity: buildIdentity() }));
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).provisionServerToken(teamServer);
+    });
+    await flush();
+
+    expect(latestOrThrow(latest).tokenCache["team-server-1"]?.token).toBe("ephemeral-token");
+    expect(latestOrThrow(latest).brokeredServers.find((entry) => entry.id === "team-server-1")?.token).toBe("ephemeral-token");
+    expect(latestOrThrow(latest).brokeredServers.find((entry) => entry.id === "team-server-1")?.permissionLevel).toBe("operator");
+    expect(latestOrThrow(latest).brokeredServers.find((entry) => entry.id === "local-server")?.token).toBe("local-token");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("clears cached broker tokens when team identity is removed", async () => {
     secureStoreMock.storage.set(
       STORAGE_TOKEN_BROKER_CACHE,
