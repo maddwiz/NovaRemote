@@ -87,6 +87,7 @@ Updated: 2026-03-05
   - [x] in-app team policy controls for danger confirm, fleet approval, session recording, timeout, and blocklist
   - [x] enforce session-recording policy
   - [x] enforce fleet-execution policy approval gate with in-app request/review actions
+  - [x] fleet-approval review notes captured in TeamScreen and forwarded to approve/deny actions
   - [x] derive runtime server permission level from broker token permissions
 
 ## v2.0+ NovaAdapt / Team Roadmap

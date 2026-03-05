@@ -435,13 +435,19 @@ describe("TeamScreen", () => {
       );
     });
 
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Fleet approval note approval-1" }).props.onChangeText("Looks safe");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
     await act(async () => {
       renderer?.root.findByProps({ accessibilityLabel: "Approve fleet request approval-1" }).props.onPress();
       renderer?.root.findByProps({ accessibilityLabel: "Deny fleet request approval-1" }).props.onPress();
     });
 
-    expect(onApproveFleetApproval).toHaveBeenCalledWith("approval-1");
-    expect(onDenyFleetApproval).toHaveBeenCalledWith("approval-1");
+    expect(onApproveFleetApproval).toHaveBeenCalledWith("approval-1", "Looks safe");
+    expect(onDenyFleetApproval).toHaveBeenCalledWith("approval-1", "Looks safe");
 
     await act(async () => {
       renderer?.unmount();

@@ -119,6 +119,7 @@ export function TeamScreen({
   const [memberQuery, setMemberQuery] = useState<string>("");
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | TeamRole>("all");
   const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
+  const [fleetApprovalNotes, setFleetApprovalNotes] = useState<Record<string, string>>({});
   const [policyDangerConfirm, setPolicyDangerConfirm] = useState<boolean | null>(null);
   const [policyFleetApproval, setPolicyFleetApproval] = useState<boolean | null>(null);
   const [policySessionRecording, setPolicySessionRecording] = useState<boolean | null>(null);
@@ -158,6 +159,26 @@ export function TeamScreen({
       return next;
     });
   }, [members]);
+
+  useEffect(() => {
+    setFleetApprovalNotes((previous) => {
+      const next: Record<string, string> = {};
+      fleetApprovals.forEach((approval) => {
+        next[approval.id] = previous[approval.id] || "";
+      });
+      const previousKeys = Object.keys(previous);
+      const nextKeys = Object.keys(next);
+      if (previousKeys.length !== nextKeys.length) {
+        return next;
+      }
+      for (const key of nextKeys) {
+        if (previous[key] !== next[key]) {
+          return next;
+        }
+      }
+      return previous;
+    });
+  }, [fleetApprovals]);
 
   useEffect(() => {
     if (!identity || !settings) {
@@ -283,7 +304,8 @@ export function TeamScreen({
         return;
       }
       setTeamStatus("");
-      void onApproveFleetApproval(approval.id)
+      const note = fleetApprovalNotes[approval.id]?.trim() || undefined;
+      void onApproveFleetApproval(approval.id, note)
         .then(() => {
           setTeamStatus(`Approved fleet request ${approval.id}.`);
         })
@@ -291,7 +313,7 @@ export function TeamScreen({
           setTeamStatus(error instanceof Error ? error.message : String(error));
         });
     },
-    [canReviewFleetApprovals, onApproveFleetApproval]
+    [canReviewFleetApprovals, fleetApprovalNotes, onApproveFleetApproval]
   );
 
   const handleDenyFleetApproval = useCallback(
@@ -300,7 +322,8 @@ export function TeamScreen({
         return;
       }
       setTeamStatus("");
-      void onDenyFleetApproval(approval.id)
+      const note = fleetApprovalNotes[approval.id]?.trim() || undefined;
+      void onDenyFleetApproval(approval.id, note)
         .then(() => {
           setTeamStatus(`Denied fleet request ${approval.id}.`);
         })
@@ -308,7 +331,7 @@ export function TeamScreen({
           setTeamStatus(error instanceof Error ? error.message : String(error));
         });
     },
-    [canReviewFleetApprovals, onDenyFleetApproval]
+    [canReviewFleetApprovals, fleetApprovalNotes, onDenyFleetApproval]
   );
 
   const handleSyncAudit = useCallback(() => {
@@ -781,6 +804,22 @@ export function TeamScreen({
               {approval.note ? <Text style={styles.emptyText}>{`Note: ${approval.note}`}</Text> : null}
               {approval.status === "pending" ? (
                 <View style={styles.rowInlineSpace}>
+                  <TextInput
+                    style={styles.input}
+                    value={fleetApprovalNotes[approval.id] || ""}
+                    onChangeText={(text) =>
+                      setFleetApprovalNotes((previous) => ({
+                        ...previous,
+                        [approval.id]: text,
+                      }))
+                    }
+                    autoCapitalize="sentences"
+                    autoCorrect
+                    placeholder="review note (optional)"
+                    placeholderTextColor="#7f7aa8"
+                    editable={canReviewFleetApprovals}
+                    accessibilityLabel={`Fleet approval note ${approval.id}`}
+                  />
                   {onApproveFleetApproval ? (
                     <Pressable
                       accessibilityRole="button"
