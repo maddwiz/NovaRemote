@@ -33,23 +33,23 @@ Updated: 2026-03-05
 
 ## v1.3.1 Hands-Free Voice Session + Panel Management (Glasses/VR)
 
-- [ ] Spatial voice routing additions:
-  - [ ] `create_session` (`ai`/`shell`) with target-server resolution
-  - [ ] `close_panel`
-  - [ ] `resize_panel` (`double`/`half`/`fullscreen`/`normal`)
-  - [ ] `move_panel`
-  - [ ] `swap_panels`
-- [ ] Preserve parser priority order so `open codex` resolves to `create_session` (not focus/send fallback)
-- [ ] Expose cross-server session creation through app context/view model (`onCreateSession(serverId, kind)`)
-- [ ] Glasses route handling for new actions (create/close/resize/move/swap)
-- [ ] Spatial panel state additions:
-  - [ ] per-panel scale
-  - [ ] fullscreen panel mode
-  - [ ] per-panel position map with move/swap helpers
-- [ ] `SpatialTerminalLayout` fullscreen render path + scale support
-- [ ] Tests:
-  - [ ] `useSpatialVoiceRouting.test.ts` coverage for all new commands and priority guarantees
-  - [ ] Glasses route integration tests for create/close/resize/move/swap flows
+- [x] Spatial voice routing additions:
+  - [x] `create_session` (`ai`/`shell`) with target-server resolution
+  - [x] `close_panel`
+  - [x] `resize_panel` (`double`/`half`/`fullscreen`/`normal`)
+  - [x] `move_panel`
+  - [x] `swap_panels`
+- [x] Preserve parser priority order so `open codex` resolves to `create_session` (not focus/send fallback)
+- [x] Expose cross-server session creation through app context/view model (`onCreateSession(serverId, kind)`)
+- [x] Glasses route handling for new actions (create/close/resize/move/swap)
+- [x] Spatial panel state additions:
+  - [x] per-panel scale
+  - [x] fullscreen panel mode
+  - [x] per-panel position map with move/swap helpers
+- [x] `SpatialTerminalLayout` fullscreen render path + scale support
+- [x] Tests:
+  - [x] `useSpatialVoiceRouting.test.ts` coverage for new commands and command-order behavior
+  - [x] Glasses route integration tests for create/close/resize/move/swap flows
 
 ## v1.4 VR Command Center
 
@@ -64,17 +64,23 @@ Updated: 2026-03-05
 
 ## v1.6 Team MVP (Enterprise Foundation)
 
-- [ ] `useTeamAuth` (team login, identity lifecycle, invite-code flow for `novaremote_cloud`)
-- [ ] `useTokenBroker` (ephemeral per-server tokens + auto-refresh + revocation behavior)
-- [ ] Team-aware server source model (`local` vs `team`) in `useServers`
-- [ ] Team server governance:
-  - [ ] non-admin edit/delete restrictions for team-managed servers
-  - [ ] permission-level badges/metadata in server UX
-- [ ] `useAuditLog` local queue + periodic cloud sync
-- [ ] Wire audit events into command, fleet, file, process, and safety confirmation flows
-- [ ] Team screen (read-only MVP): members + roles + team context
-- [ ] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
-- [ ] Team-enforced safety policy overrides (managed settings cannot be disabled locally)
+- [x] `useTeamAuth` (team login, identity lifecycle, invite-code flow for `novaremote_cloud`)
+- [x] `useTokenBroker` (ephemeral per-server tokens + auto-refresh + revocation behavior)
+- [x] Team-aware server source model (`local` vs `team`) in `useServers`
+- [x] Team server governance:
+  - [x] non-admin edit/delete restrictions for team-managed servers
+  - [x] permission-level badges/metadata in server UX
+- [x] `useAuditLog` local queue + periodic cloud sync
+- [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
+- [x] Team screen in app with login, members, roles, invites, usage, and audit sync controls
+- [~] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
+- [x] Team-enforced safety policy overrides (managed settings cannot be disabled locally)
+- [x] Team policy/runtime additions:
+  - [x] auto-refresh team identity session
+  - [x] clear broker cache on logout
+  - [x] immediate dangerous-command audit sync
+  - [x] enforce session-recording policy
+  - [x] derive runtime server permission level from broker token permissions
 
 ## v2.0+ NovaAdapt / Team Roadmap
 
