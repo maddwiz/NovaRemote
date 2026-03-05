@@ -75,6 +75,45 @@ describe("TeamScreen", () => {
     });
   });
 
+  it("submits SSO login payload when SSO mode is selected", async () => {
+    const onLoginSso = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={null}
+          members={[]}
+          loading={false}
+          busy={false}
+          onLoginSso={onLoginSso}
+        />
+      );
+    });
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Use SSO login" }).props.onPress();
+    });
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Set SSO provider saml" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Team SSO token" }).props.onChangeText("sso-token-1");
+      renderer?.root.findByProps({ accessibilityLabel: "Team invite code" }).props.onChangeText("TEAM-INVITE");
+    });
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Sign in to team account" }).props.onPress();
+    });
+
+    expect(onLoginSso).toHaveBeenCalledWith({
+      provider: "saml",
+      idToken: "sso-token-1",
+      inviteCode: "TEAM-INVITE",
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("renders team details and routes sign-out", async () => {
     const onLogout = vi.fn(async () => undefined);
     let renderer: TestRenderer.ReactTestRenderer | null = null;

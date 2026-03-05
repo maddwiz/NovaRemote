@@ -692,6 +692,7 @@ export default function AppShell() {
     error: teamAuthError,
     hasPermission: hasTeamPermission,
     loginWithPassword: loginTeamWithPassword,
+    loginWithSso: loginTeamWithSso,
     inviteMember: inviteTeamMember,
     updateMemberRole: updateTeamMemberRole,
     requestFleetApproval,
@@ -3782,6 +3783,18 @@ export default function AppShell() {
                     serverId: "",
                     serverName: "team",
                     detail: `team_login=${input.email.toLowerCase()}`,
+                  });
+                });
+              }}
+              onLoginSso={async (input) => {
+                await runWithStatus(`Signing in to team (${input.provider.toUpperCase()})`, async () => {
+                  markActivity();
+                  await loginTeamWithSso(input);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_login_sso=${input.provider}`,
                   });
                 });
               }}

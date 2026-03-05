@@ -94,7 +94,7 @@ Updated: 2026-03-05
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
 - [ ] Enterprise IAM expansion:
-  - [~] SSO (`SAML`/`OIDC`) app-side token-exchange hook added; provider dashboard + backend rollout remains pending
+  - [~] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode are implemented; provider dashboard + backend rollout remains pending
   - [~] in-app role/invite controls + member filtering are implemented; centralized cloud admin UX remains pending
 - [ ] Compliance expansion:
   - [~] team-managed session recording enforcement is in-app; cloud admin policy governance remains pending

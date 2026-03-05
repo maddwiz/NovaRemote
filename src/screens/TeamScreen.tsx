@@ -8,6 +8,8 @@ import { TeamFleetApproval, TeamIdentity, TeamMember, TeamRole } from "../types"
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_FILTER_OPTIONS: Array<"all" | TeamRole> = ["all", "viewer", "operator", "admin", "billing"];
+const TEAM_SSO_PROVIDERS = ["oidc", "saml"] as const;
+type TeamSsoProvider = (typeof TEAM_SSO_PROVIDERS)[number];
 
 type TeamScreenProps = {
   identity: TeamIdentity | null;
@@ -31,6 +33,7 @@ type TeamScreenProps = {
   busy: boolean;
   authError?: string | null;
   onLogin?: (input: { email: string; password: string; inviteCode?: string }) => Promise<void>;
+  onLoginSso?: (input: { provider: TeamSsoProvider; idToken?: string; accessToken?: string; inviteCode?: string }) => Promise<void>;
   onLogout?: () => Promise<void>;
   onRefresh?: () => void;
   canInvite?: boolean;
@@ -58,6 +61,7 @@ export function TeamScreen({
   busy,
   authError,
   onLogin,
+  onLoginSso,
   onLogout,
   onRefresh,
   canInvite = false,
@@ -75,13 +79,17 @@ export function TeamScreen({
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
   const [password, setPassword] = useState<string>("");
+  const [loginMethod, setLoginMethod] = useState<"password" | "sso">("password");
+  const [ssoProvider, setSsoProvider] = useState<TeamSsoProvider>("oidc");
+  const [ssoToken, setSsoToken] = useState<string>("");
   const [inviteCode, setInviteCode] = useState<string>("");
   const [inviteEmail, setInviteEmail] = useState<string>("");
   const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
   const [memberQuery, setMemberQuery] = useState<string>("");
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | TeamRole>("all");
   const [teamStatus, setTeamStatus] = useState<string>("");
-  const canLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
+  const canPasswordLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
+  const canSsoLogin = ssoToken.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
   const canReviewFleetApprovals = Boolean(identity && canManage && !busy && (onApproveFleetApproval || onDenyFleetApproval));
   const pendingFleetApprovals = fleetApprovals.filter((approval) => approval.status === "pending");
@@ -103,7 +111,7 @@ export function TeamScreen({
   });
 
   const handleLogin = useCallback(() => {
-    if (!onLogin || !canLogin) {
+    if (!onLogin || !canPasswordLogin) {
       return;
     }
     void onLogin({
@@ -113,7 +121,20 @@ export function TeamScreen({
     }).then(() => {
       setPassword("");
     });
-  }, [canLogin, email, inviteCode, onLogin, password]);
+  }, [canPasswordLogin, email, inviteCode, onLogin, password]);
+
+  const handleSsoLogin = useCallback(() => {
+    if (!onLoginSso || !canSsoLogin) {
+      return;
+    }
+    void onLoginSso({
+      provider: ssoProvider,
+      idToken: ssoToken.trim(),
+      inviteCode: inviteCode.trim() || undefined,
+    }).then(() => {
+      setSsoToken("");
+    });
+  }, [canSsoLogin, inviteCode, onLoginSso, ssoProvider, ssoToken]);
 
   const handleLogout = useCallback(() => {
     if (!onLogout || busy) {
@@ -242,28 +263,79 @@ export function TeamScreen({
       {!identity ? <Text style={styles.emptyText}>Sign in with your team account to view members and roles.</Text> : null}
       {!identity ? (
         <>
-          <TextInput
-            style={styles.input}
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            autoCorrect={false}
-            keyboardType="email-address"
-            placeholder="team email"
-            placeholderTextColor="#7f7aa8"
-            accessibilityLabel="Team login email"
-          />
-          <TextInput
-            style={styles.input}
-            value={password}
-            onChangeText={setPassword}
-            autoCapitalize="none"
-            autoCorrect={false}
-            secureTextEntry
-            placeholder="password"
-            placeholderTextColor="#7f7aa8"
-            accessibilityLabel="Team login password"
-          />
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use password login"
+              style={[styles.modeButton, loginMethod === "password" ? styles.modeButtonOn : null]}
+              onPress={() => setLoginMethod("password")}
+            >
+              <Text style={[styles.modeButtonText, loginMethod === "password" ? styles.modeButtonTextOn : null]}>password</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use SSO login"
+              style={[styles.modeButton, loginMethod === "sso" ? styles.modeButtonOn : null]}
+              onPress={() => setLoginMethod("sso")}
+            >
+              <Text style={[styles.modeButtonText, loginMethod === "sso" ? styles.modeButtonTextOn : null]}>sso</Text>
+            </Pressable>
+          </View>
+          {loginMethod === "password" ? (
+            <>
+              <TextInput
+                style={styles.input}
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                autoCorrect={false}
+                keyboardType="email-address"
+                placeholder="team email"
+                placeholderTextColor="#7f7aa8"
+                accessibilityLabel="Team login email"
+              />
+              <TextInput
+                style={styles.input}
+                value={password}
+                onChangeText={setPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
+                secureTextEntry
+                placeholder="password"
+                placeholderTextColor="#7f7aa8"
+                accessibilityLabel="Team login password"
+              />
+            </>
+          ) : (
+            <>
+              <View style={styles.modeRow}>
+                {TEAM_SSO_PROVIDERS.map((provider) => {
+                  const selected = ssoProvider === provider;
+                  return (
+                    <Pressable
+                      key={provider}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Set SSO provider ${provider}`}
+                      style={[styles.modeButton, selected ? styles.modeButtonOn : null]}
+                      onPress={() => setSsoProvider(provider)}
+                    >
+                      <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{provider}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+              <TextInput
+                style={styles.input}
+                value={ssoToken}
+                onChangeText={setSsoToken}
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="sso id/access token"
+                placeholderTextColor="#7f7aa8"
+                accessibilityLabel="Team SSO token"
+              />
+            </>
+          )}
           <TextInput
             style={styles.input}
             value={inviteCode}
@@ -277,11 +349,16 @@ export function TeamScreen({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Sign in to team account"
-            style={[styles.buttonPrimary, !canLogin ? styles.buttonDisabled : null]}
-            onPress={handleLogin}
-            disabled={!canLogin}
+            style={[
+              styles.buttonPrimary,
+              !(loginMethod === "password" ? canPasswordLogin : canSsoLogin) ? styles.buttonDisabled : null,
+            ]}
+            onPress={loginMethod === "password" ? handleLogin : handleSsoLogin}
+            disabled={!(loginMethod === "password" ? canPasswordLogin : canSsoLogin)}
           >
-            <Text style={styles.buttonPrimaryText}>{busy ? "Signing in..." : "Sign In"}</Text>
+            <Text style={styles.buttonPrimaryText}>
+              {busy ? "Signing in..." : loginMethod === "password" ? "Sign In" : `Sign In (${ssoProvider.toUpperCase()})`}
+            </Text>
           </Pressable>
         </>
       ) : null}
