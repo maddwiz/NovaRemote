@@ -40,6 +40,29 @@ function parseBlocklistInput(value: string): string[] {
   );
 }
 
+function formatMemberUsage(member: TeamMember): string | null {
+  const sessions = member.sessionsCreated || 0;
+  const commands = member.commandsSent || 0;
+  const fleet = member.fleetExecutions || 0;
+  const usageParts: string[] = [];
+  if (sessions > 0) {
+    usageParts.push(`sessions ${sessions}`);
+  }
+  if (commands > 0) {
+    usageParts.push(`commands ${commands}`);
+  }
+  if (fleet > 0) {
+    usageParts.push(`fleet ${fleet}`);
+  }
+  const hasUsage = usageParts.length > 0;
+  if (member.lastActiveAt) {
+    const asDate = new Date(member.lastActiveAt);
+    const lastActive = Number.isNaN(asDate.getTime()) ? member.lastActiveAt : asDate.toLocaleString();
+    return hasUsage ? `${usageParts.join(" • ")} • active ${lastActive}` : `active ${lastActive}`;
+  }
+  return hasUsage ? usageParts.join(" • ") : null;
+}
+
 type TeamScreenProps = {
   identity: TeamIdentity | null;
   members: TeamMember[];
@@ -886,62 +909,66 @@ export function TeamScreen({
       ) : null}
       {!loading && visibleMembers.length > 0 ? (
         <View style={styles.serverListWrap}>
-          {visibleMembers.map((member) => (
-            <View key={member.id} style={styles.serverCard}>
-              <Text style={styles.serverName}>{member.name}</Text>
-              <Text style={styles.serverUrl}>{member.email}</Text>
-              <Text style={styles.emptyText}>{`Role: ${member.role}`}</Text>
-              {canManage && onChangeMemberRole ? (
-                <View style={styles.modeRow}>
-                  {MEMBER_ROLE_OPTIONS.map((role) => {
-                    const selected = member.role === role;
-                    return (
-                      <Pressable
-                        key={`${member.id}:${role}`}
-                        accessibilityRole="button"
-                        accessibilityLabel={`Set ${member.email} to ${role}`}
-                        style={[styles.modeButton, selected ? styles.modeButtonOn : null, busy ? styles.buttonDisabled : null]}
-                        onPress={() => handleChangeMemberRole(member, role)}
-                        disabled={busy}
-                      >
-                        <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{role}</Text>
-                      </Pressable>
-                    );
-                  })}
-                </View>
-              ) : null}
-              {canManageMemberServers ? (
-                <View style={styles.serverCard}>
-                  <Text style={styles.serverSubtitle}>Server Access</Text>
+          {visibleMembers.map((member) => {
+            const usageText = formatMemberUsage(member);
+            return (
+              <View key={member.id} style={styles.serverCard}>
+                <Text style={styles.serverName}>{member.name}</Text>
+                <Text style={styles.serverUrl}>{member.email}</Text>
+                <Text style={styles.emptyText}>{`Role: ${member.role}`}</Text>
+                {usageText ? <Text style={styles.emptyText}>{`Usage: ${usageText}`}</Text> : null}
+                {canManage && onChangeMemberRole ? (
                   <View style={styles.modeRow}>
-                    {teamServers.map((server) => {
-                      const selected = selectedServerIdsForMember(member).includes(server.id);
+                    {MEMBER_ROLE_OPTIONS.map((role) => {
+                      const selected = member.role === role;
                       return (
                         <Pressable
-                          key={`${member.id}:${server.id}`}
+                          key={`${member.id}:${role}`}
                           accessibilityRole="button"
-                          accessibilityLabel={`Toggle ${member.email} access to ${server.name}`}
-                          style={[styles.modeButton, selected ? styles.modeButtonOn : null]}
-                          onPress={() => toggleMemberServerSelection(member.id, server.id)}
+                          accessibilityLabel={`Set ${member.email} to ${role}`}
+                          style={[styles.modeButton, selected ? styles.modeButtonOn : null, busy ? styles.buttonDisabled : null]}
+                          onPress={() => handleChangeMemberRole(member, role)}
+                          disabled={busy}
                         >
-                          <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{server.name}</Text>
+                          <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{role}</Text>
                         </Pressable>
                       );
                     })}
                   </View>
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Save server access for ${member.email}`}
-                    style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
-                    onPress={() => handleSaveMemberServers(member)}
-                    disabled={busy}
-                  >
-                    <Text style={styles.actionButtonText}>{busy ? "Saving..." : "Save Server Access"}</Text>
-                  </Pressable>
-                </View>
-              ) : null}
-            </View>
-          ))}
+                ) : null}
+                {canManageMemberServers ? (
+                  <View style={styles.serverCard}>
+                    <Text style={styles.serverSubtitle}>Server Access</Text>
+                    <View style={styles.modeRow}>
+                      {teamServers.map((server) => {
+                        const selected = selectedServerIdsForMember(member).includes(server.id);
+                        return (
+                          <Pressable
+                            key={`${member.id}:${server.id}`}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Toggle ${member.email} access to ${server.name}`}
+                            style={[styles.modeButton, selected ? styles.modeButtonOn : null]}
+                            onPress={() => toggleMemberServerSelection(member.id, server.id)}
+                          >
+                            <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{server.name}</Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Save server access for ${member.email}`}
+                      style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                      onPress={() => handleSaveMemberServers(member)}
+                      disabled={busy}
+                    >
+                      <Text style={styles.actionButtonText}>{busy ? "Saving..." : "Save Server Access"}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            );
+          })}
         </View>
       ) : null}
       {!loading && identity && members.length > 0 && visibleMembers.length === 0 ? (

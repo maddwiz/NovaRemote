@@ -101,6 +101,10 @@ export type TeamMember = {
   email: string;
   role: TeamRole;
   serverIds?: string[];
+  sessionsCreated?: number;
+  commandsSent?: number;
+  fleetExecutions?: number;
+  lastActiveAt?: string;
 };
 
 export type TeamFleetApprovalStatus = "pending" | "approved" | "denied" | "expired";

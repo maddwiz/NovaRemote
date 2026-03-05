@@ -366,6 +366,16 @@ function normalizeTeamMember(value: unknown): TeamMember | null {
   const serverIds = Array.isArray(rawServerIds)
     ? rawServerIds.map((entry: unknown) => normalizeRequiredString(entry)).filter(Boolean)
     : [];
+  const sessionsCreated = normalizeCount(
+    parsed.sessionsCreated ?? parsed.sessions_created ?? parsed.sessions ?? parsed.sessionCount ?? parsed.sessions_count
+  );
+  const commandsSent = normalizeCount(
+    parsed.commandsSent ?? parsed.commands_sent ?? parsed.commands ?? parsed.commandCount ?? parsed.commands_count
+  );
+  const fleetExecutions = normalizeCount(
+    parsed.fleetExecutions ?? parsed.fleet_executions ?? parsed.fleetRuns ?? parsed.fleet_runs ?? parsed.fleetCount
+  );
+  const lastActiveAt = normalizeOptionalString(parsed.lastActiveAt || parsed.last_active_at);
   if (!id || !name || !email) {
     return null;
   }
@@ -375,6 +385,10 @@ function normalizeTeamMember(value: unknown): TeamMember | null {
     email,
     role,
     serverIds,
+    sessionsCreated,
+    commandsSent,
+    fleetExecutions,
+    lastActiveAt,
   };
 }
 
@@ -392,6 +406,17 @@ function normalizeTeamMembers(value: unknown): TeamMember[] {
       byId.set(normalized.id, {
         ...normalized,
         serverIds: nextServerIds,
+        sessionsCreated:
+          normalized.sessionsCreated && normalized.sessionsCreated > 0
+            ? normalized.sessionsCreated
+            : previous?.sessionsCreated || 0,
+        commandsSent:
+          normalized.commandsSent && normalized.commandsSent > 0 ? normalized.commandsSent : previous?.commandsSent || 0,
+        fleetExecutions:
+          normalized.fleetExecutions && normalized.fleetExecutions > 0
+            ? normalized.fleetExecutions
+            : previous?.fleetExecutions || 0,
+        lastActiveAt: normalized.lastActiveAt || previous?.lastActiveAt,
       });
     }
   });

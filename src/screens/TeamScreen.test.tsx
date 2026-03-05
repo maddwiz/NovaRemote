@@ -277,6 +277,37 @@ describe("TeamScreen", () => {
     });
   });
 
+  it("renders per-member usage metrics when available", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[
+            {
+              id: "member-1",
+              name: "Alice",
+              email: "alice@example.com",
+              role: "viewer",
+              sessionsCreated: 4,
+              commandsSent: 20,
+              fleetExecutions: 1,
+            },
+          ]}
+          loading={false}
+          busy={false}
+        />
+      );
+    });
+
+    expect(() => renderer?.root.findByProps({ children: "Usage: sessions 4 • commands 20 • fleet 1" })).not.toThrow();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("routes member server-assignment changes when management is enabled", async () => {
     const onSetMemberServers = vi.fn(async () => undefined);
     let renderer: TestRenderer.ReactTestRenderer | null = null;

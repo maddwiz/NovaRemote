@@ -117,13 +117,28 @@ describe("team auth helpers", () => {
     });
 
     const members = teamAuthTestUtils.normalizeTeamMembers([
-      { id: "m1", name: "Alice", email: "alice@example.com", role: "admin", serverIds: ["dgx"] },
+      {
+        id: "m1",
+        name: "Alice",
+        email: "alice@example.com",
+        role: "admin",
+        serverIds: ["dgx"],
+        sessionsCreated: 10,
+        commandsSent: 120,
+        fleetExecutions: 3,
+        lastActiveAt: "2026-03-05T00:00:00.000Z",
+      },
       { id: "m1", name: "Alice Duplicate", email: "alice@example.com", role: "viewer" },
-      { id: "m2", name: "Bob", email: "bob@example.com", role: "operator" },
+      { id: "m2", name: "Bob", email: "bob@example.com", role: "operator", commandsSent: 4 },
     ]);
     expect(members).toHaveLength(2);
     expect(members.find((entry) => entry.id === "m2")?.role).toBe("operator");
+    expect(members.find((entry) => entry.id === "m2")?.commandsSent).toBe(4);
     expect(members.find((entry) => entry.id === "m1")?.serverIds).toEqual(["dgx"]);
+    expect(members.find((entry) => entry.id === "m1")?.sessionsCreated).toBe(10);
+    expect(members.find((entry) => entry.id === "m1")?.commandsSent).toBe(120);
+    expect(members.find((entry) => entry.id === "m1")?.fleetExecutions).toBe(3);
+    expect(members.find((entry) => entry.id === "m1")?.lastActiveAt).toBe("2026-03-05T00:00:00.000Z");
 
     const approvals = teamAuthTestUtils.normalizeFleetApprovals([
       {

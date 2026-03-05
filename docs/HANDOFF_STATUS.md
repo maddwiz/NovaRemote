@@ -75,6 +75,7 @@ Updated: 2026-03-05
 - [x] In-app audit queue export actions (`JSON` / `CSV`)
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
 - [x] Team screen in app with login, members, roles, invites, usage, and audit sync controls
+- [x] Per-member usage telemetry surfaced in TeamScreen cards (sessions/commands/fleet)
 - [x] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
 - [x] RevenueCat entitlement tier recognition (`pro`/`team`/`enterprise`) in app gating state
 - [x] Tier-aware paywall upgrade actions for Pro/Team/Enterprise (when package offerings are configured)
