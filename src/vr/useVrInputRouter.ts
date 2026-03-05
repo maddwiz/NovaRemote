@@ -28,6 +28,11 @@ export type UseVrInputRouterArgs = {
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
   onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onRemoveAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onSetAgentStatus?: (
+    serverIds: string[],
+    name: string,
+    status: "idle" | "monitoring" | "executing" | "waiting_approval"
+  ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onSetAgentGoal?: (
     serverIds: string[],
     name: string,
@@ -86,6 +91,7 @@ export function useVrInputRouter({
   onReconnectServers,
   onCreateAgent,
   onRemoveAgent,
+  onSetAgentStatus,
   onSetAgentGoal,
   onQueueAgentCommand,
   onApproveReadyAgents,
@@ -351,6 +357,38 @@ export function useVrInputRouter({
         } catch (error) {
           publishHudStatus({
             message: error instanceof Error ? error.message : "Failed to remove agent",
+            severity: "error",
+            at: now(),
+          });
+        }
+        return action;
+      }
+
+      if (action.kind === "set_agent_status") {
+        if (!onSetAgentStatus) {
+          publishHudStatus({
+            message: "Agent status routing is unavailable",
+            severity: "warning",
+            at: now(),
+          });
+          return action;
+        }
+        try {
+          const result = await onSetAgentStatus(action.serverIds, action.name, action.status);
+          const count = resolveActionCount(result);
+          publishHudStatus({
+            message:
+              count === 0
+                ? `No agent statuses updated for ${action.name}`
+                : count === null
+                  ? `Set status for ${action.name}`
+                  : `Set status for ${count} agent${count === 1 ? "" : "s"}`,
+            severity: count === 0 ? "warning" : "success",
+            at: now(),
+          });
+        } catch (error) {
+          publishHudStatus({
+            message: error instanceof Error ? error.message : "Failed to update agent status",
             severity: "error",
             at: now(),
           });
@@ -709,6 +747,7 @@ export function useVrInputRouter({
       onReconnectServers,
       onCreateAgent,
       onRemoveAgent,
+      onSetAgentStatus,
       onSetAgentGoal,
       onQueueAgentCommand,
       onSendCommand,

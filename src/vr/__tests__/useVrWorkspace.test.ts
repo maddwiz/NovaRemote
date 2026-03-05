@@ -329,6 +329,34 @@ describe("useVrWorkspace", () => {
       name: "deploy bot",
     });
 
+    const setAgentStatusAction = current().applyVoiceTranscript("set agent deploy bot status monitoring");
+    expect(setAgentStatusAction).toEqual({
+      kind: "set_agent_status",
+      serverIds: ["dgx"],
+      name: "deploy bot",
+      status: "monitoring",
+    });
+
+    const setAgentStatusForHomeAction = current().applyVoiceTranscript(
+      "agent build watcher status waiting for approval for homelab"
+    );
+    expect(setAgentStatusForHomeAction).toEqual({
+      kind: "set_agent_status",
+      serverIds: ["home"],
+      name: "build watcher",
+      status: "waiting_approval",
+    });
+
+    const setAgentStatusForAllServersAction = current().applyVoiceTranscript(
+      "set agent build watcher status executing for all servers"
+    );
+    expect(setAgentStatusForAllServersAction).toEqual({
+      kind: "set_agent_status",
+      serverIds: ["dgx", "home"],
+      name: "build watcher",
+      status: "executing",
+    });
+
     const setAgentGoalAction = current().applyVoiceTranscript("set agent deploy bot goal npm run deploy");
     expect(setAgentGoalAction).toEqual({
       kind: "set_agent_goal",

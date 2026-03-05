@@ -16,6 +16,7 @@ export type VoiceRoute =
   | { kind: "minimize" }
   | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
   | { kind: "remove_agent"; name: string; panelId?: string; allServers?: boolean }
+  | { kind: "set_agent_status"; name: string; status: "idle" | "monitoring" | "executing" | "waiting_approval"; panelId?: string; allServers?: boolean }
   | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string; allServers?: boolean }
   | { kind: "queue_agent_command"; name: string; command: string; panelId?: string; allServers?: boolean }
   | { kind: "approve_ready_agents"; panelId?: string }
@@ -208,6 +209,38 @@ function isAllServersTarget(target: string): boolean {
   );
 }
 
+function normalizeAgentStatus(value: string): "idle" | "monitoring" | "executing" | "waiting_approval" | null {
+  const normalized = normalizeForMatch(value);
+  if (!normalized) {
+    return null;
+  }
+  if (normalized === "idle" || normalized === "standby" || normalized === "pause" || normalized === "paused") {
+    return "idle";
+  }
+  if (normalized === "monitoring" || normalized === "monitor" || normalized === "watching" || normalized === "watch") {
+    return "monitoring";
+  }
+  if (
+    normalized === "executing" ||
+    normalized === "execute" ||
+    normalized === "running" ||
+    normalized === "run" ||
+    normalized === "active"
+  ) {
+    return "executing";
+  }
+  if (
+    normalized === "waiting approval" ||
+    normalized === "waiting for approval" ||
+    normalized === "awaiting approval" ||
+    normalized === "pending approval" ||
+    normalized === "pending"
+  ) {
+    return "waiting_approval";
+  }
+  return null;
+}
+
 export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }: ResolveVoiceRouteArgs): VoiceRoute {
   const cleaned = transcript.trim();
   if (!cleaned || panels.length === 0) {
@@ -332,6 +365,47 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
       return { kind: "remove_agent", name: `${name} for ${target}`.trim() };
     }
     return { kind: "remove_agent", name, panelId: targetPanel.id };
+  }
+
+  const setStatusMatch = cleaned.match(
+    /^(?:set\s+agent\s+(.+?)\s+status|agent\s+(.+?)\s+status)\s+(.+)$/i
+  );
+  if (setStatusMatch) {
+    const name = (setStatusMatch[1] || setStatusMatch[2] || "").trim();
+    const remainder = (setStatusMatch[3] || "").trim();
+    if (!name || !remainder) {
+      return { kind: "none" };
+    }
+
+    let status = normalizeAgentStatus(remainder);
+    let target = "";
+    if (!status) {
+      const targetMatch = remainder.match(/^(.*)\s+(?:for|on)\s+(.+)$/i);
+      if (targetMatch) {
+        const statusPart = (targetMatch[1] || "").trim();
+        const targetPart = (targetMatch[2] || "").trim();
+        const resolvedStatus = normalizeAgentStatus(statusPart);
+        if (resolvedStatus) {
+          status = resolvedStatus;
+          target = targetPart;
+        }
+      }
+    }
+
+    if (!status) {
+      return { kind: "none" };
+    }
+    if (!target) {
+      return { kind: "set_agent_status", name, status };
+    }
+    if (isAllServersTarget(target)) {
+      return { kind: "set_agent_status", name, status, allServers: true };
+    }
+    const targetPanel = findPanelByTarget(panels, target);
+    if (!targetPanel) {
+      return { kind: "none" };
+    }
+    return { kind: "set_agent_status", name, status, panelId: targetPanel.id };
   }
 
   const setGoalMatch = cleaned.match(

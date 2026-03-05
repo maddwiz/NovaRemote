@@ -10,6 +10,13 @@ export type VrVoiceIntent =
   | { kind: "reconnect_all" }
   | { kind: "create_agent"; name: string; panelId?: string; allServers?: boolean }
   | { kind: "remove_agent"; name: string; panelId?: string; allServers?: boolean }
+  | {
+      kind: "set_agent_status";
+      name: string;
+      status: "idle" | "monitoring" | "executing" | "waiting_approval";
+      panelId?: string;
+      allServers?: boolean;
+    }
   | { kind: "set_agent_goal"; name: string; goal: string; panelId?: string; allServers?: boolean }
   | { kind: "queue_agent_command"; name: string; command: string; panelId?: string; allServers?: boolean }
   | { kind: "approve_ready_agents"; panelId?: string }
@@ -297,6 +304,22 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
       : {
           kind: "remove_agent",
           name: route.name,
+          allServers: route.allServers,
+        };
+  }
+  if (route.kind === "set_agent_status") {
+    return route.panelId
+      ? {
+          kind: "set_agent_status",
+          name: route.name,
+          status: route.status,
+          panelId: route.panelId,
+          allServers: route.allServers,
+        }
+      : {
+          kind: "set_agent_status",
+          name: route.name,
+          status: route.status,
           allServers: route.allServers,
         };
   }

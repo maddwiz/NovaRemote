@@ -107,8 +107,10 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     connectAllServers,
     disconnectAllServers,
     createAgentForServer,
+    setAgentStatusForServer,
     setAgentGoalForServer,
     createAgentForServers,
+    setAgentStatusForServers,
     setAgentGoalForServers,
     removeAgentForServer,
     removeAgentForServers,
@@ -265,6 +267,18 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     return [];
   };
 
+  const runSetAgentStatusForServer = async (
+    serverId: string,
+    name: string,
+    status: "idle" | "monitoring" | "executing" | "waiting_approval"
+  ): Promise<string[]> => {
+    if (typeof setAgentStatusForServer === "function") {
+      const updated = await setAgentStatusForServer(serverId, name, status);
+      return Array.isArray(updated) ? updated : [];
+    }
+    return [];
+  };
+
   const runSetAgentGoalForServer = async (serverId: string, name: string, goal: string): Promise<string[]> => {
     if (typeof setAgentGoalForServer === "function") {
       const updated = await setAgentGoalForServer(serverId, name, goal);
@@ -285,6 +299,24 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       created.push(...next);
     }
     return created;
+  };
+
+  const runSetAgentStatusForServers = async (
+    serverIds: string[],
+    name: string,
+    status: "idle" | "monitoring" | "executing" | "waiting_approval"
+  ): Promise<string[]> => {
+    const uniqueIds = uniqueServerIds(serverIds);
+    if (typeof setAgentStatusForServers === "function") {
+      const updated = await setAgentStatusForServers(uniqueIds, name, status);
+      return Array.isArray(updated) ? updated : [];
+    }
+    const updated: string[] = [];
+    for (const serverId of uniqueIds) {
+      const next = await runSetAgentStatusForServer(serverId, name, status);
+      updated.push(...next);
+    }
+    return updated;
   };
 
   const runSetAgentGoalForServers = async (serverIds: string[], name: string, goal: string): Promise<string[]> => {
@@ -497,8 +529,10 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onConnectAllServers: connectAllServers,
     onDisconnectAllServers: disconnectAllServers,
     onCreateAgentForServer: runCreateAgentForServer,
+    onSetAgentStatusForServer: runSetAgentStatusForServer,
     onSetAgentGoalForServer: runSetAgentGoalForServer,
     onCreateAgentForServers: runCreateAgentForServers,
+    onSetAgentStatusForServers: runSetAgentStatusForServers,
     onSetAgentGoalForServers: runSetAgentGoalForServers,
     onRemoveAgentForServer: runRemoveAgentForServer,
     onRemoveAgentForServers: runRemoveAgentForServers,

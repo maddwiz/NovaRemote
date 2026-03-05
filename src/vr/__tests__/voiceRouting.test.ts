@@ -162,6 +162,25 @@ describe("parseVrVoiceIntent", () => {
       name: "deploy bot",
       allServers: true,
     });
+    expect(parseVrVoiceIntent("set agent deploy bot status monitoring", PANELS, "dgx-main")).toEqual({
+      kind: "set_agent_status",
+      name: "deploy bot",
+      status: "monitoring",
+    });
+    expect(
+      parseVrVoiceIntent("agent build watcher status waiting for approval for homelab", PANELS, "dgx-main")
+    ).toEqual({
+      kind: "set_agent_status",
+      name: "build watcher",
+      status: "waiting_approval",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("set agent build watcher status executing for all servers", PANELS, "dgx-main")).toEqual({
+      kind: "set_agent_status",
+      name: "build watcher",
+      status: "executing",
+      allServers: true,
+    });
     expect(parseVrVoiceIntent("create agent watch for errors", PANELS, "dgx-main")).toEqual({
       kind: "create_agent",
       name: "watch for errors",

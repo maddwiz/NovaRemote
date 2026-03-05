@@ -110,8 +110,18 @@ export type TerminalsViewModel = {
   onApproveReadyAgentsForFocusedServer: () => string[];
   onDenyAllPendingAgentsForFocusedServer: () => string[];
   onCreateAgentForServer: (serverId: string, name: string) => Promise<string[]>;
+  onSetAgentStatusForServer: (
+    serverId: string,
+    name: string,
+    status: "idle" | "monitoring" | "executing" | "waiting_approval"
+  ) => Promise<string[]>;
   onSetAgentGoalForServer: (serverId: string, name: string, goal: string) => Promise<string[]>;
   onCreateAgentForServers: (serverIds: string[], name: string) => Promise<string[]>;
+  onSetAgentStatusForServers: (
+    serverIds: string[],
+    name: string,
+    status: "idle" | "monitoring" | "executing" | "waiting_approval"
+  ) => Promise<string[]>;
   onSetAgentGoalForServers: (serverIds: string[], name: string, goal: string) => Promise<string[]>;
   onRemoveAgentForServer?: (serverId: string, name: string) => Promise<string[]>;
   onRemoveAgentForServers?: (serverIds: string[], name: string) => Promise<string[]>;

@@ -22,6 +22,11 @@ export type UseVrLiveRuntimeArgs = {
   onReconnectServers?: (serverIds: string[]) => Promise<void> | void;
   onCreateAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onRemoveAgent?: (serverIds: string[], name: string) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
+  onSetAgentStatus?: (
+    serverIds: string[],
+    name: string,
+    status: "idle" | "monitoring" | "executing" | "waiting_approval"
+  ) => Promise<void | number | boolean | string[]> | void | number | boolean | string[];
   onSetAgentGoal?: (
     serverIds: string[],
     name: string,
@@ -70,6 +75,7 @@ export function useVrLiveRuntime({
   onReconnectServers,
   onCreateAgent,
   onRemoveAgent,
+  onSetAgentStatus,
   onSetAgentGoal,
   onQueueAgentCommand,
   onApproveReadyAgents,
@@ -330,6 +336,7 @@ export function useVrLiveRuntime({
     onReconnectServers,
     onCreateAgent,
     onRemoveAgent,
+    onSetAgentStatus,
     onSetAgentGoal,
     onQueueAgentCommand,
     onApproveReadyAgents,

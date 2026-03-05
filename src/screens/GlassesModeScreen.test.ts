@@ -124,8 +124,10 @@ function makeTerminalsBase(connections: Map<string, ServerConnection>) {
     onConnectAllServers: vi.fn(),
     onDisconnectAllServers: vi.fn(),
     onCreateAgentForServer: vi.fn(async () => []),
+    onSetAgentStatusForServer: vi.fn(async () => []),
     onSetAgentGoalForServer: vi.fn(async () => []),
     onCreateAgentForServers: vi.fn(async () => []),
+    onSetAgentStatusForServers: vi.fn(async () => []),
     onSetAgentGoalForServers: vi.fn(async () => []),
     onRemoveAgentForServer: vi.fn(async () => []),
     onRemoveAgentForServers: vi.fn(async () => []),
@@ -713,6 +715,90 @@ describe("GlassesModeScreen", () => {
       screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
     });
     expect(onRemoveAgentForServers).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("routes set-agent-status voice commands to server-scoped and all-server handlers", async () => {
+    const routeTranscript = vi
+      .fn<
+        (
+          transcript: string
+        ) => {
+          kind: string;
+          name?: string;
+          panelId?: string;
+          status?: "idle" | "monitoring" | "executing" | "waiting_approval";
+          allServers?: boolean;
+        }
+      >()
+      .mockReturnValueOnce({
+        kind: "set_agent_status",
+        name: "build watcher",
+        status: "monitoring",
+        panelId: "home::build",
+      })
+      .mockReturnValueOnce({
+        kind: "set_agent_status",
+        name: "deploy bot",
+        status: "executing",
+        allServers: true,
+      });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const onSetAgentStatusForServer = vi.fn(async () => []);
+    const onSetAgentStatusForServers = vi.fn(async () => []);
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "set agent build watcher status monitoring for home",
+      onSetAgentStatusForServer,
+      onSetAgentStatusForServers,
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(onSetAgentStatusForServer).toHaveBeenCalledWith("home", "build watcher", "monitoring");
+
+    await act(async () => {
+      screen.update(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: {
+              ...terminals,
+              voiceTranscript: "set agent deploy bot status executing for all servers",
+            },
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+    expect(onSetAgentStatusForServers).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "executing");
 
     await act(async () => {
       screen.unmount();

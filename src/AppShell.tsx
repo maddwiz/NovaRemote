@@ -1676,6 +1676,7 @@ export default function AppShell() {
     | { kind: "deny" }
     | { kind: "create"; name: string }
     | { kind: "remove"; name: string }
+    | { kind: "set_status"; name: string; status: "idle" | "monitoring" | "executing" | "waiting_approval" }
     | { kind: "set_goal"; name: string; goal: string }
     | { kind: "queue_command"; name: string; command: string };
   type PendingAgentServerAction = {
@@ -1700,6 +1701,7 @@ export default function AppShell() {
     agents: focusedServerAgents,
     addRuntimeAgent: addFocusedServerRuntimeAgent,
     removeRuntimeAgent: removeFocusedServerRuntimeAgent,
+    setRuntimeAgentStatus: setFocusedServerRuntimeAgentStatus,
     setRuntimeAgentGoal: setFocusedServerRuntimeAgentGoal,
     requestAgentApproval: requestFocusedServerAgentApproval,
     approveReadyApprovals: approveReadyAgentsForFocusedServer,
@@ -1738,6 +1740,17 @@ export default function AppShell() {
         const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
         matchingAgentIds.forEach((agentId) => {
           removeFocusedServerRuntimeAgent(agentId);
+        });
+        return matchingAgentIds;
+      }
+      if (action.kind === "set_status") {
+        const name = action.name.trim();
+        if (!name) {
+          return [];
+        }
+        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
+        matchingAgentIds.forEach((agentId) => {
+          setFocusedServerRuntimeAgentStatus(agentId, action.status);
         });
         return matchingAgentIds;
       }
@@ -1801,6 +1814,7 @@ export default function AppShell() {
       poolConnections,
       requestFocusedServerAgentApproval,
       removeFocusedServerRuntimeAgent,
+      setFocusedServerRuntimeAgentStatus,
       setFocusedServerRuntimeAgentGoal,
     ]
   );
@@ -1882,6 +1896,15 @@ export default function AppShell() {
     [runAgentServerAction]
   );
 
+  const setAgentStatusForServer = useCallback(
+    async (
+      serverId: string,
+      name: string,
+      status: "idle" | "monitoring" | "executing" | "waiting_approval"
+    ): Promise<string[]> => await runAgentServerAction(serverId, { kind: "set_status", name, status }),
+    [runAgentServerAction]
+  );
+
   const setAgentGoalForServer = useCallback(
     async (serverId: string, name: string, goal: string): Promise<string[]> =>
       await runAgentServerAction(serverId, { kind: "set_goal", name, goal }),
@@ -1934,6 +1957,22 @@ export default function AppShell() {
       return created;
     },
     [createAgentForServer]
+  );
+
+  const setAgentStatusForServers = useCallback(
+    async (
+      serverIds: string[],
+      name: string,
+      status: "idle" | "monitoring" | "executing" | "waiting_approval"
+    ): Promise<string[]> => {
+      const updated: string[] = [];
+      for (const serverId of uniqueServerIds(serverIds)) {
+        const next = await setAgentStatusForServer(serverId, name, status);
+        updated.push(...next);
+      }
+      return updated;
+    },
+    [setAgentStatusForServer]
   );
 
   const setAgentGoalForServers = useCallback(
@@ -2689,8 +2728,10 @@ export default function AppShell() {
     connectAllServers,
     disconnectAllServers,
     createAgentForServer,
+    setAgentStatusForServer,
     setAgentGoalForServer,
     createAgentForServers,
+    setAgentStatusForServers,
     setAgentGoalForServers,
     removeAgentForServer,
     removeAgentForServers,

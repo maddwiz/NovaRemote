@@ -379,6 +379,18 @@ describe("useVrInputRouter", () => {
         name: "deploy bot",
       })
       .mockReturnValueOnce({
+        kind: "set_agent_status",
+        serverIds: ["dgx"],
+        name: "build watcher",
+        status: "monitoring",
+      })
+      .mockReturnValueOnce({
+        kind: "set_agent_status",
+        serverIds: ["dgx", "home"],
+        name: "deploy bot",
+        status: "executing",
+      })
+      .mockReturnValueOnce({
         kind: "set_agent_goal",
         serverIds: ["dgx"],
         name: "build watcher",
@@ -411,6 +423,10 @@ describe("useVrInputRouter", () => {
       .fn<(serverIds: string[], name: string) => Promise<number>>()
       .mockResolvedValueOnce(1)
       .mockResolvedValueOnce(2);
+    const onSetAgentStatus = vi
+      .fn<(serverIds: string[], name: string, status: "idle" | "monitoring" | "executing" | "waiting_approval") => Promise<number>>()
+      .mockResolvedValueOnce(1)
+      .mockResolvedValueOnce(2);
     const onSetAgentGoal = vi
       .fn<(serverIds: string[], name: string, goal: string) => Promise<number>>()
       .mockResolvedValueOnce(1)
@@ -433,6 +449,7 @@ describe("useVrInputRouter", () => {
         onSendCommand: async () => undefined,
         onCreateAgent,
         onRemoveAgent,
+        onSetAgentStatus,
         onSetAgentGoal,
         onQueueAgentCommand,
       });
@@ -467,6 +484,18 @@ describe("useVrInputRouter", () => {
     });
     expect(onRemoveAgent).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
     expect(current().hudStatus?.message).toContain("Removed 2 agents named deploy bot");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent build watcher status monitoring");
+    });
+    expect(onSetAgentStatus).toHaveBeenCalledWith(["dgx"], "build watcher", "monitoring");
+    expect(current().hudStatus?.message).toContain("Set status for 1 agent");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent deploy bot status executing for all servers");
+    });
+    expect(onSetAgentStatus).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "executing");
+    expect(current().hudStatus?.message).toContain("Set status for 2 agents");
 
     await act(async () => {
       await current().dispatchVoice("set agent build watcher goal npm run test");

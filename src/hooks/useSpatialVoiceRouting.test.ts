@@ -291,6 +291,21 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const setAgentStatus = resolveSpatialVoiceRoute({
+      transcript: "set agent deploy bot status monitoring",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const setAgentStatusForCloud = resolveSpatialVoiceRoute({
+      transcript: "agent build watcher status waiting for approval for cloud vm",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const setAgentStatusForAllServers = resolveSpatialVoiceRoute({
+      transcript: "set agent build watcher status executing for all servers",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
     const createAgentWithForPhrase = resolveSpatialVoiceRoute({
       transcript: "create agent watch for errors",
       panels: PANELS,
@@ -426,6 +441,23 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(removeAgentForAllServers).toEqual({
       kind: "remove_agent",
       name: "deploy bot",
+      allServers: true,
+    });
+    expect(setAgentStatus).toEqual({
+      kind: "set_agent_status",
+      name: "deploy bot",
+      status: "monitoring",
+    });
+    expect(setAgentStatusForCloud).toEqual({
+      kind: "set_agent_status",
+      name: "build watcher",
+      status: "waiting_approval",
+      panelId: "cloud::deploy",
+    });
+    expect(setAgentStatusForAllServers).toEqual({
+      kind: "set_agent_status",
+      name: "build watcher",
+      status: "executing",
       allServers: true,
     });
     expect(createAgentWithForPhrase).toEqual({

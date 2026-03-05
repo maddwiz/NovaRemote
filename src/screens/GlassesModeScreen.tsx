@@ -171,8 +171,10 @@ export function GlassesModeScreen() {
     onConnectAllServers,
     onDisconnectAllServers,
     onCreateAgentForServer,
+    onSetAgentStatusForServer,
     onSetAgentGoalForServer,
     onCreateAgentForServers,
+    onSetAgentStatusForServers,
     onSetAgentGoalForServers,
     onRemoveAgentForServer,
     onRemoveAgentForServers,
@@ -840,6 +842,42 @@ export function GlassesModeScreen() {
         }
         return;
       }
+      if (route.kind === "set_agent_status") {
+        if (!onSetAgentStatusForServer && !onSetAgentStatusForServers) {
+          setRouteStatus("Agent status routing is unavailable.");
+          return;
+        }
+        if (route.allServers) {
+          const serverIds = Array.from(connections.keys());
+          if (serverIds.length === 0) {
+            return;
+          }
+          if (onSetAgentStatusForServers) {
+            void onSetAgentStatusForServers(serverIds, route.name, route.status).catch(() => {});
+          } else if (onSetAgentStatusForServer) {
+            void Promise.all(
+              serverIds.map((serverId) => onSetAgentStatusForServer(serverId, route.name, route.status))
+            ).catch(() => {});
+          }
+          return;
+        }
+        const serverIds = resolveAgentTargetServerIds(route.panelId);
+        if (serverIds.length === 0) {
+          return;
+        }
+        if (serverIds.length === 1 && onSetAgentStatusForServer) {
+          void onSetAgentStatusForServer(serverIds[0], route.name, route.status).catch(() => {});
+          return;
+        }
+        if (onSetAgentStatusForServers) {
+          void onSetAgentStatusForServers(serverIds, route.name, route.status).catch(() => {});
+        } else if (onSetAgentStatusForServer) {
+          void Promise.all(
+            serverIds.map((serverId) => onSetAgentStatusForServer(serverId, route.name, route.status))
+          ).catch(() => {});
+        }
+        return;
+      }
       if (route.kind === "queue_agent_command") {
         if (route.allServers) {
           const serverIds = Array.from(connections.keys());
@@ -1012,8 +1050,10 @@ export function GlassesModeScreen() {
       focusedServerId,
       onConnectAllServers,
       onCreateAgentForServer,
+      onSetAgentStatusForServer,
       onSetAgentGoalForServer,
       onCreateAgentForServers,
+      onSetAgentStatusForServers,
       onSetAgentGoalForServers,
       onRemoveAgentForServer,
       onRemoveAgentForServers,

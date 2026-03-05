@@ -756,6 +756,7 @@ describe("useVrLiveRuntime", () => {
     const onReconnectServers = vi.fn(async () => undefined);
     const onCreateAgent = vi.fn(async () => true);
     const onRemoveAgent = vi.fn(async () => 1);
+    const onSetAgentStatus = vi.fn(async () => 1);
     const onSetAgentGoal = vi.fn(async () => 1);
     const onQueueAgentCommand = vi.fn(async () => 1);
     const onApproveReadyAgents = vi.fn(async () => ["agent-a", "agent-b"]);
@@ -780,6 +781,7 @@ describe("useVrLiveRuntime", () => {
         onReconnectServers,
         onCreateAgent,
         onRemoveAgent,
+        onSetAgentStatus,
         onSetAgentGoal,
         onQueueAgentCommand,
         onApproveReadyAgents,
@@ -868,6 +870,12 @@ describe("useVrLiveRuntime", () => {
     });
     expect(onRemoveAgent).toHaveBeenCalledWith(["dgx"], "build watcher");
     expect(current().hudStatus?.message).toContain("Removed 1 agent named build watcher");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent build watcher status monitoring");
+    });
+    expect(onSetAgentStatus).toHaveBeenCalledWith(["dgx"], "build watcher", "monitoring");
+    expect(current().hudStatus?.message).toContain("Set status for 1 agent");
 
     await act(async () => {
       await current().dispatchVoice("set agent build watcher goal npm run test");
@@ -1099,6 +1107,7 @@ describe("useVrLiveRuntime", () => {
     >(async () => undefined);
     const onCreateAgent = vi.fn(async () => 2);
     const onRemoveAgent = vi.fn(async () => 2);
+    const onSetAgentStatus = vi.fn(async () => 2);
     const onSetAgentGoal = vi.fn(async () => 2);
 
     let latest: ReturnType<typeof useVrLiveRuntime> | null = null;
@@ -1116,6 +1125,7 @@ describe("useVrLiveRuntime", () => {
         maxPanels: 4,
         onCreateAgent,
         onRemoveAgent,
+        onSetAgentStatus,
         onSetAgentGoal,
       });
       return null;
@@ -1140,6 +1150,12 @@ describe("useVrLiveRuntime", () => {
     });
     expect(onRemoveAgent).toHaveBeenCalledWith(["dgx", "home"], "deploy bot");
     expect(current().hudStatus?.message).toContain("Removed 2 agents named deploy bot");
+
+    await act(async () => {
+      await current().dispatchVoice("set agent deploy bot status monitoring for all servers");
+    });
+    expect(onSetAgentStatus).toHaveBeenCalledWith(["dgx", "home"], "deploy bot", "monitoring");
+    expect(current().hudStatus?.message).toContain("Set status for 2 agents");
 
     await act(async () => {
       await current().dispatchVoice("set agent deploy bot goal npm run deploy for all servers");
