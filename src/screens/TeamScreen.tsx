@@ -7,6 +7,7 @@ import { TeamIdentity, TeamMember, TeamRole } from "../types";
 
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
+const MEMBER_ROLE_FILTER_OPTIONS: Array<"all" | TeamRole> = ["all", "viewer", "operator", "admin", "billing"];
 
 type TeamScreenProps = {
   identity: TeamIdentity | null;
@@ -71,12 +72,27 @@ export function TeamScreen({
   const [inviteCode, setInviteCode] = useState<string>("");
   const [inviteEmail, setInviteEmail] = useState<string>("");
   const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
+  const [memberQuery, setMemberQuery] = useState<string>("");
+  const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | TeamRole>("all");
   const [teamStatus, setTeamStatus] = useState<string>("");
   const canLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
   const canExportAuditJson = Boolean(identity && onExportAuditJson && !busy);
   const canExportAuditCsv = Boolean(identity && onExportAuditCsv && !busy);
+  const normalizedMemberQuery = memberQuery.trim().toLowerCase();
+  const visibleMembers = members.filter((member) => {
+    if (memberRoleFilter !== "all" && member.role !== memberRoleFilter) {
+      return false;
+    }
+    if (!normalizedMemberQuery) {
+      return true;
+    }
+    return (
+      member.name.toLowerCase().includes(normalizedMemberQuery) ||
+      member.email.toLowerCase().includes(normalizedMemberQuery)
+    );
+  });
 
   const handleLogin = useCallback(() => {
     if (!onLogin || !canLogin) {
@@ -378,9 +394,42 @@ export function TeamScreen({
 
       {loading ? <Text style={styles.emptyText}>Loading team members...</Text> : null}
       {!loading && identity && members.length === 0 ? <Text style={styles.emptyText}>No members found.</Text> : null}
-      {!loading && members.length > 0 ? (
+      {!loading && identity && members.length > 0 ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>Member Filters</Text>
+          <TextInput
+            style={styles.input}
+            value={memberQuery}
+            onChangeText={setMemberQuery}
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="search members by name or email"
+            placeholderTextColor="#7f7aa8"
+            accessibilityLabel="Filter team members by query"
+          />
+          <View style={styles.modeRow}>
+            {MEMBER_ROLE_FILTER_OPTIONS.map((role) => {
+              const selected = memberRoleFilter === role;
+              const label = role === "all" ? "all" : role;
+              return (
+                <Pressable
+                  key={`member-filter-${role}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Filter members by ${label}`}
+                  style={[styles.modeButton, selected ? styles.modeButtonOn : null]}
+                  onPress={() => setMemberRoleFilter(role)}
+                >
+                  <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{label}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={styles.emptyText}>{`Showing ${visibleMembers.length} of ${members.length}`}</Text>
+        </View>
+      ) : null}
+      {!loading && visibleMembers.length > 0 ? (
         <View style={styles.serverListWrap}>
-          {members.map((member) => (
+          {visibleMembers.map((member) => (
             <View key={member.id} style={styles.serverCard}>
               <Text style={styles.serverName}>{member.name}</Text>
               <Text style={styles.serverUrl}>{member.email}</Text>
@@ -407,6 +456,9 @@ export function TeamScreen({
             </View>
           ))}
         </View>
+      ) : null}
+      {!loading && identity && members.length > 0 && visibleMembers.length === 0 ? (
+        <Text style={styles.emptyText}>No members match the current filters.</Text>
       ) : null}
     </View>
   );

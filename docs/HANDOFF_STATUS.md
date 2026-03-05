@@ -95,7 +95,7 @@ Updated: 2026-03-05
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
 - [ ] Enterprise IAM expansion:
   - [~] SSO (`SAML`/`OIDC`) app-side token-exchange hook added; provider dashboard + backend rollout remains pending
-  - [ ] centralized team/user role admin UX
+  - [~] in-app role/invite controls + member filtering are implemented; centralized cloud admin UX remains pending
 - [ ] Compliance expansion:
   - [ ] mandatory session recording policies
   - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud dashboard export remains pending

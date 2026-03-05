@@ -229,4 +229,46 @@ describe("TeamScreen", () => {
       renderer?.unmount();
     });
   });
+
+  it("filters team members by query and role", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[
+            { id: "member-1", name: "Alice", email: "alice@example.com", role: "operator" },
+            { id: "member-2", name: "Bob", email: "bob@example.com", role: "viewer" },
+          ]}
+          loading={false}
+          busy={false}
+          canManage
+          onChangeMemberRole={async () => undefined}
+        />
+      );
+    });
+
+    expect(() => renderer?.root.findByProps({ accessibilityLabel: "Set alice@example.com to operator" })).not.toThrow();
+    expect(() => renderer?.root.findByProps({ accessibilityLabel: "Set bob@example.com to viewer" })).not.toThrow();
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Filter team members by query" }).props.onChangeText("alice");
+    });
+
+    expect(() => renderer?.root.findByProps({ accessibilityLabel: "Set alice@example.com to operator" })).not.toThrow();
+    expect(() => renderer?.root.findByProps({ accessibilityLabel: "Set bob@example.com to viewer" })).toThrow();
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Filter team members by query" }).props.onChangeText("");
+      renderer?.root.findByProps({ accessibilityLabel: "Filter members by viewer" }).props.onPress();
+    });
+
+    expect(() => renderer?.root.findByProps({ accessibilityLabel: "Set bob@example.com to viewer" })).not.toThrow();
+    expect(() => renderer?.root.findByProps({ accessibilityLabel: "Set alice@example.com to operator" })).toThrow();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
