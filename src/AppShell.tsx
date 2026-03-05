@@ -713,6 +713,8 @@ export default function AppShell() {
     proPriceLabel,
     teamPriceLabel,
     enterprisePriceLabel,
+    teamSeatCount,
+    enterpriseSeatCount,
     purchasePro,
     purchaseTeam,
     purchaseEnterprise,
@@ -3703,6 +3705,13 @@ export default function AppShell() {
               identity={teamIdentity}
               members={teamMembers}
               planTier={subscriptionTier}
+              planSeats={
+                subscriptionTier === "team"
+                  ? teamSeatCount
+                  : subscriptionTier === "enterprise"
+                    ? enterpriseSeatCount
+                    : null
+              }
               settings={teamSettings}
               usage={teamUsage}
               loading={teamLoading}
@@ -3986,6 +3995,8 @@ export default function AppShell() {
         proPriceLabel={proPriceLabel}
         teamPriceLabel={teamPriceLabel}
         enterprisePriceLabel={enterprisePriceLabel}
+        teamSeatCount={teamSeatCount}
+        enterpriseSeatCount={enterpriseSeatCount}
         onClose={() => setPaywallVisible(false)}
         onUpgradePro={() => {
           void runWithStatus("Purchasing Pro", async () => {

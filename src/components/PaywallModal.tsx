@@ -9,6 +9,8 @@ type PaywallModalProps = {
   proPriceLabel: string | null;
   teamPriceLabel: string | null;
   enterprisePriceLabel: string | null;
+  teamSeatCount?: number | null;
+  enterpriseSeatCount?: number | null;
   onClose: () => void;
   onUpgradePro: () => void;
   onUpgradeTeam?: () => void;
@@ -22,12 +24,17 @@ export function PaywallModal({
   proPriceLabel,
   teamPriceLabel,
   enterprisePriceLabel,
+  teamSeatCount = null,
+  enterpriseSeatCount = null,
   onClose,
   onUpgradePro,
   onUpgradeTeam,
   onUpgradeEnterprise,
   onRestore,
 }: PaywallModalProps) {
+  const teamSeatLabel = teamSeatCount && teamSeatCount > 0 ? `${teamSeatCount} seats` : "seat-based access";
+  const enterpriseSeatLabel =
+    enterpriseSeatCount && enterpriseSeatCount > 0 ? `${enterpriseSeatCount} seats` : "unlimited seats";
   const canUpgradeTeam =
     Boolean(onUpgradeTeam && teamPriceLabel) &&
     (subscriptionTier === "free" || subscriptionTier === "pro");
@@ -46,12 +53,16 @@ export function PaywallModal({
           </Text>
           <Text style={styles.emptyText}>Free: 1 server, 2 sessions, core terminal controls.</Text>
           <Text style={styles.emptyText}>Pro: unlimited servers/sessions, AI assist, fleet, glasses/VR, recordings.</Text>
-          <Text style={styles.emptyText}>Team: Pro + shared fleet, role access, token broker, audit logging (5 seats).</Text>
-          <Text style={styles.emptyText}>Enterprise: Team + SSO, unlimited seats, compliance controls, SLA support.</Text>
+          <Text style={styles.emptyText}>{`Team: Pro + shared fleet, role access, token broker, audit logging (${teamSeatLabel}).`}</Text>
+          <Text style={styles.emptyText}>{`Enterprise: Team + SSO, ${enterpriseSeatLabel}, compliance controls, SLA support.`}</Text>
           <Text style={styles.serverTitle}>{`Current plan: ${subscriptionTier}`}</Text>
           <Text style={styles.serverSubtitle}>{proPriceLabel ? `Pro ${proPriceLabel}` : "Pro subscription"}</Text>
-          {teamPriceLabel ? <Text style={styles.serverSubtitle}>{`Team ${teamPriceLabel}`}</Text> : null}
-          {enterprisePriceLabel ? <Text style={styles.serverSubtitle}>{`Enterprise ${enterprisePriceLabel}`}</Text> : null}
+          {teamPriceLabel ? (
+            <Text style={styles.serverSubtitle}>{`Team ${teamPriceLabel}${teamSeatCount ? ` • ${teamSeatLabel}` : ""}`}</Text>
+          ) : null}
+          {enterprisePriceLabel ? (
+            <Text style={styles.serverSubtitle}>{`Enterprise ${enterprisePriceLabel}${enterpriseSeatCount ? ` • ${enterpriseSeatLabel}` : ""}`}</Text>
+          ) : null}
 
           <View style={styles.rowInlineSpace}>
             <Pressable

@@ -12,6 +12,7 @@ type TeamScreenProps = {
   identity: TeamIdentity | null;
   members: TeamMember[];
   planTier?: "free" | "pro" | "team" | "enterprise";
+  planSeats?: number | null;
   settings?: {
     enforceDangerConfirm: boolean | null;
     commandBlocklist: string[];
@@ -43,6 +44,7 @@ export function TeamScreen({
   identity,
   members,
   planTier = "free",
+  planSeats = null,
   settings,
   usage,
   loading,
@@ -193,6 +195,7 @@ export function TeamScreen({
       {identity ? <TeamBadge teamName={identity.teamName} role={identity.role} /> : null}
       {identity ? <Text style={styles.serverSubtitle}>{identity.email}</Text> : null}
       {identity ? <Text style={styles.emptyText}>{`Plan: ${planTier}`}</Text> : null}
+      {identity && planSeats ? <Text style={styles.emptyText}>{`Seats included: ${planSeats}`}</Text> : null}
       {identity && settings ? (
         <>
           <Text style={styles.emptyText}>

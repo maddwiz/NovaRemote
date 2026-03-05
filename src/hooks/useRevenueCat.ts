@@ -129,6 +129,51 @@ function packageMatchesExplicitId(pkg: PurchasesPackage, value: string): boolean
   return fields.some((field) => field === normalizedValue || field.includes(normalizedValue));
 }
 
+function extractSeatCountFromText(value: string): number | null {
+  const normalizedValue = normalize(value);
+  if (!normalizedValue) {
+    return null;
+  }
+
+  const forwardMatch = normalizedValue.match(/\b(\d+)\s*(seat|seats|user|users|license|licenses)\b/i);
+  if (forwardMatch) {
+    const parsed = Number.parseInt(forwardMatch[1] || "", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  const reverseMatch = normalizedValue.match(/\b(seat|seats|user|users|license|licenses)\s*(\d+)\b/i);
+  if (reverseMatch) {
+    const parsed = Number.parseInt(reverseMatch[2] || "", 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }
+
+  return null;
+}
+
+function extractSeatCount(pkg: PurchasesPackage | null): number | null {
+  if (!pkg) {
+    return null;
+  }
+  const raw = pkg as PurchasesPackage & {
+    product?: {
+      identifier?: string;
+      title?: string;
+      description?: string;
+    };
+  };
+  const candidates = [pkg.identifier, raw.product?.identifier, raw.product?.title, raw.product?.description];
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
+    }
+    const parsed = extractSeatCountFromText(candidate);
+    if (parsed) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
 function classifyPackages(offerings: PurchasesOfferings | null): {
   proPackage: PurchasesPackage | null;
   teamPackage: PurchasesPackage | null;
@@ -309,6 +354,12 @@ export function useRevenueCat() {
   const enterprisePriceLabel = useMemo(() => {
     return state.enterprisePackage?.product.priceString || null;
   }, [state.enterprisePackage]);
+  const teamSeatCount = useMemo(() => {
+    return extractSeatCount(state.teamPackage);
+  }, [state.teamPackage]);
+  const enterpriseSeatCount = useMemo(() => {
+    return extractSeatCount(state.enterprisePackage);
+  }, [state.enterprisePackage]);
 
   return {
     available,
@@ -325,6 +376,8 @@ export function useRevenueCat() {
     proPriceLabel,
     teamPriceLabel,
     enterprisePriceLabel,
+    teamSeatCount,
+    enterpriseSeatCount,
     priceLabel: proPriceLabel,
     refresh,
     purchaseForTier,

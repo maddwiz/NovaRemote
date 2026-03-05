@@ -929,6 +929,66 @@ describe("GlassesModeScreen", () => {
     });
   });
 
+  it("shows route status errors when voice create-session routing fails", async () => {
+    const routeTranscript = vi
+      .fn<
+        (
+          transcript: string
+        ) => {
+          kind: string;
+          serverId?: string;
+          sessionKind?: "ai" | "shell";
+          prompt?: string;
+        }
+      >()
+      .mockReturnValueOnce({
+        kind: "create_session",
+        serverId: "home",
+        sessionKind: "shell",
+      });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const onCreateSession = vi.fn(async () => {
+      throw new Error("Target server is disconnected.");
+    });
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "new terminal on home",
+      onCreateSession,
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+      await Promise.resolve();
+    });
+
+    expect(onCreateSession).toHaveBeenCalledWith("home", "shell", undefined);
+    expect(() => screen.root.findByProps({ children: "Target server is disconnected." })).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
   it("handles voice channel create commands with explicit workspace targeting", async () => {
     const createChannel = vi.fn((input: { workspaceId: string; name: string }) => ({
       id: "voice-2",

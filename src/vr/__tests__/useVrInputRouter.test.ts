@@ -171,6 +171,53 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("publishes an error HUD status when create-session routing fails", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({
+        kind: "create_session",
+        serverId: "home",
+        sessionKind: "shell",
+      });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onCreateSession = vi.fn(async () => {
+      throw new Error("Target server is disconnected.");
+    });
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onCreateSession,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("new terminal on homelab");
+    });
+
+    expect(onCreateSession).toHaveBeenCalledWith("home", "shell", undefined);
+    expect(current().hudStatus?.severity).toBe("error");
+    expect(current().hudStatus?.message).toContain("Target server is disconnected.");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("dispatches control-char voice actions through the control callback", async () => {
     const applyVoiceTranscript = vi.fn<
       (transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction

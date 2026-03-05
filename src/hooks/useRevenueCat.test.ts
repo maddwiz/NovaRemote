@@ -41,6 +41,8 @@ type RevenueCatHandle = {
   proPriceLabel: string | null;
   teamPriceLabel: string | null;
   enterprisePriceLabel: string | null;
+  teamSeatCount: number | null;
+  enterpriseSeatCount: number | null;
   purchasePro: () => Promise<boolean>;
   purchaseTeam: () => Promise<boolean>;
   purchaseEnterprise: () => Promise<boolean>;
@@ -277,6 +279,8 @@ describe("useRevenueCat", () => {
     expect(latestOrThrow(latest).proPriceLabel).toBe("$4.99");
     expect(latestOrThrow(latest).teamPriceLabel).toBe("$19.99");
     expect(latestOrThrow(latest).enterprisePriceLabel).toBe("$99.99");
+    expect(latestOrThrow(latest).teamSeatCount).toBeNull();
+    expect(latestOrThrow(latest).enterpriseSeatCount).toBeNull();
 
     await act(async () => {
       await latestOrThrow(latest).purchaseTeam();
@@ -292,6 +296,53 @@ describe("useRevenueCat", () => {
     const enterpriseCall = purchaseCalls[1]?.[0] as { identifier?: string };
     expect(enterpriseCall?.identifier).toBe("enterprise_monthly");
     expect(latestOrThrow(latest).subscriptionTier).toBe("enterprise");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("extracts seat counts from package metadata for team and enterprise plans", async () => {
+    purchasesMock.getCustomerInfo.mockResolvedValueOnce(buildCustomerInfo([]));
+    purchasesMock.getOfferings.mockResolvedValueOnce({
+      current: {
+        availablePackages: [
+          {
+            identifier: "team_5_seats_monthly",
+            product: {
+              identifier: "novaremote_team_5_seats_monthly",
+              title: "NovaRemote Team 5 seats",
+              description: "Team subscription for 5 seats",
+              priceString: "$19.99",
+            },
+          },
+          {
+            identifier: "enterprise_seats_200",
+            product: {
+              identifier: "novaremote_enterprise_seats_200",
+              title: "NovaRemote Enterprise",
+              description: "Enterprise tier seats 200",
+              priceString: "$99.99",
+            },
+          },
+        ],
+      },
+    } as any);
+
+    let latest: RevenueCatHandle | null = null;
+    function Harness() {
+      latest = useRevenueCat();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await waitFor(() => Boolean(latest && latest.ready), "revenuecat hook ready");
+
+    expect(latestOrThrow(latest).teamSeatCount).toBe(5);
+    expect(latestOrThrow(latest).enterpriseSeatCount).toBe(200);
 
     await act(async () => {
       renderer?.unmount();

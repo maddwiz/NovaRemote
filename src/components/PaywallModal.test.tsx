@@ -116,4 +116,41 @@ describe("PaywallModal", () => {
       enterpriseRenderer?.unmount();
     });
   });
+
+  it("renders seat-aware plan labels when seat metadata is provided", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <PaywallModal
+          visible
+          subscriptionTier="team"
+          proPriceLabel="$4.99"
+          teamPriceLabel="$19.99"
+          enterprisePriceLabel="$99.99"
+          teamSeatCount={5}
+          enterpriseSeatCount={200}
+          onClose={() => undefined}
+          onUpgradePro={() => undefined}
+          onUpgradeTeam={() => undefined}
+          onUpgradeEnterprise={() => undefined}
+          onRestore={() => undefined}
+        />
+      );
+    });
+
+    expect(() =>
+      renderer?.root.findByProps({
+        children: "Team: Pro + shared fleet, role access, token broker, audit logging (5 seats).",
+      })
+    ).not.toThrow();
+    expect(() =>
+      renderer?.root.findByProps({
+        children: "Enterprise: Team + SSO, 200 seats, compliance controls, SLA support.",
+      })
+    ).not.toThrow();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
