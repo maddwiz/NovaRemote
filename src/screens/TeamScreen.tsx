@@ -3,14 +3,7 @@ import { Pressable, Text, View } from "react-native";
 
 import { TeamBadge } from "../components/TeamBadge";
 import { styles } from "../theme/styles";
-import { TeamIdentity, TeamRole } from "../types";
-
-type TeamMember = {
-  id: string;
-  name: string;
-  email: string;
-  role: TeamRole;
-};
+import { TeamIdentity, TeamMember } from "../types";
 
 type TeamScreenProps = {
   identity: TeamIdentity | null;

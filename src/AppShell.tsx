@@ -84,6 +84,7 @@ import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
+import { TeamScreen } from "./screens/TeamScreen";
 import { GlassesModeScreen } from "./screens/GlassesModeScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { VrCommandCenterScreen } from "./screens/VrCommandCenterScreen";
@@ -673,7 +674,18 @@ export default function AppShell() {
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
   const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
   const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
-  const { identity: teamIdentity, teamServers, teamSettings } = useTeamAuth({ enabled: unlocked, onError: setError });
+  const {
+    loading: teamLoading,
+    busy: teamBusy,
+    identity: teamIdentity,
+    teamServers,
+    teamMembers,
+    teamSettings,
+    refreshTeamContext,
+  } = useTeamAuth({
+    enabled: unlocked,
+    onError: setError,
+  });
   const {
     loading: safetyLoading,
     requireDangerConfirm,
@@ -3459,6 +3471,20 @@ export default function AppShell() {
                 void runWithStatus("Importing encrypted LLM profiles", async () => {
                   const summary = await importEncrypted(payload, passphrase);
                   setLlmTransferStatus(`Imported ${summary.imported} profile(s). Total configured: ${summary.total}.`);
+                });
+              }}
+            />
+          ) : null}
+
+          {route === "team" ? (
+            <TeamScreen
+              identity={teamIdentity}
+              members={teamMembers}
+              loading={teamLoading}
+              busy={teamBusy}
+              onRefresh={() => {
+                void runWithStatus("Refreshing team context", async () => {
+                  await refreshTeamContext();
                 });
               }}
             />

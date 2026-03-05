@@ -53,6 +53,14 @@ export function TabBar({ route, onChange }: TabBarProps) {
         <Text style={[styles.tabButtonText, route === "llms" ? styles.tabButtonTextOn : null]}>LLMs</Text>
       </Pressable>
       <Pressable
+        style={[styles.tabButton, route === "team" ? styles.tabButtonOn : null]}
+        onPress={() => onChange("team")}
+        accessibilityRole="button"
+        accessibilityLabel="Open team tab"
+      >
+        <Text style={[styles.tabButtonText, route === "team" ? styles.tabButtonTextOn : null]}>Team</Text>
+      </Pressable>
+      <Pressable
         style={[styles.tabButton, route === "vr" ? styles.tabButtonOn : null]}
         onPress={() => onChange("vr")}
         accessibilityRole="button"

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { normalizeBaseUrl } from "../api/client";
 import { cloudRequest, getNovaCloudUrl } from "../api/cloudClient";
 import { DEFAULT_CWD, DEFAULT_TERMINAL_BACKEND, STORAGE_TEAM_IDENTITY } from "../constants";
-import { ServerProfile, TeamAuthProvider, TeamIdentity, TeamPermission, TeamRole } from "../types";
+import { ServerProfile, TeamAuthProvider, TeamIdentity, TeamMember, TeamPermission, TeamRole } from "../types";
 
 const TEAM_PROVIDERS: TeamAuthProvider[] = ["novaremote_cloud", "saml", "oidc", "ldap_proxy"];
 const TEAM_ROLES: TeamRole[] = ["admin", "operator", "viewer", "billing"];
@@ -226,11 +226,50 @@ function normalizeTeamSettings(value: unknown): TeamSettings {
   };
 }
 
+function normalizeTeamMember(value: unknown): TeamMember | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  const id = normalizeRequiredString(parsed.id);
+  const name = normalizeRequiredString(parsed.name);
+  const email = normalizeRequiredString(parsed.email);
+  const roleRaw = normalizeRequiredString(parsed.role).toLowerCase();
+  const role =
+    roleRaw === "admin" || roleRaw === "operator" || roleRaw === "viewer" || roleRaw === "billing"
+      ? (roleRaw as TeamRole)
+      : "viewer";
+  if (!id || !name || !email) {
+    return null;
+  }
+  return {
+    id,
+    name,
+    email,
+    role,
+  };
+}
+
+function normalizeTeamMembers(value: unknown): TeamMember[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const byId = new Map<string, TeamMember>();
+  value.forEach((entry) => {
+    const normalized = normalizeTeamMember(entry);
+    if (normalized) {
+      byId.set(normalized.id, normalized);
+    }
+  });
+  return Array.from(byId.values());
+}
+
 export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: UseTeamAuthArgs = {}) {
   const [loading, setLoading] = useState<boolean>(true);
   const [busy, setBusy] = useState<boolean>(false);
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [teamServers, setTeamServers] = useState<ServerProfile[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamSettings, setTeamSettings] = useState<TeamSettings>({ enforceDangerConfirm: null });
   const [error, setError] = useState<string | null>(null);
 
@@ -289,13 +328,23 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       const currentIdentity = nextIdentity ?? identity;
       if (!currentIdentity) {
         setTeamServers([]);
+        setTeamMembers([]);
         setTeamSettings({ enforceDangerConfirm: null });
-        return { servers: [], settings: { enforceDangerConfirm: null } };
+        return { servers: [], members: [], settings: { enforceDangerConfirm: null } };
       }
 
-      const [serversPayload, settingsPayload] = await Promise.all([
+      const [serversPayload, membersPayload, settingsPayload] = await Promise.all([
         cloudRequest<{ servers?: unknown }>(
           "/v1/team/servers",
+          { method: "GET" },
+          {
+            accessToken: currentIdentity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        ),
+        cloudRequest<{ members?: unknown }>(
+          "/v1/team/members",
           { method: "GET" },
           {
             accessToken: currentIdentity.accessToken,
@@ -315,10 +364,12 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       ]);
 
       const servers = normalizeTeamServers(serversPayload.servers || serversPayload);
+      const members = normalizeTeamMembers(membersPayload.members || membersPayload);
       const settings = normalizeTeamSettings(settingsPayload.settings || settingsPayload);
       setTeamServers(servers);
+      setTeamMembers(members);
       setTeamSettings(settings);
-      return { servers, settings };
+      return { servers, members, settings };
     },
     [cloudUrl, fetchImpl, identity]
   );
@@ -374,6 +425,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
   const logout = useCallback(async () => {
     setIdentity(null);
     setTeamServers([]);
+    setTeamMembers([]);
     setTeamSettings({ enforceDangerConfirm: null });
     setError(null);
     await persistIdentity(null);
@@ -427,6 +479,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     if (!enabled || !identity) {
       if (!identity) {
         setTeamServers([]);
+        setTeamMembers([]);
         setTeamSettings({ enforceDangerConfirm: null });
       }
       return;
@@ -453,6 +506,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       busy,
       identity,
       teamServers,
+      teamMembers,
       teamSettings,
       error,
       cloudUrl: cloudUrl || getNovaCloudUrl(),
@@ -475,6 +529,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       logout,
       refreshSession,
       refreshTeamContext,
+      teamMembers,
       teamServers,
       teamSettings,
     ]
@@ -485,5 +540,6 @@ export const teamAuthTestUtils = {
   normalizeTeamIdentity,
   shouldRefreshTeamIdentity,
   normalizeTeamServers,
+  normalizeTeamMembers,
   normalizeTeamSettings,
 };

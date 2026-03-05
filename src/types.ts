@@ -95,6 +95,13 @@ export type TeamIdentity = {
   refreshToken: string;
 };
 
+export type TeamMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: TeamRole;
+};
+
 export type TokenBrokerPermission = "read" | "write" | "execute" | "admin";
 
 export type TokenBrokerResult = {
@@ -131,7 +138,7 @@ export type VmType = "proxmox" | "vmware" | "hyper-v" | "docker" | "lxc" | "qemu
 
 export type TerminalSendMode = "ai" | "shell";
 
-export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms" | "glasses" | "vr";
+export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms" | "team" | "glasses" | "vr";
 
 export type Status = {
   text: string;
