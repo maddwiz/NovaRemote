@@ -45,6 +45,7 @@ type TeamSettings = {
   commandBlocklist: string[];
   sessionTimeoutMinutes: number | null;
   requireSessionRecording: boolean | null;
+  requireFleetApproval: boolean | null;
 };
 
 type TeamUsage = {
@@ -68,6 +69,7 @@ function defaultTeamSettings(): TeamSettings {
     commandBlocklist: [],
     sessionTimeoutMinutes: null,
     requireSessionRecording: null,
+    requireFleetApproval: null,
   };
 }
 
@@ -263,6 +265,14 @@ function normalizeTeamSettings(value: unknown): TeamSettings {
         : typeof parsed.mandatorySessionRecording === "boolean"
           ? parsed.mandatorySessionRecording
           : null;
+  const requireFleetApproval =
+    typeof parsed.requireFleetApproval === "boolean"
+      ? parsed.requireFleetApproval
+      : typeof parsed.fleetApprovalRequired === "boolean"
+        ? parsed.fleetApprovalRequired
+        : typeof parsed.enforceFleetApproval === "boolean"
+          ? parsed.enforceFleetApproval
+          : null;
   const commandBlocklist = normalizeCommandBlocklist(
     parsed.commandBlocklist || parsed.commandBlockList || parsed.blockedCommands || parsed.commandDenylist
   );
@@ -274,6 +284,7 @@ function normalizeTeamSettings(value: unknown): TeamSettings {
     commandBlocklist,
     sessionTimeoutMinutes,
     requireSessionRecording,
+    requireFleetApproval,
   };
 }
 

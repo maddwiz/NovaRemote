@@ -18,6 +18,7 @@ type TeamScreenProps = {
     commandBlocklist: string[];
     sessionTimeoutMinutes: number | null;
     requireSessionRecording: boolean | null;
+    requireFleetApproval: boolean | null;
   };
   usage?: {
     activeMembers: number;
@@ -241,6 +242,15 @@ export function TeamScreen({
             {`Session timeout: ${settings.sessionTimeoutMinutes ? `${settings.sessionTimeoutMinutes} min` : "disabled"}`}
           </Text>
           <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
+          <Text style={styles.emptyText}>
+            {`Fleet approval: ${
+              settings.requireFleetApproval === null
+                ? "user controlled"
+                : settings.requireFleetApproval
+                  ? "enforced on"
+                  : "enforced off"
+            }`}
+          </Text>
           <Text style={styles.emptyText}>
             {`Session recording: ${
               settings.requireSessionRecording === null

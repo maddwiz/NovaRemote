@@ -992,6 +992,39 @@ export default function AppShell() {
     [brokeredServers, poolConnections, recordAuditEvent, servers]
   );
 
+  const requestApprovalPrompt = useCallback(async (command: string, context: string) => {
+    return await new Promise<boolean>((resolve) => {
+      dangerResolverRef.current = resolve;
+      setDangerPrompt({
+        visible: true,
+        command,
+        context,
+      });
+    });
+  }, []);
+
+  const requestDangerApproval = useCallback(
+    async (
+      command: string,
+      context: string,
+      options: {
+        forceConfirm?: boolean;
+        skipFocusedServerCheck?: boolean;
+      } = {}
+    ) => {
+      if (!options.skipFocusedServerCheck && focusedServerId) {
+        assertServerWritable(focusedServerId, context);
+      }
+      assertCommandAllowed(command, context);
+      const shouldConfirm = options.forceConfirm || (requireDangerConfirm && isDangerousShellCommand(command));
+      if (!shouldConfirm) {
+        return true;
+      }
+      return await requestApprovalPrompt(command, context);
+    },
+    [assertCommandAllowed, assertServerWritable, focusedServerId, requestApprovalPrompt, requireDangerConfirm]
+  );
+
   const focusServer = useCallback(
     (serverId: string) => {
       markActivity();
@@ -1488,7 +1521,6 @@ export default function AppShell() {
       throw new Error("Fleet command is required.");
     }
     markActivity();
-    assertCommandAllowed(command, "Fleet command");
 
     const selectedServers = brokeredServers.filter((server) => fleetTargets.includes(server.id));
     if (selectedServers.length === 0) {
@@ -1497,6 +1529,30 @@ export default function AppShell() {
     selectedServers.forEach((server) => {
       assertServerWritable(server.id, "Fleet execution");
     });
+    const targetLabel = `${selectedServers.length} target${selectedServers.length === 1 ? "" : "s"}`;
+
+    if (teamSettings.requireFleetApproval && teamIdentity?.role !== "admin") {
+      recordAuditEvent({
+        action: "command_dangerous_denied",
+        serverId: "",
+        serverName: "fleet",
+        detail: `Fleet execution blocked: admin approval required (${targetLabel})`,
+        approved: false,
+      });
+      throw new Error("Fleet execution requires team admin approval by policy.");
+    }
+
+    const approved = await requestDangerApproval(
+      command,
+      teamSettings.requireFleetApproval ? `Fleet execution approval (${targetLabel})` : "Fleet command",
+      {
+        forceConfirm: Boolean(teamSettings.requireFleetApproval),
+        skipFocusedServerCheck: true,
+      }
+    );
+    if (!approved) {
+      throw new Error("Fleet execution cancelled.");
+    }
 
     const waitMs = Math.max(400, Math.min(Number.parseInt(fleetWaitMs, 10) || DEFAULT_FLEET_WAIT_MS, 120000));
 
@@ -1582,7 +1638,6 @@ export default function AppShell() {
       setFleetBusy(false);
     }
   }, [
-    assertCommandAllowed,
     assertServerWritable,
     brokeredServers,
     fleetCommand,
@@ -1592,6 +1647,9 @@ export default function AppShell() {
     markActivity,
     poolConnections,
     recordAuditEvent,
+    requestDangerApproval,
+    teamIdentity?.role,
+    teamSettings.requireFleetApproval,
   ]);
 
   const sendViaExternalLlmToServer = useCallback(
@@ -2480,25 +2538,6 @@ export default function AppShell() {
     setPaywallVisible(true);
     return true;
   }, [isPro]);
-
-  const requestDangerApproval = useCallback(async (command: string, context: string) => {
-    if (focusedServerId) {
-      assertServerWritable(focusedServerId, context);
-    }
-    assertCommandAllowed(command, context);
-    if (!requireDangerConfirm || !isDangerousShellCommand(command)) {
-      return true;
-    }
-
-    return await new Promise<boolean>((resolve) => {
-      dangerResolverRef.current = resolve;
-      setDangerPrompt({
-        visible: true,
-        command,
-        context,
-      });
-    });
-  }, [assertCommandAllowed, assertServerWritable, focusedServerId, requireDangerConfirm]);
 
   const deleteRecordingWithPlaybackCleanup = useCallback(
     (session: string) => {

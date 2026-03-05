@@ -80,18 +80,21 @@ describe("team auth helpers", () => {
         commandBlocklist: ["rm\\s+-rf", ""],
         sessionTimeoutMinutes: "30",
         mandatorySessionRecording: true,
+        fleetApprovalRequired: true,
       })
     ).toEqual({
       enforceDangerConfirm: true,
       commandBlocklist: ["rm\\s+-rf"],
       sessionTimeoutMinutes: 30,
       requireSessionRecording: true,
+      requireFleetApproval: true,
     });
     expect(teamAuthTestUtils.normalizeTeamSettings({})).toEqual({
       enforceDangerConfirm: null,
       commandBlocklist: [],
       sessionTimeoutMinutes: null,
       requireSessionRecording: null,
+      requireFleetApproval: null,
     });
     expect(
       teamAuthTestUtils.normalizeTeamUsage({

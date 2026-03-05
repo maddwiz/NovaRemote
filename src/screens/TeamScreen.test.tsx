@@ -96,6 +96,7 @@ describe("TeamScreen", () => {
             commandBlocklist: ["rm -rf"],
             sessionTimeoutMinutes: 15,
             requireSessionRecording: null,
+            requireFleetApproval: null,
           }}
           planTier="team"
           loading={false}
@@ -203,6 +204,7 @@ describe("TeamScreen", () => {
             commandBlocklist: [],
             sessionTimeoutMinutes: null,
             requireSessionRecording: null,
+            requireFleetApproval: null,
           }}
           loading={false}
           busy={false}
