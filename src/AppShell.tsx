@@ -1546,7 +1546,7 @@ export default function AppShell() {
       );
       if (matchingApproval) {
         recordAuditEvent({
-          action: "settings_changed",
+          action: "fleet_approval_consumed",
           serverId: "",
           serverName: "fleet",
           detail: `fleet_approval_consumed=${matchingApproval.id}`,
@@ -1560,7 +1560,7 @@ export default function AppShell() {
           note,
         });
         recordAuditEvent({
-          action: "settings_changed",
+          action: "fleet_approval_requested",
           serverId: "",
           serverName: "fleet",
           detail: `fleet_approval_requested ${targetLabel}`,
@@ -3846,9 +3846,9 @@ export default function AppShell() {
                   markActivity();
                   await approveFleetApproval(approvalId, note);
                   recordAuditEvent({
-                    action: "settings_changed",
+                    action: "fleet_approval_approved",
                     serverId: "",
-                    serverName: "team",
+                    serverName: "fleet",
                     detail: `fleet_approval_approved=${approvalId}`,
                   });
                 });
@@ -3858,9 +3858,9 @@ export default function AppShell() {
                   markActivity();
                   await denyFleetApproval(approvalId, note);
                   recordAuditEvent({
-                    action: "settings_changed",
+                    action: "fleet_approval_denied",
                     serverId: "",
-                    serverName: "team",
+                    serverName: "fleet",
                     detail: `fleet_approval_denied=${approvalId}`,
                     approved: false,
                   });
