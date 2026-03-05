@@ -354,6 +354,10 @@ function normalizeTeamMember(value: unknown): TeamMember | null {
     roleRaw === "admin" || roleRaw === "operator" || roleRaw === "viewer" || roleRaw === "billing"
       ? (roleRaw as TeamRole)
       : "viewer";
+  const rawServerIds = parsed.serverIds ?? parsed.server_ids;
+  const serverIds = Array.isArray(rawServerIds)
+    ? rawServerIds.map((entry: unknown) => normalizeRequiredString(entry)).filter(Boolean)
+    : [];
   if (!id || !name || !email) {
     return null;
   }
@@ -362,6 +366,7 @@ function normalizeTeamMember(value: unknown): TeamMember | null {
     name,
     email,
     role,
+    serverIds,
   };
 }
 
@@ -373,7 +378,13 @@ function normalizeTeamMembers(value: unknown): TeamMember[] {
   value.forEach((entry) => {
     const normalized = normalizeTeamMember(entry);
     if (normalized) {
-      byId.set(normalized.id, normalized);
+      const previous = byId.get(normalized.id);
+      const nextServerIds =
+        normalized.serverIds && normalized.serverIds.length > 0 ? normalized.serverIds : previous?.serverIds || [];
+      byId.set(normalized.id, {
+        ...normalized,
+        serverIds: nextServerIds,
+      });
     }
   });
   return Array.from(byId.values());
@@ -854,6 +865,57 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
   );
 
+  const updateMemberServers = useCallback(
+    async (memberId: string, serverIds: string[]) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before managing member server access.");
+      }
+      if (!hasTeamPermission(identity, "team:manage")) {
+        throw new Error("You do not have permission to manage team members.");
+      }
+
+      const normalizedMemberId = memberId.trim();
+      if (!normalizedMemberId) {
+        throw new Error("Member ID is required.");
+      }
+      const normalizedServerIds = Array.from(
+        new Set(
+          serverIds
+            .map((entry) => entry.trim())
+            .filter(Boolean)
+        )
+      );
+
+      setBusy(true);
+      setError(null);
+      try {
+        await cloudRequest<Record<string, unknown>>(
+          `/v1/team/members/${encodeURIComponent(normalizedMemberId)}/servers`,
+          {
+            method: "PUT",
+            body: JSON.stringify({ serverIds: normalizedServerIds }),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        setTeamMembers((prev) =>
+          prev.map((member) => (member.id === normalizedMemberId ? { ...member, serverIds: normalizedServerIds } : member))
+        );
+        await refreshTeamContext(identity);
+      } catch (updateError) {
+        setError(updateError instanceof Error ? updateError.message : String(updateError));
+        onError?.(updateError);
+        throw updateError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
   const requestFleetApproval = useCallback(
     async (input: { command: string; targets: string[]; note?: string }) => {
       if (!identity) {
@@ -1024,6 +1086,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       refreshSession,
       inviteMember,
       updateMemberRole,
+      updateMemberServers,
       requestFleetApproval,
       approveFleetApproval,
       denyFleetApproval,
@@ -1051,6 +1114,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       teamServers,
       teamSettings,
       teamUsage,
+      updateMemberServers,
       updateMemberRole,
     ]
   );

@@ -100,6 +100,7 @@ export type TeamMember = {
   name: string;
   email: string;
   role: TeamRole;
+  serverIds?: string[];
 };
 
 export type TeamFleetApprovalStatus = "pending" | "approved" | "denied" | "expired";

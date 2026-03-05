@@ -117,12 +117,13 @@ describe("team auth helpers", () => {
     });
 
     const members = teamAuthTestUtils.normalizeTeamMembers([
-      { id: "m1", name: "Alice", email: "alice@example.com", role: "admin" },
+      { id: "m1", name: "Alice", email: "alice@example.com", role: "admin", serverIds: ["dgx"] },
       { id: "m1", name: "Alice Duplicate", email: "alice@example.com", role: "viewer" },
       { id: "m2", name: "Bob", email: "bob@example.com", role: "operator" },
     ]);
     expect(members).toHaveLength(2);
     expect(members.find((entry) => entry.id === "m2")?.role).toBe("operator");
+    expect(members.find((entry) => entry.id === "m1")?.serverIds).toEqual(["dgx"]);
 
     const approvals = teamAuthTestUtils.normalizeFleetApprovals([
       {

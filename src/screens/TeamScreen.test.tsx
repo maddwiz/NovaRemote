@@ -227,6 +227,49 @@ describe("TeamScreen", () => {
     });
   });
 
+  it("routes member server-assignment changes when management is enabled", async () => {
+    const onSetMemberServers = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[
+            {
+              id: "member-1",
+              name: "Alice",
+              email: "alice@example.com",
+              role: "viewer",
+              serverIds: ["dgx"],
+            },
+          ]}
+          teamServers={[
+            { id: "dgx", name: "DGX", baseUrl: "https://dgx", token: "x", defaultCwd: "/" },
+            { id: "home", name: "Home", baseUrl: "https://home", token: "y", defaultCwd: "/" },
+          ]}
+          loading={false}
+          busy={false}
+          canManage
+          onSetMemberServers={onSetMemberServers}
+        />
+      );
+    });
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Toggle alice@example.com access to Home" }).props.onPress();
+    });
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Save server access for alice@example.com" }).props.onPress();
+    });
+
+    expect(onSetMemberServers).toHaveBeenCalledWith("member-1", ["dgx", "home"]);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("triggers audit sync and exports when requested", async () => {
     const onSyncAudit = vi.fn(async () => undefined);
     const onExportAuditJson = vi.fn(async () => undefined);

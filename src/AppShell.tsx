@@ -696,6 +696,7 @@ export default function AppShell() {
     loginWithSso: loginTeamWithSso,
     inviteMember: inviteTeamMember,
     updateMemberRole: updateTeamMemberRole,
+    updateMemberServers: updateTeamMemberServers,
     requestFleetApproval,
     approveFleetApproval,
     denyFleetApproval,
@@ -3790,6 +3791,7 @@ export default function AppShell() {
               authError={teamAuthError}
               canInvite={hasTeamPermission("team:invite")}
               canManage={hasTeamPermission("team:manage")}
+              teamServers={teamServers}
               fleetApprovals={fleetApprovals}
               auditPendingCount={pendingAuditEvents}
               auditLastSyncAt={auditLastSyncAt}
@@ -3838,6 +3840,18 @@ export default function AppShell() {
                     serverId: "",
                     serverName: "team",
                     detail: `team_role_update=${memberId}:${role}`,
+                  });
+                });
+              }}
+              onSetMemberServers={async (memberId, serverIds) => {
+                await runWithStatus("Updating member server access", async () => {
+                  markActivity();
+                  await updateTeamMemberServers(memberId, serverIds);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_member_servers=${memberId}:${serverIds.join(",")}`,
                   });
                 });
               }}

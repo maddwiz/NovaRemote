@@ -1,9 +1,9 @@
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { TeamBadge } from "../components/TeamBadge";
 import { styles } from "../theme/styles";
-import { TeamFleetApproval, TeamIdentity, TeamMember, TeamRole } from "../types";
+import { ServerProfile, TeamFleetApproval, TeamIdentity, TeamMember, TeamRole } from "../types";
 
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
@@ -38,8 +38,10 @@ type TeamScreenProps = {
   onRefresh?: () => void;
   canInvite?: boolean;
   canManage?: boolean;
+  teamServers?: ServerProfile[];
   onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
   onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
+  onSetMemberServers?: (memberId: string, serverIds: string[]) => Promise<void>;
   fleetApprovals?: TeamFleetApproval[];
   onApproveFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
   onDenyFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
@@ -66,8 +68,10 @@ export function TeamScreen({
   onRefresh,
   canInvite = false,
   canManage = false,
+  teamServers = [],
   onInviteMember,
   onChangeMemberRole,
+  onSetMemberServers,
   fleetApprovals = [],
   onApproveFleetApproval,
   onDenyFleetApproval,
@@ -87,10 +91,12 @@ export function TeamScreen({
   const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
   const [memberQuery, setMemberQuery] = useState<string>("");
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | TeamRole>("all");
+  const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
   const [teamStatus, setTeamStatus] = useState<string>("");
   const canPasswordLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
   const canSsoLogin = ssoToken.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
+  const canManageMemberServers = Boolean(identity && canManage && onSetMemberServers && teamServers.length > 0 && !busy);
   const canReviewFleetApprovals = Boolean(identity && canManage && !busy && (onApproveFleetApproval || onDenyFleetApproval));
   const pendingFleetApprovals = fleetApprovals.filter((approval) => approval.status === "pending");
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
@@ -109,6 +115,16 @@ export function TeamScreen({
       member.email.toLowerCase().includes(normalizedMemberQuery)
     );
   });
+
+  useEffect(() => {
+    setMemberServerDrafts((previous) => {
+      const next: Record<string, string[]> = {};
+      members.forEach((member) => {
+        next[member.id] = previous[member.id] || member.serverIds || [];
+      });
+      return next;
+    });
+  }, [members]);
 
   const handleLogin = useCallback(() => {
     if (!onLogin || !canPasswordLogin) {
@@ -179,6 +195,42 @@ export function TeamScreen({
         });
     },
     [busy, canManage, onChangeMemberRole]
+  );
+
+  const selectedServerIdsForMember = useCallback(
+    (member: TeamMember) => {
+      return memberServerDrafts[member.id] || member.serverIds || [];
+    },
+    [memberServerDrafts]
+  );
+
+  const toggleMemberServerSelection = useCallback((memberId: string, serverId: string) => {
+    setMemberServerDrafts((previous) => {
+      const current = previous[memberId] || [];
+      const exists = current.includes(serverId);
+      return {
+        ...previous,
+        [memberId]: exists ? current.filter((id) => id !== serverId) : [...current, serverId],
+      };
+    });
+  }, []);
+
+  const handleSaveMemberServers = useCallback(
+    (member: TeamMember) => {
+      if (!onSetMemberServers || !canManageMemberServers) {
+        return;
+      }
+      const nextServerIds = selectedServerIdsForMember(member);
+      setTeamStatus("");
+      void onSetMemberServers(member.id, nextServerIds)
+        .then(() => {
+          setTeamStatus(`Updated server access for ${member.email}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canManageMemberServers, onSetMemberServers, selectedServerIdsForMember]
   );
 
   const handleApproveFleetApproval = useCallback(
@@ -614,6 +666,36 @@ export function TeamScreen({
                       </Pressable>
                     );
                   })}
+                </View>
+              ) : null}
+              {canManageMemberServers ? (
+                <View style={styles.serverCard}>
+                  <Text style={styles.serverSubtitle}>Server Access</Text>
+                  <View style={styles.modeRow}>
+                    {teamServers.map((server) => {
+                      const selected = selectedServerIdsForMember(member).includes(server.id);
+                      return (
+                        <Pressable
+                          key={`${member.id}:${server.id}`}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Toggle ${member.email} access to ${server.name}`}
+                          style={[styles.modeButton, selected ? styles.modeButtonOn : null]}
+                          onPress={() => toggleMemberServerSelection(member.id, server.id)}
+                        >
+                          <Text style={[styles.modeButtonText, selected ? styles.modeButtonTextOn : null]}>{server.name}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Save server access for ${member.email}`}
+                    style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                    onPress={() => handleSaveMemberServers(member)}
+                    disabled={busy}
+                  >
+                    <Text style={styles.actionButtonText}>{busy ? "Saving..." : "Save Server Access"}</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </View>

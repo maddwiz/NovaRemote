@@ -50,11 +50,12 @@ type TeamAuthHandle = {
   loginWithSso: (input: { provider: "saml" | "oidc"; idToken?: string; accessToken?: string }) => Promise<TeamIdentity>;
   inviteMember: (input: { email: string; role?: TeamIdentity["role"] }) => Promise<unknown>;
   updateMemberRole: (memberId: string, role: TeamIdentity["role"]) => Promise<void>;
+  updateMemberServers: (memberId: string, serverIds: string[]) => Promise<void>;
   requestFleetApproval: (input: { command: string; targets: string[]; note?: string }) => Promise<unknown>;
   approveFleetApproval: (approvalId: string, note?: string) => Promise<void>;
   denyFleetApproval: (approvalId: string, note?: string) => Promise<void>;
   fleetApprovals: Array<{ id: string; status: string }>;
-  teamMembers: Array<{ id: string; role: string }>;
+  teamMembers: Array<{ id: string; role: string; serverIds?: string[] }>;
 };
 
 function buildIdentity(overrides: Partial<TeamIdentity> = {}): TeamIdentity {
@@ -90,6 +91,7 @@ beforeEach(() => {
   secureStoreMock.deleteItemAsync.mockClear();
   cloudClientMock.cloudRequest.mockReset();
   let memberRole: TeamIdentity["role"] = "viewer";
+  let memberServerIds: string[] = [];
   let approvals: Array<{
     id: string;
     command: string;
@@ -126,8 +128,14 @@ beforeEach(() => {
     }
     if (path === "/v1/team/members") {
       return {
-        members: [{ id: "member-1", name: "Alice", email: "alice@example.com", role: memberRole }],
+        members: [{ id: "member-1", name: "Alice", email: "alice@example.com", role: memberRole, serverIds: memberServerIds }],
       };
+    }
+    if (path.startsWith("/v1/team/members/") && path.endsWith("/servers")) {
+      const rawBody = String(init?.body || "{}");
+      const payload = JSON.parse(rawBody) as { serverIds?: string[] };
+      memberServerIds = Array.isArray(payload.serverIds) ? payload.serverIds : [];
+      return {};
     }
     if (path.startsWith("/v1/team/members/")) {
       const rawBody = String(init?.body || "{}");
@@ -372,6 +380,45 @@ describe("useTeamAuth hook", () => {
     });
   });
 
+  it("blocks server assignment updates when the user lacks management permission", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          role: "operator",
+          permissions: ["fleet:execute", "servers:read"],
+        })
+      )
+    );
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await expect(latestOrThrow(latest).updateMemberServers("member-1", ["dgx"])).rejects.toThrow(
+        "You do not have permission to manage team members."
+      );
+    });
+
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/members/member-1/servers")
+    ).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("updates member roles when management permission is granted", async () => {
     secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
 
@@ -398,6 +445,40 @@ describe("useTeamAuth hook", () => {
       cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/members/member-1")
     ).toBe(true);
     expect(latestOrThrow(latest).teamMembers.find((entry) => entry.id === "member-1")?.role).toBe("operator");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("updates member server assignments when management permission is granted", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).updateMemberServers("member-1", ["dgx", "home"]);
+    });
+    await flush();
+
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/members/member-1/servers")
+    ).toBe(true);
+    expect(latestOrThrow(latest).teamMembers.find((entry) => entry.id === "member-1")?.serverIds).toEqual([
+      "dgx",
+      "home",
+    ]);
 
     await act(async () => {
       renderer?.unmount();
