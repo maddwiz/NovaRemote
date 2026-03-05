@@ -42,9 +42,15 @@ assert_file "${DASHBOARD_DIR}/contracts/NOVAREMOTE_CLOUD_CONTRACT_SOURCE.txt"
 
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/invites"
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/invites/:inviteId"
+assert_contains "${API_DIR}/src/server.ts" "/v1/team/sso/providers"
+assert_contains "${API_DIR}/src/server.ts" "/v1/team/sso/providers/:provider"
 assert_contains "${API_DIR}/src/server.ts" "/v1/audit/exports"
 
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/team/invites/{inviteId}"
+assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/team/sso/providers/{provider}"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/audit/exports"
+
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/sso/providers"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Request JSON Export"
 
 echo "Cloud bootstrap verification passed."

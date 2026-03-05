@@ -21,11 +21,14 @@ import {
   TeamMember,
   TeamPermission,
   TeamRole,
+  TeamSsoProvider,
+  TeamSsoProviderConfig,
 } from "../types";
 
 const TEAM_PROVIDERS: TeamAuthProvider[] = ["novaremote_cloud", "saml", "oidc", "ldap_proxy"];
 const TEAM_ROLES: TeamRole[] = ["admin", "operator", "viewer", "billing"];
 const TEAM_INVITE_STATUSES: TeamInviteStatus[] = ["pending", "accepted", "expired", "revoked"];
+const TEAM_SSO_PROVIDERS: TeamSsoProvider[] = ["saml", "oidc"];
 const TEAM_PERMISSIONS: TeamPermission[] = [
   "servers:read",
   "servers:write",
@@ -75,8 +78,6 @@ type TeamUsage = {
 };
 
 type TeamInviteResult = TeamInvite;
-
-type TeamSsoProvider = "saml" | "oidc";
 
 function defaultTeamSettings(): TeamSettings {
   return {
@@ -481,6 +482,48 @@ function normalizeTeamInvites(value: unknown): TeamInvite[] {
   });
 }
 
+function normalizeTeamSsoProvider(value: unknown): TeamSsoProviderConfig | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  const providerRaw = normalizeRequiredString(parsed.provider).toLowerCase();
+  if (!TEAM_SSO_PROVIDERS.includes(providerRaw as TeamSsoProvider)) {
+    return null;
+  }
+  const provider = providerRaw as TeamSsoProvider;
+  return {
+    provider,
+    enabled: typeof parsed.enabled === "boolean" ? parsed.enabled : false,
+    displayName: normalizeOptionalString(parsed.displayName || parsed.display_name),
+    issuerUrl: normalizeOptionalString(parsed.issuerUrl || parsed.issuer_url),
+    authUrl: normalizeOptionalString(parsed.authUrl || parsed.auth_url),
+    tokenUrl: normalizeOptionalString(parsed.tokenUrl || parsed.token_url),
+    clientId: normalizeOptionalString(parsed.clientId || parsed.client_id),
+    callbackUrl: normalizeOptionalString(parsed.callbackUrl || parsed.callback_url),
+    updatedAt: normalizeOptionalString(parsed.updatedAt || parsed.updated_at),
+  };
+}
+
+function normalizeTeamSsoProviders(value: unknown): TeamSsoProviderConfig[] {
+  const providerMap = new Map<TeamSsoProvider, TeamSsoProviderConfig>();
+  TEAM_SSO_PROVIDERS.forEach((provider) => {
+    providerMap.set(provider, {
+      provider,
+      enabled: false,
+    });
+  });
+  if (Array.isArray(value)) {
+    value.forEach((entry) => {
+      const normalized = normalizeTeamSsoProvider(entry);
+      if (normalized) {
+        providerMap.set(normalized.provider, normalized);
+      }
+    });
+  }
+  return TEAM_SSO_PROVIDERS.map((provider) => providerMap.get(provider) as TeamSsoProviderConfig);
+}
+
 function normalizeFleetApprovalStatus(value: unknown): TeamFleetApproval["status"] {
   const raw = normalizeRequiredString(value).toLowerCase();
   if (raw === "approved" || raw === "denied" || raw === "expired") {
@@ -582,6 +625,9 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
   const [teamServers, setTeamServers] = useState<ServerProfile[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [teamInvites, setTeamInvites] = useState<TeamInvite[]>([]);
+  const [teamSsoProviders, setTeamSsoProviders] = useState<TeamSsoProviderConfig[]>(() =>
+    normalizeTeamSsoProviders([])
+  );
   const [fleetApprovals, setFleetApprovals] = useState<TeamFleetApproval[]>([]);
   const [teamSettings, setTeamSettings] = useState<TeamSettings>({
     ...defaultTeamSettings(),
@@ -651,6 +697,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         setTeamServers([]);
         setTeamMembers([]);
         setTeamInvites([]);
+        setTeamSsoProviders(normalizeTeamSsoProviders([]));
         setFleetApprovals([]);
         setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
@@ -658,6 +705,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
           servers: [],
           members: [],
           invites: [],
+          ssoProviders: normalizeTeamSsoProviders([]),
           approvals: [],
           settings: defaultTeamSettings(),
           usage: { activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 },
@@ -688,8 +736,20 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
               }
             ).catch(() => ({ invites: [] }))
           : Promise.resolve<{ invites?: unknown }>({ invites: [] });
+      const ssoProvidersPromise =
+        hasTeamPermission(currentIdentity, "team:manage")
+          ? cloudRequest<{ providers?: unknown }>(
+              "/v1/team/sso/providers",
+              { method: "GET" },
+              {
+                accessToken: currentIdentity.accessToken,
+                cloudUrl: cloudUrl || getNovaCloudUrl(),
+                fetchImpl,
+              }
+            ).catch(() => ({ providers: [] }))
+          : Promise.resolve<{ providers?: unknown }>({ providers: [] });
 
-      const [serversPayload, membersPayload, settingsPayload, usagePayload, approvalsPayload, invitesPayload] = await Promise.all([
+      const [serversPayload, membersPayload, settingsPayload, usagePayload, approvalsPayload, invitesPayload, ssoProvidersPayload] = await Promise.all([
         cloudRequest<{ servers?: unknown }>(
           "/v1/team/servers",
           { method: "GET" },
@@ -728,21 +788,24 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         ).catch(() => ({ usage: {} })),
         approvalsPromise,
         invitesPromise,
+        ssoProvidersPromise,
       ]);
 
       const servers = normalizeTeamServers(serversPayload.servers || serversPayload);
       const members = normalizeTeamMembers(membersPayload.members || membersPayload);
       const approvals = normalizeFleetApprovals(approvalsPayload.approvals || approvalsPayload);
       const invites = normalizeTeamInvites(invitesPayload.invites || invitesPayload);
+      const ssoProviders = normalizeTeamSsoProviders(ssoProvidersPayload.providers || ssoProvidersPayload);
       const settings = normalizeTeamSettings(settingsPayload.settings || settingsPayload);
       const usage = normalizeTeamUsage(usagePayload.usage || usagePayload);
       setTeamServers(servers);
       setTeamMembers(members);
       setTeamInvites(invites);
+      setTeamSsoProviders(ssoProviders);
       setFleetApprovals(approvals);
       setTeamSettings(settings);
       setTeamUsage(usage);
-      return { servers, members, invites, approvals, settings, usage };
+      return { servers, members, invites, ssoProviders, approvals, settings, usage };
     },
     [cloudUrl, fetchImpl, identity]
   );
@@ -848,6 +911,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     setTeamServers([]);
     setTeamMembers([]);
     setTeamInvites([]);
+    setTeamSsoProviders(normalizeTeamSsoProviders([]));
     setFleetApprovals([]);
     setTeamSettings(defaultTeamSettings());
     setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
@@ -1106,6 +1170,75 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
   );
 
+  const updateSsoProvider = useCallback(
+    async (input: {
+      provider: TeamSsoProvider;
+      enabled: boolean;
+      displayName?: string;
+      issuerUrl?: string;
+      authUrl?: string;
+      tokenUrl?: string;
+      clientId?: string;
+      callbackUrl?: string;
+    }) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before managing SSO providers.");
+      }
+      if (!hasTeamPermission(identity, "team:manage")) {
+        throw new Error("You do not have permission to manage SSO providers.");
+      }
+
+      const provider = normalizeRequiredString(input.provider).toLowerCase();
+      if (!TEAM_SSO_PROVIDERS.includes(provider as TeamSsoProvider)) {
+        throw new Error("SSO provider is invalid.");
+      }
+
+      const payload = {
+        enabled: Boolean(input.enabled),
+        displayName: normalizeOptionalString(input.displayName),
+        issuerUrl: normalizeOptionalString(input.issuerUrl),
+        authUrl: normalizeOptionalString(input.authUrl),
+        tokenUrl: normalizeOptionalString(input.tokenUrl),
+        clientId: normalizeOptionalString(input.clientId),
+        callbackUrl: normalizeOptionalString(input.callbackUrl),
+      };
+
+      setBusy(true);
+      setError(null);
+      try {
+        const response = await cloudRequest<Record<string, unknown>>(
+          `/v1/team/sso/providers/${encodeURIComponent(provider)}`,
+          {
+            method: "PATCH",
+            body: JSON.stringify(payload),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        const normalizedProvider = normalizeTeamSsoProvider(response.provider || response);
+        if (normalizedProvider) {
+          setTeamSsoProviders((previous) =>
+            normalizeTeamSsoProviders([
+              ...previous.filter((entry) => entry.provider !== normalizedProvider.provider),
+              normalizedProvider,
+            ])
+          );
+        }
+        await refreshTeamContext(identity);
+      } catch (updateError) {
+        setError(updateError instanceof Error ? updateError.message : String(updateError));
+        onError?.(updateError);
+        throw updateError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
   const updateTeamSettings = useCallback(
     async (input: TeamSettingsUpdate) => {
       if (!identity) {
@@ -1298,6 +1431,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         setTeamServers([]);
         setTeamMembers([]);
         setTeamInvites([]);
+        setTeamSsoProviders(normalizeTeamSsoProviders([]));
         setFleetApprovals([]);
         setTeamSettings(defaultTeamSettings());
         setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
@@ -1343,6 +1477,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       teamServers,
       teamMembers,
       teamInvites,
+      teamSsoProviders,
       fleetApprovals,
       teamSettings,
       teamUsage,
@@ -1359,6 +1494,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       revokeInvite,
       updateMemberRole,
       updateMemberServers,
+      updateSsoProvider,
       updateTeamSettings,
       requestFleetApproval,
       approveFleetApproval,
@@ -1385,11 +1521,13 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       refreshTeamContext,
       teamMembers,
       teamInvites,
+      teamSsoProviders,
       teamServers,
       teamSettings,
       teamUsage,
       revokeInvite,
       updateMemberServers,
+      updateSsoProvider,
       updateTeamSettings,
       updateMemberRole,
     ]
@@ -1402,6 +1540,7 @@ export const teamAuthTestUtils = {
   normalizeTeamServers,
   normalizeTeamMembers,
   normalizeTeamInvites,
+  normalizeTeamSsoProviders,
   normalizeFleetApprovals,
   normalizeTeamSettings,
   normalizeTeamUsage,

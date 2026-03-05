@@ -285,6 +285,62 @@ paths:
       responses:
         "200":
           description: Invite revoked
+  /v1/team/sso/providers:
+    get:
+      summary: List team SSO provider configuration
+      responses:
+        "200":
+          description: Team SSO provider list
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  providers:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/TeamSsoProviderConfig"
+  /v1/team/sso/providers/{provider}:
+    patch:
+      summary: Update team SSO provider configuration
+      parameters:
+        - in: path
+          name: provider
+          required: true
+          schema:
+            type: string
+            enum: [saml, oidc]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                enabled:
+                  type: boolean
+                displayName:
+                  type: string
+                issuerUrl:
+                  type: string
+                authUrl:
+                  type: string
+                tokenUrl:
+                  type: string
+                clientId:
+                  type: string
+                callbackUrl:
+                  type: string
+      responses:
+        "200":
+          description: Team SSO provider updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  provider:
+                    $ref: "#/components/schemas/TeamSsoProviderConfig"
   /v1/team/fleet/approvals:
     get:
       summary: List fleet approval records
@@ -581,6 +637,29 @@ components:
         expiresAt:
           type: string
         revokedAt:
+          type: string
+    TeamSsoProviderConfig:
+      type: object
+      required: [provider, enabled]
+      properties:
+        provider:
+          type: string
+          enum: [saml, oidc]
+        enabled:
+          type: boolean
+        displayName:
+          type: string
+        issuerUrl:
+          type: string
+        authUrl:
+          type: string
+        tokenUrl:
+          type: string
+        clientId:
+          type: string
+        callbackUrl:
+          type: string
+        updatedAt:
           type: string
     TeamSettings:
       type: object

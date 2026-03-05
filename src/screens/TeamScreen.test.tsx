@@ -396,6 +396,7 @@ describe("TeamScreen", () => {
   it("requests and opens cloud audit exports when configured", async () => {
     const onRequestCloudAuditExportJson = vi.fn(async () => undefined);
     const onRequestCloudAuditExportCsv = vi.fn(async () => undefined);
+    const onRefreshCloudAuditExports = vi.fn(async () => undefined);
     const onOpenCloudAuditExport = vi.fn();
     let renderer: TestRenderer.ReactTestRenderer | null = null;
 
@@ -413,8 +414,18 @@ describe("TeamScreen", () => {
             createdAt: "2026-03-05T00:00:00.000Z",
             downloadUrl: "https://cloud.novaremote.dev/exports/exp-1.json",
           }}
+          cloudAuditExports={[
+            {
+              exportId: "exp-2",
+              format: "csv",
+              status: "ready",
+              createdAt: "2026-03-05T01:00:00.000Z",
+              downloadUrl: "https://cloud.novaremote.dev/exports/exp-2.csv",
+            },
+          ]}
           onRequestCloudAuditExportJson={onRequestCloudAuditExportJson}
           onRequestCloudAuditExportCsv={onRequestCloudAuditExportCsv}
+          onRefreshCloudAuditExports={onRefreshCloudAuditExports}
           onOpenCloudAuditExport={onOpenCloudAuditExport}
         />
       );
@@ -423,12 +434,15 @@ describe("TeamScreen", () => {
     await act(async () => {
       renderer?.root.findByProps({ accessibilityLabel: "Request cloud audit export as JSON" }).props.onPress();
       renderer?.root.findByProps({ accessibilityLabel: "Request cloud audit export as CSV" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Refresh cloud audit exports" }).props.onPress();
       renderer?.root.findByProps({ accessibilityLabel: "Open latest cloud audit export" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Open cloud audit export exp-2" }).props.onPress();
     });
 
     expect(onRequestCloudAuditExportJson).toHaveBeenCalledTimes(1);
     expect(onRequestCloudAuditExportCsv).toHaveBeenCalledTimes(1);
-    expect(onOpenCloudAuditExport).toHaveBeenCalledTimes(1);
+    expect(onRefreshCloudAuditExports).toHaveBeenCalledTimes(1);
+    expect(onOpenCloudAuditExport).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       renderer?.unmount();
@@ -631,6 +645,40 @@ describe("TeamScreen", () => {
       renderer?.root.findByProps({ accessibilityLabel: "Open cloud dashboard" }).props.onPress();
     });
     expect(onOpenCloudDashboard).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("routes SSO provider enable and disable actions when management is enabled", async () => {
+    const onUpdateSsoProvider = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          loading={false}
+          busy={false}
+          canManage
+          teamSsoProviders={[
+            { provider: "oidc", enabled: false },
+            { provider: "saml", enabled: true, issuerUrl: "https://idp.example.com/saml" },
+          ]}
+          onUpdateSsoProvider={onUpdateSsoProvider}
+        />
+      );
+    });
+
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Enable oidc provider" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Disable saml provider" }).props.onPress();
+    });
+
+    expect(onUpdateSsoProvider).toHaveBeenNthCalledWith(1, { provider: "oidc", enabled: true });
+    expect(onUpdateSsoProvider).toHaveBeenNthCalledWith(2, { provider: "saml", enabled: false });
 
     await act(async () => {
       renderer?.unmount();

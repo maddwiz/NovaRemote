@@ -3,7 +3,7 @@
 This track moves the remaining handoff items from "roadmap" to executable scaffolding:
 
 - `NovaRemoteCloud` backend repo (team auth + token broker + policy + audit endpoints)
-- `NovaRemoteCloudDashboard` web admin repo (team/admin/audit UI scaffold)
+- `NovaRemoteCloudDashboard` web admin repo (team/admin/audit UI scaffold with member/fleet/SSO/export controls)
 
 ## 1. Bootstrap Both Repos
 
@@ -70,6 +70,12 @@ cd ../NovaRemoteCloudDashboard
 npm install
 npm run dev
 ```
+
+The generated dashboard scaffold currently wires:
+
+- team member list + fleet approval feed
+- SSO provider toggle controls (`OIDC`/`SAML`)
+- cloud audit export request actions (`JSON`/`CSV`)
 
 Use:
 

@@ -199,6 +199,18 @@ describe("team auth helpers", () => {
     expect(invites[0]?.id).toBe("invite-1");
     expect(invites[1]?.status).toBe("accepted");
 
+    const ssoProviders = teamAuthTestUtils.normalizeTeamSsoProviders([
+      {
+        provider: "oidc",
+        enabled: true,
+        issuerUrl: "https://id.example.com",
+        clientId: "novaremote-mobile",
+      },
+    ]);
+    expect(ssoProviders).toHaveLength(2);
+    expect(ssoProviders.find((entry) => entry.provider === "oidc")?.enabled).toBe(true);
+    expect(ssoProviders.find((entry) => entry.provider === "saml")?.enabled).toBe(false);
+
     expect(teamAuthTestUtils.toDashboardUrl("https://api.novaremote.dev")).toBe("https://cloud.novaremote.dev");
     expect(teamAuthTestUtils.toDashboardUrl("https://example.com/api")).toBe("https://example.com");
   });

@@ -199,6 +199,18 @@ type FleetApproval = {
   expiresAt?: string;
 };
 
+type TeamSsoProviderConfig = {
+  provider: "saml" | "oidc";
+  enabled: boolean;
+  displayName?: string;
+  issuerUrl?: string;
+  authUrl?: string;
+  tokenUrl?: string;
+  clientId?: string;
+  callbackUrl?: string;
+  updatedAt?: string;
+};
+
 const app = express();
 app.use(helmet());
 app.use(cors());
@@ -251,6 +263,24 @@ const teamInvites: Array<{
   expiresAt?: string;
   revokedAt?: string;
 }> = [];
+const teamSsoProviders: TeamSsoProviderConfig[] = [
+  {
+    provider: "oidc",
+    enabled: true,
+    displayName: "Okta OIDC",
+    issuerUrl: "https://id.example.com",
+    clientId: "novaremote-mobile",
+    callbackUrl: "novaremote://auth/team/sso/oidc",
+    updatedAt: new Date().toISOString()
+  },
+  {
+    provider: "saml",
+    enabled: false,
+    displayName: "SAML",
+    callbackUrl: "novaremote://auth/team/sso/saml",
+    updatedAt: new Date().toISOString()
+  }
+];
 const auditEvents: unknown[] = [];
 const teamSettings = {
   enforceDangerConfirm: true,
@@ -408,6 +438,45 @@ app.delete("/v1/team/invites/:inviteId", (req, res) => {
   invite.status = "revoked";
   invite.revokedAt = new Date().toISOString();
   res.json({ ok: true });
+});
+
+app.get("/v1/team/sso/providers", (_req, res) => {
+  res.json({ providers: teamSsoProviders });
+});
+
+app.patch("/v1/team/sso/providers/:provider", (req, res) => {
+  const provider = String(req.params.provider || "").trim().toLowerCase();
+  if (provider !== "oidc" && provider !== "saml") {
+    return res.status(400).json({ detail: "Invalid provider" });
+  }
+  const entry = teamSsoProviders.find((item) => item.provider === provider);
+  if (!entry) {
+    return res.status(404).json({ detail: "Provider not found" });
+  }
+  const body = req.body && typeof req.body === "object" ? req.body : {};
+  if (typeof (body as { enabled?: unknown }).enabled === "boolean") {
+    entry.enabled = (body as { enabled: boolean }).enabled;
+  }
+  if (typeof (body as { displayName?: unknown }).displayName === "string") {
+    entry.displayName = String((body as { displayName: string }).displayName);
+  }
+  if (typeof (body as { issuerUrl?: unknown }).issuerUrl === "string") {
+    entry.issuerUrl = String((body as { issuerUrl: string }).issuerUrl);
+  }
+  if (typeof (body as { authUrl?: unknown }).authUrl === "string") {
+    entry.authUrl = String((body as { authUrl: string }).authUrl);
+  }
+  if (typeof (body as { tokenUrl?: unknown }).tokenUrl === "string") {
+    entry.tokenUrl = String((body as { tokenUrl: string }).tokenUrl);
+  }
+  if (typeof (body as { clientId?: unknown }).clientId === "string") {
+    entry.clientId = String((body as { clientId: string }).clientId);
+  }
+  if (typeof (body as { callbackUrl?: unknown }).callbackUrl === "string") {
+    entry.callbackUrl = String((body as { callbackUrl: string }).callbackUrl);
+  }
+  entry.updatedAt = new Date().toISOString();
+  res.json({ provider: entry });
 });
 
 app.get("/v1/team/fleet/approvals", (_req, res) => {
@@ -614,6 +683,42 @@ body {
   color: #99b9d9;
   font-size: 13px;
 }
+.textInput {
+  width: 100%;
+  margin-top: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(130, 180, 255, 0.4);
+  background: rgba(5, 10, 18, 0.9);
+  color: #d8ecff;
+  padding: 8px 10px;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
+.actions button {
+  border-radius: 8px;
+  border: 1px solid rgba(130, 180, 255, 0.4);
+  background: rgba(12, 20, 36, 0.95);
+  color: #d8ecff;
+  padding: 7px 11px;
+  cursor: pointer;
+}
+.actions button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.providerRow {
+  border: 1px solid rgba(130, 180, 255, 0.2);
+  border-radius: 10px;
+  padding: 10px;
+  margin-top: 10px;
+}
+a {
+  color: #9bd0ff;
+}
 CSS
 fi
 
@@ -639,22 +744,259 @@ fi
 
 if [[ ! -f "${DASHBOARD_REPO}/src/App.tsx" ]]; then
   cat > "${DASHBOARD_REPO}/src/App.tsx" <<'TS'
-const cloudUrl = import.meta.env.VITE_NOVA_CLOUD_URL || "http://localhost:8788";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+type TeamSsoProviderConfig = {
+  provider: "saml" | "oidc";
+  enabled: boolean;
+  displayName?: string;
+  issuerUrl?: string;
+  clientId?: string;
+  updatedAt?: string;
+};
+
+type TeamMember = {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+};
+
+type FleetApproval = {
+  id: string;
+  command: string;
+  status: string;
+  requestedByEmail: string;
+  createdAt: string;
+};
+
+type AuditExportJob = {
+  exportId: string;
+  format: "json" | "csv";
+  status: "pending" | "ready" | "failed";
+  createdAt: string;
+  downloadUrl?: string;
+};
+
+const cloudUrl = (import.meta.env.VITE_NOVA_CLOUD_URL || "http://localhost:8788").replace(/\/+$/, "");
+
+async function fetchJson<T>(path: string, accessToken?: string): Promise<T> {
+  const response = await fetch(`${cloudUrl}${path}`, {
+    headers: accessToken
+      ? {
+          Authorization: `Bearer ${accessToken}`,
+        }
+      : undefined,
+  });
+  if (!response.ok) {
+    throw new Error(`${response.status} ${await response.text()}`);
+  }
+  return (await response.json()) as T;
+}
 
 export function App() {
+  const [status, setStatus] = useState<string>("Ready");
+  const [accessToken, setAccessToken] = useState<string>("");
+  const [healthOk, setHealthOk] = useState<boolean | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [approvals, setApprovals] = useState<FleetApproval[]>([]);
+  const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
+  const [lastExport, setLastExport] = useState<AuditExportJob | null>(null);
+  const [busy, setBusy] = useState<boolean>(false);
+
+  const loadHealth = useCallback(async () => {
+    try {
+      await fetchJson<{ ok: boolean }>("/healthz");
+      setHealthOk(true);
+    } catch {
+      setHealthOk(false);
+    }
+  }, []);
+
+  const loadTeamData = useCallback(async () => {
+    if (!accessToken.trim()) {
+      setStatus("Paste an access token from /v1/auth/login to load team data.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Loading team data...");
+    try {
+      const [membersPayload, approvalsPayload, ssoPayload] = await Promise.all([
+        fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
+        fetchJson<{ approvals?: FleetApproval[] }>("/v1/team/fleet/approvals", accessToken.trim()),
+        fetchJson<{ providers?: TeamSsoProviderConfig[] }>("/v1/team/sso/providers", accessToken.trim()),
+      ]);
+      setMembers(Array.isArray(membersPayload.members) ? membersPayload.members : []);
+      setApprovals(Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : []);
+      setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
+      setStatus("Team data loaded.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [accessToken]);
+
+  const requestExport = useCallback(
+    async (format: "json" | "csv") => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before requesting exports.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Requesting ${format.toUpperCase()} export...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/audit/exports`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+          body: JSON.stringify({ format }),
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        const payload = (await response.json()) as AuditExportJob;
+        setLastExport(payload);
+        setStatus(`Export ${payload.exportId} (${payload.status}) ready.`);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken]
+  );
+
+  const toggleSsoProvider = useCallback(
+    async (provider: "saml" | "oidc", enabled: boolean) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before editing SSO providers.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`${enabled ? "Enabling" : "Disabling"} ${provider.toUpperCase()}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/sso/providers/${provider}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+          body: JSON.stringify({ enabled }),
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
+  useEffect(() => {
+    void loadHealth();
+  }, [loadHealth]);
+
+  const healthLabel = useMemo(() => {
+    if (healthOk === null) {
+      return "checking";
+    }
+    return healthOk ? "healthy" : "unreachable";
+  }, [healthOk]);
+
   return (
     <main className="layout">
       <section className="panel">
         <h1 className="title">NovaRemote Cloud Dashboard</h1>
         <p className="muted">Connected API: {cloudUrl}</p>
+        <p className="muted">Health: {healthLabel}</p>
+        <label className="muted">
+          Access Token
+          <input
+            className="textInput"
+            value={accessToken}
+            onChange={(event) => setAccessToken(event.target.value)}
+            placeholder="Paste bearer token from /v1/auth/login"
+          />
+        </label>
+        <div className="actions">
+          <button onClick={() => void loadTeamData()} disabled={busy}>
+            {busy ? "Working..." : "Refresh Team Data"}
+          </button>
+          <button onClick={() => void requestExport("json")} disabled={busy}>
+            Request JSON Export
+          </button>
+          <button onClick={() => void requestExport("csv")} disabled={busy}>
+            Request CSV Export
+          </button>
+        </div>
+        <p className="muted">{status}</p>
       </section>
+
       <section className="panel">
-        <h2 className="title">Team Fleet</h2>
-        <p className="muted">Manage members, roles, server assignments, and policy locks.</p>
+        <h2 className="title">Team Members ({members.length})</h2>
+        {members.length === 0 ? <p className="muted">No members loaded.</p> : null}
+        {members.map((member) => (
+          <p key={member.id} className="muted">
+            {member.name} ({member.email}) • {member.role}
+          </p>
+        ))}
       </section>
+
       <section className="panel">
-        <h2 className="title">Audit Stream</h2>
-        <p className="muted">Review command history and export compliance evidence.</p>
+        <h2 className="title">Fleet Approvals ({approvals.length})</h2>
+        {approvals.length === 0 ? <p className="muted">No approvals loaded.</p> : null}
+        {approvals.map((approval) => (
+          <p key={approval.id} className="muted">
+            {approval.status} • {approval.command} • {approval.requestedByEmail}
+          </p>
+        ))}
+      </section>
+
+      <section className="panel">
+        <h2 className="title">SSO Providers</h2>
+        {ssoProviders.length === 0 ? <p className="muted">No providers loaded.</p> : null}
+        {ssoProviders.map((provider) => (
+          <div key={provider.provider} className="providerRow">
+            <p className="muted">
+              {provider.provider.toUpperCase()} • {provider.enabled ? "enabled" : "disabled"}{" "}
+              {provider.clientId ? `• ${provider.clientId}` : ""}
+            </p>
+            <div className="actions">
+              <button disabled={busy || provider.enabled} onClick={() => void toggleSsoProvider(provider.provider, true)}>
+                Enable
+              </button>
+              <button disabled={busy || !provider.enabled} onClick={() => void toggleSsoProvider(provider.provider, false)}>
+                Disable
+              </button>
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="panel">
+        <h2 className="title">Last Audit Export</h2>
+        {!lastExport ? <p className="muted">No exports requested yet.</p> : null}
+        {lastExport ? (
+          <>
+            <p className="muted">
+              {lastExport.exportId} • {lastExport.format.toUpperCase()} • {lastExport.status}
+            </p>
+            {lastExport.downloadUrl ? (
+              <p className="muted">
+                <a href={lastExport.downloadUrl} target="_blank" rel="noreferrer">
+                  Open download URL
+                </a>
+              </p>
+            ) : null}
+          </>
+        ) : null}
       </section>
     </main>
   );

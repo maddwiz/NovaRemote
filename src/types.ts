@@ -63,6 +63,8 @@ export type SessionCollaborator = {
 
 export type TeamAuthProvider = "novaremote_cloud" | "saml" | "oidc" | "ldap_proxy";
 
+export type TeamSsoProvider = "saml" | "oidc";
+
 export type TeamRole = "admin" | "operator" | "viewer" | "billing";
 
 export type TeamPermission =
@@ -93,6 +95,18 @@ export type TeamIdentity = {
   accessToken: string;
   tokenExpiresAt: number;
   refreshToken: string;
+};
+
+export type TeamSsoProviderConfig = {
+  provider: TeamSsoProvider;
+  enabled: boolean;
+  displayName?: string;
+  issuerUrl?: string;
+  authUrl?: string;
+  tokenUrl?: string;
+  clientId?: string;
+  callbackUrl?: string;
+  updatedAt?: string;
 };
 
 export type TeamMember = {

@@ -688,6 +688,7 @@ export default function AppShell() {
     teamServers,
     teamMembers,
     teamInvites,
+    teamSsoProviders,
     fleetApprovals,
     teamSettings,
     teamUsage,
@@ -701,6 +702,7 @@ export default function AppShell() {
     updateTeamSettings,
     updateMemberRole: updateTeamMemberRole,
     updateMemberServers: updateTeamMemberServers,
+    updateSsoProvider: updateTeamSsoProvider,
     requestFleetApproval,
     approveFleetApproval,
     denyFleetApproval,
@@ -821,7 +823,9 @@ export default function AppShell() {
     syncNow: syncAuditNow,
     exportSnapshot: exportAuditSnapshot,
     requestCloudExport: requestCloudAuditExport,
+    refreshCloudExports: refreshCloudAuditExports,
     lastCloudExportJob: lastCloudAuditExportJob,
+    cloudExportJobs: cloudAuditExportJobs,
   } = useAuditLog({
     identity: teamIdentity,
     enabled: unlocked,
@@ -3809,11 +3813,13 @@ export default function AppShell() {
               canManageSettings={hasTeamPermission("team:manage") || hasTeamPermission("settings:manage")}
               teamServers={teamServers}
               teamInvites={teamInvites}
+              teamSsoProviders={teamSsoProviders}
               cloudDashboardUrl={cloudDashboardUrl}
               fleetApprovals={fleetApprovals}
               auditPendingCount={pendingAuditEvents}
               auditLastSyncAt={auditLastSyncAt}
               cloudAuditExportJob={lastCloudAuditExportJob}
+              cloudAuditExports={cloudAuditExportJobs}
               onLogin={async (input) => {
                 await runWithStatus("Signing in to team", async () => {
                   markActivity();
@@ -3859,6 +3865,18 @@ export default function AppShell() {
                     serverId: "",
                     serverName: "team",
                     detail: `team_invite_revoke=${inviteId}`,
+                  });
+                });
+              }}
+              onUpdateSsoProvider={async ({ provider, enabled }) => {
+                await runWithStatus(`${enabled ? "Enabling" : "Disabling"} ${provider.toUpperCase()} SSO`, async () => {
+                  markActivity();
+                  await updateTeamSsoProvider({ provider, enabled });
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_sso_provider=${provider}:${enabled ? "enabled" : "disabled"}`,
                   });
                 });
               }}
@@ -3988,13 +4006,20 @@ export default function AppShell() {
                   await requestCloudAuditExport("csv", 168);
                 });
               }}
-              onOpenCloudAuditExport={() => {
-                if (!lastCloudAuditExportJob?.downloadUrl) {
+              onRefreshCloudAuditExports={async () => {
+                await runWithStatus("Refreshing cloud audit exports", async () => {
+                  markActivity();
+                  await refreshCloudAuditExports(20);
+                });
+              }}
+              onOpenCloudAuditExport={(job) => {
+                const target = job?.downloadUrl || lastCloudAuditExportJob?.downloadUrl;
+                if (!target) {
                   return;
                 }
                 void runWithStatus("Opening cloud audit export", async () => {
                   markActivity();
-                  await Linking.openURL(lastCloudAuditExportJob.downloadUrl || "");
+                  await Linking.openURL(target);
                 });
               }}
             />

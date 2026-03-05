@@ -11,13 +11,14 @@ import {
   TeamInvite,
   TeamMember,
   TeamRole,
+  TeamSsoProvider,
+  TeamSsoProviderConfig,
 } from "../types";
 
 const INVITE_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_OPTIONS: TeamRole[] = ["viewer", "operator", "admin", "billing"];
 const MEMBER_ROLE_FILTER_OPTIONS: Array<"all" | TeamRole> = ["all", "viewer", "operator", "admin", "billing"];
 const TEAM_SSO_PROVIDERS = ["oidc", "saml"] as const;
-type TeamSsoProvider = (typeof TEAM_SSO_PROVIDERS)[number];
 
 type TeamSettingsInput = {
   enforceDangerConfirm: boolean | null;
@@ -95,10 +96,12 @@ type TeamScreenProps = {
   canManageSettings?: boolean;
   teamServers?: ServerProfile[];
   teamInvites?: TeamInvite[];
+  teamSsoProviders?: TeamSsoProviderConfig[];
   cloudDashboardUrl?: string;
   onOpenCloudDashboard?: () => void;
   onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
   onRevokeInvite?: (inviteId: string) => Promise<void>;
+  onUpdateSsoProvider?: (input: { provider: TeamSsoProvider; enabled: boolean }) => Promise<void>;
   onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
   onSetMemberServers?: (memberId: string, serverIds: string[]) => Promise<void>;
   onUpdateSettings?: (input: TeamSettingsInput) => Promise<void>;
@@ -111,9 +114,11 @@ type TeamScreenProps = {
   onExportAuditJson?: () => Promise<void>;
   onExportAuditCsv?: () => Promise<void>;
   cloudAuditExportJob?: TeamAuditExportJob | null;
+  cloudAuditExports?: TeamAuditExportJob[];
   onRequestCloudAuditExportJson?: () => Promise<void>;
   onRequestCloudAuditExportCsv?: () => Promise<void>;
-  onOpenCloudAuditExport?: () => void;
+  onRefreshCloudAuditExports?: () => Promise<void>;
+  onOpenCloudAuditExport?: (job?: TeamAuditExportJob) => void;
 };
 
 export function TeamScreen({
@@ -135,10 +140,12 @@ export function TeamScreen({
   canManageSettings = false,
   teamServers = [],
   teamInvites = [],
+  teamSsoProviders = [],
   cloudDashboardUrl,
   onOpenCloudDashboard,
   onInviteMember,
   onRevokeInvite,
+  onUpdateSsoProvider,
   onChangeMemberRole,
   onSetMemberServers,
   onUpdateSettings,
@@ -151,8 +158,10 @@ export function TeamScreen({
   onExportAuditJson,
   onExportAuditCsv,
   cloudAuditExportJob,
+  cloudAuditExports = [],
   onRequestCloudAuditExportJson,
   onRequestCloudAuditExportCsv,
+  onRefreshCloudAuditExports,
   onOpenCloudAuditExport,
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
@@ -177,6 +186,7 @@ export function TeamScreen({
   const canSsoLogin = ssoToken.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
   const canManageInvites = Boolean(identity && (canInvite || canManage) && onRevokeInvite && !busy);
+  const canManageSsoProviders = Boolean(identity && canManage && onUpdateSsoProvider && !busy);
   const canManageMemberServers = Boolean(identity && canManage && onSetMemberServers && teamServers.length > 0 && !busy);
   const canEditTeamPolicies = Boolean(identity && canManageSettings && onUpdateSettings && settings && !busy);
   const canReviewFleetApprovals = Boolean(identity && canManage && !busy && (onApproveFleetApproval || onDenyFleetApproval));
@@ -186,9 +196,14 @@ export function TeamScreen({
   const canExportAuditCsv = Boolean(identity && onExportAuditCsv && !busy);
   const canRequestCloudAuditExportJson = Boolean(identity && onRequestCloudAuditExportJson && !busy);
   const canRequestCloudAuditExportCsv = Boolean(identity && onRequestCloudAuditExportCsv && !busy);
+  const canRefreshCloudAuditExports = Boolean(identity && onRefreshCloudAuditExports && !busy);
+  const canOpenAnyCloudAuditExport = Boolean(identity && onOpenCloudAuditExport && !busy);
   const canOpenCloudAuditExport = Boolean(identity && cloudAuditExportJob?.downloadUrl && onOpenCloudAuditExport && !busy);
   const canOpenCloudDashboard = Boolean(identity && cloudDashboardUrl && onOpenCloudDashboard && !busy);
   const pendingInvites = teamInvites.filter((invite) => invite.status === "pending");
+  const visibleSsoProviders = TEAM_SSO_PROVIDERS.map(
+    (provider) => teamSsoProviders.find((entry) => entry.provider === provider) || { provider, enabled: false }
+  );
   const normalizedMemberQuery = memberQuery.trim().toLowerCase();
   const visibleMembers = members.filter((member) => {
     if (memberRoleFilter !== "all" && member.role !== memberRoleFilter) {
@@ -310,6 +325,23 @@ export function TeamScreen({
         });
     },
     [canManageInvites, onRevokeInvite]
+  );
+
+  const handleToggleSsoProvider = useCallback(
+    (provider: TeamSsoProvider, enabled: boolean) => {
+      if (!onUpdateSsoProvider || !canManageSsoProviders) {
+        return;
+      }
+      setTeamStatus("");
+      void onUpdateSsoProvider({ provider, enabled })
+        .then(() => {
+          setTeamStatus(`${provider.toUpperCase()} ${enabled ? "enabled" : "disabled"}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canManageSsoProviders, onUpdateSsoProvider]
   );
 
   const handleChangeMemberRole = useCallback(
@@ -486,17 +518,40 @@ export function TeamScreen({
       });
   }, [canRequestCloudAuditExportCsv, onRequestCloudAuditExportCsv]);
 
-  const handleOpenCloudAuditExport = useCallback(() => {
-    if (!onOpenCloudAuditExport || !canOpenCloudAuditExport) {
+  const handleRefreshCloudAuditExports = useCallback(() => {
+    if (!onRefreshCloudAuditExports || !canRefreshCloudAuditExports) {
       return;
     }
     setTeamStatus("");
-    try {
-      onOpenCloudAuditExport();
-    } catch (error) {
-      setTeamStatus(error instanceof Error ? error.message : String(error));
-    }
-  }, [canOpenCloudAuditExport, onOpenCloudAuditExport]);
+    void onRefreshCloudAuditExports()
+      .then(() => {
+        setTeamStatus("Cloud audit exports refreshed.");
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [canRefreshCloudAuditExports, onRefreshCloudAuditExports]);
+
+  const handleOpenCloudAuditExport = useCallback(
+    (job?: TeamAuditExportJob) => {
+      if (!onOpenCloudAuditExport || !canOpenAnyCloudAuditExport) {
+        return;
+      }
+      if (!job && !canOpenCloudAuditExport) {
+        return;
+      }
+      if (job && !job.downloadUrl) {
+        return;
+      }
+      setTeamStatus("");
+      try {
+        onOpenCloudAuditExport(job);
+      } catch (error) {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      }
+    },
+    [canOpenAnyCloudAuditExport, canOpenCloudAuditExport, onOpenCloudAuditExport]
+  );
 
   const handleSaveTeamPolicies = useCallback(() => {
     if (!onUpdateSettings || !canEditTeamPolicies || !settings) {
@@ -896,6 +951,47 @@ export function TeamScreen({
         </View>
       ) : null}
 
+      {identity && (visibleSsoProviders.length > 0 || canManageSsoProviders) ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>SSO Providers</Text>
+          {visibleSsoProviders.map((providerConfig) => (
+            <View key={providerConfig.provider} style={styles.panel}>
+              <Text style={styles.serverSubtitle}>
+                {`${providerConfig.provider.toUpperCase()} • ${providerConfig.enabled ? "enabled" : "disabled"}`}
+              </Text>
+              {providerConfig.issuerUrl ? <Text style={styles.emptyText}>{providerConfig.issuerUrl}</Text> : null}
+              {providerConfig.clientId ? <Text style={styles.emptyText}>{`Client ID: ${providerConfig.clientId}`}</Text> : null}
+              <View style={styles.rowInlineSpace}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Enable ${providerConfig.provider} provider`}
+                  style={[
+                    styles.actionButton,
+                    providerConfig.enabled || !canManageSsoProviders ? styles.buttonDisabled : null,
+                  ]}
+                  onPress={() => handleToggleSsoProvider(providerConfig.provider, true)}
+                  disabled={providerConfig.enabled || !canManageSsoProviders}
+                >
+                  <Text style={styles.actionButtonText}>Enable</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Disable ${providerConfig.provider} provider`}
+                  style={[
+                    styles.actionDangerButton,
+                    !providerConfig.enabled || !canManageSsoProviders ? styles.buttonDisabled : null,
+                  ]}
+                  onPress={() => handleToggleSsoProvider(providerConfig.provider, false)}
+                  disabled={!providerConfig.enabled || !canManageSsoProviders}
+                >
+                  <Text style={styles.actionDangerText}>Disable</Text>
+                </Pressable>
+              </View>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
       {identity ? (
         <View style={styles.rowInlineSpace}>
           {onSyncAudit ? (
@@ -1000,18 +1096,53 @@ export function TeamScreen({
                 <Text style={styles.actionButtonText}>Request CSV</Text>
               </Pressable>
             ) : null}
+            {onRefreshCloudAuditExports ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Refresh cloud audit exports"
+                style={[styles.actionButton, !canRefreshCloudAuditExports ? styles.buttonDisabled : null]}
+                onPress={handleRefreshCloudAuditExports}
+                disabled={!canRefreshCloudAuditExports}
+              >
+                <Text style={styles.actionButtonText}>Refresh</Text>
+              </Pressable>
+            ) : null}
             {onOpenCloudAuditExport ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Open latest cloud audit export"
                 style={[styles.actionButton, !canOpenCloudAuditExport ? styles.buttonDisabled : null]}
-                onPress={handleOpenCloudAuditExport}
+                onPress={() => handleOpenCloudAuditExport()}
                 disabled={!canOpenCloudAuditExport}
               >
                 <Text style={styles.actionButtonText}>Open Export</Text>
               </Pressable>
             ) : null}
           </View>
+          {cloudAuditExports.length > 0 ? (
+            <View style={styles.serverCard}>
+              <Text style={styles.serverSubtitle}>Recent Exports</Text>
+              {cloudAuditExports.map((job) => (
+                <View key={job.exportId} style={styles.panel}>
+                  <Text style={styles.emptyText}>
+                    {`${job.exportId} • ${job.format.toUpperCase()} • ${job.status}`}
+                  </Text>
+                  <Text style={styles.emptyText}>{`Created ${new Date(job.createdAt).toLocaleString()}`}</Text>
+                  {job.downloadUrl ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Open cloud audit export ${job.exportId}`}
+                      style={[styles.actionButton, !canOpenAnyCloudAuditExport ? styles.buttonDisabled : null]}
+                      onPress={() => handleOpenCloudAuditExport(job)}
+                      disabled={!canOpenAnyCloudAuditExport}
+                    >
+                      <Text style={styles.actionButtonText}>Open</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+              ))}
+            </View>
+          ) : null}
         </View>
       ) : null}
 

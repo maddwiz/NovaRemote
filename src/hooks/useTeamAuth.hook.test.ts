@@ -60,10 +60,12 @@ type TeamAuthHandle = {
   }) => Promise<void>;
   updateMemberRole: (memberId: string, role: TeamIdentity["role"]) => Promise<void>;
   updateMemberServers: (memberId: string, serverIds: string[]) => Promise<void>;
+  updateSsoProvider: (input: { provider: "saml" | "oidc"; enabled: boolean }) => Promise<void>;
   requestFleetApproval: (input: { command: string; targets: string[]; note?: string }) => Promise<unknown>;
   approveFleetApproval: (approvalId: string, note?: string) => Promise<void>;
   denyFleetApproval: (approvalId: string, note?: string) => Promise<void>;
   fleetApprovals: Array<{ id: string; status: string }>;
+  teamSsoProviders: Array<{ provider: "saml" | "oidc"; enabled: boolean }>;
   teamSettings: {
     enforceDangerConfirm: boolean | null;
     commandBlocklist: string[];
@@ -146,6 +148,23 @@ beforeEach(() => {
     status: "pending" | "approved" | "denied";
     note?: string;
   }> = [];
+  let ssoProviders: Array<{
+    provider: "saml" | "oidc";
+    enabled: boolean;
+    issuerUrl?: string;
+    clientId?: string;
+  }> = [
+    {
+      provider: "oidc",
+      enabled: true,
+      issuerUrl: "https://id.example.com",
+      clientId: "novaremote-mobile",
+    },
+    {
+      provider: "saml",
+      enabled: false,
+    },
+  ];
   cloudClientMock.cloudRequest.mockImplementation(async (path: string, init?: RequestInit) => {
     if (path === "/v1/auth/refresh") {
       return {
@@ -250,6 +269,26 @@ beforeEach(() => {
         return { invite: created };
       }
       return { invites };
+    }
+    if (path === "/v1/team/sso/providers") {
+      return { providers: ssoProviders };
+    }
+    if (path.startsWith("/v1/team/sso/providers/")) {
+      const provider = String(path).split("/")[5] as "saml" | "oidc";
+      const rawBody = String(init?.body || "{}");
+      const payload = JSON.parse(rawBody) as { enabled?: boolean; issuerUrl?: string; clientId?: string };
+      ssoProviders = ssoProviders.map((entry) =>
+        entry.provider === provider
+          ? {
+              ...entry,
+              enabled: typeof payload.enabled === "boolean" ? payload.enabled : entry.enabled,
+              issuerUrl: typeof payload.issuerUrl === "string" ? payload.issuerUrl : entry.issuerUrl,
+              clientId: typeof payload.clientId === "string" ? payload.clientId : entry.clientId,
+            }
+          : entry
+      );
+      const updated = ssoProviders.find((entry) => entry.provider === provider);
+      return { provider: updated };
     }
     if (path.startsWith("/v1/team/invites/")) {
       const inviteId = String(path).split("/")[4] || "";
@@ -577,6 +616,43 @@ describe("useTeamAuth hook", () => {
       requireSessionRecording: true,
       requireFleetApproval: true,
     });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("updates SSO provider configuration when team-manage permission is granted", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+    await flush();
+
+    expect(latestOrThrow(latest).teamSsoProviders.find((entry) => entry.provider === "saml")?.enabled).toBe(false);
+
+    await act(async () => {
+      await latestOrThrow(latest).updateSsoProvider({
+        provider: "saml",
+        enabled: true,
+      });
+    });
+    await flush();
+
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/sso/providers/saml")
+    ).toBe(true);
+    expect(latestOrThrow(latest).teamSsoProviders.find((entry) => entry.provider === "saml")?.enabled).toBe(true);
 
     await act(async () => {
       renderer?.unmount();

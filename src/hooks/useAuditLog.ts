@@ -129,6 +129,20 @@ function normalizeAuditExportJob(value: unknown): TeamAuditExportJob | null {
   };
 }
 
+function normalizeAuditExportJobs(value: unknown): TeamAuditExportJob[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const byId = new Map<string, TeamAuditExportJob>();
+  value.forEach((entry) => {
+    const normalized = normalizeAuditExportJob(entry);
+    if (normalized) {
+      byId.set(normalized.exportId, normalized);
+    }
+  });
+  return Array.from(byId.values()).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+}
+
 export function serializeAuditEvents(events: AuditEvent[], format: AuditExportFormat): string {
   if (format === "json") {
     return JSON.stringify(events, null, 2);
@@ -213,6 +227,7 @@ export function useAuditLog({
   const [lastError, setLastError] = useState<string | null>(null);
   const [lastSyncAt, setLastSyncAt] = useState<number | null>(null);
   const [lastCloudExportJob, setLastCloudExportJob] = useState<TeamAuditExportJob | null>(null);
+  const [cloudExportJobs, setCloudExportJobs] = useState<TeamAuditExportJob[]>([]);
 
   useEffect(() => {
     let mounted = true;
@@ -401,10 +416,48 @@ export function useAuditLog({
         throw new Error("Cloud export response is invalid.");
       }
       setLastCloudExportJob(job);
+      setCloudExportJobs((previous) => normalizeAuditExportJobs([job, ...previous]));
       return job;
     },
     [cloudUrl, enabled, fetchImpl, identity, syncEnabled]
   );
+
+  const refreshCloudExports = useCallback(
+    async (limit = 20): Promise<TeamAuditExportJob[]> => {
+      if (!enabled || !syncEnabled) {
+        return [];
+      }
+      if (!identity?.accessToken) {
+        return [];
+      }
+      const normalizedLimit = Number.isFinite(limit) && limit > 0 ? Math.round(limit) : 20;
+      const payload = await cloudRequest<Record<string, unknown>>(
+        `/v1/audit/exports?limit=${encodeURIComponent(String(normalizedLimit))}`,
+        { method: "GET" },
+        {
+          accessToken: identity.accessToken,
+          cloudUrl: cloudUrl || getNovaCloudUrl(),
+          fetchImpl,
+        }
+      );
+      const jobs = normalizeAuditExportJobs(payload.exports || payload.jobs || payload.items || payload);
+      setCloudExportJobs(jobs);
+      if (jobs.length > 0) {
+        setLastCloudExportJob(jobs[0] || null);
+      }
+      return jobs;
+    },
+    [cloudUrl, enabled, fetchImpl, identity?.accessToken, syncEnabled]
+  );
+
+  useEffect(() => {
+    if (!enabled || !syncEnabled || !identity?.accessToken) {
+      setCloudExportJobs([]);
+      setLastCloudExportJob(null);
+      return;
+    }
+    void refreshCloudExports().catch(() => {});
+  }, [enabled, identity?.accessToken, refreshCloudExports, syncEnabled]);
 
   useEffect(() => {
     if (!enabled || !syncEnabled || !identity?.accessToken) {
@@ -428,14 +481,17 @@ export function useAuditLog({
       lastError,
       lastSyncAt,
       lastCloudExportJob,
+      cloudExportJobs,
       record,
       clear,
       syncNow,
       exportSnapshot,
       requestCloudExport,
+      refreshCloudExports,
     }),
     [
       clear,
+      cloudExportJobs,
       deviceId,
       events,
       exportSnapshot,
@@ -444,6 +500,7 @@ export function useAuditLog({
       lastSyncAt,
       loading,
       record,
+      refreshCloudExports,
       requestCloudExport,
       syncNow,
       syncing,
@@ -456,4 +513,5 @@ export const auditLogTestUtils = {
   buildAuditEvent,
   serializeAuditEvents,
   normalizeAuditExportJob,
+  normalizeAuditExportJobs,
 };

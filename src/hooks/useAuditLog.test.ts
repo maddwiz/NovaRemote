@@ -17,7 +17,7 @@ const secureStoreMock = vi.hoisted(() => {
 });
 
 const cloudClientMock = vi.hoisted(() => ({
-  cloudRequest: vi.fn(async () => ({})),
+  cloudRequest: vi.fn(async (_path?: string) => ({})),
   getNovaCloudUrl: vi.fn(() => "https://cloud.novaremote.dev"),
 }));
 
@@ -64,7 +64,9 @@ type AuditLogHandle = {
   syncNow: () => Promise<{ synced: number; remaining: number }>;
   exportSnapshot: (format?: "json" | "csv") => string;
   requestCloudExport: (format: "json" | "csv", rangeHours?: number) => Promise<TeamAuditExportJob>;
+  refreshCloudExports: (limit?: number) => Promise<TeamAuditExportJob[]>;
   lastCloudExportJob: TeamAuditExportJob | null;
+  cloudExportJobs: TeamAuditExportJob[];
   pendingCount: number;
   events: AuditEvent[];
 };
@@ -204,6 +206,24 @@ describe("audit log helpers", () => {
     expect(normalized?.exportId).toBe("exp-1");
     expect(normalized?.status).toBe("ready");
   });
+
+  it("normalizes cloud export job lists with ordering", () => {
+    const normalized = auditLogTestUtils.normalizeAuditExportJobs([
+      {
+        exportId: "exp-1",
+        format: "json",
+        status: "ready",
+        createdAt: "2026-03-01T00:00:00.000Z",
+      },
+      {
+        exportId: "exp-2",
+        format: "csv",
+        status: "pending",
+        createdAt: "2026-03-05T00:00:00.000Z",
+      },
+    ]);
+    expect(normalized.map((entry) => entry.exportId)).toEqual(["exp-2", "exp-1"]);
+  });
 });
 
 describe("useAuditLog", () => {
@@ -236,8 +256,11 @@ describe("useAuditLog", () => {
     });
     await flush();
 
-    expect(cloudClientMock.cloudRequest).toHaveBeenCalledTimes(1);
-    const call = (cloudClientMock.cloudRequest.mock.calls[0] as unknown[]) || [];
+    const eventCall = (cloudClientMock.cloudRequest.mock.calls as unknown[][]).find(
+      (call) => String(call[0]) === "/v1/audit/events"
+    );
+    expect(eventCall).toBeTruthy();
+    const call = (eventCall as unknown[]) || [];
     const init = (call[1] as { body?: string } | undefined) || undefined;
     const body = String(init?.body || "{}");
     const payload = JSON.parse(body) as { events?: AuditEvent[] };
@@ -250,7 +273,12 @@ describe("useAuditLog", () => {
   });
 
   it("falls back to queue if immediate sync fails", async () => {
-    cloudClientMock.cloudRequest.mockRejectedValueOnce(new Error("500 sync failure"));
+    cloudClientMock.cloudRequest.mockImplementation(async (path?: string) => {
+      if (String(path || "") === "/v1/audit/events") {
+        throw new Error("500 sync failure");
+      }
+      return {};
+    });
     const onError = vi.fn();
     let latest: AuditLogHandle | null = null;
 
@@ -362,13 +390,22 @@ describe("useAuditLog", () => {
   });
 
   it("requests cloud-hosted export jobs and stores the last export metadata", async () => {
-    cloudClientMock.cloudRequest.mockResolvedValueOnce({
-      exportId: "exp-123",
-      format: "json",
-      status: "ready",
-      createdAt: "2026-03-05T00:00:00.000Z",
-      expiresAt: "2026-03-05T01:00:00.000Z",
-      downloadUrl: "https://cloud.novaremote.dev/exports/exp-123.json",
+    cloudClientMock.cloudRequest.mockImplementation(async (path?: string) => {
+      const normalizedPath = String(path || "");
+      if (normalizedPath.startsWith("/v1/audit/exports?limit=")) {
+        return { exports: [] };
+      }
+      if (normalizedPath === "/v1/audit/exports") {
+        return {
+          exportId: "exp-123",
+          format: "json",
+          status: "ready",
+          createdAt: "2026-03-05T00:00:00.000Z",
+          expiresAt: "2026-03-05T01:00:00.000Z",
+          downloadUrl: "https://cloud.novaremote.dev/exports/exp-123.json",
+        };
+      }
+      return {};
     });
 
     let latest: AuditLogHandle | null = null;
@@ -396,6 +433,57 @@ describe("useAuditLog", () => {
     expect(
       cloudCalls.some((call) => String(call[0]) === "/v1/audit/exports")
     ).toBe(true);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("refreshes cloud export history and updates the latest export pointer", async () => {
+    cloudClientMock.cloudRequest.mockImplementation(async (path?: string) => {
+      const normalizedPath = String(path || "");
+      if (normalizedPath.startsWith("/v1/audit/exports?limit=")) {
+        return {
+          exports: [
+            {
+              exportId: "exp-201",
+              format: "csv",
+              status: "ready",
+              createdAt: "2026-03-05T01:00:00.000Z",
+              downloadUrl: "https://cloud.novaremote.dev/exports/exp-201.csv",
+            },
+            {
+              exportId: "exp-200",
+              format: "json",
+              status: "failed",
+              createdAt: "2026-03-04T01:00:00.000Z",
+            },
+          ],
+        };
+      }
+      return {};
+    });
+
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: true }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).refreshCloudExports(10);
+    });
+    await flush();
+
+    expect(latestOrThrow(latest).cloudExportJobs.map((entry) => entry.exportId)).toEqual(["exp-201", "exp-200"]);
+    expect(latestOrThrow(latest).lastCloudExportJob?.exportId).toBe("exp-201");
 
     await act(async () => {
       renderer?.unmount();
