@@ -56,6 +56,14 @@ type TeamSettings = {
   requireFleetApproval: boolean | null;
 };
 
+type TeamSettingsUpdate = {
+  enforceDangerConfirm?: boolean | null;
+  commandBlocklist?: string[];
+  sessionTimeoutMinutes?: number | null;
+  requireSessionRecording?: boolean | null;
+  requireFleetApproval?: boolean | null;
+};
+
 type TeamUsage = {
   activeMembers: number;
   sessionsCreated: number;
@@ -916,6 +924,78 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
   );
 
+  const updateTeamSettings = useCallback(
+    async (input: TeamSettingsUpdate) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before managing team settings.");
+      }
+      if (!hasTeamPermission(identity, "settings:manage") && !hasTeamPermission(identity, "team:manage")) {
+        throw new Error("You do not have permission to manage team settings.");
+      }
+
+      const nextSettings: TeamSettingsUpdate = {};
+      if ("enforceDangerConfirm" in input) {
+        nextSettings.enforceDangerConfirm =
+          typeof input.enforceDangerConfirm === "boolean" || input.enforceDangerConfirm === null
+            ? input.enforceDangerConfirm
+            : null;
+      }
+      if ("commandBlocklist" in input) {
+        nextSettings.commandBlocklist = normalizeCommandBlocklist(input.commandBlocklist);
+      }
+      if ("sessionTimeoutMinutes" in input) {
+        nextSettings.sessionTimeoutMinutes = normalizeSessionTimeoutMinutes(input.sessionTimeoutMinutes);
+      }
+      if ("requireSessionRecording" in input) {
+        nextSettings.requireSessionRecording =
+          typeof input.requireSessionRecording === "boolean" || input.requireSessionRecording === null
+            ? input.requireSessionRecording
+            : null;
+      }
+      if ("requireFleetApproval" in input) {
+        nextSettings.requireFleetApproval =
+          typeof input.requireFleetApproval === "boolean" || input.requireFleetApproval === null
+            ? input.requireFleetApproval
+            : null;
+      }
+
+      if (Object.keys(nextSettings).length === 0) {
+        throw new Error("No team settings changes were provided.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const payload = await cloudRequest<Record<string, unknown>>(
+          "/v1/team/settings",
+          {
+            method: "PATCH",
+            body: JSON.stringify(nextSettings),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        const normalizedSettings = normalizeTeamSettings(payload.settings || payload);
+        setTeamSettings((previous) => ({
+          ...previous,
+          ...nextSettings,
+          ...normalizedSettings,
+        }));
+        await refreshTeamContext(identity);
+      } catch (updateError) {
+        setError(updateError instanceof Error ? updateError.message : String(updateError));
+        onError?.(updateError);
+        throw updateError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
   const requestFleetApproval = useCallback(
     async (input: { command: string; targets: string[]; note?: string }) => {
       if (!identity) {
@@ -1087,6 +1167,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       inviteMember,
       updateMemberRole,
       updateMemberServers,
+      updateTeamSettings,
       requestFleetApproval,
       approveFleetApproval,
       denyFleetApproval,
@@ -1115,6 +1196,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       teamSettings,
       teamUsage,
       updateMemberServers,
+      updateTeamSettings,
       updateMemberRole,
     ]
   );

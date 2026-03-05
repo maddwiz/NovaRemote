@@ -695,6 +695,7 @@ export default function AppShell() {
     loginWithPassword: loginTeamWithPassword,
     loginWithSso: loginTeamWithSso,
     inviteMember: inviteTeamMember,
+    updateTeamSettings,
     updateMemberRole: updateTeamMemberRole,
     updateMemberServers: updateTeamMemberServers,
     requestFleetApproval,
@@ -3791,6 +3792,7 @@ export default function AppShell() {
               authError={teamAuthError}
               canInvite={hasTeamPermission("team:invite")}
               canManage={hasTeamPermission("team:manage")}
+              canManageSettings={hasTeamPermission("team:manage") || hasTeamPermission("settings:manage")}
               teamServers={teamServers}
               fleetApprovals={fleetApprovals}
               auditPendingCount={pendingAuditEvents}
@@ -3852,6 +3854,18 @@ export default function AppShell() {
                     serverId: "",
                     serverName: "team",
                     detail: `team_member_servers=${memberId}:${serverIds.join(",")}`,
+                  });
+                });
+              }}
+              onUpdateSettings={async (nextSettings) => {
+                await runWithStatus("Updating team policies", async () => {
+                  markActivity();
+                  await updateTeamSettings(nextSettings);
+                  recordAuditEvent({
+                    action: "settings_changed",
+                    serverId: "",
+                    serverName: "team",
+                    detail: `team_policy_update=danger:${nextSettings.enforceDangerConfirm};fleet:${nextSettings.requireFleetApproval};recording:${nextSettings.requireSessionRecording};timeout:${nextSettings.sessionTimeoutMinutes ?? "off"};blocklist:${nextSettings.commandBlocklist.length}`,
                   });
                 });
               }}

@@ -11,18 +11,41 @@ const MEMBER_ROLE_FILTER_OPTIONS: Array<"all" | TeamRole> = ["all", "viewer", "o
 const TEAM_SSO_PROVIDERS = ["oidc", "saml"] as const;
 type TeamSsoProvider = (typeof TEAM_SSO_PROVIDERS)[number];
 
+type TeamSettingsInput = {
+  enforceDangerConfirm: boolean | null;
+  commandBlocklist: string[];
+  sessionTimeoutMinutes: number | null;
+  requireSessionRecording: boolean | null;
+  requireFleetApproval: boolean | null;
+};
+
+function policyValueLabel(value: boolean | null): string {
+  if (value === true) {
+    return "enforced on";
+  }
+  if (value === false) {
+    return "enforced off";
+  }
+  return "user controlled";
+}
+
+function parseBlocklistInput(value: string): string[] {
+  return Array.from(
+    new Set(
+      value
+        .split(/\r?\n|,/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+    )
+  );
+}
+
 type TeamScreenProps = {
   identity: TeamIdentity | null;
   members: TeamMember[];
   planTier?: "free" | "pro" | "team" | "enterprise";
   planSeats?: number | null;
-  settings?: {
-    enforceDangerConfirm: boolean | null;
-    commandBlocklist: string[];
-    sessionTimeoutMinutes: number | null;
-    requireSessionRecording: boolean | null;
-    requireFleetApproval: boolean | null;
-  };
+  settings?: TeamSettingsInput;
   usage?: {
     activeMembers: number;
     sessionsCreated: number;
@@ -38,10 +61,12 @@ type TeamScreenProps = {
   onRefresh?: () => void;
   canInvite?: boolean;
   canManage?: boolean;
+  canManageSettings?: boolean;
   teamServers?: ServerProfile[];
   onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
   onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
   onSetMemberServers?: (memberId: string, serverIds: string[]) => Promise<void>;
+  onUpdateSettings?: (input: TeamSettingsInput) => Promise<void>;
   fleetApprovals?: TeamFleetApproval[];
   onApproveFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
   onDenyFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
@@ -68,10 +93,12 @@ export function TeamScreen({
   onRefresh,
   canInvite = false,
   canManage = false,
+  canManageSettings = false,
   teamServers = [],
   onInviteMember,
   onChangeMemberRole,
   onSetMemberServers,
+  onUpdateSettings,
   fleetApprovals = [],
   onApproveFleetApproval,
   onDenyFleetApproval,
@@ -92,11 +119,17 @@ export function TeamScreen({
   const [memberQuery, setMemberQuery] = useState<string>("");
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | TeamRole>("all");
   const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
+  const [policyDangerConfirm, setPolicyDangerConfirm] = useState<boolean | null>(null);
+  const [policyFleetApproval, setPolicyFleetApproval] = useState<boolean | null>(null);
+  const [policySessionRecording, setPolicySessionRecording] = useState<boolean | null>(null);
+  const [policySessionTimeoutInput, setPolicySessionTimeoutInput] = useState<string>("");
+  const [policyBlocklistInput, setPolicyBlocklistInput] = useState<string>("");
   const [teamStatus, setTeamStatus] = useState<string>("");
   const canPasswordLogin = email.trim().length > 0 && password.trim().length > 0 && !busy;
   const canSsoLogin = ssoToken.trim().length > 0 && !busy;
   const canSubmitInvite = Boolean(identity && canInvite && onInviteMember && inviteEmail.trim().length > 0 && !busy);
   const canManageMemberServers = Boolean(identity && canManage && onSetMemberServers && teamServers.length > 0 && !busy);
+  const canEditTeamPolicies = Boolean(identity && canManageSettings && onUpdateSettings && settings && !busy);
   const canReviewFleetApprovals = Boolean(identity && canManage && !busy && (onApproveFleetApproval || onDenyFleetApproval));
   const pendingFleetApprovals = fleetApprovals.filter((approval) => approval.status === "pending");
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
@@ -125,6 +158,17 @@ export function TeamScreen({
       return next;
     });
   }, [members]);
+
+  useEffect(() => {
+    if (!identity || !settings) {
+      return;
+    }
+    setPolicyDangerConfirm(settings.enforceDangerConfirm);
+    setPolicyFleetApproval(settings.requireFleetApproval);
+    setPolicySessionRecording(settings.requireSessionRecording);
+    setPolicySessionTimeoutInput(settings.sessionTimeoutMinutes ? String(settings.sessionTimeoutMinutes) : "");
+    setPolicyBlocklistInput(settings.commandBlocklist.join("\n"));
+  }, [identity, settings]);
 
   const handleLogin = useCallback(() => {
     if (!onLogin || !canPasswordLogin) {
@@ -309,6 +353,47 @@ export function TeamScreen({
       });
   }, [canExportAuditCsv, onExportAuditCsv]);
 
+  const handleSaveTeamPolicies = useCallback(() => {
+    if (!onUpdateSettings || !canEditTeamPolicies || !settings) {
+      return;
+    }
+    const timeoutRaw = policySessionTimeoutInput.trim();
+    let timeoutMinutes: number | null = null;
+    if (timeoutRaw) {
+      const parsed = Number.parseInt(timeoutRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setTeamStatus("Session timeout must be a positive number of minutes.");
+        return;
+      }
+      timeoutMinutes = parsed;
+    }
+
+    const payload: TeamSettingsInput = {
+      enforceDangerConfirm: policyDangerConfirm,
+      requireFleetApproval: policyFleetApproval,
+      requireSessionRecording: policySessionRecording,
+      sessionTimeoutMinutes: timeoutMinutes,
+      commandBlocklist: parseBlocklistInput(policyBlocklistInput),
+    };
+    setTeamStatus("");
+    void onUpdateSettings(payload)
+      .then(() => {
+        setTeamStatus("Team policies updated.");
+      })
+      .catch((error) => {
+        setTeamStatus(error instanceof Error ? error.message : String(error));
+      });
+  }, [
+    canEditTeamPolicies,
+    onUpdateSettings,
+    policyBlocklistInput,
+    policyDangerConfirm,
+    policyFleetApproval,
+    policySessionRecording,
+    policySessionTimeoutInput,
+    settings,
+  ]);
+
   return (
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Team</Text>
@@ -421,33 +506,15 @@ export function TeamScreen({
       {identity && settings ? (
         <>
           <Text style={styles.emptyText}>
-            {`Danger confirm: ${
-              settings.enforceDangerConfirm === null ? "user controlled" : settings.enforceDangerConfirm ? "enforced on" : "enforced off"
-            }`}
+            {`Danger confirm: ${policyValueLabel(settings.enforceDangerConfirm)}`}
           </Text>
           <Text style={styles.emptyText}>
             {`Session timeout: ${settings.sessionTimeoutMinutes ? `${settings.sessionTimeoutMinutes} min` : "disabled"}`}
           </Text>
           <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
           <Text style={styles.emptyText}>{`Fleet approvals pending: ${pendingFleetApprovals.length}`}</Text>
-          <Text style={styles.emptyText}>
-            {`Fleet approval: ${
-              settings.requireFleetApproval === null
-                ? "user controlled"
-                : settings.requireFleetApproval
-                  ? "enforced on"
-                  : "enforced off"
-            }`}
-          </Text>
-          <Text style={styles.emptyText}>
-            {`Session recording: ${
-              settings.requireSessionRecording === null
-                ? "user controlled"
-                : settings.requireSessionRecording
-                  ? "enforced on"
-                  : "enforced off"
-            }`}
-          </Text>
+          <Text style={styles.emptyText}>{`Fleet approval: ${policyValueLabel(settings.requireFleetApproval)}`}</Text>
+          <Text style={styles.emptyText}>{`Session recording: ${policyValueLabel(settings.requireSessionRecording)}`}</Text>
           <Text style={styles.emptyText}>{`Audit queue: ${auditPendingCount}`}</Text>
           <Text style={styles.emptyText}>
             {`Last audit sync: ${auditLastSyncAt ? new Date(auditLastSyncAt).toLocaleTimeString() : "never"}`}
@@ -458,6 +525,142 @@ export function TeamScreen({
             </Text>
           ) : null}
         </>
+      ) : null}
+
+      {identity && settings ? (
+        <View style={styles.serverCard}>
+          <Text style={styles.serverName}>Team Policies</Text>
+          <Text style={styles.emptyText}>Danger confirmation policy</Text>
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set danger confirmation policy user"
+              style={[styles.modeButton, policyDangerConfirm === null ? styles.modeButtonOn : null]}
+              onPress={() => setPolicyDangerConfirm(null)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policyDangerConfirm === null ? styles.modeButtonTextOn : null]}>user</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set danger confirmation policy on"
+              style={[styles.modeButton, policyDangerConfirm === true ? styles.modeButtonOn : null]}
+              onPress={() => setPolicyDangerConfirm(true)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policyDangerConfirm === true ? styles.modeButtonTextOn : null]}>enforce on</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set danger confirmation policy off"
+              style={[styles.modeButton, policyDangerConfirm === false ? styles.modeButtonOn : null]}
+              onPress={() => setPolicyDangerConfirm(false)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policyDangerConfirm === false ? styles.modeButtonTextOn : null]}>enforce off</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.emptyText}>Fleet approval policy</Text>
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set fleet approval policy user"
+              style={[styles.modeButton, policyFleetApproval === null ? styles.modeButtonOn : null]}
+              onPress={() => setPolicyFleetApproval(null)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policyFleetApproval === null ? styles.modeButtonTextOn : null]}>user</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set fleet approval policy on"
+              style={[styles.modeButton, policyFleetApproval === true ? styles.modeButtonOn : null]}
+              onPress={() => setPolicyFleetApproval(true)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policyFleetApproval === true ? styles.modeButtonTextOn : null]}>enforce on</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set fleet approval policy off"
+              style={[styles.modeButton, policyFleetApproval === false ? styles.modeButtonOn : null]}
+              onPress={() => setPolicyFleetApproval(false)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policyFleetApproval === false ? styles.modeButtonTextOn : null]}>enforce off</Text>
+            </Pressable>
+          </View>
+
+          <Text style={styles.emptyText}>Session recording policy</Text>
+          <View style={styles.modeRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set session recording policy user"
+              style={[styles.modeButton, policySessionRecording === null ? styles.modeButtonOn : null]}
+              onPress={() => setPolicySessionRecording(null)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policySessionRecording === null ? styles.modeButtonTextOn : null]}>user</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set session recording policy on"
+              style={[styles.modeButton, policySessionRecording === true ? styles.modeButtonOn : null]}
+              onPress={() => setPolicySessionRecording(true)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policySessionRecording === true ? styles.modeButtonTextOn : null]}>enforce on</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Set session recording policy off"
+              style={[styles.modeButton, policySessionRecording === false ? styles.modeButtonOn : null]}
+              onPress={() => setPolicySessionRecording(false)}
+              disabled={!canEditTeamPolicies}
+            >
+              <Text style={[styles.modeButtonText, policySessionRecording === false ? styles.modeButtonTextOn : null]}>enforce off</Text>
+            </Pressable>
+          </View>
+
+          <TextInput
+            style={styles.input}
+            value={policySessionTimeoutInput}
+            onChangeText={setPolicySessionTimeoutInput}
+            keyboardType="number-pad"
+            autoCapitalize="none"
+            autoCorrect={false}
+            placeholder="session timeout minutes (blank disables)"
+            placeholderTextColor="#7f7aa8"
+            editable={canEditTeamPolicies}
+            accessibilityLabel="Team session timeout minutes"
+          />
+          <TextInput
+            style={[styles.input, { minHeight: 72, textAlignVertical: "top" }]}
+            value={policyBlocklistInput}
+            onChangeText={setPolicyBlocklistInput}
+            autoCapitalize="none"
+            autoCorrect={false}
+            multiline
+            placeholder="command blocklist patterns (one per line)"
+            placeholderTextColor="#7f7aa8"
+            editable={canEditTeamPolicies}
+            accessibilityLabel="Team command blocklist patterns"
+          />
+          {canEditTeamPolicies ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Save team policies"
+              style={[styles.buttonPrimary, busy ? styles.buttonDisabled : null]}
+              onPress={handleSaveTeamPolicies}
+              disabled={busy}
+            >
+              <Text style={styles.buttonPrimaryText}>{busy ? "Saving..." : "Save Policies"}</Text>
+            </Pressable>
+          ) : (
+            <Text style={styles.emptyText}>Managed by team admin.</Text>
+          )}
+        </View>
       ) : null}
       {authError ? <Text style={styles.emptyText}>{authError}</Text> : null}
       {teamStatus ? <Text style={styles.emptyText}>{teamStatus}</Text> : null}

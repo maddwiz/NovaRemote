@@ -49,12 +49,26 @@ type TeamAuthHandle = {
   identity: TeamIdentity | null;
   loginWithSso: (input: { provider: "saml" | "oidc"; idToken?: string; accessToken?: string }) => Promise<TeamIdentity>;
   inviteMember: (input: { email: string; role?: TeamIdentity["role"] }) => Promise<unknown>;
+  updateTeamSettings: (input: {
+    enforceDangerConfirm?: boolean | null;
+    commandBlocklist?: string[];
+    sessionTimeoutMinutes?: number | null;
+    requireSessionRecording?: boolean | null;
+    requireFleetApproval?: boolean | null;
+  }) => Promise<void>;
   updateMemberRole: (memberId: string, role: TeamIdentity["role"]) => Promise<void>;
   updateMemberServers: (memberId: string, serverIds: string[]) => Promise<void>;
   requestFleetApproval: (input: { command: string; targets: string[]; note?: string }) => Promise<unknown>;
   approveFleetApproval: (approvalId: string, note?: string) => Promise<void>;
   denyFleetApproval: (approvalId: string, note?: string) => Promise<void>;
   fleetApprovals: Array<{ id: string; status: string }>;
+  teamSettings: {
+    enforceDangerConfirm: boolean | null;
+    commandBlocklist: string[];
+    sessionTimeoutMinutes: number | null;
+    requireSessionRecording: boolean | null;
+    requireFleetApproval: boolean | null;
+  };
   teamMembers: Array<{ id: string; role: string; serverIds?: string[] }>;
 };
 
@@ -92,6 +106,13 @@ beforeEach(() => {
   cloudClientMock.cloudRequest.mockReset();
   let memberRole: TeamIdentity["role"] = "viewer";
   let memberServerIds: string[] = [];
+  let teamSettingsState = {
+    enforceDangerConfirm: null as boolean | null,
+    commandBlocklist: [] as string[],
+    sessionTimeoutMinutes: null as number | null,
+    requireSessionRecording: null as boolean | null,
+    requireFleetApproval: null as boolean | null,
+  };
   let approvals: Array<{
     id: string;
     command: string;
@@ -146,7 +167,18 @@ beforeEach(() => {
       return {};
     }
     if (path === "/v1/team/settings") {
-      return { settings: {} };
+      if (String(init?.method || "GET").toUpperCase() === "PATCH") {
+        const rawBody = String(init?.body || "{}");
+        const payload = JSON.parse(rawBody) as Partial<typeof teamSettingsState>;
+        teamSettingsState = {
+          ...teamSettingsState,
+          ...payload,
+          commandBlocklist: Array.isArray(payload.commandBlocklist)
+            ? payload.commandBlocklist.filter((entry) => typeof entry === "string")
+            : teamSettingsState.commandBlocklist,
+        };
+      }
+      return { settings: teamSettingsState };
     }
     if (path === "/v1/team/fleet/approvals") {
       if (init?.method === "POST") {
@@ -374,6 +406,92 @@ describe("useTeamAuth hook", () => {
     expect(
       cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]).startsWith("/v1/team/members/"))
     ).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("blocks team policy updates when the user lacks settings permission", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          role: "viewer",
+          permissions: ["servers:read"],
+        })
+      )
+    );
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await expect(
+        latestOrThrow(latest).updateTeamSettings({
+          enforceDangerConfirm: true,
+        })
+      ).rejects.toThrow("You do not have permission to manage team settings.");
+    });
+
+    const patchedTeamSettings = (cloudClientMock.cloudRequest.mock.calls as Array<[string, RequestInit?]>).some(
+      (call) => String(call[0]) === "/v1/team/settings" && String(call[1]?.method || "GET").toUpperCase() === "PATCH"
+    );
+    expect(patchedTeamSettings).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("updates team policies when settings permission is granted", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).updateTeamSettings({
+        enforceDangerConfirm: true,
+        commandBlocklist: ["rm -rf", "shutdown -h now"],
+        sessionTimeoutMinutes: 30,
+        requireSessionRecording: true,
+        requireFleetApproval: true,
+      });
+    });
+    await flush();
+
+    const patchedTeamSettings = (cloudClientMock.cloudRequest.mock.calls as Array<[string, RequestInit?]>).some(
+      (call) => String(call[0]) === "/v1/team/settings" && String(call[1]?.method || "GET").toUpperCase() === "PATCH"
+    );
+    expect(patchedTeamSettings).toBe(true);
+    expect(latestOrThrow(latest).teamSettings).toMatchObject({
+      enforceDangerConfirm: true,
+      commandBlocklist: ["rm -rf", "shutdown -h now"],
+      sessionTimeoutMinutes: 30,
+      requireSessionRecording: true,
+      requireFleetApproval: true,
+    });
 
     await act(async () => {
       renderer?.unmount();

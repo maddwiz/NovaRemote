@@ -83,6 +83,7 @@ Updated: 2026-03-05
   - [x] auto-refresh team identity session
   - [x] clear broker cache on logout
   - [x] immediate dangerous-command audit sync
+  - [x] in-app team policy controls for danger confirm, fleet approval, session recording, timeout, and blocklist
   - [x] enforce session-recording policy
   - [x] enforce fleet-execution policy approval gate with in-app request/review actions
   - [x] derive runtime server permission level from broker token permissions

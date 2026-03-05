@@ -157,6 +157,56 @@ describe("TeamScreen", () => {
     });
   });
 
+  it("routes team policy updates when settings management is enabled", async () => {
+    const onUpdateSettings = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          settings={{
+            enforceDangerConfirm: null,
+            commandBlocklist: [],
+            sessionTimeoutMinutes: null,
+            requireSessionRecording: null,
+            requireFleetApproval: null,
+          }}
+          loading={false}
+          busy={false}
+          canManageSettings
+          onUpdateSettings={onUpdateSettings}
+        />
+      );
+    });
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Set danger confirmation policy on" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Set fleet approval policy on" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Set session recording policy off" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Team session timeout minutes" }).props.onChangeText("45");
+      renderer?.root
+        .findByProps({ accessibilityLabel: "Team command blocklist patterns" })
+        .props.onChangeText("rm -rf\nshutdown -h now");
+    });
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Save team policies" }).props.onPress();
+    });
+
+    expect(onUpdateSettings).toHaveBeenCalledWith({
+      enforceDangerConfirm: true,
+      requireFleetApproval: true,
+      requireSessionRecording: false,
+      sessionTimeoutMinutes: 45,
+      commandBlocklist: ["rm -rf", "shutdown -h now"],
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("submits invite payload with selected role", async () => {
     const onInviteMember = vi.fn(async () => undefined);
     let renderer: TestRenderer.ReactTestRenderer | null = null;
