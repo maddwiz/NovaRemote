@@ -172,6 +172,15 @@ export function useTokenBroker({
     void SecureStore.setItemAsync(STORAGE_TOKEN_BROKER_CACHE, JSON.stringify(tokenCache)).catch(() => {});
   }, [loading, tokenCache]);
 
+  useEffect(() => {
+    if (!enabled || identity) {
+      return;
+    }
+    setTokenCache({});
+    setLastError(null);
+    void SecureStore.deleteItemAsync(STORAGE_TOKEN_BROKER_CACHE).catch(() => {});
+  }, [enabled, identity]);
+
   const teamServers = useMemo(() => servers.filter((server) => isTeamManagedServer(server)), [servers]);
 
   const provisionServerToken = useCallback(

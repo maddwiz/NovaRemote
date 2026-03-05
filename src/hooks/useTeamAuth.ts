@@ -3,7 +3,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { normalizeBaseUrl } from "../api/client";
 import { cloudRequest, getNovaCloudUrl } from "../api/cloudClient";
-import { DEFAULT_CWD, DEFAULT_TERMINAL_BACKEND, STORAGE_TEAM_IDENTITY } from "../constants";
+import {
+  DEFAULT_CWD,
+  DEFAULT_TERMINAL_BACKEND,
+  STORAGE_TEAM_IDENTITY,
+  TEAM_TOKEN_REFRESH_BUFFER_MS,
+  TEAM_TOKEN_REFRESH_INTERVAL_MS,
+} from "../constants";
 import { normalizeCommandBlocklist, normalizeSessionTimeoutMinutes } from "../teamPolicy";
 import { ServerProfile, TeamAuthProvider, TeamIdentity, TeamMember, TeamPermission, TeamRole } from "../types";
 
@@ -624,6 +630,24 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       onError?.(contextError);
     });
   }, [enabled, identity, onError, refreshTeamContext]);
+
+  useEffect(() => {
+    if (!enabled || !identity) {
+      return;
+    }
+    const timer = setInterval(() => {
+      if (busy) {
+        return;
+      }
+      if (!shouldRefreshTeamIdentity(identity, Date.now(), TEAM_TOKEN_REFRESH_BUFFER_MS)) {
+        return;
+      }
+      void refreshSession().catch(() => {});
+    }, TEAM_TOKEN_REFRESH_INTERVAL_MS);
+    return () => {
+      clearInterval(timer);
+    };
+  }, [busy, enabled, identity, refreshSession]);
 
   const hasPermission = useCallback(
     (permission: TeamPermission) => {
