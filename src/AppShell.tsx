@@ -80,6 +80,7 @@ import {
   resolveFleetTerminalApiBasePath,
   shouldAttemptFleetShellRun,
 } from "./fleetTerminalBasePath";
+import { findApprovedFleetApproval } from "./fleetApproval";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -1537,20 +1538,36 @@ export default function AppShell() {
     const targetLabel = `${selectedServers.length} target${selectedServers.length === 1 ? "" : "s"}`;
 
     if (teamSettings.requireFleetApproval && teamIdentity?.role !== "admin") {
-      const note = `targets=${selectedServers.map((server) => server.name).join(",")} cwd=${fleetCwd.trim() || DEFAULT_CWD}`;
-      await requestFleetApproval({
+      const matchingApproval = findApprovedFleetApproval(
+        fleetApprovals,
         command,
-        targets: selectedServers.map((server) => server.id),
-        note,
-      });
-      recordAuditEvent({
-        action: "settings_changed",
-        serverId: "",
-        serverName: "fleet",
-        detail: `fleet_approval_requested ${targetLabel}`,
-        approved: null,
-      });
-      throw new Error("Fleet approval requested. An admin must approve before execution.");
+        selectedServers.map((server) => server.id),
+        teamIdentity?.userId
+      );
+      if (matchingApproval) {
+        recordAuditEvent({
+          action: "settings_changed",
+          serverId: "",
+          serverName: "fleet",
+          detail: `fleet_approval_consumed=${matchingApproval.id}`,
+          approved: true,
+        });
+      } else {
+        const note = `targets=${selectedServers.map((server) => server.name).join(",")} cwd=${fleetCwd.trim() || DEFAULT_CWD}`;
+        await requestFleetApproval({
+          command,
+          targets: selectedServers.map((server) => server.id),
+          note,
+        });
+        recordAuditEvent({
+          action: "settings_changed",
+          serverId: "",
+          serverName: "fleet",
+          detail: `fleet_approval_requested ${targetLabel}`,
+          approved: null,
+        });
+        throw new Error("Fleet approval requested. Run again after admin approval is granted.");
+      }
     }
 
     const approved = await requestDangerApproval(
@@ -1660,7 +1677,9 @@ export default function AppShell() {
     recordAuditEvent,
     requestDangerApproval,
     requestFleetApproval,
+    fleetApprovals,
     teamIdentity?.role,
+    teamIdentity?.userId,
     teamSettings.requireFleetApproval,
   ]);
 

@@ -101,7 +101,7 @@ Updated: 2026-03-05
   - [~] audit export (`CSV`/`JSON`) from in-app queue is implemented; cloud dashboard export remains pending
 - [ ] Fleet governance expansion:
   - [x] command blocklist + policy enforcement
-  - [~] fleet approval request/review flow is wired in-app (request + approve/deny); cloud dashboard orchestration remains pending
+  - [~] fleet approval request/review + approved-execution matching is wired in-app; cloud dashboard orchestration remains pending
   - [x] inactivity timeout / session auto-disconnect policies
 - [ ] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [ ] Full agent lifecycle + NovaSpine memory orchestration is still roadmap work
