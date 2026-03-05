@@ -48,6 +48,8 @@ import { useTeamAuth } from "./useTeamAuth";
 type TeamAuthHandle = {
   identity: TeamIdentity | null;
   inviteMember: (input: { email: string; role?: TeamIdentity["role"] }) => Promise<unknown>;
+  updateMemberRole: (memberId: string, role: TeamIdentity["role"]) => Promise<void>;
+  teamMembers: Array<{ id: string; role: string }>;
 };
 
 function buildIdentity(overrides: Partial<TeamIdentity> = {}): TeamIdentity {
@@ -181,11 +183,89 @@ describe("useTeamAuth hook", () => {
     });
     await flush();
 
-    await expect(latestOrThrow(latest).inviteMember({ email: "new@example.com", role: "viewer" })).rejects.toThrow(
-      "You do not have permission to invite team members."
-    );
+    await act(async () => {
+      await expect(latestOrThrow(latest).inviteMember({ email: "new@example.com", role: "viewer" })).rejects.toThrow(
+        "You do not have permission to invite team members."
+      );
+    });
     expect(
       cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/invites")
+    ).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("invites a team member when permission is granted", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    let result: unknown = null;
+    await act(async () => {
+      result = await latestOrThrow(latest).inviteMember({
+        email: "new.member@example.com",
+        role: "operator",
+      });
+    });
+
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/invites")
+    ).toBe(true);
+    expect(result).toMatchObject({
+      email: "new.member@example.com",
+      role: "operator",
+      inviteCode: "INV-123",
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("blocks role updates when the user lacks management permission", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          role: "viewer",
+          permissions: ["servers:read", "team:invite"],
+        })
+      )
+    );
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await expect(latestOrThrow(latest).updateMemberRole("member-1", "operator")).rejects.toThrow(
+        "You do not have permission to manage team members."
+      );
+    });
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]).startsWith("/v1/team/members/"))
     ).toBe(false);
 
     await act(async () => {
