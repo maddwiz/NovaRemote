@@ -104,20 +104,20 @@ Updated: 2026-03-05
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
-- [ ] Enterprise IAM expansion:
+- [~] Enterprise IAM expansion:
   - [x] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode
   - [x] Team SSO provider lifecycle (`GET/PATCH /v1/team/sso/providers`) wired in app (`useTeamAuth`, TeamScreen toggles) + cloud contract/scaffold
   - [~] in-app role/invite controls + member filtering + member server-assignment controls are implemented, plus invite revoke + dashboard deep-link; production cloud admin UX deployment remains pending
-- [ ] Compliance expansion:
+- [~] Compliance expansion:
   - [~] team-managed session recording enforcement is in-app; cloud admin policy governance remains pending
   - [x] audit export (`CSV`/`JSON`) from in-app queue
   - [x] cloud audit export job requests + export history refresh/list/open actions in app (`useAuditLog` + TeamScreen)
   - [~] cloud dashboard export lifecycle governance remains pending deployment
-- [ ] Fleet governance expansion:
+- [~] Fleet governance expansion:
   - [x] command blocklist + policy enforcement
   - [~] fleet approval request/review + approved-execution matching is wired in-app and surfaced in dashboard scaffold (including approve/deny actions); production orchestration rollout remains pending
   - [x] inactivity timeout / session auto-disconnect policies
-- [ ] Separate NovaRemote Cloud backend + web admin dashboard rollout
+- [~] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`) plus temp-dir bootstrap verification (`cloud:verify-bootstrap`), interactive dashboard scaffold wiring (team members, approvals, SSO provider toggles, export requests), and deployment templates (`Dockerfile`, `render.yaml`, scaffold CI workflows); production rollout/hardening remains pending
 - [~] NovaSpine context orchestration is implemented in-app; full autonomous agent lifecycle orchestration remains roadmap work
 - [~] Presence-aware voice channels are implemented in-app; full multi-user collaboration voice/presence channels remain roadmap work
