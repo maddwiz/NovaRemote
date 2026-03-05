@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findApprovedFleetApproval, fleetApprovalTestUtils } from "./fleetApproval";
+import { findApprovedFleetApproval, findPendingFleetApproval, fleetApprovalTestUtils } from "./fleetApproval";
 import { TeamFleetApproval } from "./types";
 
 function approval(overrides: Partial<TeamFleetApproval>): TeamFleetApproval {
@@ -39,6 +39,21 @@ describe("fleetApproval", () => {
       }),
     ];
     expect(findApprovedFleetApproval(approvals, "docker compose up -d", ["dgx", "home"], "user-1")).toBeNull();
+  });
+
+  it("matches pending requests for the same command/targets/requester", () => {
+    const approvals: TeamFleetApproval[] = [
+      approval({
+        id: "approval-pending",
+        status: "pending",
+      }),
+      approval({
+        id: "approval-approved",
+        status: "approved",
+      }),
+    ];
+    const pending = findPendingFleetApproval(approvals, "docker compose up -d", ["home", "dgx"], "user-1");
+    expect(pending?.id).toBe("approval-pending");
   });
 
   it("normalizes targets consistently", () => {

@@ -80,7 +80,7 @@ import {
   resolveFleetTerminalApiBasePath,
   shouldAttemptFleetShellRun,
 } from "./fleetTerminalBasePath";
-import { findApprovedFleetApproval } from "./fleetApproval";
+import { findApprovedFleetApproval, findPendingFleetApproval } from "./fleetApproval";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -1555,6 +1555,15 @@ export default function AppShell() {
           approved: true,
         });
       } else {
+        const pendingApproval = findPendingFleetApproval(
+          fleetApprovals,
+          command,
+          selectedServers.map((server) => server.id),
+          teamIdentity?.userId
+        );
+        if (pendingApproval) {
+          throw new Error(`Fleet approval already pending (#${pendingApproval.id}).`);
+        }
         const note = `targets=${selectedServers.map((server) => server.name).join(",")} cwd=${fleetCwd.trim() || DEFAULT_CWD}`;
         await requestFleetApproval({
           command,

@@ -61,6 +61,38 @@ export function findApprovedFleetApproval(
   return null;
 }
 
+export function findPendingFleetApproval(
+  approvals: TeamFleetApproval[],
+  command: string,
+  targets: string[],
+  requesterId?: string | null
+): TeamFleetApproval | null {
+  const normalizedCommand = normalizeCommand(command);
+  const normalizedTargets = normalizeTargets(targets);
+  const requester = requesterId?.trim() || "";
+  if (!normalizedCommand || normalizedTargets.length === 0) {
+    return null;
+  }
+
+  for (const approval of approvals) {
+    if (approval.status !== "pending") {
+      continue;
+    }
+    if (requester && approval.requestedByUserId !== requester) {
+      continue;
+    }
+    if (normalizeCommand(approval.command) !== normalizedCommand) {
+      continue;
+    }
+    if (!equalTargets(normalizeTargets(approval.targets), normalizedTargets)) {
+      continue;
+    }
+    return approval;
+  }
+
+  return null;
+}
+
 export const fleetApprovalTestUtils = {
   normalizeCommand,
   normalizeTargets,
