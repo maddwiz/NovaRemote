@@ -28,6 +28,12 @@ type TeamScreenProps = {
     commandBlocklist: string[];
     sessionTimeoutMinutes: number | null;
   };
+  usage?: {
+    activeMembers: number;
+    sessionsCreated: number;
+    commandsSent: number;
+    fleetExecutions: number;
+  };
   loading: boolean;
   busy: boolean;
   authError?: string | null;
@@ -47,6 +53,7 @@ export function TeamScreen({
   identity,
   members,
   settings,
+  usage,
   loading,
   busy,
   authError,
@@ -207,6 +214,11 @@ export function TeamScreen({
           <Text style={styles.emptyText}>
             {`Last audit sync: ${auditLastSyncAt ? new Date(auditLastSyncAt).toLocaleTimeString() : "never"}`}
           </Text>
+          {usage ? (
+            <Text style={styles.emptyText}>
+              {`Usage: members ${usage.activeMembers} • sessions ${usage.sessionsCreated} • commands ${usage.commandsSent} • fleet ${usage.fleetExecutions}`}
+            </Text>
+          ) : null}
         </>
       ) : null}
       {authError ? <Text style={styles.emptyText}>{authError}</Text> : null}

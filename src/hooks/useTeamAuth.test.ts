@@ -90,6 +90,25 @@ describe("team auth helpers", () => {
       commandBlocklist: [],
       sessionTimeoutMinutes: null,
     });
+    expect(
+      teamAuthTestUtils.normalizeTeamUsage({
+        activeMembers: "7",
+        sessions_created: 42,
+        commandsSent: "120",
+        fleet_runs: 3,
+      })
+    ).toEqual({
+      activeMembers: 7,
+      sessionsCreated: 42,
+      commandsSent: 120,
+      fleetExecutions: 3,
+    });
+    expect(teamAuthTestUtils.normalizeTeamUsage({})).toEqual({
+      activeMembers: 0,
+      sessionsCreated: 0,
+      commandsSent: 0,
+      fleetExecutions: 0,
+    });
 
     const members = teamAuthTestUtils.normalizeTeamMembers([
       { id: "m1", name: "Alice", email: "alice@example.com", role: "admin" },

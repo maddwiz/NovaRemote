@@ -687,6 +687,7 @@ export default function AppShell() {
     teamServers,
     teamMembers,
     teamSettings,
+    teamUsage,
     error: teamAuthError,
     hasPermission: hasTeamPermission,
     loginWithPassword: loginTeamWithPassword,
@@ -3664,6 +3665,7 @@ export default function AppShell() {
               identity={teamIdentity}
               members={teamMembers}
               settings={teamSettings}
+              usage={teamUsage}
               loading={teamLoading}
               busy={teamBusy}
               authError={teamAuthError}

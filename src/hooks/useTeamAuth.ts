@@ -46,6 +46,13 @@ type TeamSettings = {
   sessionTimeoutMinutes: number | null;
 };
 
+type TeamUsage = {
+  activeMembers: number;
+  sessionsCreated: number;
+  commandsSent: number;
+  fleetExecutions: number;
+};
+
 type TeamInviteResult = {
   email: string;
   role: TeamRole;
@@ -251,6 +258,49 @@ function normalizeTeamSettings(value: unknown): TeamSettings {
   };
 }
 
+function normalizeTeamUsage(value: unknown): TeamUsage {
+  if (!value || typeof value !== "object") {
+    return {
+      activeMembers: 0,
+      sessionsCreated: 0,
+      commandsSent: 0,
+      fleetExecutions: 0,
+    };
+  }
+  const parsed = value as Record<string, unknown>;
+  const activeMembers = normalizeCount(
+    parsed.activeMembers ?? parsed.active_members ?? parsed.membersActive ?? parsed.members_count ?? parsed.memberCount
+  );
+  const sessionsCreated = normalizeCount(
+    parsed.sessionsCreated ?? parsed.sessions_created ?? parsed.sessions ?? parsed.sessionCount ?? parsed.sessions_count
+  );
+  const commandsSent = normalizeCount(
+    parsed.commandsSent ?? parsed.commands_sent ?? parsed.commands ?? parsed.commandCount ?? parsed.commands_count
+  );
+  const fleetExecutions = normalizeCount(
+    parsed.fleetExecutions ?? parsed.fleet_executions ?? parsed.fleetRuns ?? parsed.fleet_runs ?? parsed.fleetCount
+  );
+  return {
+    activeMembers,
+    sessionsCreated,
+    commandsSent,
+    fleetExecutions,
+  };
+}
+
+function normalizeCount(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return Math.max(0, Math.round(value));
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isFinite(parsed)) {
+      return Math.max(0, parsed);
+    }
+  }
+  return 0;
+}
+
 function normalizeTeamMember(value: unknown): TeamMember | null {
   if (!value || typeof value !== "object") {
     return null;
@@ -306,6 +356,12 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     enforceDangerConfirm: null,
     commandBlocklist: [],
     sessionTimeoutMinutes: null,
+  });
+  const [teamUsage, setTeamUsage] = useState<TeamUsage>({
+    activeMembers: 0,
+    sessionsCreated: 0,
+    commandsSent: 0,
+    fleetExecutions: 0,
   });
   const [error, setError] = useState<string | null>(null);
 
@@ -366,14 +422,16 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         setTeamServers([]);
         setTeamMembers([]);
         setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
+        setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
         return {
           servers: [],
           members: [],
           settings: { enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null },
+          usage: { activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 },
         };
       }
 
-      const [serversPayload, membersPayload, settingsPayload] = await Promise.all([
+      const [serversPayload, membersPayload, settingsPayload, usagePayload] = await Promise.all([
         cloudRequest<{ servers?: unknown }>(
           "/v1/team/servers",
           { method: "GET" },
@@ -401,15 +459,26 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
             fetchImpl,
           }
         ),
+        cloudRequest<{ usage?: unknown }>(
+          "/v1/team/usage",
+          { method: "GET" },
+          {
+            accessToken: currentIdentity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        ).catch(() => ({ usage: {} })),
       ]);
 
       const servers = normalizeTeamServers(serversPayload.servers || serversPayload);
       const members = normalizeTeamMembers(membersPayload.members || membersPayload);
       const settings = normalizeTeamSettings(settingsPayload.settings || settingsPayload);
+      const usage = normalizeTeamUsage(usagePayload.usage || usagePayload);
       setTeamServers(servers);
       setTeamMembers(members);
       setTeamSettings(settings);
-      return { servers, members, settings };
+      setTeamUsage(usage);
+      return { servers, members, settings, usage };
     },
     [cloudUrl, fetchImpl, identity]
   );
@@ -467,6 +536,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     setTeamServers([]);
     setTeamMembers([]);
     setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
+    setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
     setError(null);
     await persistIdentity(null);
   }, [persistIdentity]);
@@ -622,6 +692,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         setTeamServers([]);
         setTeamMembers([]);
         setTeamSettings({ enforceDangerConfirm: null, commandBlocklist: [], sessionTimeoutMinutes: null });
+        setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
       }
       return;
     }
@@ -664,6 +735,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       teamServers,
       teamMembers,
       teamSettings,
+      teamUsage,
       error,
       cloudUrl: cloudUrl || getNovaCloudUrl(),
       loggedIn: Boolean(identity),
@@ -691,6 +763,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       teamMembers,
       teamServers,
       teamSettings,
+      teamUsage,
       updateMemberRole,
     ]
   );
@@ -702,4 +775,5 @@ export const teamAuthTestUtils = {
   normalizeTeamServers,
   normalizeTeamMembers,
   normalizeTeamSettings,
+  normalizeTeamUsage,
 };
