@@ -843,13 +843,21 @@ export function TeamScreen({
                     editable={canReviewFleetApprovals}
                     accessibilityLabel={`Fleet approval note ${approval.id}`}
                   />
+                  {identity?.userId === approval.requestedByUserId ? (
+                    <Text style={styles.emptyText}>Self-approval is blocked. Another team member must approve.</Text>
+                  ) : null}
                   {onApproveFleetApproval ? (
                     <Pressable
                       accessibilityRole="button"
                       accessibilityLabel={`Approve fleet request ${approval.id}`}
-                      style={[styles.actionButton, !canReviewFleetApprovals ? styles.buttonDisabled : null]}
+                      style={[
+                        styles.actionButton,
+                        !canReviewFleetApprovals || identity?.userId === approval.requestedByUserId
+                          ? styles.buttonDisabled
+                          : null,
+                      ]}
                       onPress={() => handleApproveFleetApproval(approval)}
-                      disabled={!canReviewFleetApprovals}
+                      disabled={!canReviewFleetApprovals || identity?.userId === approval.requestedByUserId}
                     >
                       <Text style={styles.actionButtonText}>Approve</Text>
                     </Pressable>

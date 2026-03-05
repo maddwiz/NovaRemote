@@ -1085,6 +1085,12 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       if (!normalizedApprovalId) {
         throw new Error("Approval ID is required.");
       }
+      if (action === "approve") {
+        const approval = fleetApprovals.find((entry) => entry.id === normalizedApprovalId);
+        if (approval && approval.requestedByUserId === identity.userId) {
+          throw new Error("Fleet approvals must be reviewed by another team member.");
+        }
+      }
 
       setBusy(true);
       setError(null);
@@ -1112,7 +1118,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
         setBusy(false);
       }
     },
-    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+    [cloudUrl, fetchImpl, fleetApprovals, identity, onError, refreshTeamContext]
   );
 
   const approveFleetApproval = useCallback(

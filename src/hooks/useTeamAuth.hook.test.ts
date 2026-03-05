@@ -604,7 +604,15 @@ describe("useTeamAuth hook", () => {
   });
 
   it("creates and reviews fleet approvals when policy workflows are enabled", async () => {
-    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          userId: "reviewer-1",
+          email: "reviewer@example.com",
+        })
+      )
+    );
 
     let latest: TeamAuthHandle | null = null;
 
@@ -642,6 +650,48 @@ describe("useTeamAuth hook", () => {
     });
     await flush();
     expect(latestOrThrow(latest).fleetApprovals.find((entry) => entry.id === approvalId)?.status).toBe("denied");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("blocks approving fleet requests created by the same user", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).requestFleetApproval({
+        command: "docker compose up -d",
+        targets: ["dgx"],
+      });
+    });
+    await flush();
+
+    const approvalId = latestOrThrow(latest).fleetApprovals[0]?.id || "";
+    await act(async () => {
+      await expect(latestOrThrow(latest).approveFleetApproval(approvalId)).rejects.toThrow(
+        "Fleet approvals must be reviewed by another team member."
+      );
+    });
+
+    const approvalEndpointCalls = (cloudClientMock.cloudRequest.mock.calls as Array<[string, RequestInit?]>).filter(
+      (call) => String(call[0]).endsWith("/approve")
+    );
+    expect(approvalEndpointCalls).toHaveLength(0);
 
     await act(async () => {
       renderer?.unmount();
