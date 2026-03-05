@@ -287,6 +287,22 @@ export type NovaMemoryEntry = {
   createdAt: string;
 };
 
+export type NovaSpineContextStatus = "waiting_approval" | "active" | "healthy" | "stale" | "idle";
+
+export type NovaSpineContext = {
+  serverId: string;
+  memoryContextId: string;
+  agentIds: string[];
+  agentNames: string[];
+  activeStatus: NovaAgentStatus | "mixed" | "none";
+  status: NovaSpineContextStatus;
+  pendingApprovalCount: number;
+  lastUpdatedAt: string | null;
+  lastSummary: string | null;
+  totalEntries: number;
+  recentEntries: NovaMemoryEntry[];
+};
+
 export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";
 
 export type AiEnginePreference = "auto" | "server" | "external";

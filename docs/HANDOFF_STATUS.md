@@ -97,6 +97,7 @@ Updated: 2026-03-05
 ## v2.0+ NovaAdapt / Team Roadmap
 
 - [~] Early NovaAdapt runtime/panel scaffolding exists
+- [x] In-app NovaSpine context snapshots are wired (`useNovaSpine` + runtime/panel integration for context status, pending approvals, and recent timeline state)
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets

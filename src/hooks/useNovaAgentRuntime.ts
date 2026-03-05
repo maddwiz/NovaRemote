@@ -3,6 +3,7 @@ import { useCallback, useMemo } from "react";
 import { NovaAgentStatus } from "../types";
 import { useNovaAgents } from "./useNovaAgents";
 import { useNovaMemory } from "./useNovaMemory";
+import { useNovaSpine } from "./useNovaSpine";
 
 type UseNovaAgentRuntimeArgs = {
   serverId: string | null;
@@ -41,6 +42,16 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
     resolveApproval,
   } = useNovaAgents({ serverId });
   const { entries: memoryEntries, loading: memoryLoading, addEntry, clearContext } = useNovaMemory({ serverId });
+  const {
+    contexts: spineContexts,
+    findContextByAgentId: findSpineContextByAgentId,
+    findContextsByQuery: findSpineContextsByQuery,
+    totalPendingApprovals: pendingSpineApprovals,
+  } = useNovaSpine({
+    serverId,
+    agents,
+    entries: memoryEntries,
+  });
 
   const agentById = useMemo(() => {
     const map = new Map<string, (typeof agents)[number]>();
@@ -291,6 +302,10 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
       loading,
       memoryEntries,
       memoryLoading,
+      spineContexts,
+      pendingSpineApprovals,
+      findSpineContextByAgentId,
+      findSpineContextsByQuery,
       addRuntimeAgent,
       removeRuntimeAgent,
       setRuntimeAgentStatus,
@@ -313,6 +328,10 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
       loading,
       memoryEntries,
       memoryLoading,
+      spineContexts,
+      pendingSpineApprovals,
+      findSpineContextByAgentId,
+      findSpineContextsByQuery,
       removeRuntimeAgent,
       requestAgentApproval,
       approveReadyApprovals,

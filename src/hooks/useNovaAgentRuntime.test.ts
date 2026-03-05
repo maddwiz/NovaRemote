@@ -84,6 +84,11 @@ describe("useNovaAgentRuntime", () => {
 
     expect(current().agents).toHaveLength(1);
     expect(current().memoryEntries.some((entry) => entry.kind === "agent_created")).toBe(true);
+    expect(current().spineContexts).toHaveLength(1);
+    expect(current().spineContexts[0]?.status).toBe("healthy");
+    expect(current().findSpineContextByAgentId(current().agents[0]?.agentId || "")?.memoryContextId).toBe(
+      current().agents[0]?.memoryContextId
+    );
     expect(onDispatchCommand).toHaveBeenCalledTimes(0);
 
     await act(async () => {
@@ -128,6 +133,8 @@ describe("useNovaAgentRuntime", () => {
       expect(requested).toBe(true);
     });
     expect(current().agents[0]?.status).toBe("waiting_approval");
+    expect(current().pendingSpineApprovals).toBe(1);
+    expect(current().spineContexts[0]?.status).toBe("waiting_approval");
 
     await act(async () => {
       const approved = current().approveAgentApproval(agentId);
@@ -140,6 +147,8 @@ describe("useNovaAgentRuntime", () => {
     expect(onDispatchCommand).toHaveBeenCalledWith("main", "npm run deploy");
     expect(current().memoryEntries.some((entry) => entry.kind === "approval_approved")).toBe(true);
     expect(current().memoryEntries.some((entry) => entry.kind === "command_dispatched")).toBe(true);
+    expect(current().pendingSpineApprovals).toBe(0);
+    expect(current().spineContexts[0]?.status).toBe("active");
 
     await act(async () => {
       renderer?.unmount();

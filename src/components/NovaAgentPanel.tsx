@@ -2,7 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { useNovaAgentRuntime } from "../hooks/useNovaAgentRuntime";
-import { NovaAgent, NovaAgentStatus, NovaMemoryEntry } from "../types";
+import { NovaAgent, NovaAgentStatus, NovaMemoryEntry, NovaSpineContext } from "../types";
 import { styles } from "../theme/styles";
 
 type NovaAgentPanelProps = {
@@ -36,6 +36,22 @@ function statusLabel(status: NovaAgentStatus): string {
   return "IDLE";
 }
 
+function spineStatusLabel(status: NovaSpineContext["status"]): string {
+  if (status === "waiting_approval") {
+    return "WAITING";
+  }
+  if (status === "active") {
+    return "ACTIVE";
+  }
+  if (status === "stale") {
+    return "STALE";
+  }
+  if (status === "healthy") {
+    return "HEALTHY";
+  }
+  return "IDLE";
+}
+
 function AgentCard({
   agent,
   sessions,
@@ -43,6 +59,7 @@ function AgentCard({
   goalDraft,
   capabilitiesDraft,
   memoryEntries,
+  spineContext,
   selectedSession,
   onCommandChange,
   onGoalChange,
@@ -63,6 +80,7 @@ function AgentCard({
   goalDraft: string;
   capabilitiesDraft: string;
   memoryEntries: NovaMemoryEntry[];
+  spineContext: NovaSpineContext | null;
   selectedSession: string | null;
   onCommandChange: (value: string) => void;
   onGoalChange: (value: string) => void;
@@ -78,6 +96,9 @@ function AgentCard({
   onClearMemory: () => void;
 }) {
   const recentMemory = memoryEntries.slice(0, 4);
+  const contextSummary = spineContext
+    ? `${spineStatusLabel(spineContext.status)} • events ${spineContext.totalEntries}${spineContext.pendingApprovalCount > 0 ? ` • pending ${spineContext.pendingApprovalCount}` : ""}`
+    : "IDLE • events 0";
 
   return (
     <View style={styles.terminalCard}>
@@ -86,6 +107,8 @@ function AgentCard({
         <Text style={[styles.modePill, styles.modePillShell]}>{statusLabel(agent.status)}</Text>
       </View>
       <Text style={styles.serverSubtitle}>{`Memory ${agent.memoryContextId}`}</Text>
+      <Text style={styles.emptyText}>{`Context ${contextSummary}`}</Text>
+      {spineContext?.lastSummary ? <Text style={styles.emptyText}>{`Last: ${spineContext.lastSummary}`}</Text> : null}
 
       <TextInput
         style={styles.input}
@@ -250,6 +273,9 @@ export function NovaAgentPanel({
     approveReadyApprovals,
     denyAllPendingApprovals,
     clearAgentMemory,
+    spineContexts,
+    findSpineContextByAgentId,
+    pendingSpineApprovals,
   } = useNovaAgentRuntime({
     serverId,
     onDispatchCommand: onQueueCommand,
@@ -353,7 +379,7 @@ export function NovaAgentPanel({
       ) : null}
 
       <View style={styles.actionsWrap}>
-        <Text style={styles.serverSubtitle}>{`Pending approvals: ${pendingAgents.length}`}</Text>
+        <Text style={styles.serverSubtitle}>{`Pending approvals: ${pendingAgents.length} • NovaSpine ${pendingSpineApprovals}`}</Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Approve pending agents with ready command and session routes"
@@ -376,6 +402,9 @@ export function NovaAgentPanel({
 
       {loading || memoryLoading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
       {!loading && !memoryLoading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
+      {!loading && !memoryLoading && spineContexts.length > 0 ? (
+        <Text style={styles.emptyText}>{`Contexts: ${spineContexts.length}`}</Text>
+      ) : null}
 
       {agents.map((agent) => {
         const draftGoal = goalDrafts[agent.agentId] ?? agent.currentGoal;
@@ -383,6 +412,7 @@ export function NovaAgentPanel({
         const selectedSession = sessionByAgent[agent.agentId] || agent.pendingApproval?.session || defaultSession;
         const command = commandByAgent[agent.agentId] || "";
         const agentMemory = memoryEntries.filter((entry) => entry.memoryContextId === agent.memoryContextId);
+        const spineContext = findSpineContextByAgentId(agent.agentId);
 
         return (
           <AgentCard
@@ -393,6 +423,7 @@ export function NovaAgentPanel({
             goalDraft={draftGoal}
             capabilitiesDraft={draftCapabilities}
             memoryEntries={agentMemory}
+            spineContext={spineContext}
             selectedSession={selectedSession}
             onCommandChange={(value) => setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: value }))}
             onGoalChange={(value) => setGoalDrafts((prev) => ({ ...prev, [agent.agentId]: value }))}
