@@ -90,7 +90,7 @@ npm run dev
 
 Default server address: `http://localhost:8788`
 
-This scaffold intentionally uses in-memory state to unblock integration. Replace with PostgreSQL + migrations before production rollout.
+This scaffold uses file-backed JSON state by default (`NOVA_CLOUD_STATE_FILE`) to preserve data across restarts. Replace with PostgreSQL + migrations before production rollout.
 DOC
 fi
 
@@ -149,6 +149,7 @@ if [[ ! -f "${API_REPO}/.env.example" ]]; then
 PORT=8788
 NOVA_CLOUD_JWT_SECRET=replace-me
 NOVA_CLOUD_TOKEN_TTL_SECONDS=7200
+NOVA_CLOUD_STATE_FILE=./data/state.json
 ENV
 fi
 
@@ -158,6 +159,9 @@ import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
 import { randomUUID } from "node:crypto";
+import { promises as fs } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { z } from "zod";
 
 type TeamRole = "admin" | "operator" | "viewer" | "billing";
@@ -299,6 +303,95 @@ const teamSettings = {
   requireFleetApproval: false
 };
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const stateFilePath =
+  process.env.NOVA_CLOUD_STATE_FILE && process.env.NOVA_CLOUD_STATE_FILE.trim()
+    ? path.resolve(process.cwd(), process.env.NOVA_CLOUD_STATE_FILE.trim())
+    : path.resolve(__dirname, "../data/state.json");
+const saveDebounceMsRaw = Number.parseInt(process.env.NOVA_CLOUD_STATE_SAVE_DEBOUNCE_MS || "200", 10);
+const saveDebounceMs = Number.isFinite(saveDebounceMsRaw) && saveDebounceMsRaw >= 0 ? saveDebounceMsRaw : 200;
+let persistTimer: ReturnType<typeof setTimeout> | null = null;
+
+function replaceArrayInPlace<T>(target: T[], source: T[]) {
+  target.splice(0, target.length, ...source);
+}
+
+function snapshotState() {
+  return {
+    teamServers,
+    teamMembers,
+    teamInvites,
+    teamSsoProviders,
+    fleetApprovals,
+    auditEvents,
+    auditExportJobs,
+    teamSettings,
+  };
+}
+
+async function persistState() {
+  try {
+    await fs.mkdir(path.dirname(stateFilePath), { recursive: true });
+    await fs.writeFile(stateFilePath, JSON.stringify(snapshotState(), null, 2), "utf8");
+  } catch (error) {
+    console.warn("Failed to persist state:", error);
+  }
+}
+
+function schedulePersist() {
+  if (saveDebounceMs === 0) {
+    void persistState();
+    return;
+  }
+  if (persistTimer) {
+    clearTimeout(persistTimer);
+  }
+  persistTimer = setTimeout(() => {
+    persistTimer = null;
+    void persistState();
+  }, saveDebounceMs);
+}
+
+async function loadState() {
+  try {
+    const raw = await fs.readFile(stateFilePath, "utf8");
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    if (Array.isArray(parsed.teamServers)) {
+      replaceArrayInPlace(teamServers, parsed.teamServers as TeamServer[]);
+    }
+    if (Array.isArray(parsed.teamMembers)) {
+      replaceArrayInPlace(
+        teamMembers,
+        parsed.teamMembers as Array<{ id: string; name: string; email: string; role: TeamRole; serverIds: string[] }>
+      );
+    }
+    if (Array.isArray(parsed.teamInvites)) {
+      replaceArrayInPlace(teamInvites, parsed.teamInvites as typeof teamInvites);
+    }
+    if (Array.isArray(parsed.teamSsoProviders)) {
+      replaceArrayInPlace(teamSsoProviders, parsed.teamSsoProviders as TeamSsoProviderConfig[]);
+    }
+    if (Array.isArray(parsed.fleetApprovals)) {
+      replaceArrayInPlace(fleetApprovals, parsed.fleetApprovals as FleetApproval[]);
+    }
+    if (Array.isArray(parsed.auditEvents)) {
+      replaceArrayInPlace(auditEvents, parsed.auditEvents);
+    }
+    if (Array.isArray(parsed.auditExportJobs)) {
+      replaceArrayInPlace(auditExportJobs, parsed.auditExportJobs as typeof auditExportJobs);
+    }
+    if (parsed.teamSettings && typeof parsed.teamSettings === "object") {
+      Object.assign(teamSettings, parsed.teamSettings);
+    }
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code !== "ENOENT") {
+      console.warn("Failed to load persisted state:", error);
+    }
+  }
+}
+
 const inviteSchema = z.object({
   email: z.string().email(),
   role: z.enum(["admin", "operator", "viewer", "billing"])
@@ -381,6 +474,7 @@ app.patch("/v1/team/members/:memberId", (req, res) => {
     return res.status(404).json({ detail: "Member not found" });
   }
   member.role = role;
+  schedulePersist();
   res.json({ ok: true });
 });
 
@@ -391,6 +485,7 @@ app.put("/v1/team/members/:memberId/servers", (req, res) => {
     return res.status(404).json({ detail: "Member not found" });
   }
   member.serverIds = Array.isArray(req.body?.serverIds) ? req.body.serverIds.map((entry: unknown) => String(entry)) : [];
+  schedulePersist();
   res.json({ ok: true });
 });
 
@@ -400,6 +495,7 @@ app.get("/v1/team/settings", (_req, res) => {
 
 app.patch("/v1/team/settings", (req, res) => {
   Object.assign(teamSettings, req.body || {});
+  schedulePersist();
   res.json({ settings: teamSettings });
 });
 
@@ -436,6 +532,7 @@ app.post("/v1/team/invites", (req, res) => {
     expiresAt
   };
   teamInvites.unshift(invite);
+  schedulePersist();
   res.json({ invite });
 });
 
@@ -446,6 +543,7 @@ app.delete("/v1/team/invites/:inviteId", (req, res) => {
   }
   invite.status = "revoked";
   invite.revokedAt = new Date().toISOString();
+  schedulePersist();
   res.json({ ok: true });
 });
 
@@ -485,6 +583,7 @@ app.patch("/v1/team/sso/providers/:provider", (req, res) => {
     entry.callbackUrl = String((body as { callbackUrl: string }).callbackUrl);
   }
   entry.updatedAt = new Date().toISOString();
+  schedulePersist();
   res.json({ provider: entry });
 });
 
@@ -508,6 +607,7 @@ app.post("/v1/team/fleet/approvals", (req, res) => {
     expiresAt
   };
   fleetApprovals.unshift(approval);
+  schedulePersist();
   res.json({ approval });
 });
 
@@ -519,6 +619,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/approve", (req, res) => {
   approval.status = "approved";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
+  schedulePersist();
   res.json({ ok: true });
 });
 
@@ -530,12 +631,14 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", (req, res) => {
   approval.status = "denied";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
+  schedulePersist();
   res.json({ ok: true });
 });
 
 app.post("/v1/audit/events", (req, res) => {
   const events = Array.isArray(req.body?.events) ? req.body.events : [];
   auditEvents.push(...events);
+  schedulePersist();
   res.json({ accepted: events.length, rejected: 0 });
 });
 
@@ -566,12 +669,28 @@ app.post("/v1/audit/exports", (req, res) => {
     detail: `Snapshot contains ${auditEvents.length} events`
   };
   auditExportJobs.unshift(job);
+  schedulePersist();
   res.json(job);
 });
 
 const port = Number.parseInt(process.env.PORT || "8788", 10);
-app.listen(port, () => {
-  console.log(`NovaRemoteCloud scaffold listening on http://localhost:${port}`);
+void loadState().finally(() => {
+  app.listen(port, () => {
+    console.log(`NovaRemoteCloud scaffold listening on http://localhost:${port}`);
+    console.log(`State file: ${stateFilePath}`);
+  });
+});
+
+process.on("SIGINT", () => {
+  void persistState().finally(() => {
+    process.exit(0);
+  });
+});
+
+process.on("SIGTERM", () => {
+  void persistState().finally(() => {
+    process.exit(0);
+  });
 });
 TS
 fi

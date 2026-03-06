@@ -81,6 +81,8 @@ The generated dashboard scaffold currently wires:
 - SSO provider toggle controls (`OIDC`/`SAML`)
 - cloud audit export request actions (`JSON`/`CSV`) + export history list/open links
 
+The generated API scaffold now persists state to a local JSON file (`NOVA_CLOUD_STATE_FILE`, default `./data/state.json`) so local restarts retain team data.
+
 Each generated repo also includes deployment starters:
 
 - `Dockerfile`

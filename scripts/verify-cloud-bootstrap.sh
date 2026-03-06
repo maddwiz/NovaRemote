@@ -34,6 +34,7 @@ assert_contains() {
 }
 
 assert_file "${API_DIR}/src/server.ts"
+assert_file "${API_DIR}/.env.example"
 assert_file "${API_DIR}/Dockerfile"
 assert_file "${API_DIR}/render.yaml"
 assert_file "${API_DIR}/.github/workflows/ci.yml"
@@ -50,8 +51,10 @@ assert_contains "${API_DIR}/src/server.ts" "/v1/team/invites"
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/invites/:inviteId"
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/sso/providers"
 assert_contains "${API_DIR}/src/server.ts" "/v1/team/sso/providers/:provider"
+assert_contains "${API_DIR}/src/server.ts" "NOVA_CLOUD_STATE_FILE"
 assert_contains "${API_DIR}/src/server.ts" "app.get(\"/v1/audit/exports\""
 assert_contains "${API_DIR}/src/server.ts" "/v1/audit/exports"
+assert_contains "${API_DIR}/.env.example" "NOVA_CLOUD_STATE_FILE"
 
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/team/invites/{inviteId}"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/team/sso/providers/{provider}"

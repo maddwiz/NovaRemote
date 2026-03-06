@@ -106,7 +106,7 @@ npm run cloud:bootstrap-repos
 
 This creates:
 
-- `../NovaRemoteCloud` (backend scaffold with Docker/Render/GitHub Actions templates)
+- `../NovaRemoteCloud` (backend scaffold with file-backed local state + Docker/Render/GitHub Actions templates)
 - `../NovaRemoteCloudDashboard` (admin web scaffold with member role/server-assignment/invite/policy/fleet/SSO/export controls + deployment templates)
 
 Verify scaffold + contract sync health:
