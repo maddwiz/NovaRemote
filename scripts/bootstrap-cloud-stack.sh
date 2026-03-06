@@ -230,6 +230,42 @@ type AuditEvent = {
   appVersion?: string;
 };
 
+const ROLE_PERMISSIONS: Record<TeamRole, TeamPermission[]> = {
+  admin: [
+    "servers:read",
+    "servers:write",
+    "servers:delete",
+    "sessions:create",
+    "sessions:send",
+    "sessions:view",
+    "fleet:execute",
+    "settings:manage",
+    "team:invite",
+    "team:manage",
+    "audit:read",
+  ],
+  operator: [
+    "servers:read",
+    "sessions:create",
+    "sessions:send",
+    "sessions:view",
+    "fleet:execute",
+    "audit:read",
+  ],
+  viewer: [
+    "servers:read",
+    "sessions:view",
+    "audit:read",
+  ],
+  billing: [
+    "audit:read",
+  ],
+};
+
+function permissionsForRole(role: TeamRole): TeamPermission[] {
+  return [...(ROLE_PERMISSIONS[role] || ROLE_PERMISSIONS.viewer)];
+}
+
 const app = express();
 app.use(helmet());
 app.use(cors());
@@ -243,19 +279,7 @@ const baseIdentity: TeamIdentity = {
   teamId: "team-1",
   teamName: "NovaRemote Ops",
   role: "admin",
-  permissions: [
-    "servers:read",
-    "servers:write",
-    "servers:delete",
-    "sessions:create",
-    "sessions:send",
-    "sessions:view",
-    "fleet:execute",
-    "settings:manage",
-    "team:invite",
-    "team:manage",
-    "audit:read"
-  ],
+  permissions: permissionsForRole("admin"),
   accessToken: `access-${randomUUID()}`,
   refreshToken: `refresh-${randomUUID()}`,
   tokenExpiresAt: Date.now() + 60 * 60 * 1000
@@ -269,6 +293,17 @@ const teamServers: TeamServer[] = [
 const teamMembers: Array<{ id: string; name: string; email: string; role: TeamRole; serverIds: string[] }> = [
   { id: "user-admin-1", name: "Nova Admin", email: "admin@novaremote.dev", role: "admin", serverIds: teamServers.map((server) => server.id) }
 ];
+
+function syncBaseIdentityFromMembers() {
+  const member = teamMembers.find((entry) => entry.id === baseIdentity.userId);
+  if (!member) {
+    return;
+  }
+  baseIdentity.role = member.role;
+  baseIdentity.permissions = permissionsForRole(member.role);
+  baseIdentity.email = member.email || baseIdentity.email;
+  baseIdentity.displayName = member.name || baseIdentity.displayName;
+}
 
 const fleetApprovals: FleetApproval[] = [];
 const teamInvites: Array<{
@@ -399,6 +434,7 @@ async function loadState() {
     if (parsed.teamSettings && typeof parsed.teamSettings === "object") {
       Object.assign(teamSettings, parsed.teamSettings);
     }
+    syncBaseIdentityFromMembers();
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") {
@@ -496,6 +532,7 @@ function deriveDisplayNameFromEmail(email: string): string {
 }
 
 function issueSession(overrides?: Partial<Pick<TeamIdentity, "provider" | "email" | "displayName">>) {
+  syncBaseIdentityFromMembers();
   if (overrides?.provider) {
     baseIdentity.provider = overrides.provider;
   }
@@ -505,6 +542,7 @@ function issueSession(overrides?: Partial<Pick<TeamIdentity, "provider" | "email
   if (overrides?.displayName) {
     baseIdentity.displayName = overrides.displayName;
   }
+  baseIdentity.permissions = permissionsForRole(baseIdentity.role);
   baseIdentity.accessToken = `access-${randomUUID()}`;
   baseIdentity.refreshToken = `refresh-${randomUUID()}`;
   baseIdentity.tokenExpiresAt = Date.now() + 60 * 60 * 1000;
@@ -513,6 +551,19 @@ function issueSession(overrides?: Partial<Pick<TeamIdentity, "provider" | "email
 
 function unauthorized(res: Response, detail: string) {
   res.status(401).json({ detail });
+}
+
+function forbidden(res: Response, detail: string) {
+  res.status(403).json({ detail });
+}
+
+function requireTeamPermission(permission: TeamPermission) {
+  return (_req: Request, res: Response, next: NextFunction) => {
+    if (!baseIdentity.permissions.includes(permission)) {
+      return forbidden(res, `Missing permission: ${permission}`);
+    }
+    next();
+  };
 }
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
@@ -589,7 +640,7 @@ app.post("/v1/auth/logout", (req, res) => {
 
 app.use("/v1", requireAuth);
 
-app.post("/v1/tokens/provision", (req, res) => {
+app.post("/v1/tokens/provision", requireTeamPermission("servers:read"), (req, res) => {
   const serverId = String(req.body?.serverId || "").trim();
   const permissionLevel = String(req.body?.permissionLevel || "viewer").trim();
   if (!serverId) {
@@ -609,11 +660,11 @@ app.post("/v1/tokens/provision", (req, res) => {
   });
 });
 
-app.get("/v1/team/servers", (_req, res) => {
+app.get("/v1/team/servers", requireTeamPermission("servers:read"), (_req, res) => {
   res.json({ servers: teamServers });
 });
 
-app.post("/v1/team/servers", (req, res) => {
+app.post("/v1/team/servers", requireTeamPermission("servers:write"), (req, res) => {
   const parsed = teamServerCreateSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid server payload" });
@@ -637,7 +688,7 @@ app.post("/v1/team/servers", (req, res) => {
   res.json({ server: nextServer });
 });
 
-app.patch("/v1/team/servers/:serverId", (req, res) => {
+app.patch("/v1/team/servers/:serverId", requireTeamPermission("servers:write"), (req, res) => {
   const serverId = String(req.params.serverId || "").trim();
   const target = teamServers.find((entry) => entry.id === serverId);
   if (!target) {
@@ -663,7 +714,7 @@ app.patch("/v1/team/servers/:serverId", (req, res) => {
   res.json({ server: target });
 });
 
-app.delete("/v1/team/servers/:serverId", (req, res) => {
+app.delete("/v1/team/servers/:serverId", requireTeamPermission("servers:delete"), (req, res) => {
   const serverId = String(req.params.serverId || "").trim();
   const index = teamServers.findIndex((entry) => entry.id === serverId);
   if (index === -1) {
@@ -677,23 +728,30 @@ app.delete("/v1/team/servers/:serverId", (req, res) => {
   res.json({ server: removed, ok: true });
 });
 
-app.get("/v1/team/members", (_req, res) => {
+app.get("/v1/team/members", requireTeamPermission("team:manage"), (_req, res) => {
   res.json({ members: teamMembers });
 });
 
-app.patch("/v1/team/members/:memberId", (req, res) => {
+app.patch("/v1/team/members/:memberId", requireTeamPermission("team:manage"), (req, res) => {
   const memberId = String(req.params.memberId || "");
-  const role = String(req.body?.role || "") as TeamRole;
+  const roleRaw = String(req.body?.role || "").trim().toLowerCase();
+  if (roleRaw !== "admin" && roleRaw !== "operator" && roleRaw !== "viewer" && roleRaw !== "billing") {
+    return res.status(400).json({ detail: "role must be admin, operator, viewer, or billing" });
+  }
+  const role = roleRaw as TeamRole;
   const member = teamMembers.find((entry) => entry.id === memberId);
   if (!member) {
     return res.status(404).json({ detail: "Member not found" });
   }
   member.role = role;
+  if (member.id === baseIdentity.userId) {
+    syncBaseIdentityFromMembers();
+  }
   schedulePersist();
   res.json({ ok: true });
 });
 
-app.put("/v1/team/members/:memberId/servers", (req, res) => {
+app.put("/v1/team/members/:memberId/servers", requireTeamPermission("team:manage"), (req, res) => {
   const memberId = String(req.params.memberId || "");
   const member = teamMembers.find((entry) => entry.id === memberId);
   if (!member) {
@@ -704,17 +762,17 @@ app.put("/v1/team/members/:memberId/servers", (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/v1/team/settings", (_req, res) => {
+app.get("/v1/team/settings", requireTeamPermission("settings:manage"), (_req, res) => {
   res.json({ settings: teamSettings });
 });
 
-app.patch("/v1/team/settings", (req, res) => {
+app.patch("/v1/team/settings", requireTeamPermission("settings:manage"), (req, res) => {
   Object.assign(teamSettings, req.body || {});
   schedulePersist();
   res.json({ settings: teamSettings });
 });
 
-app.get("/v1/team/usage", (_req, res) => {
+app.get("/v1/team/usage", requireTeamPermission("team:manage"), (_req, res) => {
   const sessionsCreated = auditEvents.filter((event) => event.action === "session_created").length;
   const commandsSent = auditEvents.filter(
     (event) => event.action === "command_sent" || event.action === "voice_command_sent"
@@ -730,11 +788,11 @@ app.get("/v1/team/usage", (_req, res) => {
   });
 });
 
-app.get("/v1/team/invites", (_req, res) => {
+app.get("/v1/team/invites", requireTeamPermission("team:invite"), (_req, res) => {
   res.json({ invites: teamInvites });
 });
 
-app.post("/v1/team/invites", (req, res) => {
+app.post("/v1/team/invites", requireTeamPermission("team:invite"), (req, res) => {
   const parsed = inviteSchema.safeParse(req.body || {});
   if (!parsed.success) {
     return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid invite payload" });
@@ -756,7 +814,7 @@ app.post("/v1/team/invites", (req, res) => {
   res.json({ invite });
 });
 
-app.delete("/v1/team/invites/:inviteId", (req, res) => {
+app.delete("/v1/team/invites/:inviteId", requireTeamPermission("team:invite"), (req, res) => {
   const invite = teamInvites.find((entry) => entry.id === req.params.inviteId);
   if (!invite) {
     return res.status(404).json({ detail: "Invite not found" });
@@ -767,11 +825,11 @@ app.delete("/v1/team/invites/:inviteId", (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/v1/team/sso/providers", (_req, res) => {
+app.get("/v1/team/sso/providers", requireTeamPermission("team:manage"), (_req, res) => {
   res.json({ providers: teamSsoProviders });
 });
 
-app.patch("/v1/team/sso/providers/:provider", (req, res) => {
+app.patch("/v1/team/sso/providers/:provider", requireTeamPermission("team:manage"), (req, res) => {
   const provider = String(req.params.provider || "").trim().toLowerCase();
   if (provider !== "oidc" && provider !== "saml") {
     return res.status(400).json({ detail: "Invalid provider" });
@@ -807,11 +865,11 @@ app.patch("/v1/team/sso/providers/:provider", (req, res) => {
   res.json({ provider: entry });
 });
 
-app.get("/v1/team/fleet/approvals", (_req, res) => {
+app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (_req, res) => {
   res.json({ approvals: fleetApprovals });
 });
 
-app.post("/v1/team/fleet/approvals", (req, res) => {
+app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (req, res) => {
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const approval: FleetApproval = {
@@ -831,7 +889,7 @@ app.post("/v1/team/fleet/approvals", (req, res) => {
   res.json({ approval });
 });
 
-app.post("/v1/team/fleet/approvals/:approvalId/approve", (req, res) => {
+app.post("/v1/team/fleet/approvals/:approvalId/approve", requireTeamPermission("team:manage"), (req, res) => {
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
@@ -843,7 +901,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/approve", (req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/v1/team/fleet/approvals/:approvalId/deny", (req, res) => {
+app.post("/v1/team/fleet/approvals/:approvalId/deny", requireTeamPermission("team:manage"), (req, res) => {
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
@@ -855,7 +913,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", (req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/v1/audit/events", (req, res) => {
+app.get("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => {
   const limitRaw = Number.parseInt(String(req.query?.limit || "100"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 100;
   const actionFilter = String(req.query?.action || "").trim().toLowerCase();
@@ -890,7 +948,7 @@ app.get("/v1/audit/events", (req, res) => {
   res.json({ events: filtered.slice(0, limit) });
 });
 
-app.post("/v1/audit/events", (req, res) => {
+app.post("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => {
   const incoming = Array.isArray(req.body?.events) ? req.body.events : [];
   const normalized = incoming
     .map((entry) => normalizeAuditEvent(entry))
@@ -900,7 +958,7 @@ app.post("/v1/audit/events", (req, res) => {
   res.json({ accepted: normalized.length, rejected: incoming.length - normalized.length });
 });
 
-app.get("/v1/audit/exports", (req, res) => {
+app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {
   const limitRaw = Number.parseInt(String(req.query?.limit || "20"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 20;
   const ordered = [...auditExportJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -909,7 +967,7 @@ app.get("/v1/audit/exports", (req, res) => {
   });
 });
 
-app.post("/v1/audit/exports", (req, res) => {
+app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {
   const format = String(req.body?.format || "").toLowerCase();
   if (format !== "json" && format !== "csv") {
     return res.status(400).json({ detail: "format must be json or csv" });
@@ -931,7 +989,7 @@ app.post("/v1/audit/exports", (req, res) => {
   res.json(job);
 });
 
-app.delete("/v1/audit/exports/:exportId", (req, res) => {
+app.delete("/v1/audit/exports/:exportId", requireTeamPermission("audit:read"), (req, res) => {
   const exportId = String(req.params.exportId || "").trim();
   const index = auditExportJobs.findIndex((entry) => entry.exportId === exportId);
   if (index === -1) {
@@ -1256,6 +1314,7 @@ type TeamIdentity = {
   tokenExpiresAt?: number;
   teamName?: string;
   role?: string;
+  permissions?: string[];
   email?: string;
   displayName?: string;
 };
@@ -1295,6 +1354,10 @@ function parseBoolString(value: string): boolean | null {
     return false;
   }
   return null;
+}
+
+function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
+  return result.status === "fulfilled" ? result.value : fallback;
 }
 
 export function App() {
@@ -1513,7 +1576,7 @@ export function App() {
     setBusy(true);
     setStatus("Loading team data...");
     try {
-      const [membersPayload, teamServersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload, exportsPayload, auditEventsPayload] = await Promise.all([
+      const results = await Promise.allSettled([
         fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
         fetchJson<{ servers?: TeamServer[] }>("/v1/team/servers", accessToken.trim()),
         fetchJson<{ approvals?: FleetApproval[] }>("/v1/team/fleet/approvals", accessToken.trim()),
@@ -1522,7 +1585,23 @@ export function App() {
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
         fetchJson<{ exports?: AuditExportJob[] }>("/v1/audit/exports?limit=20", accessToken.trim()),
         fetchJson<{ events?: AuditEvent[] }>("/v1/audit/events?limit=200", accessToken.trim()),
-      ]);
+      ] as const);
+      const membersPayload = settledValue(results[0], { members: [] as TeamMember[] });
+      const teamServersPayload = settledValue(results[1], { servers: [] as TeamServer[] });
+      const approvalsPayload = settledValue(results[2], { approvals: [] as FleetApproval[] });
+      const ssoPayload = settledValue(results[3], { providers: [] as TeamSsoProviderConfig[] });
+      const invitesPayload = settledValue(results[4], { invites: [] as TeamInvite[] });
+      const settingsPayload = settledValue(results[5], {
+        settings: {
+          enforceDangerConfirm: null,
+          requireFleetApproval: null,
+          requireSessionRecording: null,
+          sessionTimeoutMinutes: null,
+          commandBlocklist: [],
+        } as TeamSettings,
+      });
+      const exportsPayload = settledValue(results[6], { exports: [] as AuditExportJob[] });
+      const auditEventsPayload = settledValue(results[7], { events: [] as AuditEvent[] });
       const nextMembers = Array.isArray(membersPayload.members) ? membersPayload.members : [];
       setMembers(nextMembers);
       const nextServers = Array.isArray(teamServersPayload.servers) ? teamServersPayload.servers : [];
@@ -1577,7 +1656,12 @@ export function App() {
           : ""
       );
       setPolicyBlocklist((nextSettings.commandBlocklist || []).join("\n"));
-      setStatus("Team data loaded.");
+      const failedCount = results.filter((entry) => entry.status === "rejected").length;
+      if (failedCount > 0) {
+        setStatus(`Team data loaded with ${failedCount} permission or API warning${failedCount === 1 ? "" : "s"}.`);
+      } else {
+        setStatus("Team data loaded.");
+      }
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
@@ -2067,6 +2151,10 @@ export function App() {
         ) : (
           <p className="muted">Not signed in.</p>
         )}
+        {identity?.role ? <p className="muted">{`Role: ${identity.role}`}</p> : null}
+        {Array.isArray(identity?.permissions) && identity.permissions.length > 0 ? (
+          <p className="muted">{`Permissions: ${identity.permissions.join(", ")}`}</p>
+        ) : null}
         {identity?.tokenExpiresAt ? (
           <p className="muted">{`Session expires: ${new Date(identity.tokenExpiresAt).toLocaleString()}`}</p>
         ) : null}

@@ -86,6 +86,7 @@ The generated dashboard scaffold currently wires:
 - cloud audit export request actions (`JSON`/`CSV`) + export history list/open/delete controls
 
 The generated API scaffold now persists state to a local JSON file (`NOVA_CLOUD_STATE_FILE`, default `./data/state.json`) so local restarts retain team data.
+It also applies endpoint-level permission guards (`requireTeamPermission`) derived from the signed-in role for local RBAC validation.
 
 Each generated repo also includes deployment starters:
 
