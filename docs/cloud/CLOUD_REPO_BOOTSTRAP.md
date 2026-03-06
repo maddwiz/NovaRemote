@@ -89,6 +89,7 @@ The generated dashboard scaffold currently wires:
 The generated API scaffold now persists state to a local JSON file (`NOVA_CLOUD_STATE_FILE`, default `./data/state.json`) so local restarts retain team data.
 It also applies endpoint-level permission guards (`requireTeamPermission`) derived from the signed-in role for local RBAC validation.
 Fleet approval endpoints now include duplicate-pending detection, pending-expiry normalization, and server-side self-approval guardrails.
+Approved fleet requests can also be claimed for execution (`claim-execution`) to generate an execution token and reviewer/executor metadata.
 The scaffold also emits system audit events for auth, server-fleet, invite, policy, approval-review, and export lifecycle actions.
 Team policy updates are schema-validated in the scaffold API, including timeout bounds and command blocklist regex validation.
 Audit export jobs now model lifecycle states (`pending` -> `ready`) and TTL cleanup with expiry metadata in the dashboard scaffold.

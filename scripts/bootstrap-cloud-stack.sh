@@ -201,6 +201,13 @@ type FleetApproval = {
   status: "pending" | "approved" | "denied" | "expired";
   note?: string;
   expiresAt?: string;
+  reviewedByUserId?: string;
+  reviewedByEmail?: string;
+  reviewedAt?: string;
+  executionClaimedByUserId?: string;
+  executionClaimedByEmail?: string;
+  executionClaimedAt?: string;
+  executionToken?: string;
 };
 
 type TeamSsoProviderConfig = {
@@ -1227,9 +1234,12 @@ app.post("/v1/team/fleet/approvals/:approvalId/approve", requireTeamPermission("
   approval.status = "approved";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
+  approval.reviewedByUserId = baseIdentity.userId;
+  approval.reviewedByEmail = baseIdentity.email;
+  approval.reviewedAt = approval.updatedAt;
   recordSystemAuditEvent(
     "fleet_approval_reviewed",
-    `Approved fleet request ${approval.id}.`,
+    `Approved fleet request ${approval.id} by ${baseIdentity.email}.`,
     { approved: true },
     false
   );
@@ -1256,14 +1266,53 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", requireTeamPermission("tea
   approval.status = "denied";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
+  approval.reviewedByUserId = baseIdentity.userId;
+  approval.reviewedByEmail = baseIdentity.email;
+  approval.reviewedAt = approval.updatedAt;
   recordSystemAuditEvent(
     "fleet_approval_reviewed",
-    `Denied fleet request ${approval.id}.`,
+    `Denied fleet request ${approval.id} by ${baseIdentity.email}.`,
     { approved: false },
     false
   );
   schedulePersist();
   res.json({ ok: true });
+});
+
+app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPermission("fleet:execute"), (req, res) => {
+  const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
+  if (!approval) {
+    return res.status(404).json({ detail: "Approval not found" });
+  }
+  const currentStatus = expireApprovalIfNeeded(approval, Date.now());
+  if (currentStatus === "expired") {
+    schedulePersist();
+    return res.status(409).json({ detail: "Approval has expired" });
+  }
+  if (approval.status !== "approved") {
+    return res.status(409).json({ detail: `Approval is ${approval.status}; execution claim requires approved status.` });
+  }
+  if (approval.executionClaimedAt) {
+    return res.status(409).json({
+      detail: `Execution already claimed at ${approval.executionClaimedAt}.`,
+      approval,
+      executionToken: approval.executionToken,
+    });
+  }
+  const claimedAt = new Date().toISOString();
+  approval.executionClaimedByUserId = baseIdentity.userId;
+  approval.executionClaimedByEmail = baseIdentity.email;
+  approval.executionClaimedAt = claimedAt;
+  approval.executionToken = `fexec-${randomUUID()}`;
+  approval.updatedAt = claimedAt;
+  recordSystemAuditEvent(
+    "fleet_execution_claimed",
+    `Claimed execution for approved fleet request ${approval.id}.`,
+    { approved: true },
+    false
+  );
+  schedulePersist();
+  res.json({ approval, executionToken: approval.executionToken });
 });
 
 app.get("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => {
@@ -1641,6 +1690,11 @@ type FleetApproval = {
   status: string;
   requestedByEmail: string;
   createdAt: string;
+  reviewedByEmail?: string;
+  reviewedAt?: string;
+  executionClaimedByEmail?: string;
+  executionClaimedAt?: string;
+  executionToken?: string;
 };
 
 type AuditExportJob = {
@@ -2265,6 +2319,35 @@ export function App() {
     [accessToken, loadTeamData]
   );
 
+  const claimApprovalExecution = useCallback(
+    async (approvalId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before claiming execution.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Claiming execution for ${approvalId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/fleet/approvals/${approvalId}/claim-execution`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
   const updateMemberRole = useCallback(
     async (memberId: string, role: string) => {
       if (!accessToken.trim()) {
@@ -2816,6 +2899,19 @@ export function App() {
             <p className="muted">
               {approval.status} • {approval.command} • {approval.requestedByEmail}
             </p>
+            {approval.reviewedByEmail ? (
+              <p className="muted">
+                Reviewed by {approval.reviewedByEmail}
+                {approval.reviewedAt ? ` • ${new Date(approval.reviewedAt).toLocaleString()}` : ""}
+              </p>
+            ) : null}
+            {approval.executionClaimedByEmail ? (
+              <p className="muted">
+                Execution claimed by {approval.executionClaimedByEmail}
+                {approval.executionClaimedAt ? ` • ${new Date(approval.executionClaimedAt).toLocaleString()}` : ""}
+              </p>
+            ) : null}
+            {approval.executionToken ? <p className="muted">{`Execution token: ${approval.executionToken}`}</p> : null}
             {approval.status === "pending" ? (
               <div className="actions">
                 <button disabled={busy} onClick={() => void reviewApproval(approval.id, "approve")}>
@@ -2823,6 +2919,13 @@ export function App() {
                 </button>
                 <button disabled={busy} onClick={() => void reviewApproval(approval.id, "deny")}>
                   Deny
+                </button>
+              </div>
+            ) : null}
+            {approval.status === "approved" && !approval.executionClaimedAt ? (
+              <div className="actions">
+                <button disabled={busy} onClick={() => void claimApprovalExecution(approval.id)}>
+                  Claim Execution
                 </button>
               </div>
             ) : null}

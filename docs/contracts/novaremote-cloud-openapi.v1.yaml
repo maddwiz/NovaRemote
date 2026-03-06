@@ -517,6 +517,30 @@ paths:
           description: Self-review blocked (review must come from another team member)
         "409":
           description: Approval is no longer pending (already resolved or expired)
+  /v1/team/fleet/approvals/{approvalId}/claim-execution:
+    post:
+      summary: Claim execution intent for an approved fleet request
+      parameters:
+        - in: path
+          name: approvalId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Fleet execution claim accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approval, executionToken]
+                properties:
+                  approval:
+                    $ref: "#/components/schemas/FleetApproval"
+                  executionToken:
+                    type: string
+        "409":
+          description: Approval is not eligible to claim (not approved, expired, or already claimed)
   /v1/audit/events:
     get:
       summary: Query audit events
@@ -940,6 +964,20 @@ components:
         note:
           type: string
         expiresAt:
+          type: string
+        reviewedByUserId:
+          type: string
+        reviewedByEmail:
+          type: string
+        reviewedAt:
+          type: string
+        executionClaimedByUserId:
+          type: string
+        executionClaimedByEmail:
+          type: string
+        executionClaimedAt:
+          type: string
+        executionToken:
           type: string
     AuditExportJob:
       type: object
