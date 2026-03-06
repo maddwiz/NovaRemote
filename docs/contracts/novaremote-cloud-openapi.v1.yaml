@@ -557,6 +557,51 @@ paths:
           description: Caller is not authorized for one or more approval targets
         "409":
           description: Approval is not eligible to claim (not approved, expired, already claimed, or targets unavailable)
+  /v1/team/fleet/approvals/{approvalId}/complete:
+    post:
+      summary: Complete a claimed fleet execution
+      description: Completes execution with the issued execution token; only the claimer or admin can finalize.
+      parameters:
+        - in: path
+          name: approvalId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [executionToken]
+              properties:
+                executionToken:
+                  type: string
+                status:
+                  type: string
+                  enum: [succeeded, failed]
+                summary:
+                  type: string
+      responses:
+        "200":
+          description: Fleet execution completion accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [approval, ok]
+                properties:
+                  approval:
+                    $ref: "#/components/schemas/FleetApproval"
+                  ok:
+                    type: boolean
+                    const: true
+        "400":
+          description: Invalid completion payload
+        "403":
+          description: Invalid execution token or insufficient permission to complete
+        "409":
+          description: Approval is not eligible to complete (not claimed, already completed, expired, or targets unavailable)
   /v1/audit/events:
     get:
       summary: Query audit events
@@ -998,6 +1043,17 @@ components:
         executionClaimedAt:
           type: string
         executionToken:
+          type: string
+        executionCompletedByUserId:
+          type: string
+        executionCompletedByEmail:
+          type: string
+        executionCompletedAt:
+          type: string
+        executionResult:
+          type: string
+          enum: [succeeded, failed]
+        executionSummary:
           type: string
     AuditExportJob:
       type: object

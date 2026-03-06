@@ -38,7 +38,7 @@
   "dependencies": {
     "anser": "^2.3.5",
     "crypto-js": "^4.2.0",
-    "expo": "~55.0.4",
+    "expo": "~55.0.5",
     "expo-av": "^16.0.8",
     "expo-camera": "~55.0.9",
     "expo-haptics": "^55.0.8",

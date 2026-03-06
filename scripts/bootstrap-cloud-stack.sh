@@ -216,6 +216,11 @@ type FleetApproval = {
   executionClaimedByEmail?: string;
   executionClaimedAt?: string;
   executionToken?: string;
+  executionCompletedByUserId?: string;
+  executionCompletedByEmail?: string;
+  executionCompletedAt?: string;
+  executionResult?: "succeeded" | "failed";
+  executionSummary?: string;
 };
 
 type TeamSsoProviderConfig = {
@@ -486,6 +491,12 @@ const ssoExchangeSchema = z
 
 const refreshTokenSchema = z.object({
   refreshToken: z.string().trim().min(1),
+});
+
+const fleetExecutionCompleteSchema = z.object({
+  executionToken: z.string().trim().min(1),
+  status: z.enum(["succeeded", "failed"]).default("succeeded"),
+  summary: z.string().trim().max(2000).optional(),
 });
 
 const teamServerCreateSchema = z.object({
@@ -1595,6 +1606,70 @@ app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPerm
   res.json({ approval, executionToken: approval.executionToken });
 });
 
+app.post("/v1/team/fleet/approvals/:approvalId/complete", requireTeamPermission("fleet:execute"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
+  const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
+  if (!approval) {
+    return res.status(404).json({ detail: "Approval not found" });
+  }
+  const parsed = fleetExecutionCompleteSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid completion payload" });
+  }
+  const currentStatus = expireApprovalIfNeeded(approval, Date.now());
+  if (currentStatus === "expired") {
+    schedulePersist();
+    return res.status(409).json({ detail: "Approval has expired" });
+  }
+  if (approval.status !== "approved") {
+    return res.status(409).json({ detail: `Approval is ${approval.status}; execution completion requires approved status.` });
+  }
+  const completionTargetValidation = normalizeFleetTargetsForIdentity(normalizeApprovalTargets(approval.targets), identity);
+  if (completionTargetValidation.unknownTargets.length > 0) {
+    return res
+      .status(409)
+      .json({ detail: `Approval targets are no longer available: ${completionTargetValidation.unknownTargets.join(", ")}` });
+  }
+  if (completionTargetValidation.unauthorizedTargets.length > 0) {
+    return forbidden(res, `Not authorized for targets: ${completionTargetValidation.unauthorizedTargets.join(", ")}`);
+  }
+  if (!approval.executionClaimedAt || !approval.executionToken) {
+    return res.status(409).json({ detail: "Execution must be claimed before completion." });
+  }
+  if (approval.executionCompletedAt) {
+    return res.status(409).json({ detail: `Execution already completed at ${approval.executionCompletedAt}.`, approval });
+  }
+  if (
+    approval.executionClaimedByUserId &&
+    approval.executionClaimedByUserId !== identity.userId &&
+    identity.role !== "admin"
+  ) {
+    return forbidden(res, "Only the claimer or an admin can complete execution.");
+  }
+  if (approval.executionToken !== parsed.data.executionToken) {
+    return res.status(403).json({ detail: "Execution token mismatch." });
+  }
+
+  const completedAt = new Date().toISOString();
+  approval.executionCompletedByUserId = identity.userId;
+  approval.executionCompletedByEmail = identity.email;
+  approval.executionCompletedAt = completedAt;
+  approval.executionResult = parsed.data.status;
+  approval.executionSummary = parsed.data.summary?.trim() || approval.executionSummary;
+  approval.updatedAt = completedAt;
+  recordSystemAuditEvent(
+    "fleet_execution_completed",
+    `Marked execution ${parsed.data.status} for fleet request ${approval.id}.`,
+    { approved: parsed.data.status === "succeeded" },
+    false
+  );
+  schedulePersist();
+  res.json({ approval, ok: true });
+});
+
 app.get("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => {
   const limitRaw = Number.parseInt(String(req.query?.limit || "100"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 100;
@@ -1979,6 +2054,10 @@ type FleetApproval = {
   executionClaimedByEmail?: string;
   executionClaimedAt?: string;
   executionToken?: string;
+  executionCompletedByEmail?: string;
+  executionCompletedAt?: string;
+  executionResult?: "succeeded" | "failed";
+  executionSummary?: string;
 };
 
 type AuditExportJob = {
@@ -2632,6 +2711,43 @@ export function App() {
     [accessToken, loadTeamData]
   );
 
+  const completeApprovalExecution = useCallback(
+    async (approvalId: string, executionToken: string, status: "succeeded" | "failed") => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before completing execution.");
+        return;
+      }
+      if (!executionToken.trim()) {
+        setStatus("Execution token is required before completion.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Marking ${approvalId} ${status}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/fleet/approvals/${approvalId}/complete`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+          body: JSON.stringify({
+            executionToken,
+            status,
+          }),
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
   const updateMemberRole = useCallback(
     async (memberId: string, role: string) => {
       if (!accessToken.trim()) {
@@ -3200,6 +3316,13 @@ export function App() {
                 {approval.executionClaimedAt ? ` • ${new Date(approval.executionClaimedAt).toLocaleString()}` : ""}
               </p>
             ) : null}
+            {approval.executionCompletedByEmail ? (
+              <p className="muted">
+                Execution {approval.executionResult || "completed"} by {approval.executionCompletedByEmail}
+                {approval.executionCompletedAt ? ` • ${new Date(approval.executionCompletedAt).toLocaleString()}` : ""}
+              </p>
+            ) : null}
+            {approval.executionSummary ? <p className="muted">{`Summary: ${approval.executionSummary}`}</p> : null}
             {approval.executionToken ? <p className="muted">{`Execution token: ${approval.executionToken}`}</p> : null}
             {approval.status === "pending" ? (
               <div className="actions">
@@ -3215,6 +3338,25 @@ export function App() {
               <div className="actions">
                 <button disabled={busy} onClick={() => void claimApprovalExecution(approval.id)}>
                   Claim Execution
+                </button>
+              </div>
+            ) : null}
+            {approval.status === "approved" &&
+            Boolean(approval.executionClaimedAt) &&
+            !approval.executionCompletedAt &&
+            approval.executionToken ? (
+              <div className="actions">
+                <button
+                  disabled={busy}
+                  onClick={() => void completeApprovalExecution(approval.id, approval.executionToken || "", "succeeded")}
+                >
+                  Mark Succeeded
+                </button>
+                <button
+                  disabled={busy}
+                  onClick={() => void completeApprovalExecution(approval.id, approval.executionToken || "", "failed")}
+                >
+                  Mark Failed
                 </button>
               </div>
             ) : null}

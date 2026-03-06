@@ -98,6 +98,7 @@ Token provisioning now enforces server assignment + least-privilege permission c
 Team server listing now enforces per-member visibility (non-admin members only receive assigned servers).
 Member server assignment updates now validate that all `serverIds` exist before applying changes.
 Fleet approval request and claim flows now validate target server existence and caller access at both request and claim time.
+Fleet approvals now include a completion endpoint (`/complete`) that finalizes claimed executions with token verification and success/failure outcome metadata.
 
 Each generated repo also includes deployment starters:
 
