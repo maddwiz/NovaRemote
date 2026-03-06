@@ -363,6 +363,8 @@ const stateFilePath =
 const saveDebounceMsRaw = Number.parseInt(process.env.NOVA_CLOUD_STATE_SAVE_DEBOUNCE_MS || "200", 10);
 const saveDebounceMs = Number.isFinite(saveDebounceMsRaw) && saveDebounceMsRaw >= 0 ? saveDebounceMsRaw : 200;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const AUDIT_EXPORT_PROCESSING_MS = 1_500;
+const AUDIT_EXPORT_TTL_MS = 60 * 60 * 1000;
 
 function replaceArrayInPlace<T>(target: T[], source: T[]) {
   target.splice(0, target.length, ...source);
@@ -564,6 +566,42 @@ function recordSystemAuditEvent(action: string, detail: string, input: SystemAud
   }
   auditEvents.push(event);
   if (persist) {
+    schedulePersist();
+  }
+}
+
+function reconcileAuditExportJobs() {
+  const nowMs = Date.now();
+  let changed = false;
+  const retained: typeof auditExportJobs = [];
+
+  auditExportJobs.forEach((job) => {
+    const expiresAtMs = job.expiresAt ? Date.parse(job.expiresAt) : Number.NaN;
+    if (Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs) {
+      changed = true;
+      recordSystemAuditEvent("audit_export_expired", `Expired audit export ${job.exportId}.`, {}, false);
+      return;
+    }
+
+    if (job.status === "pending") {
+      const createdAtMs = Date.parse(job.createdAt);
+      if (Number.isFinite(createdAtMs) && nowMs - createdAtMs >= AUDIT_EXPORT_PROCESSING_MS) {
+        job.status = "ready";
+        job.downloadUrl = `https://cloud.novaremote.dev/exports/${job.exportId}.${job.format}`;
+        job.detail = `Snapshot contains ${auditEvents.length} events`;
+        changed = true;
+        recordSystemAuditEvent("audit_export_ready", `Audit export ${job.exportId} is ready.`, {}, false);
+      }
+    }
+
+    retained.push(job);
+  });
+
+  if (retained.length !== auditExportJobs.length) {
+    auditExportJobs.splice(0, auditExportJobs.length, ...retained);
+  }
+
+  if (changed) {
     schedulePersist();
   }
 }
@@ -1274,6 +1312,7 @@ app.post("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => 
 });
 
 app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {
+  reconcileAuditExportJobs();
   const limitRaw = Number.parseInt(String(req.query?.limit || "20"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 20;
   const ordered = [...auditExportJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
@@ -1283,21 +1322,21 @@ app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => 
 });
 
 app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {
+  reconcileAuditExportJobs();
   const format = String(req.body?.format || "").toLowerCase();
   if (format !== "json" && format !== "csv") {
     return res.status(400).json({ detail: "format must be json or csv" });
   }
   const exportId = `audit-exp-${randomUUID().slice(0, 10)}`;
   const createdAt = new Date().toISOString();
-  const expiresAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  const expiresAt = new Date(Date.now() + AUDIT_EXPORT_TTL_MS).toISOString();
   const job = {
     exportId,
     format: format as "json" | "csv",
-    status: "ready" as const,
+    status: "pending" as const,
     createdAt,
     expiresAt,
-    downloadUrl: `https://cloud.novaremote.dev/exports/${exportId}.${format}`,
-    detail: `Snapshot contains ${auditEvents.length} events`
+    detail: "Export queued for processing"
   };
   auditExportJobs.unshift(job);
   recordSystemAuditEvent("audit_export_requested", `Requested ${format.toUpperCase()} audit export ${exportId}.`, {}, false);
@@ -1306,6 +1345,7 @@ app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) =>
 });
 
 app.delete("/v1/audit/exports/:exportId", requireTeamPermission("audit:read"), (req, res) => {
+  reconcileAuditExportJobs();
   const exportId = String(req.params.exportId || "").trim();
   const index = auditExportJobs.findIndex((entry) => entry.exportId === exportId);
   if (index === -1) {
@@ -2916,6 +2956,8 @@ export function App() {
             <p className="muted">
               {lastExport.exportId} • {lastExport.format.toUpperCase()} • {lastExport.status}
             </p>
+            {lastExport.detail ? <p className="muted">{lastExport.detail}</p> : null}
+            {lastExport.expiresAt ? <p className="muted">{`Expires: ${new Date(lastExport.expiresAt).toLocaleString()}`}</p> : null}
             {lastExport.downloadUrl ? (
               <p className="muted">
                 <a href={lastExport.downloadUrl} target="_blank" rel="noreferrer">
@@ -2933,6 +2975,8 @@ export function App() {
                 <p className="muted">
                   {job.exportId} • {job.format.toUpperCase()} • {job.status} • {new Date(job.createdAt).toLocaleString()}
                 </p>
+                {job.detail ? <p className="muted">{job.detail}</p> : null}
+                {job.expiresAt ? <p className="muted">{`Expires: ${new Date(job.expiresAt).toLocaleString()}`}</p> : null}
                 <div className="actions">
                   {job.downloadUrl ? (
                     <a href={job.downloadUrl} target="_blank" rel="noreferrer">

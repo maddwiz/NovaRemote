@@ -91,6 +91,7 @@ It also applies endpoint-level permission guards (`requireTeamPermission`) deriv
 Fleet approval endpoints now include duplicate-pending detection, pending-expiry normalization, and server-side self-approval guardrails.
 The scaffold also emits system audit events for auth, server-fleet, invite, policy, approval-review, and export lifecycle actions.
 Team policy updates are schema-validated in the scaffold API, including timeout bounds and command blocklist regex validation.
+Audit export jobs now model lifecycle states (`pending` -> `ready`) and TTL cleanup with expiry metadata in the dashboard scaffold.
 
 Each generated repo also includes deployment starters:
 
