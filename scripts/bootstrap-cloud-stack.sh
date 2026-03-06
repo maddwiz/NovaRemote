@@ -316,6 +316,7 @@ const teamInvites: Array<{
   createdAt: string;
   expiresAt?: string;
   revokedAt?: string;
+  acceptedAt?: string;
 }> = [];
 const teamSsoProviders: TeamSsoProviderConfig[] = [
   {
@@ -531,6 +532,64 @@ function deriveDisplayNameFromEmail(email: string): string {
     .join(" ");
 }
 
+function defaultServerIdsForRole(role: TeamRole): string[] {
+  if (role === "admin" || role === "operator") {
+    return teamServers.map((server) => server.id);
+  }
+  return [];
+}
+
+function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
+  member: (typeof teamMembers)[number] | null;
+  detail?: string;
+} {
+  const normalizedCode = inviteCode.trim().toUpperCase();
+  if (!normalizedCode) {
+    return { member: null, detail: "Invite code is required" };
+  }
+  const invite = teamInvites.find(
+    (entry) => typeof entry.inviteCode === "string" && entry.inviteCode.trim().toUpperCase() === normalizedCode
+  );
+  if (!invite) {
+    return { member: null, detail: "Invalid invite code" };
+  }
+  if (invite.status !== "pending") {
+    return { member: null, detail: `Invite is ${invite.status}` };
+  }
+  if (invite.expiresAt) {
+    const expiresAtMs = Date.parse(invite.expiresAt);
+    if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) {
+      invite.status = "expired";
+      schedulePersist();
+      return { member: null, detail: "Invite has expired" };
+    }
+  }
+  const inviteEmail = invite.email.toLowerCase();
+  if (expectedEmail && expectedEmail.toLowerCase() !== inviteEmail) {
+    return { member: null, detail: "Invite code does not match login email" };
+  }
+
+  let member = teamMembers.find((entry) => entry.email.toLowerCase() === inviteEmail);
+  if (!member) {
+    member = {
+      id: `user-${randomUUID().slice(0, 8)}`,
+      name: deriveDisplayNameFromEmail(inviteEmail),
+      email: inviteEmail,
+      role: invite.role,
+      serverIds: defaultServerIdsForRole(invite.role),
+    };
+    teamMembers.push(member);
+  } else {
+    member.role = invite.role;
+    member.serverIds = Array.from(new Set([...member.serverIds, ...defaultServerIdsForRole(invite.role)]));
+  }
+
+  invite.status = "accepted";
+  invite.acceptedAt = new Date().toISOString();
+  schedulePersist();
+  return { member };
+}
+
 function issueSession(overrides?: Partial<Pick<TeamIdentity, "provider" | "email" | "displayName">>) {
   syncBaseIdentityFromMembers();
   if (overrides?.provider) {
@@ -588,7 +647,26 @@ app.post("/v1/auth/login", (req, res) => {
     return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid login payload" });
   }
   const email = parsed.data.email.toLowerCase();
-  const displayName = deriveDisplayNameFromEmail(email);
+  const inviteCode = parsed.data.inviteCode?.trim() || "";
+  if (inviteCode) {
+    const redeemed = redeemInviteCode(inviteCode, email);
+    if (!redeemed.member) {
+      return res.status(400).json({ detail: redeemed.detail || "Unable to redeem invite code" });
+    }
+    baseIdentity.userId = redeemed.member.id;
+    baseIdentity.role = redeemed.member.role;
+    baseIdentity.email = redeemed.member.email;
+    baseIdentity.displayName = redeemed.member.name;
+  } else {
+    const matchingMember = teamMembers.find((entry) => entry.email.toLowerCase() === email);
+    if (matchingMember) {
+      baseIdentity.userId = matchingMember.id;
+      baseIdentity.role = matchingMember.role;
+      baseIdentity.email = matchingMember.email;
+      baseIdentity.displayName = matchingMember.name;
+    }
+  }
+  const displayName = baseIdentity.displayName || deriveDisplayNameFromEmail(email);
   res.json({
     identity: issueSession({
       provider: "novaremote_cloud",
@@ -604,6 +682,17 @@ app.post("/v1/auth/sso/exchange", (req, res) => {
     return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid SSO exchange payload" });
   }
   const provider = parsed.data.provider === "saml" ? "saml" : "oidc";
+  const inviteCode = parsed.data.inviteCode?.trim() || "";
+  if (inviteCode) {
+    const redeemed = redeemInviteCode(inviteCode);
+    if (!redeemed.member) {
+      return res.status(400).json({ detail: redeemed.detail || "Unable to redeem invite code" });
+    }
+    baseIdentity.userId = redeemed.member.id;
+    baseIdentity.role = redeemed.member.role;
+    baseIdentity.email = redeemed.member.email;
+    baseIdentity.displayName = redeemed.member.name;
+  }
   res.json({
     identity: issueSession({
       provider,
@@ -1366,6 +1455,7 @@ export function App() {
   const [loginEmail, setLoginEmail] = useState<string>("admin@novaremote.dev");
   const [loginPassword, setLoginPassword] = useState<string>("dev-password");
   const [ssoToken, setSsoToken] = useState<string>("dev-sso-token");
+  const [inviteCode, setInviteCode] = useState<string>("");
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
@@ -1438,6 +1528,7 @@ export function App() {
           provider: "novaremote_cloud",
           email,
           password,
+          inviteCode: inviteCode.trim() || undefined,
         }),
       });
       if (!response.ok) {
@@ -1457,7 +1548,7 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [loginEmail, loginPassword]);
+  }, [inviteCode, loginEmail, loginPassword]);
 
   const signInSso = useCallback(async () => {
     const token = ssoToken.trim();
@@ -1476,6 +1567,7 @@ export function App() {
         body: JSON.stringify({
           provider: "oidc",
           idToken: token,
+          inviteCode: inviteCode.trim() || undefined,
         }),
       });
       if (!response.ok) {
@@ -1491,7 +1583,7 @@ export function App() {
     } finally {
       setBusy(false);
     }
-  }, [ssoToken]);
+  }, [inviteCode, ssoToken]);
 
   const refreshSession = useCallback(async () => {
     if (!identity?.refreshToken) {
@@ -2185,6 +2277,15 @@ export function App() {
               value={ssoToken}
               onChange={(event) => setSsoToken(event.target.value)}
               placeholder="oidc id token"
+            />
+          </label>
+          <label className="muted">
+            Invite Code (Optional)
+            <input
+              className="textInput"
+              value={inviteCode}
+              onChange={(event) => setInviteCode(event.target.value)}
+              placeholder="INV-ABC123"
             />
           </label>
         </div>
