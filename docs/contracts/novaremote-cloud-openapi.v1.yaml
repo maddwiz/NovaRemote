@@ -819,6 +819,8 @@ components:
           type: string
         expiresAt:
           type: string
+        acceptedAt:
+          type: string
         revokedAt:
           type: string
     TeamSsoProviderConfig:
