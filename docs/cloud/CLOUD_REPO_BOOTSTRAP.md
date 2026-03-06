@@ -74,6 +74,7 @@ npm run dev
 The generated dashboard scaffold currently wires:
 
 - team member list + role update controls
+- member server-assignment controls
 - invite lifecycle controls (create + revoke)
 - team policy controls (`danger confirm`, `fleet approval`, `recording`, `timeout`, `blocklist`)
 - fleet approval feed with approve/deny actions

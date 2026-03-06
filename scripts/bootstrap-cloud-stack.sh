@@ -807,6 +807,11 @@ type TeamMember = {
   serverIds?: string[];
 };
 
+type TeamServer = {
+  id: string;
+  name: string;
+};
+
 type TeamInvite = {
   id: string;
   email: string;
@@ -882,6 +887,8 @@ export function App() {
   const [accessToken, setAccessToken] = useState<string>("");
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [teamServers, setTeamServers] = useState<TeamServer[]>([]);
+  const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
@@ -919,14 +926,24 @@ export function App() {
     setBusy(true);
     setStatus("Loading team data...");
     try {
-      const [membersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload] = await Promise.all([
+      const [membersPayload, teamServersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload] = await Promise.all([
         fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
+        fetchJson<{ servers?: TeamServer[] }>("/v1/team/servers", accessToken.trim()),
         fetchJson<{ approvals?: FleetApproval[] }>("/v1/team/fleet/approvals", accessToken.trim()),
         fetchJson<{ providers?: TeamSsoProviderConfig[] }>("/v1/team/sso/providers", accessToken.trim()),
         fetchJson<{ invites?: TeamInvite[] }>("/v1/team/invites", accessToken.trim()),
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
       ]);
-      setMembers(Array.isArray(membersPayload.members) ? membersPayload.members : []);
+      const nextMembers = Array.isArray(membersPayload.members) ? membersPayload.members : [];
+      setMembers(nextMembers);
+      setTeamServers(Array.isArray(teamServersPayload.servers) ? teamServersPayload.servers : []);
+      setMemberServerDrafts((previous) => {
+        const next: Record<string, string[]> = {};
+        nextMembers.forEach((member) => {
+          next[member.id] = previous[member.id] || member.serverIds || [];
+        });
+        return next;
+      });
       setApprovals(Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : []);
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
@@ -1074,6 +1091,48 @@ export function App() {
       }
     },
     [accessToken, loadTeamData]
+  );
+
+  const toggleMemberServer = useCallback((memberId: string, serverId: string) => {
+    setMemberServerDrafts((previous) => {
+      const current = previous[memberId] || [];
+      const nextServers = current.includes(serverId) ? current.filter((entry) => entry !== serverId) : [...current, serverId];
+      return {
+        ...previous,
+        [memberId]: nextServers,
+      };
+    });
+  }, []);
+
+  const saveMemberServers = useCallback(
+    async (memberId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before updating server assignments.");
+        return;
+      }
+      const serverIds = memberServerDrafts[memberId] || [];
+      setBusy(true);
+      setStatus(`Updating server access for ${memberId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/members/${memberId}/servers`, {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+          body: JSON.stringify({ serverIds }),
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData, memberServerDrafts]
   );
 
   const createInvite = useCallback(async () => {
@@ -1244,6 +1303,20 @@ export function App() {
                   Set {role}
                 </button>
               ))}
+            </div>
+            <p className="muted">Server Access</p>
+            <div className="actions">
+              {teamServers.map((server) => {
+                const selected = (memberServerDrafts[member.id] || member.serverIds || []).includes(server.id);
+                return (
+                  <button key={server.id} disabled={busy} onClick={() => toggleMemberServer(member.id, server.id)}>
+                    {selected ? "Remove" : "Grant"} {server.name}
+                  </button>
+                );
+              })}
+              <button disabled={busy} onClick={() => void saveMemberServers(member.id)}>
+                Save Access
+              </button>
             </div>
           </div>
         ))}
