@@ -167,6 +167,14 @@ import { z } from "zod";
 type TeamRole = "admin" | "operator" | "viewer" | "billing";
 type TeamPermission = "servers:read" | "servers:write" | "servers:delete" | "sessions:create" | "sessions:send" | "sessions:view" | "fleet:execute" | "settings:manage" | "team:invite" | "team:manage" | "audit:read";
 
+type TeamMemberRecord = {
+  id: string;
+  name: string;
+  email: string;
+  role: TeamRole;
+  serverIds: string[];
+};
+
 type TeamIdentity = {
   provider: "novaremote_cloud" | "saml" | "oidc" | "ldap_proxy";
   userId: string;
@@ -297,7 +305,7 @@ const teamServers: TeamServer[] = [
   { id: "srv-home", teamServerId: "srv-home", name: "Homelab", baseUrl: "https://homelab.example.com", defaultCwd: "/home/dev", permissionLevel: "operator" }
 ];
 
-const teamMembers: Array<{ id: string; name: string; email: string; role: TeamRole; serverIds: string[] }> = [
+const teamMembers: TeamMemberRecord[] = [
   { id: "user-admin-1", name: "Nova Admin", email: "admin@novaremote.dev", role: "admin", serverIds: teamServers.map((server) => server.id) }
 ];
 
@@ -423,7 +431,7 @@ async function loadState() {
     if (Array.isArray(parsed.teamMembers)) {
       replaceArrayInPlace(
         teamMembers,
-        parsed.teamMembers as Array<{ id: string; name: string; email: string; role: TeamRole; serverIds: string[] }>
+        parsed.teamMembers as TeamMemberRecord[]
       );
     }
     if (Array.isArray(parsed.teamInvites)) {
@@ -575,6 +583,71 @@ function recordSystemAuditEvent(action: string, detail: string, input: SystemAud
   if (persist) {
     schedulePersist();
   }
+}
+
+type MemberUsageSnapshot = {
+  sessionsCreated: number;
+  commandsSent: number;
+  fleetExecutions: number;
+  lastActiveTimestamp: number | null;
+};
+
+function buildEmptyMemberUsage(): MemberUsageSnapshot {
+  return {
+    sessionsCreated: 0,
+    commandsSent: 0,
+    fleetExecutions: 0,
+    lastActiveTimestamp: null,
+  };
+}
+
+function computeMemberUsageByIdentity() {
+  const byUserId = new Map<string, MemberUsageSnapshot>();
+  const byEmail = new Map<string, MemberUsageSnapshot>();
+
+  for (const event of auditEvents) {
+    const userId = typeof event.userId === "string" ? event.userId.trim() : "";
+    const userEmail = typeof event.userEmail === "string" ? event.userEmail.trim().toLowerCase() : "";
+    const hasIdentity = Boolean(userId || userEmail);
+    if (!hasIdentity) {
+      continue;
+    }
+    let stats: MemberUsageSnapshot | null = null;
+    if (userId && byUserId.has(userId)) {
+      stats = byUserId.get(userId) || null;
+    } else if (userEmail && byEmail.has(userEmail)) {
+      stats = byEmail.get(userEmail) || null;
+    }
+    if (!stats) {
+      stats = buildEmptyMemberUsage();
+    }
+
+    const action = event.action.toLowerCase();
+    if (action === "session_created") {
+      stats.sessionsCreated += 1;
+    }
+    if (action === "command_sent" || action === "voice_command_sent") {
+      stats.commandsSent += 1;
+    }
+    if (action === "fleet_executed" || action === "fleet_execution_claimed") {
+      stats.fleetExecutions += 1;
+    }
+
+    if (Number.isFinite(event.timestamp)) {
+      if (stats.lastActiveTimestamp === null || event.timestamp > stats.lastActiveTimestamp) {
+        stats.lastActiveTimestamp = event.timestamp;
+      }
+    }
+
+    if (userId) {
+      byUserId.set(userId, stats);
+    }
+    if (userEmail) {
+      byEmail.set(userEmail, stats);
+    }
+  }
+
+  return { byUserId, byEmail };
 }
 
 function reconcileAuditExportJobs() {
@@ -992,7 +1065,21 @@ app.delete("/v1/team/servers/:serverId", requireTeamPermission("servers:delete")
 });
 
 app.get("/v1/team/members", requireTeamPermission("team:manage"), (_req, res) => {
-  res.json({ members: teamMembers });
+  const usageByIdentity = computeMemberUsageByIdentity();
+  const members = teamMembers.map((member) => {
+    const normalizedEmail = member.email.trim().toLowerCase();
+    const stats = usageByIdentity.byUserId.get(member.id) ?? usageByIdentity.byEmail.get(normalizedEmail);
+    const lastActiveAt =
+      stats && stats.lastActiveTimestamp !== null ? new Date(stats.lastActiveTimestamp).toISOString() : undefined;
+    return {
+      ...member,
+      sessionsCreated: stats?.sessionsCreated ?? 0,
+      commandsSent: stats?.commandsSent ?? 0,
+      fleetExecutions: stats?.fleetExecutions ?? 0,
+      lastActiveAt,
+    };
+  });
+  res.json({ members });
 });
 
 app.patch("/v1/team/members/:memberId", requireTeamPermission("team:manage"), (req, res) => {
@@ -1070,11 +1157,18 @@ app.patch("/v1/team/settings", requireTeamPermission("settings:manage"), (req, r
 });
 
 app.get("/v1/team/usage", requireTeamPermission("team:manage"), (_req, res) => {
-  const sessionsCreated = auditEvents.filter((event) => event.action === "session_created").length;
-  const commandsSent = auditEvents.filter(
-    (event) => event.action === "command_sent" || event.action === "voice_command_sent"
-  ).length;
-  const fleetExecutions = auditEvents.filter((event) => event.action === "fleet_executed").length;
+  const usageByIdentity = computeMemberUsageByIdentity();
+  const uniqueUsageSnapshots = new Set<MemberUsageSnapshot>();
+  usageByIdentity.byUserId.forEach((snapshot) => uniqueUsageSnapshots.add(snapshot));
+  usageByIdentity.byEmail.forEach((snapshot) => uniqueUsageSnapshots.add(snapshot));
+  let sessionsCreated = 0;
+  let commandsSent = 0;
+  let fleetExecutions = 0;
+  uniqueUsageSnapshots.forEach((snapshot) => {
+    sessionsCreated += snapshot.sessionsCreated;
+    commandsSent += snapshot.commandsSent;
+    fleetExecutions += snapshot.fleetExecutions;
+  });
   res.json({
     usage: {
       activeMembers: teamMembers.length,
@@ -1657,6 +1751,10 @@ type TeamMember = {
   email: string;
   role: string;
   serverIds?: string[];
+  sessionsCreated?: number;
+  commandsSent?: number;
+  fleetExecutions?: number;
+  lastActiveAt?: string;
 };
 
 type TeamServer = {
@@ -2818,6 +2916,11 @@ export function App() {
           <div key={member.id} className="providerRow">
             <p className="muted">
               {member.name} ({member.email}) • {member.role}
+            </p>
+            <p className="muted">
+              {`Usage: sessions ${member.sessionsCreated ?? 0} • commands ${member.commandsSent ?? 0} • fleet ${
+                member.fleetExecutions ?? 0
+              }${member.lastActiveAt ? ` • last active ${new Date(member.lastActiveAt).toLocaleString()}` : ""}`}
             </p>
             <div className="actions">
               {TEAM_ROLES.map((role) => (

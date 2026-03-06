@@ -830,6 +830,7 @@ components:
           type: integer
         lastActiveAt:
           type: string
+          format: date-time
     TeamInvite:
       type: object
       required: [id, email, role, status, createdAt]
