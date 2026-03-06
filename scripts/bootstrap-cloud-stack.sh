@@ -397,6 +397,19 @@ const inviteSchema = z.object({
   role: z.enum(["admin", "operator", "viewer", "billing"])
 });
 
+const teamServerCreateSchema = z.object({
+  name: z.string().trim().min(1),
+  baseUrl: z.string().url(),
+  defaultCwd: z.string().trim().min(1).default("/"),
+  permissionLevel: z.enum(["admin", "operator", "viewer"]).default("operator"),
+});
+
+const teamServerPatchSchema = teamServerCreateSchema.partial();
+
+function normalizeServerBaseUrl(value: string): string {
+  return value.trim().replace(/\/+$/, "");
+}
+
 function unauthorized(res: Response, detail: string) {
   res.status(401).json({ detail });
 }
@@ -460,6 +473,70 @@ app.post("/v1/tokens/provision", (req, res) => {
 
 app.get("/v1/team/servers", (_req, res) => {
   res.json({ servers: teamServers });
+});
+
+app.post("/v1/team/servers", (req, res) => {
+  const parsed = teamServerCreateSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid server payload" });
+  }
+  const id = `srv-${randomUUID().slice(0, 8)}`;
+  const nextServer: TeamServer = {
+    id,
+    teamServerId: id,
+    name: parsed.data.name,
+    baseUrl: normalizeServerBaseUrl(parsed.data.baseUrl),
+    defaultCwd: parsed.data.defaultCwd,
+    permissionLevel: parsed.data.permissionLevel,
+  };
+  teamServers.unshift(nextServer);
+  teamMembers.forEach((member) => {
+    if (member.role === "admin" && !member.serverIds.includes(id)) {
+      member.serverIds.push(id);
+    }
+  });
+  schedulePersist();
+  res.json({ server: nextServer });
+});
+
+app.patch("/v1/team/servers/:serverId", (req, res) => {
+  const serverId = String(req.params.serverId || "").trim();
+  const target = teamServers.find((entry) => entry.id === serverId);
+  if (!target) {
+    return res.status(404).json({ detail: "Server not found" });
+  }
+  const parsed = teamServerPatchSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid server payload" });
+  }
+  if (parsed.data.name) {
+    target.name = parsed.data.name;
+  }
+  if (parsed.data.baseUrl) {
+    target.baseUrl = normalizeServerBaseUrl(parsed.data.baseUrl);
+  }
+  if (parsed.data.defaultCwd) {
+    target.defaultCwd = parsed.data.defaultCwd;
+  }
+  if (parsed.data.permissionLevel) {
+    target.permissionLevel = parsed.data.permissionLevel;
+  }
+  schedulePersist();
+  res.json({ server: target });
+});
+
+app.delete("/v1/team/servers/:serverId", (req, res) => {
+  const serverId = String(req.params.serverId || "").trim();
+  const index = teamServers.findIndex((entry) => entry.id === serverId);
+  if (index === -1) {
+    return res.status(404).json({ detail: "Server not found" });
+  }
+  const [removed] = teamServers.splice(index, 1);
+  teamMembers.forEach((member) => {
+    member.serverIds = member.serverIds.filter((id) => id !== serverId);
+  });
+  schedulePersist();
+  res.json({ server: removed, ok: true });
 });
 
 app.get("/v1/team/members", (_req, res) => {
@@ -929,6 +1006,9 @@ type TeamMember = {
 type TeamServer = {
   id: string;
   name: string;
+  baseUrl: string;
+  defaultCwd: string;
+  permissionLevel: "admin" | "operator" | "viewer";
 };
 
 type TeamInvite = {
@@ -1008,6 +1088,10 @@ export function App() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [teamServers, setTeamServers] = useState<TeamServer[]>([]);
   const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
+  const [serverNameInput, setServerNameInput] = useState<string>("");
+  const [serverUrlInput, setServerUrlInput] = useState<string>("");
+  const [serverCwdInput, setServerCwdInput] = useState<string>("/");
+  const [serverPermissionInput, setServerPermissionInput] = useState<"admin" | "operator" | "viewer">("operator");
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
@@ -1093,6 +1177,77 @@ export function App() {
       setBusy(false);
     }
   }, [accessToken]);
+
+  const createServer = useCallback(async () => {
+    if (!accessToken.trim()) {
+      setStatus("Paste an access token before creating servers.");
+      return;
+    }
+    const name = serverNameInput.trim();
+    const baseUrl = serverUrlInput.trim();
+    const defaultCwd = serverCwdInput.trim() || "/";
+    if (!name || !baseUrl) {
+      setStatus("Server name and URL are required.");
+      return;
+    }
+    setBusy(true);
+    setStatus(`Creating server ${name}...`);
+    try {
+      const response = await fetch(`${cloudUrl}/v1/team/servers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken.trim()}`,
+        },
+        body: JSON.stringify({
+          name,
+          baseUrl,
+          defaultCwd,
+          permissionLevel: serverPermissionInput,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${await response.text()}`);
+      }
+      setServerNameInput("");
+      setServerUrlInput("");
+      setServerCwdInput("/");
+      setServerPermissionInput("operator");
+      await loadTeamData();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [accessToken, loadTeamData, serverCwdInput, serverNameInput, serverPermissionInput, serverUrlInput]);
+
+  const removeServer = useCallback(
+    async (serverId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before deleting servers.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Deleting server ${serverId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/servers/${serverId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
 
   const requestExport = useCallback(
     async (format: "json" | "csv") => {
@@ -1410,6 +1565,60 @@ export function App() {
           </button>
         </div>
         <p className="muted">{status}</p>
+      </section>
+
+      <section className="panel">
+        <h2 className="title">Team Servers ({teamServers.length})</h2>
+        <div className="gridCols">
+          <label className="muted">
+            Name
+            <input className="textInput" value={serverNameInput} onChange={(event) => setServerNameInput(event.target.value)} />
+          </label>
+          <label className="muted">
+            Base URL
+            <input
+              className="textInput"
+              value={serverUrlInput}
+              onChange={(event) => setServerUrlInput(event.target.value)}
+              placeholder="https://server.example.com"
+            />
+          </label>
+          <label className="muted">
+            Default CWD
+            <input className="textInput" value={serverCwdInput} onChange={(event) => setServerCwdInput(event.target.value)} />
+          </label>
+          <label className="muted">
+            Permission Level
+            <select
+              className="selectInput"
+              value={serverPermissionInput}
+              onChange={(event) => setServerPermissionInput(event.target.value as "admin" | "operator" | "viewer")}
+            >
+              <option value="viewer">viewer</option>
+              <option value="operator">operator</option>
+              <option value="admin">admin</option>
+            </select>
+          </label>
+        </div>
+        <div className="actions">
+          <button disabled={busy} onClick={() => void createServer()}>
+            Add Server
+          </button>
+        </div>
+        {teamServers.length === 0 ? <p className="muted">No servers loaded.</p> : null}
+        {teamServers.map((server) => (
+          <div key={server.id} className="providerRow">
+            <p className="muted">
+              {server.name} • {server.baseUrl} • {server.permissionLevel}
+            </p>
+            <p className="muted">Default CWD: {server.defaultCwd}</p>
+            <div className="actions">
+              <button disabled={busy} onClick={() => void removeServer(server.id)}>
+                Delete Server
+              </button>
+            </div>
+          </div>
+        ))}
       </section>
 
       <section className="panel">

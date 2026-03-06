@@ -126,6 +126,60 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/TeamServer"
+    post:
+      summary: Create a team-managed server entry
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamServerCreate"
+      responses:
+        "200":
+          description: Team server created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server:
+                    $ref: "#/components/schemas/TeamServer"
+  /v1/team/servers/{serverId}:
+    patch:
+      summary: Update a team-managed server entry
+      parameters:
+        - in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TeamServerPatch"
+      responses:
+        "200":
+          description: Team server updated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  server:
+                    $ref: "#/components/schemas/TeamServer"
+    delete:
+      summary: Remove a team-managed server entry
+      parameters:
+        - in: path
+          name: serverId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Team server removed
   /v1/team/members:
     get:
       summary: List team members and role metadata
@@ -608,6 +662,31 @@ components:
           type: string
         vmId:
           type: string
+    TeamServerCreate:
+      type: object
+      required: [name, baseUrl]
+      properties:
+        name:
+          type: string
+        baseUrl:
+          type: string
+        defaultCwd:
+          type: string
+        permissionLevel:
+          type: string
+          enum: [admin, operator, viewer]
+    TeamServerPatch:
+      type: object
+      properties:
+        name:
+          type: string
+        baseUrl:
+          type: string
+        defaultCwd:
+          type: string
+        permissionLevel:
+          type: string
+          enum: [admin, operator, viewer]
     TeamMember:
       type: object
       required: [id, name, email, role]
