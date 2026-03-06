@@ -74,6 +74,7 @@ npm run dev
 The generated dashboard scaffold currently wires:
 
 - built-in password/SSO sign-in helpers for local testing
+- refresh-session and logout helpers (`/v1/auth/refresh`, `/v1/auth/logout`) with auto-refresh scheduling
 - team server create/edit/delete controls
 - team member list + role update controls
 - member server-assignment controls

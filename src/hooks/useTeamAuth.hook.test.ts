@@ -48,6 +48,7 @@ import { useTeamAuth } from "./useTeamAuth";
 type TeamAuthHandle = {
   identity: TeamIdentity | null;
   cloudDashboardUrl: string;
+  logout: () => Promise<void>;
   loginWithSso: (input: { provider: "saml" | "oidc"; idToken?: string; accessToken?: string }) => Promise<TeamIdentity>;
   inviteMember: (input: { email: string; role?: TeamIdentity["role"] }) => Promise<unknown>;
   revokeInvite: (inviteId: string) => Promise<void>;
@@ -322,6 +323,41 @@ afterEach(() => {
 });
 
 describe("useTeamAuth hook", () => {
+  it("logs out and revokes the current cloud session", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).logout();
+    });
+    await flush();
+
+    const logoutCall = (cloudClientMock.cloudRequest.mock.calls as Array<[string, RequestInit?]>).find(
+      (call) => String(call[0]) === "/v1/auth/logout"
+    );
+    expect(logoutCall).toBeTruthy();
+    const logoutBody = JSON.parse(String(logoutCall?.[1]?.body || "{}")) as { refreshToken?: string };
+    expect(logoutBody.refreshToken).toBe("refresh-token");
+    expect(latestOrThrow(latest).identity).toBeNull();
+    expect(secureStoreMock.storage.has(STORAGE_TEAM_IDENTITY)).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("auto-refreshes the team session before token expiry", async () => {
     secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
 

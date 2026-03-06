@@ -42,6 +42,7 @@ paths:
                 $ref: "#/components/schemas/AuthEnvelope"
   /v1/auth/refresh:
     post:
+      security: []
       summary: Refresh team auth session
       requestBody:
         required: true
@@ -60,6 +61,32 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuthEnvelope"
+  /v1/auth/logout:
+    post:
+      security: []
+      summary: Revoke team auth session
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refreshToken]
+              properties:
+                refreshToken:
+                  type: string
+      responses:
+        "200":
+          description: Team auth session revoked
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [ok]
+                properties:
+                  ok:
+                    type: boolean
+                    const: true
   /v1/auth/sso/exchange:
     post:
       security: []

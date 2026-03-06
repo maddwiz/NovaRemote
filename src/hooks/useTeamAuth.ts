@@ -907,6 +907,8 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
   );
 
   const logout = useCallback(async () => {
+    const currentIdentity = identity;
+    setBusy(true);
     setIdentity(null);
     setTeamServers([]);
     setTeamMembers([]);
@@ -917,7 +919,29 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
     setError(null);
     await persistIdentity(null);
-  }, [persistIdentity]);
+    try {
+      if (currentIdentity) {
+        await cloudRequest(
+          "/v1/auth/logout",
+          {
+            method: "POST",
+            body: JSON.stringify({
+              refreshToken: currentIdentity.refreshToken,
+            }),
+          },
+          {
+            accessToken: currentIdentity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+      }
+    } catch (logoutError) {
+      onError?.(logoutError);
+    } finally {
+      setBusy(false);
+    }
+  }, [cloudUrl, fetchImpl, identity, onError, persistIdentity]);
 
   const refreshSession = useCallback(async () => {
     if (!identity) {

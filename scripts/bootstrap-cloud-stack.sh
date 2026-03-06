@@ -412,6 +412,28 @@ const inviteSchema = z.object({
   role: z.enum(["admin", "operator", "viewer", "billing"])
 });
 
+const loginSchema = z.object({
+  provider: z.literal("novaremote_cloud"),
+  email: z.string().email(),
+  password: z.string().min(1),
+  inviteCode: z.string().trim().min(1).optional(),
+});
+
+const ssoExchangeSchema = z
+  .object({
+    provider: z.enum(["oidc", "saml"]),
+    idToken: z.string().trim().min(1).optional(),
+    accessToken: z.string().trim().min(1).optional(),
+    inviteCode: z.string().trim().min(1).optional(),
+  })
+  .refine((value) => Boolean(value.idToken || value.accessToken), {
+    message: "idToken or accessToken is required",
+  });
+
+const refreshTokenSchema = z.object({
+  refreshToken: z.string().trim().min(1),
+});
+
 const teamServerCreateSchema = z.object({
   name: z.string().trim().min(1),
   baseUrl: z.string().url(),
@@ -461,6 +483,34 @@ function normalizeAuditEvent(value: unknown): AuditEvent | null {
   };
 }
 
+function deriveDisplayNameFromEmail(email: string): string {
+  const localPart = email.split("@")[0] || "team";
+  const withSpaces = localPart.replace(/[._-]+/g, " ").trim();
+  if (!withSpaces) {
+    return "Team User";
+  }
+  return withSpaces
+    .split(/\s+/)
+    .map((segment) => segment.charAt(0).toUpperCase() + segment.slice(1))
+    .join(" ");
+}
+
+function issueSession(overrides?: Partial<Pick<TeamIdentity, "provider" | "email" | "displayName">>) {
+  if (overrides?.provider) {
+    baseIdentity.provider = overrides.provider;
+  }
+  if (overrides?.email) {
+    baseIdentity.email = overrides.email;
+  }
+  if (overrides?.displayName) {
+    baseIdentity.displayName = overrides.displayName;
+  }
+  baseIdentity.accessToken = `access-${randomUUID()}`;
+  baseIdentity.refreshToken = `refresh-${randomUUID()}`;
+  baseIdentity.tokenExpiresAt = Date.now() + 60 * 60 * 1000;
+  return baseIdentity;
+}
+
 function unauthorized(res: Response, detail: string) {
   res.status(401).json({ detail });
 }
@@ -471,6 +521,9 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!token || token !== baseIdentity.accessToken) {
     return unauthorized(res, "Unauthorized");
   }
+  if (!Number.isFinite(baseIdentity.tokenExpiresAt) || Date.now() >= baseIdentity.tokenExpiresAt) {
+    return unauthorized(res, "Team access token expired");
+  }
   next();
 }
 
@@ -478,26 +531,60 @@ app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.post("/v1/auth/login", (_req, res) => {
-  baseIdentity.accessToken = `access-${randomUUID()}`;
-  baseIdentity.refreshToken = `refresh-${randomUUID()}`;
-  baseIdentity.tokenExpiresAt = Date.now() + 60 * 60 * 1000;
-  res.json({ identity: baseIdentity });
+app.post("/v1/auth/login", (req, res) => {
+  const parsed = loginSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid login payload" });
+  }
+  const email = parsed.data.email.toLowerCase();
+  const displayName = deriveDisplayNameFromEmail(email);
+  res.json({
+    identity: issueSession({
+      provider: "novaremote_cloud",
+      email,
+      displayName,
+    }),
+  });
 });
 
-app.post("/v1/auth/sso/exchange", (_req, res) => {
-  baseIdentity.provider = "oidc";
-  baseIdentity.accessToken = `access-${randomUUID()}`;
-  baseIdentity.refreshToken = `refresh-${randomUUID()}`;
-  baseIdentity.tokenExpiresAt = Date.now() + 60 * 60 * 1000;
-  res.json({ identity: baseIdentity });
+app.post("/v1/auth/sso/exchange", (req, res) => {
+  const parsed = ssoExchangeSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid SSO exchange payload" });
+  }
+  const provider = parsed.data.provider === "saml" ? "saml" : "oidc";
+  res.json({
+    identity: issueSession({
+      provider,
+    }),
+  });
 });
 
-app.post("/v1/auth/refresh", (_req, res) => {
-  baseIdentity.accessToken = `access-${randomUUID()}`;
-  baseIdentity.refreshToken = `refresh-${randomUUID()}`;
-  baseIdentity.tokenExpiresAt = Date.now() + 60 * 60 * 1000;
-  res.json({ identity: baseIdentity });
+app.post("/v1/auth/refresh", (req, res) => {
+  const parsed = refreshTokenSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "refreshToken is required" });
+  }
+  if (parsed.data.refreshToken !== baseIdentity.refreshToken) {
+    return unauthorized(res, "Invalid refresh token");
+  }
+  res.json({
+    identity: issueSession(),
+  });
+});
+
+app.post("/v1/auth/logout", (req, res) => {
+  const parsed = refreshTokenSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "refreshToken is required" });
+  }
+  if (parsed.data.refreshToken !== baseIdentity.refreshToken) {
+    return unauthorized(res, "Invalid refresh token");
+  }
+  baseIdentity.accessToken = `revoked-${randomUUID()}`;
+  baseIdentity.refreshToken = `revoked-${randomUUID()}`;
+  baseIdentity.tokenExpiresAt = Date.now() - 1;
+  res.json({ ok: true });
 });
 
 app.use("/v1", requireAuth);
@@ -1163,8 +1250,12 @@ type AuditEvent = {
 };
 
 type TeamIdentity = {
+  provider?: "novaremote_cloud" | "oidc" | "saml" | "ldap_proxy";
   accessToken: string;
-  refreshToken?: string;
+  refreshToken: string;
+  tokenExpiresAt?: number;
+  teamName?: string;
+  role?: string;
   email?: string;
   displayName?: string;
 };
@@ -1339,11 +1430,70 @@ export function App() {
     }
   }, [ssoToken]);
 
-  const signOut = useCallback(() => {
+  const refreshSession = useCallback(async () => {
+    if (!identity?.refreshToken) {
+      setStatus("Sign in before refreshing the session.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Refreshing team session...");
+    try {
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (accessToken.trim()) {
+        headers.Authorization = `Bearer ${accessToken.trim()}`;
+      }
+      const response = await fetch(`${cloudUrl}/v1/auth/refresh`, {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          refreshToken: identity.refreshToken,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${await response.text()}`);
+      }
+      const payload = (await response.json()) as { identity?: TeamIdentity };
+      const nextIdentity = payload.identity || null;
+      setIdentity(nextIdentity);
+      setAccessToken(nextIdentity?.accessToken || "");
+      setStatus("Session refreshed.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [accessToken, identity]);
+
+  const signOut = useCallback(async () => {
+    const currentIdentity = identity;
+    const currentToken = accessToken.trim();
+    setBusy(true);
+    if (currentIdentity?.refreshToken) {
+      try {
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+        };
+        if (currentToken) {
+          headers.Authorization = `Bearer ${currentToken}`;
+        }
+        await fetch(`${cloudUrl}/v1/auth/logout`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            refreshToken: currentIdentity.refreshToken,
+          }),
+        });
+      } catch {
+        // Local sign-out still proceeds even if logout endpoint is unavailable.
+      }
+    }
     setIdentity(null);
     setAccessToken("");
     setMembers([]);
     setTeamServers([]);
+    setServerEditDrafts({});
     setMemberServerDrafts({});
     setApprovals([]);
     setSsoProviders([]);
@@ -1352,11 +1502,12 @@ export function App() {
     setAuditEvents([]);
     setLastExport(null);
     setStatus("Signed out.");
-  }, []);
+    setBusy(false);
+  }, [accessToken, identity]);
 
   const loadTeamData = useCallback(async () => {
     if (!accessToken.trim()) {
-      setStatus("Paste an access token from /v1/auth/login to load team data.");
+      setStatus("Sign in to load team data.");
       return;
     }
     setBusy(true);
@@ -1867,6 +2018,19 @@ export function App() {
     void loadTeamData();
   }, [accessToken, loadTeamData]);
 
+  useEffect(() => {
+    if (!identity?.refreshToken || !identity.tokenExpiresAt) {
+      return;
+    }
+    const msUntilRefresh = Math.max(identity.tokenExpiresAt - Date.now() - 60_000, 0);
+    const timer = setTimeout(() => {
+      void refreshSession();
+    }, msUntilRefresh);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [identity, refreshSession]);
+
   const healthLabel = useMemo(() => {
     if (healthOk === null) {
       return "checking";
@@ -1903,6 +2067,9 @@ export function App() {
         ) : (
           <p className="muted">Not signed in.</p>
         )}
+        {identity?.tokenExpiresAt ? (
+          <p className="muted">{`Session expires: ${new Date(identity.tokenExpiresAt).toLocaleString()}`}</p>
+        ) : null}
         <div className="gridCols">
           <label className="muted">
             Team Email
@@ -1940,7 +2107,10 @@ export function App() {
           <button onClick={() => void signInSso()} disabled={busy}>
             SSO Sign-In
           </button>
-          <button onClick={() => signOut()} disabled={busy || !accessToken.trim()}>
+          <button onClick={() => void refreshSession()} disabled={busy || !identity?.refreshToken}>
+            Refresh Session
+          </button>
+          <button onClick={() => void signOut()} disabled={busy || !accessToken.trim()}>
             Sign Out
           </button>
         </div>
@@ -1950,7 +2120,7 @@ export function App() {
             className="textInput"
             value={accessToken}
             onChange={(event) => setAccessToken(event.target.value)}
-            placeholder="Paste bearer token from /v1/auth/login"
+            placeholder="Generated on sign-in; can be pasted for manual testing"
           />
         </label>
         <div className="actions">
