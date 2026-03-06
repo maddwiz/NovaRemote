@@ -94,6 +94,7 @@ The scaffold also emits system audit events for auth, server-fleet, invite, poli
 Team policy updates are schema-validated in the scaffold API, including timeout bounds and command blocklist regex validation.
 Audit export jobs now model lifecycle states (`pending` -> `ready`) and TTL cleanup with expiry metadata in the dashboard scaffold.
 Team member responses now include server-derived usage snapshots (`sessionsCreated`, `commandsSent`, `fleetExecutions`, `lastActiveAt`) computed from the audit stream.
+Token provisioning now enforces server assignment + least-privilege permission clamping (requested level is capped by caller role and server policy).
 
 Each generated repo also includes deployment starters:
 

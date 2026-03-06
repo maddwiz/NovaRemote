@@ -95,6 +95,7 @@ Updated: 2026-03-06
   - [x] self-approval guard for fleet requests (another team member must approve)
   - [x] duplicate fleet approval requests are deduped when an identical request is already pending
   - [x] derive runtime server permission level from broker token permissions
+  - [x] cloud token provisioning now enforces member server assignment and least-privilege clamping by caller role + server policy
   - [x] token broker now provisions immediately on team login and purges cached tokens on 401/403 revocation responses
 
 ## v2.0+ NovaAdapt / Team Roadmap

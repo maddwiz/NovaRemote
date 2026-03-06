@@ -705,6 +705,51 @@ function defaultServerIdsForRole(role: TeamRole): string[] {
   return [];
 }
 
+type PermissionLevel = "admin" | "operator" | "viewer";
+
+const permissionLevelRank: Record<PermissionLevel, number> = {
+  viewer: 0,
+  operator: 1,
+  admin: 2,
+};
+
+function normalizePermissionLevel(value: unknown): PermissionLevel {
+  const raw = typeof value === "string" ? value.trim().toLowerCase() : "";
+  if (raw === "admin" || raw === "operator" || raw === "viewer") {
+    return raw;
+  }
+  return "viewer";
+}
+
+function rolePermissionCeiling(role: TeamRole): PermissionLevel {
+  if (role === "admin") {
+    return "admin";
+  }
+  if (role === "operator") {
+    return "operator";
+  }
+  return "viewer";
+}
+
+function leastPrivilegeLevel(levels: PermissionLevel[]): PermissionLevel {
+  if (levels.length === 0) {
+    return "viewer";
+  }
+  return levels.reduce((lowest, current) =>
+    permissionLevelRank[current] < permissionLevelRank[lowest] ? current : lowest
+  );
+}
+
+function tokenPermissionsForLevel(level: PermissionLevel): string[] {
+  if (level === "admin") {
+    return ["read", "write", "execute", "admin"];
+  }
+  if (level === "operator") {
+    return ["read", "write", "execute"];
+  }
+  return ["read"];
+}
+
 function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
   member: (typeof teamMembers)[number] | null;
   detail?: string;
@@ -959,22 +1004,47 @@ app.post("/v1/auth/logout", (req, res) => {
 app.use("/v1", requireAuth);
 
 app.post("/v1/tokens/provision", requireTeamPermission("servers:read"), (req, res) => {
-  const serverId = String(req.body?.serverId || "").trim();
-  const permissionLevel = String(req.body?.permissionLevel || "viewer").trim();
-  if (!serverId) {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  const requestedServerId = String(req.body?.serverId || "").trim();
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
+  if (!requestedServerId) {
     return res.status(400).json({ detail: "serverId is required" });
   }
-  const permissionMap: Record<string, string[]> = {
-    admin: ["read", "write", "execute", "admin"],
-    operator: ["read", "write", "execute"],
-    viewer: ["read"]
-  };
-  const permissions = permissionMap[permissionLevel] || ["read"];
+  const targetServer =
+    teamServers.find((server) => server.id === requestedServerId) ||
+    teamServers.find((server) => server.teamServerId === requestedServerId);
+  if (!targetServer) {
+    return res.status(404).json({ detail: "Server not found" });
+  }
+
+  const callerMembership = teamMembers.find((entry) => entry.id === identity.userId) || null;
+  const hasServerAccess =
+    identity.role === "admin" || (callerMembership ? callerMembership.serverIds.includes(targetServer.id) : false);
+  if (!hasServerAccess) {
+    return forbidden(res, "Not authorized for this server.");
+  }
+
+  const requestedPermissionLevel = normalizePermissionLevel(req.body?.permissionLevel);
+  const effectivePermissionLevel = leastPrivilegeLevel([
+    requestedPermissionLevel,
+    rolePermissionCeiling(identity.role),
+    normalizePermissionLevel(targetServer.permissionLevel),
+  ]);
+  const permissions = tokenPermissionsForLevel(effectivePermissionLevel);
+  recordSystemAuditEvent(
+    "token_provisioned",
+    `Provisioned ${effectivePermissionLevel} token for ${targetServer.name}.`,
+    { serverId: targetServer.id, serverName: targetServer.name },
+    false
+  );
   res.json({
-    serverId,
-    token: `srv-token-${serverId}-${randomUUID()}`,
+    serverId: targetServer.id,
+    token: `srv-token-${targetServer.id}-${randomUUID()}`,
     expiresAt: Date.now() + 2 * 60 * 60 * 1000,
-    permissions
+    permissions,
+    permissionLevel: effectivePermissionLevel,
   });
 });
 
