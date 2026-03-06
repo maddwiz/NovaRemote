@@ -113,6 +113,7 @@ Updated: 2026-03-05
   - [~] team-managed session recording enforcement is in-app; cloud admin policy governance remains pending
   - [x] audit export (`CSV`/`JSON`) from in-app queue
   - [x] cloud audit export job requests + export history refresh/list/open actions in app (`useAuditLog` + TeamScreen)
+  - [x] cloud scaffold now emits system audit events for auth, server/invite/policy admin actions, fleet approval lifecycle, and export lifecycle updates
   - [~] cloud dashboard export lifecycle governance remains pending deployment
 - [~] Fleet governance expansion:
   - [x] command blocklist + policy enforcement

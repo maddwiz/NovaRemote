@@ -520,6 +520,34 @@ function normalizeAuditEvent(value: unknown): AuditEvent | null {
   };
 }
 
+type SystemAuditInput = {
+  serverId?: string;
+  serverName?: string;
+  session?: string;
+  approved?: boolean | null;
+};
+
+function recordSystemAuditEvent(action: string, detail: string, input: SystemAuditInput = {}, persist = true) {
+  const event = normalizeAuditEvent({
+    action,
+    detail,
+    timestamp: Date.now(),
+    serverId: input.serverId || "",
+    serverName: input.serverName || "",
+    session: input.session || "",
+    approved: input.approved,
+    userId: baseIdentity.userId,
+    userEmail: baseIdentity.email,
+  });
+  if (!event) {
+    return;
+  }
+  auditEvents.push(event);
+  if (persist) {
+    schedulePersist();
+  }
+}
+
 function deriveDisplayNameFromEmail(email: string): string {
   const localPart = email.split("@")[0] || "team";
   const withSpaces = localPart.replace(/[._-]+/g, " ").trim();
@@ -560,6 +588,7 @@ function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
     const expiresAtMs = Date.parse(invite.expiresAt);
     if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) {
       invite.status = "expired";
+      recordSystemAuditEvent("invite_expired", `Invite ${invite.id} expired before redemption.`, {}, false);
       schedulePersist();
       return { member: null, detail: "Invite has expired" };
     }
@@ -586,6 +615,7 @@ function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
 
   invite.status = "accepted";
   invite.acceptedAt = new Date().toISOString();
+  recordSystemAuditEvent("invite_redeemed", `Invite ${invite.id} redeemed for ${member.email}.`, {}, false);
   schedulePersist();
   return { member };
 }
@@ -721,12 +751,14 @@ app.post("/v1/auth/login", (req, res) => {
     }
   }
   const displayName = baseIdentity.displayName || deriveDisplayNameFromEmail(email);
+  const issuedIdentity = issueSession({
+    provider: "novaremote_cloud",
+    email,
+    displayName,
+  });
+  recordSystemAuditEvent("team_login", `Password sign-in for ${issuedIdentity.email}.`);
   res.json({
-    identity: issueSession({
-      provider: "novaremote_cloud",
-      email,
-      displayName,
-    }),
+    identity: issuedIdentity,
   });
 });
 
@@ -747,10 +779,12 @@ app.post("/v1/auth/sso/exchange", (req, res) => {
     baseIdentity.email = redeemed.member.email;
     baseIdentity.displayName = redeemed.member.name;
   }
+  const issuedIdentity = issueSession({
+    provider,
+  });
+  recordSystemAuditEvent("team_login_sso", `SSO sign-in via ${provider} for ${issuedIdentity.email}.`);
   res.json({
-    identity: issueSession({
-      provider,
-    }),
+    identity: issuedIdentity,
   });
 });
 
@@ -762,8 +796,10 @@ app.post("/v1/auth/refresh", (req, res) => {
   if (parsed.data.refreshToken !== baseIdentity.refreshToken) {
     return unauthorized(res, "Invalid refresh token");
   }
+  const issuedIdentity = issueSession();
+  recordSystemAuditEvent("team_session_refreshed", `Team session refreshed for ${issuedIdentity.email}.`);
   res.json({
-    identity: issueSession(),
+    identity: issuedIdentity,
   });
 });
 
@@ -775,6 +811,7 @@ app.post("/v1/auth/logout", (req, res) => {
   if (parsed.data.refreshToken !== baseIdentity.refreshToken) {
     return unauthorized(res, "Invalid refresh token");
   }
+  recordSystemAuditEvent("team_logout", `Team session revoked for ${baseIdentity.email}.`);
   baseIdentity.accessToken = `revoked-${randomUUID()}`;
   baseIdentity.refreshToken = `revoked-${randomUUID()}`;
   baseIdentity.tokenExpiresAt = Date.now() - 1;
@@ -827,6 +864,12 @@ app.post("/v1/team/servers", requireTeamPermission("servers:write"), (req, res) 
       member.serverIds.push(id);
     }
   });
+  recordSystemAuditEvent(
+    "server_added",
+    `Added team server ${nextServer.name} (${nextServer.baseUrl}).`,
+    { serverId: nextServer.id, serverName: nextServer.name },
+    false
+  );
   schedulePersist();
   res.json({ server: nextServer });
 });
@@ -853,6 +896,12 @@ app.patch("/v1/team/servers/:serverId", requireTeamPermission("servers:write"), 
   if (parsed.data.permissionLevel) {
     target.permissionLevel = parsed.data.permissionLevel;
   }
+  recordSystemAuditEvent(
+    "server_updated",
+    `Updated team server ${target.name}.`,
+    { serverId: target.id, serverName: target.name },
+    false
+  );
   schedulePersist();
   res.json({ server: target });
 });
@@ -867,6 +916,12 @@ app.delete("/v1/team/servers/:serverId", requireTeamPermission("servers:delete")
   teamMembers.forEach((member) => {
     member.serverIds = member.serverIds.filter((id) => id !== serverId);
   });
+  recordSystemAuditEvent(
+    "server_removed",
+    `Removed team server ${removed.name}.`,
+    { serverId: removed.id, serverName: removed.name },
+    false
+  );
   schedulePersist();
   res.json({ server: removed, ok: true });
 });
@@ -890,6 +945,7 @@ app.patch("/v1/team/members/:memberId", requireTeamPermission("team:manage"), (r
   if (member.id === baseIdentity.userId) {
     syncBaseIdentityFromMembers();
   }
+  recordSystemAuditEvent("member_role_updated", `Updated ${member.email} role to ${role}.`, {}, false);
   schedulePersist();
   res.json({ ok: true });
 });
@@ -901,6 +957,12 @@ app.put("/v1/team/members/:memberId/servers", requireTeamPermission("team:manage
     return res.status(404).json({ detail: "Member not found" });
   }
   member.serverIds = Array.isArray(req.body?.serverIds) ? req.body.serverIds.map((entry: unknown) => String(entry)) : [];
+  recordSystemAuditEvent(
+    "member_server_assignment_updated",
+    `Updated server assignments for ${member.email} (${member.serverIds.length} servers).`,
+    {},
+    false
+  );
   schedulePersist();
   res.json({ ok: true });
 });
@@ -911,6 +973,7 @@ app.get("/v1/team/settings", requireTeamPermission("settings:manage"), (_req, re
 
 app.patch("/v1/team/settings", requireTeamPermission("settings:manage"), (req, res) => {
   Object.assign(teamSettings, req.body || {});
+  recordSystemAuditEvent("settings_changed", "Updated team settings.", {}, false);
   schedulePersist();
   res.json({ settings: teamSettings });
 });
@@ -953,6 +1016,7 @@ app.post("/v1/team/invites", requireTeamPermission("team:invite"), (req, res) =>
     expiresAt
   };
   teamInvites.unshift(invite);
+  recordSystemAuditEvent("invite_created", `Created invite for ${invite.email} as ${invite.role}.`, {}, false);
   schedulePersist();
   res.json({ invite });
 });
@@ -964,6 +1028,7 @@ app.delete("/v1/team/invites/:inviteId", requireTeamPermission("team:invite"), (
   }
   invite.status = "revoked";
   invite.revokedAt = new Date().toISOString();
+  recordSystemAuditEvent("invite_revoked", `Revoked invite ${invite.id} for ${invite.email}.`, {}, false);
   schedulePersist();
   res.json({ ok: true });
 });
@@ -1004,6 +1069,7 @@ app.patch("/v1/team/sso/providers/:provider", requireTeamPermission("team:manage
     entry.callbackUrl = String((body as { callbackUrl: string }).callbackUrl);
   }
   entry.updatedAt = new Date().toISOString();
+  recordSystemAuditEvent("sso_provider_updated", `Updated ${provider.toUpperCase()} SSO provider configuration.`, {}, false);
   schedulePersist();
   res.json({ provider: entry });
 });
@@ -1048,6 +1114,12 @@ app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (re
     expiresAt
   };
   fleetApprovals.unshift(approval);
+  recordSystemAuditEvent(
+    "fleet_approval_requested",
+    `Requested fleet approval for command: ${approval.command}`,
+    { approved: null },
+    false
+  );
   schedulePersist();
   res.json({ approval });
 });
@@ -1071,6 +1143,12 @@ app.post("/v1/team/fleet/approvals/:approvalId/approve", requireTeamPermission("
   approval.status = "approved";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
+  recordSystemAuditEvent(
+    "fleet_approval_reviewed",
+    `Approved fleet request ${approval.id}.`,
+    { approved: true },
+    false
+  );
   schedulePersist();
   res.json({ ok: true });
 });
@@ -1094,6 +1172,12 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", requireTeamPermission("tea
   approval.status = "denied";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
+  recordSystemAuditEvent(
+    "fleet_approval_reviewed",
+    `Denied fleet request ${approval.id}.`,
+    { approved: false },
+    false
+  );
   schedulePersist();
   res.json({ ok: true });
 });
@@ -1170,6 +1254,7 @@ app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) =>
     detail: `Snapshot contains ${auditEvents.length} events`
   };
   auditExportJobs.unshift(job);
+  recordSystemAuditEvent("audit_export_requested", `Requested ${format.toUpperCase()} audit export ${exportId}.`, {}, false);
   schedulePersist();
   res.json(job);
 });
@@ -1181,6 +1266,7 @@ app.delete("/v1/audit/exports/:exportId", requireTeamPermission("audit:read"), (
     return res.status(404).json({ detail: "Export not found" });
   }
   const [removed] = auditExportJobs.splice(index, 1);
+  recordSystemAuditEvent("audit_export_removed", `Deleted audit export ${removed.exportId}.`, {}, false);
   schedulePersist();
   res.json({ ok: true, export: removed });
 });
