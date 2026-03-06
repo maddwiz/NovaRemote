@@ -750,6 +750,29 @@ function tokenPermissionsForLevel(level: PermissionLevel): string[] {
   return ["read"];
 }
 
+function findTeamMemberForIdentity(identity: TeamIdentity): TeamMemberRecord | null {
+  const byId = teamMembers.find((entry) => entry.id === identity.userId);
+  if (byId) {
+    return byId;
+  }
+  const normalizedEmail = identity.email.trim().toLowerCase();
+  if (!normalizedEmail) {
+    return null;
+  }
+  return teamMembers.find((entry) => entry.email.trim().toLowerCase() === normalizedEmail) || null;
+}
+
+function resolveVisibleServerIds(identity: TeamIdentity): Set<string> {
+  if (identity.role === "admin") {
+    return new Set(teamServers.map((server) => server.id));
+  }
+  const member = findTeamMemberForIdentity(identity);
+  if (!member) {
+    return new Set();
+  }
+  return new Set(member.serverIds);
+}
+
 function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
   member: (typeof teamMembers)[number] | null;
   detail?: string;
@@ -1019,7 +1042,7 @@ app.post("/v1/tokens/provision", requireTeamPermission("servers:read"), (req, re
     return res.status(404).json({ detail: "Server not found" });
   }
 
-  const callerMembership = teamMembers.find((entry) => entry.id === identity.userId) || null;
+  const callerMembership = findTeamMemberForIdentity(identity);
   const hasServerAccess =
     identity.role === "admin" || (callerMembership ? callerMembership.serverIds.includes(targetServer.id) : false);
   if (!hasServerAccess) {
@@ -1048,8 +1071,15 @@ app.post("/v1/tokens/provision", requireTeamPermission("servers:read"), (req, re
   });
 });
 
-app.get("/v1/team/servers", requireTeamPermission("servers:read"), (_req, res) => {
-  res.json({ servers: teamServers });
+app.get("/v1/team/servers", requireTeamPermission("servers:read"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
+  const visibleServerIds = resolveVisibleServerIds(identity);
+  const visibleServers =
+    identity.role === "admin" ? teamServers : teamServers.filter((server) => visibleServerIds.has(server.id));
+  res.json({ servers: visibleServers });
 });
 
 app.post("/v1/team/servers", requireTeamPermission("servers:write"), (req, res) => {

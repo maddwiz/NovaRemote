@@ -146,6 +146,7 @@ paths:
   /v1/team/servers:
     get:
       summary: List team-managed servers visible to the user
+      description: Response is filtered by team member server assignments unless the caller is an admin.
       responses:
         "200":
           description: Team server list

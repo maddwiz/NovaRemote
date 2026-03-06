@@ -72,6 +72,7 @@ Updated: 2026-03-06
   - [x] non-admin edit/delete restrictions for team-managed servers
   - [x] permission-level badges/metadata in server UX
   - [x] URL-precedence merge (team server replaces local duplicate for same base URL)
+  - [x] cloud scaffold server listing is now filtered by member assignments (admin sees all)
 - [x] `useAuditLog` local queue + periodic cloud sync
 - [x] In-app audit queue export actions (`JSON` / `CSV`)
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
