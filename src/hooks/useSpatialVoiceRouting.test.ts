@@ -196,6 +196,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "home::build-01",
     });
+    const closeRemoveTargeted = resolveSpatialVoiceRoute({
+      transcript: "remove cloud vm",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const closeRemoveFocused = resolveSpatialVoiceRoute({
+      transcript: "remove that",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
     const resizeFocused = resolveSpatialVoiceRoute({
       transcript: "double size",
       panels: PANELS,
@@ -249,6 +259,14 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(closeTargeted).toEqual({
       kind: "close_panel",
       panelId: "cloud::deploy",
+    });
+    expect(closeRemoveTargeted).toEqual({
+      kind: "close_panel",
+      panelId: "cloud::deploy",
+    });
+    expect(closeRemoveFocused).toEqual({
+      kind: "close_panel",
+      panelId: "home::build-01",
     });
     expect(resizeFocused).toEqual({
       kind: "resize_panel",

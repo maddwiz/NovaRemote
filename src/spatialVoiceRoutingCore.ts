@@ -324,19 +324,24 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
   }
 
   const closeMatch = cleaned.match(
-    /^(?:close|dismiss|kill|shut)\s+(?:this(?:\s+panel)?|that(?:\s+panel)?|panel|terminal|(.+))$/i
+    /^(?:close|dismiss|remove|kill|shut)\s+(?:this(?:\s+panel)?|that(?:\s+panel)?|panel|terminal|(.+))$/i
   );
   if (closeMatch) {
     const targetName = closeMatch[1]?.trim() || "";
-    if (targetName) {
-      const targetPanel = findPanelByTarget(panels, targetName);
-      if (targetPanel) {
-        return { kind: "close_panel", panelId: targetPanel.id };
+    const delegatesToPanelVisibilityRoute = /^(?:remove|close|hide)\s+(?:panel|session|terminal)\b/i.test(cleaned);
+    if (delegatesToPanelVisibilityRoute || (targetName && /^agent\b/i.test(targetName))) {
+      // Let agent-specific routes resolve commands like "remove agent deploy bot".
+    } else {
+      if (targetName) {
+        const targetPanel = findPanelByTarget(panels, targetName);
+        if (targetPanel) {
+          return { kind: "close_panel", panelId: targetPanel.id };
+        }
       }
-    }
-    const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
-    if (fallbackPanelId) {
-      return { kind: "close_panel", panelId: fallbackPanelId };
+      const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
+      if (fallbackPanelId) {
+        return { kind: "close_panel", panelId: fallbackPanelId };
+      }
     }
   }
 
