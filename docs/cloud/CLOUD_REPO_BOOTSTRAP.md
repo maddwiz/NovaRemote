@@ -79,7 +79,7 @@ The generated dashboard scaffold currently wires:
 - team policy controls (`danger confirm`, `fleet approval`, `recording`, `timeout`, `blocklist`)
 - fleet approval feed with approve/deny actions
 - SSO provider toggle controls (`OIDC`/`SAML`)
-- cloud audit export request actions (`JSON`/`CSV`)
+- cloud audit export request actions (`JSON`/`CSV`) + export history list/open links
 
 Each generated repo also includes deployment starters:
 

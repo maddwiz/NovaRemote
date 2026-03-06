@@ -892,6 +892,7 @@ export function App() {
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
+  const [exportJobs, setExportJobs] = useState<AuditExportJob[]>([]);
   const [settings, setSettings] = useState<TeamSettings>({
     enforceDangerConfirm: null,
     requireFleetApproval: null,
@@ -926,13 +927,14 @@ export function App() {
     setBusy(true);
     setStatus("Loading team data...");
     try {
-      const [membersPayload, teamServersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload] = await Promise.all([
+      const [membersPayload, teamServersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload, exportsPayload] = await Promise.all([
         fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
         fetchJson<{ servers?: TeamServer[] }>("/v1/team/servers", accessToken.trim()),
         fetchJson<{ approvals?: FleetApproval[] }>("/v1/team/fleet/approvals", accessToken.trim()),
         fetchJson<{ providers?: TeamSsoProviderConfig[] }>("/v1/team/sso/providers", accessToken.trim()),
         fetchJson<{ invites?: TeamInvite[] }>("/v1/team/invites", accessToken.trim()),
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
+        fetchJson<{ exports?: AuditExportJob[] }>("/v1/audit/exports?limit=20", accessToken.trim()),
       ]);
       const nextMembers = Array.isArray(membersPayload.members) ? membersPayload.members : [];
       setMembers(nextMembers);
@@ -947,6 +949,7 @@ export function App() {
       setApprovals(Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : []);
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
+      setExportJobs(Array.isArray(exportsPayload.exports) ? exportsPayload.exports : []);
       const nextSettings = settingsPayload.settings || {
         enforceDangerConfirm: null,
         requireFleetApproval: null,
@@ -994,6 +997,7 @@ export function App() {
         }
         const payload = (await response.json()) as AuditExportJob;
         setLastExport(payload);
+        await loadTeamData();
         setStatus(`Export ${payload.exportId} (${payload.status}) ready.`);
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
@@ -1001,7 +1005,7 @@ export function App() {
         setBusy(false);
       }
     },
-    [accessToken]
+    [accessToken, loadTeamData]
   );
 
   const toggleSsoProvider = useCallback(
@@ -1488,6 +1492,21 @@ export function App() {
               </p>
             ) : null}
           </>
+        ) : null}
+        {exportJobs.length > 0 ? (
+          <div className="providerRow">
+            <p className="muted">Recent Export Jobs</p>
+            {exportJobs.map((job) => (
+              <p key={job.exportId} className="muted">
+                {job.exportId} • {job.format.toUpperCase()} • {job.status} • {new Date(job.createdAt).toLocaleString()}{" "}
+                {job.downloadUrl ? (
+                  <a href={job.downloadUrl} target="_blank" rel="noreferrer">
+                    open
+                  </a>
+                ) : null}
+              </p>
+            ))}
+          </div>
         ) : null}
       </section>
     </main>
