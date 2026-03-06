@@ -116,7 +116,7 @@ Updated: 2026-03-05
   - [~] cloud dashboard export lifecycle governance remains pending deployment
 - [~] Fleet governance expansion:
   - [x] command blocklist + policy enforcement
-  - [~] fleet approval request/review + approved-execution matching is wired in-app and surfaced in dashboard scaffold (including approve/deny actions); production orchestration rollout remains pending
+  - [~] fleet approval request/review + approved-execution matching is wired in-app and surfaced in dashboard scaffold (including approve/deny actions); scaffold API now enforces duplicate-pending + self-approval guardrails and pending-expiry normalization, while production orchestration rollout remains pending
   - [x] inactivity timeout / session auto-disconnect policies
 - [~] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`) plus temp-dir bootstrap verification (`cloud:verify-bootstrap`), interactive dashboard scaffold wiring (built-in password/SSO sign-in helpers, invite-code redemption, refresh/logout session lifecycle, server fleet create/edit/delete, member role + server assignment management, invite lifecycle, policy editing, approvals, SSO toggles, audit event viewing/filtering, export request/history/delete lifecycle), file-backed local state persistence in the API scaffold, stricter refresh-token validation in scaffold auth routes, endpoint-level permission guards derived from team role in the scaffold API, and deployment templates (`Dockerfile`, `render.yaml`, scaffold CI workflows); production rollout/hardening remains pending

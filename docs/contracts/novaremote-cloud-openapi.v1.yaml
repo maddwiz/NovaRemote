@@ -465,6 +465,8 @@ paths:
                 properties:
                   approval:
                     $ref: "#/components/schemas/FleetApproval"
+        "409":
+          description: Duplicate pending approval request for the same requester/command/targets
   /v1/team/fleet/approvals/{approvalId}/approve:
     post:
       summary: Approve a fleet request
@@ -486,6 +488,10 @@ paths:
       responses:
         "200":
           description: Fleet request approved
+        "403":
+          description: Self-approval blocked (review must come from another team member)
+        "409":
+          description: Approval is no longer pending (already resolved or expired)
   /v1/team/fleet/approvals/{approvalId}/deny:
     post:
       summary: Deny a fleet request
@@ -507,6 +513,10 @@ paths:
       responses:
         "200":
           description: Fleet request denied
+        "403":
+          description: Self-review blocked (review must come from another team member)
+        "409":
+          description: Approval is no longer pending (already resolved or expired)
   /v1/audit/events:
     get:
       summary: Query audit events

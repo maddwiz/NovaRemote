@@ -62,6 +62,9 @@ assert_contains "${API_DIR}/src/server.ts" "/v1/auth/refresh"
 assert_contains "${API_DIR}/src/server.ts" "/v1/auth/logout"
 assert_contains "${API_DIR}/src/server.ts" "function requireTeamPermission"
 assert_contains "${API_DIR}/src/server.ts" "function redeemInviteCode"
+assert_contains "${API_DIR}/src/server.ts" "function expirePendingApprovals"
+assert_contains "${API_DIR}/src/server.ts" "Fleet approval already pending"
+assert_contains "${API_DIR}/src/server.ts" "Fleet approvals must be reviewed by another team member."
 assert_contains "${API_DIR}/.env.example" "NOVA_CLOUD_STATE_FILE"
 
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/team/invites/{inviteId}"
@@ -71,6 +74,8 @@ assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/aud
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/audit/exports/{exportId}"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/audit/exports"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/auth/logout"
+assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "Duplicate pending approval request"
+assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "Self-approval blocked"
 
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/sso/providers"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/fleet/approvals/\${approvalId}/\${action}"

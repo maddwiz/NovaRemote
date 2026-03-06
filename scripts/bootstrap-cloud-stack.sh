@@ -637,6 +637,60 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   next();
 }
 
+function normalizeApprovalCommand(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function normalizeApprovalTargets(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  const deduped = new Set<string>();
+  value.forEach((entry) => {
+    const normalized = String(entry || "").trim();
+    if (!normalized) {
+      return;
+    }
+    deduped.add(normalized);
+  });
+  return Array.from(deduped.values()).sort((a, b) => a.localeCompare(b));
+}
+
+function approvalFingerprint(command: string, targets: string[]): string {
+  return `${command.toLowerCase()}::${targets.join(",").toLowerCase()}`;
+}
+
+function expireApprovalIfNeeded(approval: FleetApproval, nowMs: number): FleetApproval["status"] {
+  if (approval.status !== "pending") {
+    return approval.status;
+  }
+  if (!approval.expiresAt) {
+    return approval.status;
+  }
+  const expiresAtMs = Date.parse(approval.expiresAt);
+  if (!Number.isFinite(expiresAtMs) || expiresAtMs > nowMs) {
+    return approval.status;
+  }
+  approval.status = "expired";
+  approval.updatedAt = new Date(nowMs).toISOString();
+  return approval.status;
+}
+
+function expirePendingApprovals() {
+  const nowMs = Date.now();
+  let changed = false;
+  fleetApprovals.forEach((approval) => {
+    const before = approval.status;
+    const after = expireApprovalIfNeeded(approval, nowMs);
+    if (before !== after) {
+      changed = true;
+    }
+  });
+  if (changed) {
+    schedulePersist();
+  }
+}
+
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
 });
@@ -955,18 +1009,38 @@ app.patch("/v1/team/sso/providers/:provider", requireTeamPermission("team:manage
 });
 
 app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (_req, res) => {
+  expirePendingApprovals();
   res.json({ approvals: fleetApprovals });
 });
 
 app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (req, res) => {
+  expirePendingApprovals();
+  const command = normalizeApprovalCommand(req.body?.command);
+  const targets = normalizeApprovalTargets(req.body?.targets);
+  if (!command) {
+    return res.status(400).json({ detail: "command is required" });
+  }
+  if (targets.length === 0) {
+    return res.status(400).json({ detail: "At least one target is required" });
+  }
+  const fingerprint = approvalFingerprint(command, targets);
+  const duplicate = fleetApprovals.find(
+    (entry) =>
+      entry.status === "pending" &&
+      entry.requestedByUserId === baseIdentity.userId &&
+      approvalFingerprint(entry.command, normalizeApprovalTargets(entry.targets)) === fingerprint
+  );
+  if (duplicate) {
+    return res.status(409).json({ detail: `Fleet approval already pending (#${duplicate.id}).`, approval: duplicate });
+  }
   const now = new Date().toISOString();
   const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
   const approval: FleetApproval = {
     id: `fa-${randomUUID().slice(0, 8)}`,
-    command: String(req.body?.command || "").trim(),
+    command,
     requestedByUserId: baseIdentity.userId,
     requestedByEmail: baseIdentity.email,
-    targets: Array.isArray(req.body?.targets) ? req.body.targets.map((entry: unknown) => String(entry)) : [],
+    targets,
     createdAt: now,
     updatedAt: now,
     status: "pending",
@@ -983,6 +1057,17 @@ app.post("/v1/team/fleet/approvals/:approvalId/approve", requireTeamPermission("
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
   }
+  const currentStatus = expireApprovalIfNeeded(approval, Date.now());
+  if (currentStatus === "expired") {
+    schedulePersist();
+    return res.status(409).json({ detail: "Approval has expired" });
+  }
+  if (approval.status !== "pending") {
+    return res.status(409).json({ detail: `Approval is already ${approval.status}` });
+  }
+  if (approval.requestedByUserId === baseIdentity.userId) {
+    return res.status(403).json({ detail: "Fleet approvals must be reviewed by another team member." });
+  }
   approval.status = "approved";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
@@ -994,6 +1079,17 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", requireTeamPermission("tea
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
+  }
+  const currentStatus = expireApprovalIfNeeded(approval, Date.now());
+  if (currentStatus === "expired") {
+    schedulePersist();
+    return res.status(409).json({ detail: "Approval has expired" });
+  }
+  if (approval.status !== "pending") {
+    return res.status(409).json({ detail: `Approval is already ${approval.status}` });
+  }
+  if (approval.requestedByUserId === baseIdentity.userId) {
+    return res.status(403).json({ detail: "Fleet approvals must be reviewed by another team member." });
   }
   approval.status = "denied";
   approval.updatedAt = new Date().toISOString();
