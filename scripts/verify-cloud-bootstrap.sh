@@ -68,6 +68,7 @@ assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/fleet/approvals/\${appr
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/invites"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/servers"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/servers/\${serverId}"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Save Server"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/members/\${memberId}"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/members/\${memberId}/servers"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/settings"

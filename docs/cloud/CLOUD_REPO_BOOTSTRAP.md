@@ -73,7 +73,7 @@ npm run dev
 
 The generated dashboard scaffold currently wires:
 
-- team server create/delete controls
+- team server create/edit/delete controls
 - team member list + role update controls
 - member server-assignment controls
 - invite lifecycle controls (create + revoke)

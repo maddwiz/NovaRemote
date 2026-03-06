@@ -1087,6 +1087,17 @@ export function App() {
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [teamServers, setTeamServers] = useState<TeamServer[]>([]);
+  const [serverEditDrafts, setServerEditDrafts] = useState<
+    Record<
+      string,
+      {
+        name: string;
+        baseUrl: string;
+        defaultCwd: string;
+        permissionLevel: "admin" | "operator" | "viewer";
+      }
+    >
+  >({});
   const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
   const [serverNameInput, setServerNameInput] = useState<string>("");
   const [serverUrlInput, setServerUrlInput] = useState<string>("");
@@ -1141,7 +1152,29 @@ export function App() {
       ]);
       const nextMembers = Array.isArray(membersPayload.members) ? membersPayload.members : [];
       setMembers(nextMembers);
-      setTeamServers(Array.isArray(teamServersPayload.servers) ? teamServersPayload.servers : []);
+      const nextServers = Array.isArray(teamServersPayload.servers) ? teamServersPayload.servers : [];
+      setTeamServers(nextServers);
+      setServerEditDrafts((previous) => {
+        const next: Record<
+          string,
+          {
+            name: string;
+            baseUrl: string;
+            defaultCwd: string;
+            permissionLevel: "admin" | "operator" | "viewer";
+          }
+        > = {};
+        nextServers.forEach((server) => {
+          const previousDraft = previous[server.id];
+          next[server.id] = previousDraft || {
+            name: server.name,
+            baseUrl: server.baseUrl,
+            defaultCwd: server.defaultCwd,
+            permissionLevel: server.permissionLevel,
+          };
+        });
+        return next;
+      });
       setMemberServerDrafts((previous) => {
         const next: Record<string, string[]> = {};
         nextMembers.forEach((member) => {
@@ -1247,6 +1280,51 @@ export function App() {
       }
     },
     [accessToken, loadTeamData]
+  );
+
+  const saveServerEdit = useCallback(
+    async (serverId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before updating servers.");
+        return;
+      }
+      const draft = serverEditDrafts[serverId];
+      if (!draft) {
+        setStatus(`No draft found for server ${serverId}.`);
+        return;
+      }
+      const payload = {
+        name: draft.name.trim(),
+        baseUrl: draft.baseUrl.trim(),
+        defaultCwd: draft.defaultCwd.trim() || "/",
+        permissionLevel: draft.permissionLevel,
+      };
+      if (!payload.name || !payload.baseUrl) {
+        setStatus("Server name and URL are required.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Updating server ${serverId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/servers/${serverId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+          body: JSON.stringify(payload),
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData, serverEditDrafts]
   );
 
   const requestExport = useCallback(
@@ -1606,19 +1684,99 @@ export function App() {
           </button>
         </div>
         {teamServers.length === 0 ? <p className="muted">No servers loaded.</p> : null}
-        {teamServers.map((server) => (
-          <div key={server.id} className="providerRow">
-            <p className="muted">
-              {server.name} • {server.baseUrl} • {server.permissionLevel}
-            </p>
-            <p className="muted">Default CWD: {server.defaultCwd}</p>
-            <div className="actions">
-              <button disabled={busy} onClick={() => void removeServer(server.id)}>
-                Delete Server
-              </button>
+        {teamServers.map((server) => {
+          const draft = serverEditDrafts[server.id] || {
+            name: server.name,
+            baseUrl: server.baseUrl,
+            defaultCwd: server.defaultCwd,
+            permissionLevel: server.permissionLevel,
+          };
+          return (
+            <div key={server.id} className="providerRow">
+              <p className="muted">
+                {server.id} • {server.name}
+              </p>
+              <div className="gridCols">
+                <label className="muted">
+                  Name
+                  <input
+                    className="textInput"
+                    value={draft.name}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          name: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="muted">
+                  Base URL
+                  <input
+                    className="textInput"
+                    value={draft.baseUrl}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          baseUrl: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="muted">
+                  Default CWD
+                  <input
+                    className="textInput"
+                    value={draft.defaultCwd}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          defaultCwd: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="muted">
+                  Permission Level
+                  <select
+                    className="selectInput"
+                    value={draft.permissionLevel}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          permissionLevel: event.target.value as "admin" | "operator" | "viewer",
+                        },
+                      }))
+                    }
+                  >
+                    <option value="viewer">viewer</option>
+                    <option value="operator">operator</option>
+                    <option value="admin">admin</option>
+                  </select>
+                </label>
+              </div>
+              <div className="actions">
+                <button disabled={busy} onClick={() => void saveServerEdit(server.id)}>
+                  Save Server
+                </button>
+                <button disabled={busy} onClick={() => void removeServer(server.id)}>
+                  Delete Server
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
 
       <section className="panel">
