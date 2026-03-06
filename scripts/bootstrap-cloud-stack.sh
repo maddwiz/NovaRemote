@@ -712,11 +712,35 @@ body {
   color: #d8ecff;
   padding: 8px 10px;
 }
+.selectInput {
+  width: 100%;
+  margin-top: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(130, 180, 255, 0.4);
+  background: rgba(5, 10, 18, 0.9);
+  color: #d8ecff;
+  padding: 8px 10px;
+}
+.textArea {
+  width: 100%;
+  min-height: 96px;
+  margin-top: 6px;
+  border-radius: 8px;
+  border: 1px solid rgba(130, 180, 255, 0.4);
+  background: rgba(5, 10, 18, 0.9);
+  color: #d8ecff;
+  padding: 8px 10px;
+}
 .actions {
   display: flex;
   gap: 8px;
   margin-top: 10px;
   flex-wrap: wrap;
+}
+.gridCols {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
 }
 .actions button {
   border-radius: 8px;
@@ -780,6 +804,24 @@ type TeamMember = {
   name: string;
   email: string;
   role: string;
+  serverIds?: string[];
+};
+
+type TeamInvite = {
+  id: string;
+  email: string;
+  role: string;
+  status: "pending" | "accepted" | "expired" | "revoked";
+  inviteCode?: string;
+  expiresAt?: string;
+};
+
+type TeamSettings = {
+  enforceDangerConfirm: boolean | null;
+  requireFleetApproval: boolean | null;
+  requireSessionRecording: boolean | null;
+  sessionTimeoutMinutes: number | null;
+  commandBlocklist: string[];
 };
 
 type FleetApproval = {
@@ -799,6 +841,7 @@ type AuditExportJob = {
 };
 
 const cloudUrl = (import.meta.env.VITE_NOVA_CLOUD_URL || "http://localhost:8788").replace(/\/+$/, "");
+const TEAM_ROLES = ["viewer", "operator", "admin", "billing"] as const;
 
 async function fetchJson<T>(path: string, accessToken?: string): Promise<T> {
   const response = await fetch(`${cloudUrl}${path}`, {
@@ -814,6 +857,26 @@ async function fetchJson<T>(path: string, accessToken?: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+function boolString(value: boolean | null): "true" | "false" | "null" {
+  if (value === true) {
+    return "true";
+  }
+  if (value === false) {
+    return "false";
+  }
+  return "null";
+}
+
+function parseBoolString(value: string): boolean | null {
+  if (value === "true") {
+    return true;
+  }
+  if (value === "false") {
+    return false;
+  }
+  return null;
+}
+
 export function App() {
   const [status, setStatus] = useState<string>("Ready");
   const [accessToken, setAccessToken] = useState<string>("");
@@ -821,6 +884,21 @@ export function App() {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
+  const [invites, setInvites] = useState<TeamInvite[]>([]);
+  const [settings, setSettings] = useState<TeamSettings>({
+    enforceDangerConfirm: null,
+    requireFleetApproval: null,
+    requireSessionRecording: null,
+    sessionTimeoutMinutes: null,
+    commandBlocklist: [],
+  });
+  const [inviteEmail, setInviteEmail] = useState<string>("");
+  const [inviteRole, setInviteRole] = useState<string>("viewer");
+  const [policyDanger, setPolicyDanger] = useState<"true" | "false" | "null">("null");
+  const [policyFleet, setPolicyFleet] = useState<"true" | "false" | "null">("null");
+  const [policyRecording, setPolicyRecording] = useState<"true" | "false" | "null">("null");
+  const [policyTimeout, setPolicyTimeout] = useState<string>("");
+  const [policyBlocklist, setPolicyBlocklist] = useState<string>("");
   const [lastExport, setLastExport] = useState<AuditExportJob | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
 
@@ -841,14 +919,34 @@ export function App() {
     setBusy(true);
     setStatus("Loading team data...");
     try {
-      const [membersPayload, approvalsPayload, ssoPayload] = await Promise.all([
+      const [membersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload] = await Promise.all([
         fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
         fetchJson<{ approvals?: FleetApproval[] }>("/v1/team/fleet/approvals", accessToken.trim()),
         fetchJson<{ providers?: TeamSsoProviderConfig[] }>("/v1/team/sso/providers", accessToken.trim()),
+        fetchJson<{ invites?: TeamInvite[] }>("/v1/team/invites", accessToken.trim()),
+        fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
       ]);
       setMembers(Array.isArray(membersPayload.members) ? membersPayload.members : []);
       setApprovals(Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : []);
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
+      setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
+      const nextSettings = settingsPayload.settings || {
+        enforceDangerConfirm: null,
+        requireFleetApproval: null,
+        requireSessionRecording: null,
+        sessionTimeoutMinutes: null,
+        commandBlocklist: [],
+      };
+      setSettings(nextSettings);
+      setPolicyDanger(boolString(nextSettings.enforceDangerConfirm));
+      setPolicyFleet(boolString(nextSettings.requireFleetApproval));
+      setPolicyRecording(boolString(nextSettings.requireSessionRecording));
+      setPolicyTimeout(
+        typeof nextSettings.sessionTimeoutMinutes === "number" && Number.isFinite(nextSettings.sessionTimeoutMinutes)
+          ? String(nextSettings.sessionTimeoutMinutes)
+          : ""
+      );
+      setPolicyBlocklist((nextSettings.commandBlocklist || []).join("\n"));
       setStatus("Team data loaded.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
@@ -948,6 +1046,150 @@ export function App() {
     [accessToken, loadTeamData]
   );
 
+  const updateMemberRole = useCallback(
+    async (memberId: string, role: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before updating roles.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Updating ${memberId} role to ${role}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/members/${memberId}`, {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+          body: JSON.stringify({ role }),
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
+  const createInvite = useCallback(async () => {
+    if (!accessToken.trim()) {
+      setStatus("Paste an access token before creating invites.");
+      return;
+    }
+    if (!inviteEmail.trim()) {
+      setStatus("Invite email is required.");
+      return;
+    }
+    setBusy(true);
+    setStatus(`Sending invite to ${inviteEmail.trim().toLowerCase()}...`);
+    try {
+      const response = await fetch(`${cloudUrl}/v1/team/invites`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken.trim()}`,
+        },
+        body: JSON.stringify({
+          email: inviteEmail.trim().toLowerCase(),
+          role: inviteRole,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${await response.text()}`);
+      }
+      setInviteEmail("");
+      await loadTeamData();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [accessToken, inviteEmail, inviteRole, loadTeamData]);
+
+  const revokeInvite = useCallback(
+    async (inviteId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before revoking invites.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Revoking invite ${inviteId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/team/invites/${inviteId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
+  const savePolicies = useCallback(async () => {
+    if (!accessToken.trim()) {
+      setStatus("Paste an access token before updating policies.");
+      return;
+    }
+    const timeoutRaw = policyTimeout.trim();
+    let timeout: number | null = null;
+    if (timeoutRaw) {
+      const parsed = Number.parseInt(timeoutRaw, 10);
+      if (!Number.isFinite(parsed) || parsed <= 0) {
+        setStatus("Session timeout must be a positive integer.");
+        return;
+      }
+      timeout = parsed;
+    }
+    const blocklist = policyBlocklist
+      .split(/\r?\n|,/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+
+    const payload: TeamSettings = {
+      enforceDangerConfirm: parseBoolString(policyDanger),
+      requireFleetApproval: parseBoolString(policyFleet),
+      requireSessionRecording: parseBoolString(policyRecording),
+      sessionTimeoutMinutes: timeout,
+      commandBlocklist: Array.from(new Set(blocklist)),
+    };
+
+    setBusy(true);
+    setStatus("Saving team policies...");
+    try {
+      const response = await fetch(`${cloudUrl}/v1/team/settings`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken.trim()}`,
+        },
+        body: JSON.stringify(payload),
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${await response.text()}`);
+      }
+      setSettings(payload);
+      await loadTeamData();
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [accessToken, loadTeamData, policyBlocklist, policyDanger, policyFleet, policyRecording, policyTimeout]);
+
   useEffect(() => {
     void loadHealth();
   }, [loadHealth]);
@@ -992,9 +1234,65 @@ export function App() {
         <h2 className="title">Team Members ({members.length})</h2>
         {members.length === 0 ? <p className="muted">No members loaded.</p> : null}
         {members.map((member) => (
-          <p key={member.id} className="muted">
-            {member.name} ({member.email}) • {member.role}
-          </p>
+          <div key={member.id} className="providerRow">
+            <p className="muted">
+              {member.name} ({member.email}) • {member.role}
+            </p>
+            <div className="actions">
+              {TEAM_ROLES.map((role) => (
+                <button key={role} disabled={busy || member.role === role} onClick={() => void updateMemberRole(member.id, role)}>
+                  Set {role}
+                </button>
+              ))}
+            </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="panel">
+        <h2 className="title">Team Invites</h2>
+        <div className="gridCols">
+          <label className="muted">
+            Email
+            <input
+              className="textInput"
+              value={inviteEmail}
+              onChange={(event) => setInviteEmail(event.target.value)}
+              placeholder="new-user@example.com"
+            />
+          </label>
+          <label className="muted">
+            Role
+            <select className="selectInput" value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+              {TEAM_ROLES.map((role) => (
+                <option key={role} value={role}>
+                  {role}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
+        <div className="actions">
+          <button disabled={busy} onClick={() => void createInvite()}>
+            Send Invite
+          </button>
+        </div>
+        {invites.length === 0 ? <p className="muted">No invites found.</p> : null}
+        {invites.map((invite) => (
+          <div key={invite.id} className="providerRow">
+            <p className="muted">
+              {invite.email} • {invite.role} • {invite.status}
+            </p>
+            {invite.inviteCode ? <p className="muted">Code: {invite.inviteCode}</p> : null}
+            {invite.expiresAt ? <p className="muted">Expires: {new Date(invite.expiresAt).toLocaleString()}</p> : null}
+            {invite.status === "pending" ? (
+              <div className="actions">
+                <button disabled={busy} onClick={() => void revokeInvite(invite.id)}>
+                  Revoke
+                </button>
+              </div>
+            ) : null}
+          </div>
         ))}
       </section>
 
@@ -1018,6 +1316,66 @@ export function App() {
             ) : null}
           </div>
         ))}
+      </section>
+
+      <section className="panel">
+        <h2 className="title">Team Policies</h2>
+        <div className="gridCols">
+          <label className="muted">
+            Danger Confirm
+            <select className="selectInput" value={policyDanger} onChange={(event) => setPolicyDanger(event.target.value as "true" | "false" | "null")}>
+              <option value="null">User controlled</option>
+              <option value="true">Enforced on</option>
+              <option value="false">Enforced off</option>
+            </select>
+          </label>
+          <label className="muted">
+            Fleet Approval
+            <select className="selectInput" value={policyFleet} onChange={(event) => setPolicyFleet(event.target.value as "true" | "false" | "null")}>
+              <option value="null">User controlled</option>
+              <option value="true">Enforced on</option>
+              <option value="false">Enforced off</option>
+            </select>
+          </label>
+          <label className="muted">
+            Session Recording
+            <select
+              className="selectInput"
+              value={policyRecording}
+              onChange={(event) => setPolicyRecording(event.target.value as "true" | "false" | "null")}
+            >
+              <option value="null">User controlled</option>
+              <option value="true">Enforced on</option>
+              <option value="false">Enforced off</option>
+            </select>
+          </label>
+          <label className="muted">
+            Session Timeout (minutes)
+            <input
+              className="textInput"
+              value={policyTimeout}
+              onChange={(event) => setPolicyTimeout(event.target.value)}
+              placeholder="e.g. 20"
+            />
+          </label>
+        </div>
+        <label className="muted">
+          Command Blocklist (newline or comma separated)
+          <textarea
+            className="textArea"
+            value={policyBlocklist}
+            onChange={(event) => setPolicyBlocklist(event.target.value)}
+            placeholder="rm -rf /"
+          />
+        </label>
+        <div className="actions">
+          <button disabled={busy} onClick={() => void savePolicies()}>
+            Save Policies
+          </button>
+        </div>
+        <p className="muted">
+          Current: danger={boolString(settings.enforceDangerConfirm)} • fleet={boolString(settings.requireFleetApproval)} • recording={boolString(settings.requireSessionRecording)} • timeout={settings.sessionTimeoutMinutes ?? "off"} • blocklist={settings.commandBlocklist.length}
+        </p>
       </section>
 
       <section className="panel">

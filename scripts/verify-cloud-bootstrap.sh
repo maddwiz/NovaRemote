@@ -59,6 +59,9 @@ assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/aud
 
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/sso/providers"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/fleet/approvals/\${approvalId}/\${action}"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/invites"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/members/\${memberId}"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "/v1/team/settings"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Request JSON Export"
 assert_contains "${API_DIR}/render.yaml" "healthCheckPath: /healthz"
 assert_contains "${DASHBOARD_DIR}/render.yaml" "staticPublishPath: dist"

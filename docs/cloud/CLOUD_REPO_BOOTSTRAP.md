@@ -73,7 +73,10 @@ npm run dev
 
 The generated dashboard scaffold currently wires:
 
-- team member list + fleet approval feed with approve/deny actions
+- team member list + role update controls
+- invite lifecycle controls (create + revoke)
+- team policy controls (`danger confirm`, `fleet approval`, `recording`, `timeout`, `blocklist`)
+- fleet approval feed with approve/deny actions
 - SSO provider toggle controls (`OIDC`/`SAML`)
 - cloud audit export request actions (`JSON`/`CSV`)
 
