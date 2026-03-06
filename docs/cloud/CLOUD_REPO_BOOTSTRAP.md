@@ -81,7 +81,7 @@ The generated dashboard scaffold currently wires:
 - fleet approval feed with approve/deny actions
 - SSO provider toggle controls (`OIDC`/`SAML`)
 - audit event viewer with action/server filters
-- cloud audit export request actions (`JSON`/`CSV`) + export history list/open links
+- cloud audit export request actions (`JSON`/`CSV`) + export history list/open/delete controls
 
 The generated API scaffold now persists state to a local JSON file (`NOVA_CLOUD_STATE_FILE`, default `./data/state.json`) so local restarts retain team data.
 

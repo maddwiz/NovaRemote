@@ -595,6 +595,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AuditExportJob"
+  /v1/audit/exports/{exportId}:
+    delete:
+      summary: Delete a cloud-hosted audit export job
+      parameters:
+        - in: path
+          name: exportId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export job removed
 components:
   securitySchemes:
     bearerAuth:

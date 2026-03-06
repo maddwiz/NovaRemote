@@ -628,12 +628,17 @@ app.patch("/v1/team/settings", (req, res) => {
 });
 
 app.get("/v1/team/usage", (_req, res) => {
+  const sessionsCreated = auditEvents.filter((event) => event.action === "session_created").length;
+  const commandsSent = auditEvents.filter(
+    (event) => event.action === "command_sent" || event.action === "voice_command_sent"
+  ).length;
+  const fleetExecutions = auditEvents.filter((event) => event.action === "fleet_executed").length;
   res.json({
     usage: {
       activeMembers: teamMembers.length,
-      sessionsCreated: 0,
-      commandsSent: 0,
-      fleetExecutions: 0
+      sessionsCreated,
+      commandsSent,
+      fleetExecutions
     }
   });
 });
@@ -837,6 +842,17 @@ app.post("/v1/audit/exports", (req, res) => {
   auditExportJobs.unshift(job);
   schedulePersist();
   res.json(job);
+});
+
+app.delete("/v1/audit/exports/:exportId", (req, res) => {
+  const exportId = String(req.params.exportId || "").trim();
+  const index = auditExportJobs.findIndex((entry) => entry.exportId === exportId);
+  if (index === -1) {
+    return res.status(404).json({ detail: "Export not found" });
+  }
+  const [removed] = auditExportJobs.splice(index, 1);
+  schedulePersist();
+  res.json({ ok: true, export: removed });
 });
 
 const port = Number.parseInt(process.env.PORT || "8788", 10);
@@ -1458,6 +1474,34 @@ export function App() {
         setLastExport(payload);
         await loadTeamData();
         setStatus(`Export ${payload.exportId} (${payload.status}) ready.`);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
+  const removeExport = useCallback(
+    async (exportId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before deleting exports.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Deleting export ${exportId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/audit/exports/${exportId}`, {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        await loadTeamData();
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
       } finally {
@@ -2145,14 +2189,21 @@ export function App() {
           <div className="providerRow">
             <p className="muted">Recent Export Jobs</p>
             {exportJobs.map((job) => (
-              <p key={job.exportId} className="muted">
-                {job.exportId} • {job.format.toUpperCase()} • {job.status} • {new Date(job.createdAt).toLocaleString()}{" "}
-                {job.downloadUrl ? (
-                  <a href={job.downloadUrl} target="_blank" rel="noreferrer">
-                    open
-                  </a>
-                ) : null}
-              </p>
+              <div key={job.exportId} className="providerRow">
+                <p className="muted">
+                  {job.exportId} • {job.format.toUpperCase()} • {job.status} • {new Date(job.createdAt).toLocaleString()}
+                </p>
+                <div className="actions">
+                  {job.downloadUrl ? (
+                    <a href={job.downloadUrl} target="_blank" rel="noreferrer">
+                      Open
+                    </a>
+                  ) : null}
+                  <button disabled={busy} onClick={() => void removeExport(job.exportId)}>
+                    Delete Export
+                  </button>
+                </div>
+              </div>
             ))}
           </div>
         ) : null}
