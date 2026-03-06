@@ -195,6 +195,27 @@ function normalizeOptionalString(value: unknown): string | undefined {
   return normalized || undefined;
 }
 
+function parseCloudErrorStatus(error: unknown): number | null {
+  if (!(error instanceof Error)) {
+    return null;
+  }
+  const match = error.message.match(/^\s*(\d{3})\b/);
+  if (!match) {
+    return null;
+  }
+  const code = Number.parseInt(match[1], 10);
+  return Number.isFinite(code) ? code : null;
+}
+
+function fallbackOnForbidden<T>(fallbackValue: T) {
+  return (error: unknown): T => {
+    if (parseCloudErrorStatus(error) === 403) {
+      return fallbackValue;
+    }
+    throw error;
+  };
+}
+
 function parseTeamAuthIdentity(payload: TeamAuthResponse): TeamIdentity | null {
   if (payload.identity && typeof payload.identity === "object") {
     const nested = normalizeTeamIdentity(payload.identity);
@@ -722,7 +743,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
                 cloudUrl: cloudUrl || getNovaCloudUrl(),
                 fetchImpl,
               }
-            ).catch(() => ({ approvals: [] }))
+            ).catch(fallbackOnForbidden({ approvals: [] }))
           : Promise.resolve<{ approvals?: unknown }>({ approvals: [] });
       const invitesPromise =
         hasTeamPermission(currentIdentity, "team:invite") || hasTeamPermission(currentIdentity, "team:manage")
@@ -734,7 +755,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
                 cloudUrl: cloudUrl || getNovaCloudUrl(),
                 fetchImpl,
               }
-            ).catch(() => ({ invites: [] }))
+            ).catch(fallbackOnForbidden({ invites: [] }))
           : Promise.resolve<{ invites?: unknown }>({ invites: [] });
       const ssoProvidersPromise =
         hasTeamPermission(currentIdentity, "team:manage")
@@ -746,8 +767,31 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
                 cloudUrl: cloudUrl || getNovaCloudUrl(),
                 fetchImpl,
               }
-            ).catch(() => ({ providers: [] }))
+            ).catch(fallbackOnForbidden({ providers: [] }))
           : Promise.resolve<{ providers?: unknown }>({ providers: [] });
+
+      const membersPromise =
+        hasTeamPermission(currentIdentity, "team:manage")
+          ? cloudRequest<{ members?: unknown }>(
+              "/v1/team/members",
+              { method: "GET" },
+              {
+                accessToken: currentIdentity.accessToken,
+                cloudUrl: cloudUrl || getNovaCloudUrl(),
+                fetchImpl,
+              }
+            ).catch(fallbackOnForbidden({ members: [] }))
+          : Promise.resolve<{ members?: unknown }>({ members: [] });
+
+      const settingsPromise = cloudRequest<{ settings?: unknown }>(
+        "/v1/team/settings",
+        { method: "GET" },
+        {
+          accessToken: currentIdentity.accessToken,
+          cloudUrl: cloudUrl || getNovaCloudUrl(),
+          fetchImpl,
+        }
+      ).catch(fallbackOnForbidden({ settings: {} }));
 
       const [serversPayload, membersPayload, settingsPayload, usagePayload, approvalsPayload, invitesPayload, ssoProvidersPayload] = await Promise.all([
         cloudRequest<{ servers?: unknown }>(
@@ -758,25 +802,9 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
             cloudUrl: cloudUrl || getNovaCloudUrl(),
             fetchImpl,
           }
-        ),
-        cloudRequest<{ members?: unknown }>(
-          "/v1/team/members",
-          { method: "GET" },
-          {
-            accessToken: currentIdentity.accessToken,
-            cloudUrl: cloudUrl || getNovaCloudUrl(),
-            fetchImpl,
-          }
-        ),
-        cloudRequest<{ settings?: unknown }>(
-          "/v1/team/settings",
-          { method: "GET" },
-          {
-            accessToken: currentIdentity.accessToken,
-            cloudUrl: cloudUrl || getNovaCloudUrl(),
-            fetchImpl,
-          }
-        ),
+        ).catch(fallbackOnForbidden({ servers: [] })),
+        membersPromise,
+        settingsPromise,
         cloudRequest<{ usage?: unknown }>(
           "/v1/team/usage",
           { method: "GET" },
@@ -785,7 +813,7 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
             cloudUrl: cloudUrl || getNovaCloudUrl(),
             fetchImpl,
           }
-        ).catch(() => ({ usage: {} })),
+        ).catch(fallbackOnForbidden({ usage: {} })),
         approvalsPromise,
         invitesPromise,
         ssoProvidersPromise,

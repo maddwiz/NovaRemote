@@ -323,6 +323,70 @@ afterEach(() => {
 });
 
 describe("useTeamAuth hook", () => {
+  it("falls back gracefully when role-limited endpoints return 403", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          role: "viewer",
+          permissions: ["servers:read"],
+        })
+      )
+    );
+    cloudClientMock.cloudRequest.mockImplementation(async (path: string) => {
+      if (path === "/v1/team/servers") {
+        return {
+          servers: [
+            {
+              id: "srv-viewer",
+              name: "Viewer Host",
+              baseUrl: "https://viewer.example.com",
+              defaultCwd: "/",
+              permissionLevel: "viewer",
+            },
+          ],
+        };
+      }
+      if (path === "/v1/team/settings" || path === "/v1/team/members" || path === "/v1/team/usage") {
+        throw new Error("403 Forbidden");
+      }
+      return {};
+    });
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+    await flush();
+
+    expect(latestOrThrow(latest).identity?.role).toBe("viewer");
+    expect(latestOrThrow(latest).teamMembers).toEqual([]);
+    expect(latestOrThrow(latest).teamInvites).toEqual([]);
+    expect(latestOrThrow(latest).fleetApprovals).toEqual([]);
+    expect(latestOrThrow(latest).teamSettings).toEqual({
+      enforceDangerConfirm: null,
+      commandBlocklist: [],
+      sessionTimeoutMinutes: null,
+      requireSessionRecording: null,
+      requireFleetApproval: null,
+    });
+    expect(
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/settings")
+    ).toBe(true);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("logs out and revokes the current cloud session", async () => {
     secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
 
