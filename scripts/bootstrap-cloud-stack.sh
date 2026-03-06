@@ -773,6 +773,50 @@ function resolveVisibleServerIds(identity: TeamIdentity): Set<string> {
   return new Set(member.serverIds);
 }
 
+function findTeamServerByAnyId(serverId: string) {
+  const normalizedServerId = serverId.trim();
+  if (!normalizedServerId) {
+    return null;
+  }
+  return (
+    teamServers.find((server) => server.id === normalizedServerId) ||
+    teamServers.find((server) => server.teamServerId === normalizedServerId) ||
+    null
+  );
+}
+
+type NormalizedFleetTargets = {
+  normalizedTargets: string[];
+  unknownTargets: string[];
+  unauthorizedTargets: string[];
+};
+
+function normalizeFleetTargetsForIdentity(rawTargets: string[], identity: TeamIdentity): NormalizedFleetTargets {
+  const visibleServerIds = resolveVisibleServerIds(identity);
+  const normalizedTargets = new Set<string>();
+  const unknownTargets = new Set<string>();
+  const unauthorizedTargets = new Set<string>();
+
+  rawTargets.forEach((target) => {
+    const server = findTeamServerByAnyId(target);
+    if (!server) {
+      unknownTargets.add(target);
+      return;
+    }
+    if (identity.role !== "admin" && !visibleServerIds.has(server.id)) {
+      unauthorizedTargets.add(server.id);
+      return;
+    }
+    normalizedTargets.add(server.id);
+  });
+
+  return {
+    normalizedTargets: Array.from(normalizedTargets.values()).sort((a, b) => a.localeCompare(b)),
+    unknownTargets: Array.from(unknownTargets.values()).sort((a, b) => a.localeCompare(b)),
+    unauthorizedTargets: Array.from(unauthorizedTargets.values()).sort((a, b) => a.localeCompare(b)),
+  };
+}
+
 function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
   member: (typeof teamMembers)[number] | null;
   detail?: string;
@@ -870,6 +914,7 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!Number.isFinite(baseIdentity.tokenExpiresAt) || Date.now() >= baseIdentity.tokenExpiresAt) {
     return unauthorized(res, "Team access token expired");
   }
+  (req as Request & { identity?: TeamIdentity }).identity = { ...baseIdentity, permissions: [...baseIdentity.permissions] };
   next();
 }
 
@@ -1381,20 +1426,32 @@ app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (_req,
 });
 
 app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
   expirePendingApprovals();
   const command = normalizeApprovalCommand(req.body?.command);
-  const targets = normalizeApprovalTargets(req.body?.targets);
+  const requestedTargets = normalizeApprovalTargets(req.body?.targets);
   if (!command) {
     return res.status(400).json({ detail: "command is required" });
   }
-  if (targets.length === 0) {
+  if (requestedTargets.length === 0) {
     return res.status(400).json({ detail: "At least one target is required" });
   }
+  const targetValidation = normalizeFleetTargetsForIdentity(requestedTargets, identity);
+  if (targetValidation.unknownTargets.length > 0) {
+    return res.status(400).json({ detail: `Unknown targets: ${targetValidation.unknownTargets.join(", ")}` });
+  }
+  if (targetValidation.unauthorizedTargets.length > 0) {
+    return forbidden(res, `Not authorized for targets: ${targetValidation.unauthorizedTargets.join(", ")}`);
+  }
+  const targets = targetValidation.normalizedTargets;
   const fingerprint = approvalFingerprint(command, targets);
   const duplicate = fleetApprovals.find(
     (entry) =>
       entry.status === "pending" &&
-      entry.requestedByUserId === baseIdentity.userId &&
+      entry.requestedByUserId === identity.userId &&
       approvalFingerprint(entry.command, normalizeApprovalTargets(entry.targets)) === fingerprint
   );
   if (duplicate) {
@@ -1405,8 +1462,8 @@ app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (re
   const approval: FleetApproval = {
     id: `fa-${randomUUID().slice(0, 8)}`,
     command,
-    requestedByUserId: baseIdentity.userId,
-    requestedByEmail: baseIdentity.email,
+    requestedByUserId: identity.userId,
+    requestedByEmail: identity.email,
     targets,
     createdAt: now,
     updatedAt: now,
@@ -1490,6 +1547,10 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", requireTeamPermission("tea
 });
 
 app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPermission("fleet:execute"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
@@ -1502,6 +1563,15 @@ app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPerm
   if (approval.status !== "approved") {
     return res.status(409).json({ detail: `Approval is ${approval.status}; execution claim requires approved status.` });
   }
+  const claimTargetValidation = normalizeFleetTargetsForIdentity(normalizeApprovalTargets(approval.targets), identity);
+  if (claimTargetValidation.unknownTargets.length > 0) {
+    return res
+      .status(409)
+      .json({ detail: `Approval targets are no longer available: ${claimTargetValidation.unknownTargets.join(", ")}` });
+  }
+  if (claimTargetValidation.unauthorizedTargets.length > 0) {
+    return forbidden(res, `Not authorized for targets: ${claimTargetValidation.unauthorizedTargets.join(", ")}`);
+  }
   if (approval.executionClaimedAt) {
     return res.status(409).json({
       detail: `Execution already claimed at ${approval.executionClaimedAt}.`,
@@ -1510,8 +1580,8 @@ app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPerm
     });
   }
   const claimedAt = new Date().toISOString();
-  approval.executionClaimedByUserId = baseIdentity.userId;
-  approval.executionClaimedByEmail = baseIdentity.email;
+  approval.executionClaimedByUserId = identity.userId;
+  approval.executionClaimedByEmail = identity.email;
   approval.executionClaimedAt = claimedAt;
   approval.executionToken = `fexec-${randomUUID()}`;
   approval.updatedAt = claimedAt;

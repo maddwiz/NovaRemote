@@ -97,6 +97,7 @@ Team member responses now include server-derived usage snapshots (`sessionsCreat
 Token provisioning now enforces server assignment + least-privilege permission clamping (requested level is capped by caller role and server policy).
 Team server listing now enforces per-member visibility (non-admin members only receive assigned servers).
 Member server assignment updates now validate that all `serverIds` exist before applying changes.
+Fleet approval request and claim flows now validate target server existence and caller access at both request and claim time.
 
 Each generated repo also includes deployment starters:
 

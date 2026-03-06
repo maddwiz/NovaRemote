@@ -447,6 +447,7 @@ paths:
                       $ref: "#/components/schemas/FleetApproval"
     post:
       summary: Request fleet approval for command execution
+      description: Targets are normalized to canonical team server IDs and validated against caller server access.
       requestBody:
         required: true
         content:
@@ -473,6 +474,10 @@ paths:
                 properties:
                   approval:
                     $ref: "#/components/schemas/FleetApproval"
+        "400":
+          description: Invalid payload or unknown targets
+        "403":
+          description: Caller is not authorized for one or more targets
         "409":
           description: Duplicate pending approval request for the same requester/command/targets
   /v1/team/fleet/approvals/{approvalId}/approve:
@@ -528,6 +533,7 @@ paths:
   /v1/team/fleet/approvals/{approvalId}/claim-execution:
     post:
       summary: Claim execution intent for an approved fleet request
+      description: Claimer must still have access to every approval target at claim time.
       parameters:
         - in: path
           name: approvalId
@@ -547,8 +553,10 @@ paths:
                     $ref: "#/components/schemas/FleetApproval"
                   executionToken:
                     type: string
+        "403":
+          description: Caller is not authorized for one or more approval targets
         "409":
-          description: Approval is not eligible to claim (not approved, expired, or already claimed)
+          description: Approval is not eligible to claim (not approved, expired, already claimed, or targets unavailable)
   /v1/audit/events:
     get:
       summary: Query audit events
