@@ -480,6 +480,26 @@ const teamServerCreateSchema = z.object({
 
 const teamServerPatchSchema = teamServerCreateSchema.partial();
 
+const teamSettingsPatchSchema = z.object({
+  enforceDangerConfirm: z.boolean().nullable().optional(),
+  requireFleetApproval: z.boolean().nullable().optional(),
+  requireSessionRecording: z.boolean().nullable().optional(),
+  sessionTimeoutMinutes: z.number().int().min(1).max(24 * 60).nullable().optional(),
+  commandBlocklist: z.array(z.string().trim().min(1)).max(200).optional(),
+});
+
+function normalizeCommandBlocklistPatterns(value: string[]): string[] {
+  const deduped = new Set<string>();
+  value.forEach((entry) => {
+    const normalized = entry.trim();
+    if (!normalized) {
+      return;
+    }
+    deduped.add(normalized);
+  });
+  return Array.from(deduped.values());
+}
+
 function normalizeServerBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
 }
@@ -972,8 +992,34 @@ app.get("/v1/team/settings", requireTeamPermission("settings:manage"), (_req, re
 });
 
 app.patch("/v1/team/settings", requireTeamPermission("settings:manage"), (req, res) => {
-  Object.assign(teamSettings, req.body || {});
-  recordSystemAuditEvent("settings_changed", "Updated team settings.", {}, false);
+  const parsed = teamSettingsPatchSchema.safeParse(req.body || {});
+  if (!parsed.success) {
+    return res.status(400).json({ detail: parsed.error.issues[0]?.message || "Invalid settings payload" });
+  }
+  const nextSettings = { ...parsed.data };
+  if (Array.isArray(nextSettings.commandBlocklist)) {
+    const normalizedBlocklist = normalizeCommandBlocklistPatterns(nextSettings.commandBlocklist);
+    for (const pattern of normalizedBlocklist) {
+      try {
+        // Validate pattern syntax before accepting policy changes.
+        // eslint-disable-next-line no-new
+        new RegExp(pattern);
+      } catch (error) {
+        return res.status(400).json({
+          detail: `Invalid command blocklist regex: ${pattern}`,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    nextSettings.commandBlocklist = normalizedBlocklist;
+  }
+  Object.assign(teamSettings, nextSettings);
+  recordSystemAuditEvent(
+    "settings_changed",
+    `Updated team settings (${Object.keys(nextSettings).join(", ") || "no-op"}).`,
+    {},
+    false
+  );
   schedulePersist();
   res.json({ settings: teamSettings });
 });

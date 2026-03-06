@@ -90,6 +90,7 @@ The generated API scaffold now persists state to a local JSON file (`NOVA_CLOUD_
 It also applies endpoint-level permission guards (`requireTeamPermission`) derived from the signed-in role for local RBAC validation.
 Fleet approval endpoints now include duplicate-pending detection, pending-expiry normalization, and server-side self-approval guardrails.
 The scaffold also emits system audit events for auth, server-fleet, invite, policy, approval-review, and export lifecycle actions.
+Team policy updates are schema-validated in the scaffold API, including timeout bounds and command blocklist regex validation.
 
 Each generated repo also includes deployment starters:
 

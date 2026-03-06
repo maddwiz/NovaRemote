@@ -116,7 +116,7 @@ Updated: 2026-03-05
   - [x] cloud scaffold now emits system audit events for auth, server/invite/policy admin actions, fleet approval lifecycle, and export lifecycle updates
   - [~] cloud dashboard export lifecycle governance remains pending deployment
 - [~] Fleet governance expansion:
-  - [x] command blocklist + policy enforcement
+  - [x] command blocklist + policy enforcement (including scaffold-side regex validation and policy payload bounds checks)
   - [~] fleet approval request/review + approved-execution matching is wired in-app and surfaced in dashboard scaffold (including approve/deny actions); scaffold API now enforces duplicate-pending + self-approval guardrails and pending-expiry normalization, while production orchestration rollout remains pending
   - [x] inactivity timeout / session auto-disconnect policies
 - [~] Separate NovaRemote Cloud backend + web admin dashboard rollout
