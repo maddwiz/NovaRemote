@@ -1208,7 +1208,23 @@ app.put("/v1/team/members/:memberId/servers", requireTeamPermission("team:manage
   if (!member) {
     return res.status(404).json({ detail: "Member not found" });
   }
-  member.serverIds = Array.isArray(req.body?.serverIds) ? req.body.serverIds.map((entry: unknown) => String(entry)) : [];
+  const rawServerIds = Array.isArray(req.body?.serverIds) ? req.body.serverIds : [];
+  const normalizedServerIds = Array.from(
+    new Set(
+      rawServerIds
+        .map((entry: unknown) => String(entry || "").trim())
+        .filter((entry) => Boolean(entry))
+    )
+  );
+  const knownServerIds = new Set(teamServers.map((server) => server.id));
+  const invalidServerIds = normalizedServerIds.filter((id) => !knownServerIds.has(id));
+  if (invalidServerIds.length > 0) {
+    return res.status(400).json({ detail: `Unknown serverIds: ${invalidServerIds.join(", ")}` });
+  }
+  member.serverIds =
+    member.role === "admin"
+      ? Array.from(new Set([...normalizedServerIds, ...teamServers.map((server) => server.id)]))
+      : normalizedServerIds;
   recordSystemAuditEvent(
     "member_server_assignment_updated",
     `Updated server assignments for ${member.email} (${member.serverIds.length} servers).`,

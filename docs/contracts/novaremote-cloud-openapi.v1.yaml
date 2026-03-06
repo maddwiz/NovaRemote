@@ -275,6 +275,8 @@ paths:
       responses:
         "200":
           description: Member server assignments updated
+        "400":
+          description: One or more serverIds are unknown
   /v1/team/settings:
     get:
       summary: Retrieve team policy settings

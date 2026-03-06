@@ -73,6 +73,7 @@ Updated: 2026-03-06
   - [x] permission-level badges/metadata in server UX
   - [x] URL-precedence merge (team server replaces local duplicate for same base URL)
   - [x] cloud scaffold server listing is now filtered by member assignments (admin sees all)
+  - [x] cloud scaffold validates member server-assignment updates against known server IDs
 - [x] `useAuditLog` local queue + periodic cloud sync
 - [x] In-app audit queue export actions (`JSON` / `CSV`)
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
