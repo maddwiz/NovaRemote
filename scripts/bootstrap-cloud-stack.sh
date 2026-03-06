@@ -1162,6 +1162,13 @@ type AuditEvent = {
   approved?: boolean | null;
 };
 
+type TeamIdentity = {
+  accessToken: string;
+  refreshToken?: string;
+  email?: string;
+  displayName?: string;
+};
+
 const cloudUrl = (import.meta.env.VITE_NOVA_CLOUD_URL || "http://localhost:8788").replace(/\/+$/, "");
 const TEAM_ROLES = ["viewer", "operator", "admin", "billing"] as const;
 
@@ -1202,6 +1209,10 @@ function parseBoolString(value: string): boolean | null {
 export function App() {
   const [status, setStatus] = useState<string>("Ready");
   const [accessToken, setAccessToken] = useState<string>("");
+  const [loginEmail, setLoginEmail] = useState<string>("admin@novaremote.dev");
+  const [loginPassword, setLoginPassword] = useState<string>("dev-password");
+  const [ssoToken, setSsoToken] = useState<string>("dev-sso-token");
+  const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [teamServers, setTeamServers] = useState<TeamServer[]>([]);
@@ -1252,6 +1263,95 @@ export function App() {
     } catch {
       setHealthOk(false);
     }
+  }, []);
+
+  const signInPassword = useCallback(async () => {
+    const email = loginEmail.trim().toLowerCase();
+    const password = loginPassword;
+    if (!email || !password) {
+      setStatus("Email and password are required.");
+      return;
+    }
+    setBusy(true);
+    setStatus(`Signing in ${email}...`);
+    try {
+      const response = await fetch(`${cloudUrl}/v1/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider: "novaremote_cloud",
+          email,
+          password,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${await response.text()}`);
+      }
+      const payload = (await response.json()) as { identity?: TeamIdentity };
+      const nextIdentity = payload.identity || null;
+      const token = nextIdentity?.accessToken || "";
+      setIdentity(nextIdentity);
+      setAccessToken(token);
+      if (token) {
+        await Promise.resolve();
+      }
+      setStatus("Signed in.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [loginEmail, loginPassword]);
+
+  const signInSso = useCallback(async () => {
+    const token = ssoToken.trim();
+    if (!token) {
+      setStatus("SSO token is required.");
+      return;
+    }
+    setBusy(true);
+    setStatus("Signing in with SSO...");
+    try {
+      const response = await fetch(`${cloudUrl}/v1/auth/sso/exchange`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          provider: "oidc",
+          idToken: token,
+        }),
+      });
+      if (!response.ok) {
+        throw new Error(`${response.status} ${await response.text()}`);
+      }
+      const payload = (await response.json()) as { identity?: TeamIdentity };
+      const nextIdentity = payload.identity || null;
+      setIdentity(nextIdentity);
+      setAccessToken(nextIdentity?.accessToken || "");
+      setStatus("Signed in with SSO.");
+    } catch (error) {
+      setStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setBusy(false);
+    }
+  }, [ssoToken]);
+
+  const signOut = useCallback(() => {
+    setIdentity(null);
+    setAccessToken("");
+    setMembers([]);
+    setTeamServers([]);
+    setMemberServerDrafts({});
+    setApprovals([]);
+    setSsoProviders([]);
+    setInvites([]);
+    setExportJobs([]);
+    setAuditEvents([]);
+    setLastExport(null);
+    setStatus("Signed out.");
   }, []);
 
   const loadTeamData = useCallback(async () => {
@@ -1760,6 +1860,13 @@ export function App() {
     void loadHealth();
   }, [loadHealth]);
 
+  useEffect(() => {
+    if (!accessToken.trim()) {
+      return;
+    }
+    void loadTeamData();
+  }, [accessToken, loadTeamData]);
+
   const healthLabel = useMemo(() => {
     if (healthOk === null) {
       return "checking";
@@ -1791,6 +1898,52 @@ export function App() {
         <h1 className="title">NovaRemote Cloud Dashboard</h1>
         <p className="muted">Connected API: {cloudUrl}</p>
         <p className="muted">Health: {healthLabel}</p>
+        {identity ? (
+          <p className="muted">{`Signed in: ${identity.email || "unknown"}${identity.displayName ? ` (${identity.displayName})` : ""}`}</p>
+        ) : (
+          <p className="muted">Not signed in.</p>
+        )}
+        <div className="gridCols">
+          <label className="muted">
+            Team Email
+            <input
+              className="textInput"
+              value={loginEmail}
+              onChange={(event) => setLoginEmail(event.target.value)}
+              placeholder="admin@novaremote.dev"
+            />
+          </label>
+          <label className="muted">
+            Password
+            <input
+              className="textInput"
+              value={loginPassword}
+              onChange={(event) => setLoginPassword(event.target.value)}
+              placeholder="password"
+              type="password"
+            />
+          </label>
+          <label className="muted">
+            SSO Token
+            <input
+              className="textInput"
+              value={ssoToken}
+              onChange={(event) => setSsoToken(event.target.value)}
+              placeholder="oidc id token"
+            />
+          </label>
+        </div>
+        <div className="actions">
+          <button onClick={() => void signInPassword()} disabled={busy}>
+            Password Sign-In
+          </button>
+          <button onClick={() => void signInSso()} disabled={busy}>
+            SSO Sign-In
+          </button>
+          <button onClick={() => signOut()} disabled={busy || !accessToken.trim()}>
+            Sign Out
+          </button>
+        </div>
         <label className="muted">
           Access Token
           <input
