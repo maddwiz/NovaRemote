@@ -1,0 +1,94 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+TMP_ROOT="$(mktemp -d)"
+VR_DIR="${TMP_ROOT}/NovaRemoteVR"
+
+cleanup() {
+  rm -rf "${TMP_ROOT}"
+}
+trap cleanup EXIT
+
+echo "Bootstrapping VR repo into temp dir: ${TMP_ROOT}"
+bash "${ROOT_DIR}/scripts/bootstrap-vr-repo.sh" "${VR_DIR}" >/dev/null
+
+assert_file() {
+  local file_path="$1"
+  if [[ ! -f "${file_path}" ]]; then
+    echo "Expected file missing: ${file_path}"
+    exit 1
+  fi
+}
+
+assert_dir() {
+  local dir_path="$1"
+  if [[ ! -d "${dir_path}" ]]; then
+    echo "Expected directory missing: ${dir_path}"
+    exit 1
+  fi
+}
+
+assert_contains() {
+  local file_path="$1"
+  local pattern="$2"
+  if ! rg -F -q -- "${pattern}" "${file_path}"; then
+    echo "Expected pattern '${pattern}' not found in ${file_path}"
+    exit 1
+  fi
+}
+
+assert_dir "${VR_DIR}/contracts"
+assert_dir "${VR_DIR}/docs/vr"
+assert_dir "${VR_DIR}/api"
+assert_dir "${VR_DIR}/auth"
+assert_dir "${VR_DIR}/terminals"
+assert_dir "${VR_DIR}/layout"
+assert_dir "${VR_DIR}/voice"
+assert_dir "${VR_DIR}/input"
+assert_dir "${VR_DIR}/hud"
+assert_dir "${VR_DIR}/shared"
+assert_dir "${VR_DIR}/clients/quest-unity"
+assert_dir "${VR_DIR}/clients/visionos"
+assert_dir "${VR_DIR}/scripts"
+
+assert_file "${VR_DIR}/README.md"
+assert_file "${VR_DIR}/.gitignore"
+assert_file "${VR_DIR}/docs/vr/README.md"
+assert_file "${VR_DIR}/docs/vr/VR_PROTOCOL_CONTRACT.md"
+assert_file "${VR_DIR}/contracts/novaremote-client-protocol.v1.json"
+assert_file "${VR_DIR}/contracts/NOVAREMOTE_CONTRACT_SOURCE.txt"
+assert_file "${VR_DIR}/api/README.md"
+assert_file "${VR_DIR}/auth/README.md"
+assert_file "${VR_DIR}/terminals/README.md"
+assert_file "${VR_DIR}/layout/README.md"
+assert_file "${VR_DIR}/voice/README.md"
+assert_file "${VR_DIR}/input/README.md"
+assert_file "${VR_DIR}/hud/README.md"
+assert_file "${VR_DIR}/shared/README.md"
+assert_file "${VR_DIR}/clients/quest-unity/README.md"
+assert_file "${VR_DIR}/clients/visionos/README.md"
+
+assert_contains "${VR_DIR}/README.md" "Standalone immersive client for NovaRemote protocol contracts."
+assert_contains "${VR_DIR}/README.md" "clients/quest-unity"
+assert_contains "${VR_DIR}/README.md" "clients/visionos"
+assert_contains "${VR_DIR}/.gitignore" "[Ll]ibrary/"
+assert_contains "${VR_DIR}/.gitignore" "DerivedData/"
+assert_contains "${VR_DIR}/contracts/NOVAREMOTE_CONTRACT_SOURCE.txt" "protocol_doc=docs/vr/VR_PROTOCOL_CONTRACT.md"
+assert_contains "${VR_DIR}/contracts/NOVAREMOTE_CONTRACT_SOURCE.txt" "json_schema=docs/contracts/novaremote-client-protocol.v1.json"
+
+if ! cmp -s "${ROOT_DIR}/docs/vr/VR_PROTOCOL_CONTRACT.md" "${VR_DIR}/docs/vr/VR_PROTOCOL_CONTRACT.md"; then
+  echo "VR protocol contract doc in scaffold does not match source contract."
+  exit 1
+fi
+
+if ! cmp -s "${ROOT_DIR}/docs/contracts/novaremote-client-protocol.v1.json" "${VR_DIR}/contracts/novaremote-client-protocol.v1.json"; then
+  echo "VR protocol schema in scaffold does not match source schema."
+  exit 1
+fi
+
+bash "${ROOT_DIR}/scripts/sync-vr-contracts.sh" "${VR_DIR}" >/dev/null
+
+echo "VR bootstrap verification passed."

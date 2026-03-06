@@ -30,6 +30,12 @@ Optional: configure `origin` in the same command:
 npm run vr:bootstrap-repo -- /absolute/path/to/NovaRemoteVR --remote git@github.com:YOUR_ORG/NovaRemoteVR.git
 ```
 
+Bootstrap verification command (runs in a temp directory and checks scaffold + contract sync):
+
+```bash
+npm run vr:verify-bootstrap
+```
+
 ## 2. Shared Contract Source of Truth
 
 Source files in `NovaRemote`:
