@@ -215,6 +215,21 @@ type TeamSsoProviderConfig = {
   updatedAt?: string;
 };
 
+type AuditEvent = {
+  id: string;
+  timestamp: number;
+  action: string;
+  serverId: string;
+  serverName: string;
+  session: string;
+  detail: string;
+  userId: string;
+  userEmail: string;
+  approved?: boolean | null;
+  deviceId?: string;
+  appVersion?: string;
+};
+
 const app = express();
 app.use(helmet());
 app.use(cors());
@@ -285,7 +300,7 @@ const teamSsoProviders: TeamSsoProviderConfig[] = [
     updatedAt: new Date().toISOString()
   }
 ];
-const auditEvents: unknown[] = [];
+const auditEvents: AuditEvent[] = [];
 const auditExportJobs: Array<{
   exportId: string;
   format: "json" | "csv";
@@ -408,6 +423,42 @@ const teamServerPatchSchema = teamServerCreateSchema.partial();
 
 function normalizeServerBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
+}
+
+function normalizeAuditEvent(value: unknown): AuditEvent | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const parsed = value as Record<string, unknown>;
+  const action = typeof parsed.action === "string" ? parsed.action.trim() : "";
+  if (!action) {
+    return null;
+  }
+  const timestampRaw = parsed.timestamp;
+  const timestamp =
+    typeof timestampRaw === "number" && Number.isFinite(timestampRaw)
+      ? Math.round(timestampRaw)
+      : Date.now();
+  return {
+    id:
+      typeof parsed.id === "string" && parsed.id.trim()
+        ? parsed.id.trim()
+        : `audit-${randomUUID().slice(0, 10)}`,
+    timestamp,
+    action,
+    serverId: typeof parsed.serverId === "string" ? parsed.serverId : "",
+    serverName: typeof parsed.serverName === "string" ? parsed.serverName : "",
+    session: typeof parsed.session === "string" ? parsed.session : "",
+    detail: typeof parsed.detail === "string" ? parsed.detail : "",
+    userId: typeof parsed.userId === "string" ? parsed.userId : baseIdentity.userId,
+    userEmail: typeof parsed.userEmail === "string" ? parsed.userEmail : baseIdentity.email,
+    approved:
+      typeof parsed.approved === "boolean" || parsed.approved === null
+        ? (parsed.approved as boolean | null)
+        : undefined,
+    deviceId: typeof parsed.deviceId === "string" ? parsed.deviceId : undefined,
+    appVersion: typeof parsed.appVersion === "string" ? parsed.appVersion : undefined,
+  };
 }
 
 function unauthorized(res: Response, detail: string) {
@@ -712,11 +763,49 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", (req, res) => {
   res.json({ ok: true });
 });
 
+app.get("/v1/audit/events", (req, res) => {
+  const limitRaw = Number.parseInt(String(req.query?.limit || "100"), 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 1000) : 100;
+  const actionFilter = String(req.query?.action || "").trim().toLowerCase();
+  const serverIdFilter = String(req.query?.serverId || "").trim();
+  const sessionFilter = String(req.query?.session || "").trim();
+  const fromTimestampRaw = Number.parseInt(String(req.query?.fromTimestamp || ""), 10);
+  const toTimestampRaw = Number.parseInt(String(req.query?.toTimestamp || ""), 10);
+  const fromTimestamp = Number.isFinite(fromTimestampRaw) ? fromTimestampRaw : null;
+  const toTimestamp = Number.isFinite(toTimestampRaw) ? toTimestampRaw : null;
+
+  const filtered = auditEvents
+    .filter((event) => {
+      if (actionFilter && event.action.toLowerCase() !== actionFilter) {
+        return false;
+      }
+      if (serverIdFilter && event.serverId !== serverIdFilter) {
+        return false;
+      }
+      if (sessionFilter && event.session !== sessionFilter) {
+        return false;
+      }
+      if (fromTimestamp !== null && event.timestamp < fromTimestamp) {
+        return false;
+      }
+      if (toTimestamp !== null && event.timestamp > toTimestamp) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => b.timestamp - a.timestamp);
+
+  res.json({ events: filtered.slice(0, limit) });
+});
+
 app.post("/v1/audit/events", (req, res) => {
-  const events = Array.isArray(req.body?.events) ? req.body.events : [];
-  auditEvents.push(...events);
+  const incoming = Array.isArray(req.body?.events) ? req.body.events : [];
+  const normalized = incoming
+    .map((entry) => normalizeAuditEvent(entry))
+    .filter((entry): entry is AuditEvent => Boolean(entry));
+  auditEvents.push(...normalized);
   schedulePersist();
-  res.json({ accepted: events.length, rejected: 0 });
+  res.json({ accepted: normalized.length, rejected: incoming.length - normalized.length });
 });
 
 app.get("/v1/audit/exports", (req, res) => {
@@ -1044,6 +1133,19 @@ type AuditExportJob = {
   downloadUrl?: string;
 };
 
+type AuditEvent = {
+  id: string;
+  timestamp: number;
+  action: string;
+  serverId: string;
+  serverName: string;
+  session: string;
+  detail: string;
+  userId: string;
+  userEmail: string;
+  approved?: boolean | null;
+};
+
 const cloudUrl = (import.meta.env.VITE_NOVA_CLOUD_URL || "http://localhost:8788").replace(/\/+$/, "");
 const TEAM_ROLES = ["viewer", "operator", "admin", "billing"] as const;
 
@@ -1107,6 +1209,9 @@ export function App() {
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
   const [exportJobs, setExportJobs] = useState<AuditExportJob[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [auditActionFilter, setAuditActionFilter] = useState<string>("");
+  const [auditServerFilter, setAuditServerFilter] = useState<string>("");
   const [settings, setSettings] = useState<TeamSettings>({
     enforceDangerConfirm: null,
     requireFleetApproval: null,
@@ -1141,7 +1246,7 @@ export function App() {
     setBusy(true);
     setStatus("Loading team data...");
     try {
-      const [membersPayload, teamServersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload, exportsPayload] = await Promise.all([
+      const [membersPayload, teamServersPayload, approvalsPayload, ssoPayload, invitesPayload, settingsPayload, exportsPayload, auditEventsPayload] = await Promise.all([
         fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
         fetchJson<{ servers?: TeamServer[] }>("/v1/team/servers", accessToken.trim()),
         fetchJson<{ approvals?: FleetApproval[] }>("/v1/team/fleet/approvals", accessToken.trim()),
@@ -1149,6 +1254,7 @@ export function App() {
         fetchJson<{ invites?: TeamInvite[] }>("/v1/team/invites", accessToken.trim()),
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
         fetchJson<{ exports?: AuditExportJob[] }>("/v1/audit/exports?limit=20", accessToken.trim()),
+        fetchJson<{ events?: AuditEvent[] }>("/v1/audit/events?limit=200", accessToken.trim()),
       ]);
       const nextMembers = Array.isArray(membersPayload.members) ? membersPayload.members : [];
       setMembers(nextMembers);
@@ -1186,6 +1292,7 @@ export function App() {
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
       setExportJobs(Array.isArray(exportsPayload.exports) ? exportsPayload.exports : []);
+      setAuditEvents(Array.isArray(auditEventsPayload.events) ? auditEventsPayload.events : []);
       const nextSettings = settingsPayload.settings || {
         enforceDangerConfirm: null,
         requireFleetApproval: null,
@@ -1616,6 +1723,24 @@ export function App() {
     return healthOk ? "healthy" : "unreachable";
   }, [healthOk]);
 
+  const filteredAuditEvents = useMemo(() => {
+    const actionNeedle = auditActionFilter.trim().toLowerCase();
+    const serverNeedle = auditServerFilter.trim().toLowerCase();
+    return auditEvents.filter((event) => {
+      if (actionNeedle && !event.action.toLowerCase().includes(actionNeedle)) {
+        return false;
+      }
+      if (
+        serverNeedle &&
+        !event.serverId.toLowerCase().includes(serverNeedle) &&
+        !event.serverName.toLowerCase().includes(serverNeedle)
+      ) {
+        return false;
+      }
+      return true;
+    });
+  }, [auditActionFilter, auditEvents, auditServerFilter]);
+
   return (
     <main className="layout">
       <section className="panel">
@@ -1958,6 +2083,43 @@ export function App() {
                 Disable
               </button>
             </div>
+          </div>
+        ))}
+      </section>
+
+      <section className="panel">
+        <h2 className="title">{`Audit Events (${filteredAuditEvents.length}/${auditEvents.length})`}</h2>
+        <div className="gridCols">
+          <label className="muted">
+            Filter action
+            <input
+              className="textInput"
+              value={auditActionFilter}
+              onChange={(event) => setAuditActionFilter(event.target.value)}
+              placeholder="command_sent"
+            />
+          </label>
+          <label className="muted">
+            Filter server
+            <input
+              className="textInput"
+              value={auditServerFilter}
+              onChange={(event) => setAuditServerFilter(event.target.value)}
+              placeholder="srv-dgx"
+            />
+          </label>
+        </div>
+        {filteredAuditEvents.length === 0 ? <p className="muted">No events match filters.</p> : null}
+        {filteredAuditEvents.map((event) => (
+          <div key={event.id} className="providerRow">
+            <p className="muted">
+              {new Date(event.timestamp).toLocaleString()} • {event.action}
+            </p>
+            <p className="muted">
+              {event.serverName || event.serverId || "no-server"} • {event.session || "no-session"} •{" "}
+              {event.userEmail || event.userId || "unknown-user"}
+            </p>
+            {event.detail ? <p className="muted">{event.detail}</p> : null}
           </div>
         ))}
       </section>

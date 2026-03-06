@@ -481,6 +481,51 @@ paths:
         "200":
           description: Fleet request denied
   /v1/audit/events:
+    get:
+      summary: Query audit events
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: action
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: serverId
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: session
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: fromTimestamp
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: toTimestamp
+          required: false
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Audit events
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
     post:
       summary: Ingest a batch of audit events
       requestBody:
