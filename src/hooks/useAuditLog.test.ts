@@ -65,6 +65,7 @@ type AuditLogHandle = {
   exportSnapshot: (format?: "json" | "csv") => string;
   requestCloudExport: (format: "json" | "csv", rangeHours?: number) => Promise<TeamAuditExportJob>;
   refreshCloudExports: (limit?: number) => Promise<TeamAuditExportJob[]>;
+  retryCloudExport: (exportId: string) => Promise<TeamAuditExportJob>;
   lastCloudExportJob: TeamAuditExportJob | null;
   cloudExportJobs: TeamAuditExportJob[];
   pendingCount: number;
@@ -484,6 +485,63 @@ describe("useAuditLog", () => {
 
     expect(latestOrThrow(latest).cloudExportJobs.map((entry) => entry.exportId)).toEqual(["exp-201", "exp-200"]);
     expect(latestOrThrow(latest).lastCloudExportJob?.exportId).toBe("exp-201");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("retries failed cloud export jobs and updates latest export metadata", async () => {
+    cloudClientMock.cloudRequest.mockImplementation(async (path?: string) => {
+      const normalizedPath = String(path || "");
+      if (normalizedPath.startsWith("/v1/audit/exports?limit=")) {
+        return { exports: [] };
+      }
+      if (normalizedPath === "/v1/audit/exports/exp-failed/retry") {
+        return {
+          export: {
+            exportId: "exp-failed",
+            format: "json",
+            status: "pending",
+            createdAt: "2026-03-05T02:00:00.000Z",
+            attemptCount: 2,
+            detail: "Retry queued (12 events in scope)",
+          },
+        };
+      }
+      return {};
+    });
+
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: true }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    let job: TeamAuditExportJob | null = null;
+    await act(async () => {
+      job = await latestOrThrow(latest).retryCloudExport("exp-failed");
+    });
+    await flush();
+
+    expect(job).toMatchObject({
+      exportId: "exp-failed",
+      status: "pending",
+      attemptCount: 2,
+    });
+    expect(latestOrThrow(latest).lastCloudExportJob?.exportId).toBe("exp-failed");
+    expect(latestOrThrow(latest).cloudExportJobs[0]?.exportId).toBe("exp-failed");
+    const cloudCalls = cloudClientMock.cloudRequest.mock.calls as unknown as Array<[string, ...unknown[]]>;
+    expect(
+      cloudCalls.some((call) => String(call[0]) === "/v1/audit/exports/exp-failed/retry")
+    ).toBe(true);
 
     await act(async () => {
       renderer?.unmount();

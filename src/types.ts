@@ -169,6 +169,14 @@ export type TeamAuditExportJob = {
   format: "json" | "csv";
   status: TeamAuditExportStatus;
   createdAt: string;
+  readyAt?: string;
+  failedAt?: string;
+  lastTransitionAt?: string;
+  attemptCount?: number;
+  requestedByUserId?: string;
+  requestedByEmail?: string;
+  rangeHours?: number;
+  eventCount?: number;
   expiresAt?: string;
   downloadUrl?: string;
   detail?: string;

@@ -362,6 +362,14 @@ const auditExportJobs: Array<{
   format: "json" | "csv";
   status: "pending" | "ready" | "failed";
   createdAt: string;
+  readyAt?: string;
+  failedAt?: string;
+  lastTransitionAt?: string;
+  attemptCount?: number;
+  requestedByUserId?: string;
+  requestedByEmail?: string;
+  rangeHours?: number;
+  eventCount?: number;
   expiresAt?: string;
   downloadUrl?: string;
   detail?: string;
@@ -388,6 +396,7 @@ const saveDebounceMsRaw = Number.parseInt(process.env.NOVA_CLOUD_STATE_SAVE_DEBO
 const saveDebounceMs = Number.isFinite(saveDebounceMsRaw) && saveDebounceMsRaw >= 0 ? saveDebounceMsRaw : 200;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const AUDIT_EXPORT_PROCESSING_MS = 1_500;
+const AUDIT_EXPORT_MAX_PROCESSING_MS = 30_000;
 const AUDIT_EXPORT_TTL_MS = 60 * 60 * 1000;
 
 function replaceArrayInPlace<T>(target: T[], source: T[]) {
@@ -671,6 +680,7 @@ function reconcileAuditExportJobs() {
   const retained: typeof auditExportJobs = [];
 
   auditExportJobs.forEach((job) => {
+    const createdAtMs = Date.parse(job.createdAt);
     const expiresAtMs = job.expiresAt ? Date.parse(job.expiresAt) : Number.NaN;
     if (Number.isFinite(expiresAtMs) && expiresAtMs <= nowMs) {
       changed = true;
@@ -679,13 +689,33 @@ function reconcileAuditExportJobs() {
     }
 
     if (job.status === "pending") {
-      const createdAtMs = Date.parse(job.createdAt);
-      if (Number.isFinite(createdAtMs) && nowMs - createdAtMs >= AUDIT_EXPORT_PROCESSING_MS) {
+      if (Number.isFinite(createdAtMs) && nowMs - createdAtMs >= AUDIT_EXPORT_MAX_PROCESSING_MS) {
+        job.status = "failed";
+        job.failedAt = new Date(nowMs).toISOString();
+        job.lastTransitionAt = job.failedAt;
+        job.downloadUrl = undefined;
+        job.detail = "Export processing timed out before completion";
+        changed = true;
+        recordSystemAuditEvent("audit_export_failed", `Audit export ${job.exportId} timed out.`, {}, false);
+      } else if (Number.isFinite(createdAtMs) && nowMs - createdAtMs >= AUDIT_EXPORT_PROCESSING_MS) {
+        const exportEventCount = typeof job.eventCount === "number" ? Math.max(0, Math.round(job.eventCount)) : auditEvents.length;
+        if (exportEventCount === 0) {
+          job.status = "failed";
+          job.failedAt = new Date(nowMs).toISOString();
+          job.lastTransitionAt = job.failedAt;
+          job.downloadUrl = undefined;
+          job.detail = "No audit events matched the requested export range";
+          changed = true;
+          recordSystemAuditEvent("audit_export_failed", `Audit export ${job.exportId} has no events to export.`, {}, false);
+        } else {
         job.status = "ready";
+        job.readyAt = new Date(nowMs).toISOString();
+        job.lastTransitionAt = job.readyAt;
         job.downloadUrl = `https://cloud.novaremote.dev/exports/${job.exportId}.${job.format}`;
-        job.detail = `Snapshot contains ${auditEvents.length} events`;
+        job.detail = `Snapshot contains ${exportEventCount} events`;
         changed = true;
         recordSystemAuditEvent("audit_export_ready", `Audit export ${job.exportId} is ready.`, {}, false);
+        }
       }
     }
 
@@ -1749,11 +1779,19 @@ app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => 
 });
 
 app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
   reconcileAuditExportJobs();
   const format = String(req.body?.format || "").toLowerCase();
   if (format !== "json" && format !== "csv") {
     return res.status(400).json({ detail: "format must be json or csv" });
   }
+  const rangeHoursRaw = Number.parseInt(String(req.body?.rangeHours || ""), 10);
+  const rangeHours = Number.isFinite(rangeHoursRaw) && rangeHoursRaw > 0 ? Math.min(rangeHoursRaw, 24 * 30) : undefined;
+  const minTimestamp = rangeHours ? Date.now() - rangeHours * 60 * 60 * 1000 : null;
+  const eventCount = minTimestamp === null ? auditEvents.length : auditEvents.filter((event) => event.timestamp >= minTimestamp).length;
   const exportId = `audit-exp-${randomUUID().slice(0, 10)}`;
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + AUDIT_EXPORT_TTL_MS).toISOString();
@@ -1762,13 +1800,53 @@ app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) =>
     format: format as "json" | "csv",
     status: "pending" as const,
     createdAt,
+    attemptCount: 0,
+    requestedByUserId: identity.userId,
+    requestedByEmail: identity.email,
+    rangeHours,
+    eventCount,
+    lastTransitionAt: createdAt,
     expiresAt,
-    detail: "Export queued for processing"
+    detail: `Export queued (${eventCount} events in scope)`
   };
   auditExportJobs.unshift(job);
   recordSystemAuditEvent("audit_export_requested", `Requested ${format.toUpperCase()} audit export ${exportId}.`, {}, false);
   schedulePersist();
   res.json(job);
+});
+
+app.post("/v1/audit/exports/:exportId/retry", requireTeamPermission("audit:read"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
+  reconcileAuditExportJobs();
+  const exportId = String(req.params.exportId || "").trim();
+  const job = auditExportJobs.find((entry) => entry.exportId === exportId);
+  if (!job) {
+    return res.status(404).json({ detail: "Export not found" });
+  }
+  if (job.status !== "failed") {
+    return res.status(409).json({ detail: `Only failed exports can be retried (current status: ${job.status}).`, export: job });
+  }
+  const nowIso = new Date().toISOString();
+  const minTimestamp = job.rangeHours ? Date.now() - job.rangeHours * 60 * 60 * 1000 : null;
+  const nextEventCount = minTimestamp === null ? auditEvents.length : auditEvents.filter((event) => event.timestamp >= minTimestamp).length;
+  job.status = "pending";
+  job.createdAt = nowIso;
+  job.readyAt = undefined;
+  job.failedAt = undefined;
+  job.downloadUrl = undefined;
+  job.lastTransitionAt = nowIso;
+  job.attemptCount = (job.attemptCount || 0) + 1;
+  job.requestedByUserId = identity.userId;
+  job.requestedByEmail = identity.email;
+  job.eventCount = nextEventCount;
+  job.expiresAt = new Date(Date.now() + AUDIT_EXPORT_TTL_MS).toISOString();
+  job.detail = `Retry queued (${nextEventCount} events in scope)`;
+  recordSystemAuditEvent("audit_export_retried", `Retried audit export ${job.exportId}.`, {}, false);
+  schedulePersist();
+  res.json({ export: job, ok: true });
 });
 
 app.delete("/v1/audit/exports/:exportId", requireTeamPermission("audit:read"), (req, res) => {

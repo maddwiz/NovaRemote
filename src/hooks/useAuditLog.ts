@@ -117,6 +117,44 @@ function normalizeAuditExportJob(value: unknown): TeamAuditExportJob | null {
     format,
     status,
     createdAt,
+    readyAt:
+      (typeof parsed.readyAt === "string" && parsed.readyAt) ||
+      (typeof parsed.ready_at === "string" && parsed.ready_at) ||
+      undefined,
+    failedAt:
+      (typeof parsed.failedAt === "string" && parsed.failedAt) ||
+      (typeof parsed.failed_at === "string" && parsed.failed_at) ||
+      undefined,
+    lastTransitionAt:
+      (typeof parsed.lastTransitionAt === "string" && parsed.lastTransitionAt) ||
+      (typeof parsed.last_transition_at === "string" && parsed.last_transition_at) ||
+      undefined,
+    attemptCount:
+      typeof parsed.attemptCount === "number" && Number.isFinite(parsed.attemptCount)
+        ? Math.max(0, Math.round(parsed.attemptCount))
+        : typeof parsed.attempt_count === "number" && Number.isFinite(parsed.attempt_count)
+          ? Math.max(0, Math.round(parsed.attempt_count))
+          : undefined,
+    requestedByUserId:
+      (typeof parsed.requestedByUserId === "string" && parsed.requestedByUserId) ||
+      (typeof parsed.requested_by_user_id === "string" && parsed.requested_by_user_id) ||
+      undefined,
+    requestedByEmail:
+      (typeof parsed.requestedByEmail === "string" && parsed.requestedByEmail) ||
+      (typeof parsed.requested_by_email === "string" && parsed.requested_by_email) ||
+      undefined,
+    rangeHours:
+      typeof parsed.rangeHours === "number" && Number.isFinite(parsed.rangeHours)
+        ? Math.max(1, Math.round(parsed.rangeHours))
+        : typeof parsed.range_hours === "number" && Number.isFinite(parsed.range_hours)
+          ? Math.max(1, Math.round(parsed.range_hours))
+          : undefined,
+    eventCount:
+      typeof parsed.eventCount === "number" && Number.isFinite(parsed.eventCount)
+        ? Math.max(0, Math.round(parsed.eventCount))
+        : typeof parsed.event_count === "number" && Number.isFinite(parsed.event_count)
+          ? Math.max(0, Math.round(parsed.event_count))
+          : undefined,
     expiresAt:
       (typeof parsed.expiresAt === "string" && parsed.expiresAt) ||
       (typeof parsed.expires_at === "string" && parsed.expires_at) ||
@@ -450,6 +488,41 @@ export function useAuditLog({
     [cloudUrl, enabled, fetchImpl, identity?.accessToken, syncEnabled]
   );
 
+  const retryCloudExport = useCallback(
+    async (exportId: string): Promise<TeamAuditExportJob> => {
+      if (!enabled || !syncEnabled) {
+        throw new Error("Cloud audit export is disabled.");
+      }
+      if (!identity?.accessToken) {
+        throw new Error("Sign in to a team account before retrying cloud audit exports.");
+      }
+      const normalizedExportId = exportId.trim();
+      if (!normalizedExportId) {
+        throw new Error("Export ID is required.");
+      }
+      const payload = await cloudRequest<Record<string, unknown>>(
+        `/v1/audit/exports/${encodeURIComponent(normalizedExportId)}/retry`,
+        {
+          method: "POST",
+          body: JSON.stringify({}),
+        },
+        {
+          accessToken: identity.accessToken,
+          cloudUrl: cloudUrl || getNovaCloudUrl(),
+          fetchImpl,
+        }
+      );
+      const job = normalizeAuditExportJob(payload.export || payload);
+      if (!job) {
+        throw new Error("Cloud export retry response is invalid.");
+      }
+      setLastCloudExportJob(job);
+      setCloudExportJobs((previous) => normalizeAuditExportJobs([job, ...previous]));
+      return job;
+    },
+    [cloudUrl, enabled, fetchImpl, identity, syncEnabled]
+  );
+
   useEffect(() => {
     if (!enabled || !syncEnabled || !identity?.accessToken) {
       setCloudExportJobs([]);
@@ -488,6 +561,7 @@ export function useAuditLog({
       exportSnapshot,
       requestCloudExport,
       refreshCloudExports,
+      retryCloudExport,
     }),
     [
       clear,
@@ -501,6 +575,7 @@ export function useAuditLog({
       loading,
       record,
       refreshCloudExports,
+      retryCloudExport,
       requestCloudExport,
       syncNow,
       syncing,

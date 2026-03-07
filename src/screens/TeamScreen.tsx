@@ -125,6 +125,7 @@ type TeamScreenProps = {
   onRequestCloudAuditExportJson?: () => Promise<void>;
   onRequestCloudAuditExportCsv?: () => Promise<void>;
   onRefreshCloudAuditExports?: () => Promise<void>;
+  onRetryCloudAuditExport?: (exportId: string) => Promise<void>;
   onOpenCloudAuditExport?: (job?: TeamAuditExportJob) => void;
 };
 
@@ -171,6 +172,7 @@ export function TeamScreen({
   onRequestCloudAuditExportJson,
   onRequestCloudAuditExportCsv,
   onRefreshCloudAuditExports,
+  onRetryCloudAuditExport,
   onOpenCloudAuditExport,
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
@@ -208,6 +210,7 @@ export function TeamScreen({
   const canRequestCloudAuditExportJson = Boolean(identity && onRequestCloudAuditExportJson && !busy);
   const canRequestCloudAuditExportCsv = Boolean(identity && onRequestCloudAuditExportCsv && !busy);
   const canRefreshCloudAuditExports = Boolean(identity && onRefreshCloudAuditExports && !busy);
+  const canRetryCloudAuditExport = Boolean(identity && onRetryCloudAuditExport && !busy);
   const canOpenAnyCloudAuditExport = Boolean(identity && onOpenCloudAuditExport && !busy);
   const canOpenCloudAuditExport = Boolean(identity && cloudAuditExportJob?.downloadUrl && onOpenCloudAuditExport && !busy);
   const canOpenCloudDashboard = Boolean(identity && cloudDashboardUrl && onOpenCloudDashboard && !busy);
@@ -587,6 +590,23 @@ export function TeamScreen({
         setTeamStatus(error instanceof Error ? error.message : String(error));
       });
   }, [canRefreshCloudAuditExports, onRefreshCloudAuditExports]);
+
+  const handleRetryCloudAuditExport = useCallback(
+    (job: TeamAuditExportJob) => {
+      if (!onRetryCloudAuditExport || !canRetryCloudAuditExport) {
+        return;
+      }
+      setTeamStatus("");
+      void onRetryCloudAuditExport(job.exportId)
+        .then(() => {
+          setTeamStatus(`Retry queued for export ${job.exportId}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canRetryCloudAuditExport, onRetryCloudAuditExport]
+  );
 
   const handleOpenCloudAuditExport = useCallback(
     (job?: TeamAuditExportJob) => {
@@ -1184,6 +1204,12 @@ export function TeamScreen({
                     {`${job.exportId} • ${job.format.toUpperCase()} • ${job.status}`}
                   </Text>
                   <Text style={styles.emptyText}>{`Created ${new Date(job.createdAt).toLocaleString()}`}</Text>
+                  {job.readyAt ? <Text style={styles.emptyText}>{`Ready ${new Date(job.readyAt).toLocaleString()}`}</Text> : null}
+                  {job.failedAt ? <Text style={styles.emptyText}>{`Failed ${new Date(job.failedAt).toLocaleString()}`}</Text> : null}
+                  {job.rangeHours ? <Text style={styles.emptyText}>{`Range ${job.rangeHours}h`}</Text> : null}
+                  {typeof job.eventCount === "number" ? <Text style={styles.emptyText}>{`Events ${job.eventCount}`}</Text> : null}
+                  {typeof job.attemptCount === "number" ? <Text style={styles.emptyText}>{`Attempts ${job.attemptCount}`}</Text> : null}
+                  {job.detail ? <Text style={styles.emptyText}>{job.detail}</Text> : null}
                   {job.downloadUrl ? (
                     <Pressable
                       accessibilityRole="button"
@@ -1193,6 +1219,17 @@ export function TeamScreen({
                       disabled={!canOpenAnyCloudAuditExport}
                     >
                       <Text style={styles.actionButtonText}>Open</Text>
+                    </Pressable>
+                  ) : null}
+                  {job.status === "failed" && onRetryCloudAuditExport ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Retry cloud audit export ${job.exportId}`}
+                      style={[styles.actionButton, !canRetryCloudAuditExport ? styles.buttonDisabled : null]}
+                      onPress={() => handleRetryCloudAuditExport(job)}
+                      disabled={!canRetryCloudAuditExport}
+                    >
+                      <Text style={styles.actionButtonText}>Retry</Text>
                     </Pressable>
                   ) : null}
                 </View>
