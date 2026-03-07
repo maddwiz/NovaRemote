@@ -2753,6 +2753,11 @@ type AuditExportJob = {
   detail?: string;
 };
 
+type AuditExportDetail = {
+  export: AuditExportJob;
+  inScopeEventCount: number;
+};
+
 type AuditEvent = {
   id: string;
   timestamp: number;
@@ -2965,6 +2970,7 @@ export function App() {
   const [policyTimeout, setPolicyTimeout] = useState<string>("");
   const [policyBlocklist, setPolicyBlocklist] = useState<string>("");
   const [lastExport, setLastExport] = useState<AuditExportJob | null>(null);
+  const [selectedExportDetail, setSelectedExportDetail] = useState<AuditExportDetail | null>(null);
   const [busy, setBusy] = useState<boolean>(false);
 
   const loadHealth = useCallback(async () => {
@@ -3124,6 +3130,7 @@ export function App() {
     setExportSummary({ pending: 0, ready: 0, failed: 0, avgProcessingDurationMs: null });
     setAuditEvents([]);
     setLastExport(null);
+    setSelectedExportDetail(null);
     setStatus("Signed out.");
     setBusy(false);
   }, [accessToken, identity]);
@@ -3208,7 +3215,8 @@ export function App() {
       setApprovals(Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : []);
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
-      setExportJobs(Array.isArray(exportsPayload.exports) ? exportsPayload.exports : []);
+      const nextExportJobs = Array.isArray(exportsPayload.exports) ? exportsPayload.exports : [];
+      setExportJobs(nextExportJobs);
       setExportSummary({
         pending: Number(exportsPayload.summary?.pending || 0),
         ready: Number(exportsPayload.summary?.ready || 0),
@@ -3218,6 +3226,16 @@ export function App() {
           Number.isFinite(exportsPayload.summary?.avgProcessingDurationMs)
             ? Math.max(0, Math.round(exportsPayload.summary?.avgProcessingDurationMs))
             : null,
+      });
+      setSelectedExportDetail((previous) => {
+        if (!previous) {
+          return null;
+        }
+        const refreshed = nextExportJobs.find((job) => job.exportId === previous.export.exportId);
+        if (!refreshed) {
+          return null;
+        }
+        return { ...previous, export: refreshed };
       });
       setAuditEvents(Array.isArray(auditEventsPayload.events) ? auditEventsPayload.events : []);
       const nextSettings = settingsPayload.settings || {
@@ -3454,6 +3472,12 @@ export function App() {
         if (!response.ok) {
           throw new Error(`${response.status} ${await response.text()}`);
         }
+        setSelectedExportDetail((previous) => {
+          if (!previous || previous.export.exportId !== exportId) {
+            return previous;
+          }
+          return null;
+        });
         await loadTeamData();
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
@@ -3462,6 +3486,38 @@ export function App() {
       }
     },
     [accessToken, loadTeamData]
+  );
+
+  const loadExportDetail = useCallback(
+    async (exportId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before loading export details.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Loading export ${exportId} details...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/audit/exports/${exportId}`, {
+          headers: {
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        const payload = (await response.json()) as AuditExportDetail;
+        if (!payload || !payload.export || typeof payload.inScopeEventCount !== "number") {
+          throw new Error("Invalid export detail payload.");
+        }
+        setSelectedExportDetail(payload);
+        setStatus(`Loaded export ${exportId} details.`);
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken]
   );
 
   const toggleSsoProvider = useCallback(
@@ -4753,6 +4809,19 @@ export function App() {
             ) : null}
           </>
         ) : null}
+        {selectedExportDetail ? (
+          <div className="providerRow">
+            <p className="muted">{`Detail: ${selectedExportDetail.export.exportId}`}</p>
+            <p className="muted">{`In-scope events now: ${selectedExportDetail.inScopeEventCount}`}</p>
+            {typeof selectedExportDetail.export.eventCount === "number" ? (
+              <p className="muted">{`Snapshot event count: ${selectedExportDetail.export.eventCount}`}</p>
+            ) : null}
+            {selectedExportDetail.export.detail ? <p className="muted">{selectedExportDetail.export.detail}</p> : null}
+            <div className="actions">
+              <button onClick={() => setSelectedExportDetail(null)}>Clear Detail</button>
+            </div>
+          </div>
+        ) : null}
         {exportJobs.length > 0 ? (
           <div className="providerRow">
             <p className="muted">{`Recent Export Jobs (${filteredExportJobs.length}/${exportJobs.length})`}</p>
@@ -4811,6 +4880,9 @@ export function App() {
                 {job.detail ? <p className="muted">{job.detail}</p> : null}
                 {job.expiresAt ? <p className="muted">{`Expires: ${new Date(job.expiresAt).toLocaleString()}`}</p> : null}
                 <div className="actions">
+                  <button disabled={busy} onClick={() => void loadExportDetail(job.exportId)}>
+                    View Details
+                  </button>
                   {job.downloadUrl ? (
                     <a href={job.downloadUrl} target="_blank" rel="noreferrer">
                       Open
