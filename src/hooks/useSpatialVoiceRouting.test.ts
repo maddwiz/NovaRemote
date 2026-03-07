@@ -34,6 +34,13 @@ const PANELS = [
   },
 ];
 
+const SERVER_TARGETS = [
+  { id: "dgx", name: "DGX Spark" },
+  { id: "home", name: "Homelab", vmHost: "Rack A", vmType: "qemu", vmName: "build-runner", vmId: "201" },
+  { id: "cloud", name: "Cloud VM", vmHost: "Rack B", vmType: "cloud", vmName: "deploy-node", vmId: "c-17" },
+  { id: "ops", name: "Ops Gateway", vmHost: "Rack C", vmType: "proxmox", vmName: "ops-gateway", vmId: "301" },
+];
+
 describe("resolveSpatialVoiceRoute", () => {
   it("routes explicit send-to syntax to a matching panel", () => {
     const route = resolveSpatialVoiceRoute({
@@ -719,6 +726,37 @@ describe("resolveSpatialVoiceRoute", () => {
       kind: "create_session",
       serverId: "dgx",
       sessionKind: "ai",
+    });
+  });
+
+  it("resolves create-session targets from server metadata when no panel exists yet", () => {
+    const route = resolveSpatialVoiceRoute({
+      transcript: "open codex on proxmox",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+      serverTargets: SERVER_TARGETS,
+    });
+
+    expect(route).toEqual({
+      kind: "create_session",
+      serverId: "ops",
+      sessionKind: "ai",
+    });
+  });
+
+  it("can create sessions when no panels are open but server targets are available", () => {
+    const route = resolveSpatialVoiceRoute({
+      transcript: "new terminal on homelab and run npm run build",
+      panels: [],
+      focusedPanelId: null,
+      serverTargets: SERVER_TARGETS,
+    });
+
+    expect(route).toEqual({
+      kind: "create_session",
+      serverId: "home",
+      sessionKind: "shell",
+      prompt: "npm run build",
     });
   });
 });

@@ -527,9 +527,22 @@ export function GlassesModeScreen() {
       }),
     [allPanels, connections]
   );
+  const serverTargets = useMemo(
+    () =>
+      Array.from(connections.values()).map((connection) => ({
+        id: connection.server.id,
+        name: connection.server.name,
+        vmHost: connection.server.vmHost,
+        vmType: connection.server.vmType,
+        vmName: connection.server.vmName,
+        vmId: connection.server.vmId,
+      })),
+    [connections]
+  );
   const { routeTranscript } = useSpatialVoiceRouting({
     panels: routePanels,
     focusedPanelId,
+    serverTargets,
   });
 
   const panelUniverseIds = useMemo(() => allPanels.map((panel) => panel.id), [allPanels]);

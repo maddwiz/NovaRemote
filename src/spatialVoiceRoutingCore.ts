@@ -10,6 +10,15 @@ export type VoiceRoutePanel = {
   sessionLabel: string;
 };
 
+export type VoiceRouteServerTarget = {
+  id: string;
+  name: string;
+  vmHost?: string;
+  vmType?: string;
+  vmName?: string;
+  vmId?: string;
+};
+
 export type VoiceRoutePanelPosition = "left" | "center" | "right" | "above" | "below";
 
 export type VoiceRoute =
@@ -48,6 +57,7 @@ type ResolveVoiceRouteArgs = {
   transcript: string;
   panels: VoiceRoutePanel[];
   focusedPanelId: string | null;
+  serverTargets?: VoiceRouteServerTarget[];
 };
 
 export function normalizeForMatch(value: string): string {
@@ -140,6 +150,73 @@ export function findPanelByTarget(panels: VoiceRoutePanel[], rawTarget: string):
     }
     winnerScore = score;
     winner = panel;
+  });
+  return winnerScore > 0 ? winner : null;
+}
+
+function scoreServerTarget(target: VoiceRouteServerTarget, targetTokens: string[]): number {
+  const name = normalizeForMatch(target.name);
+  const vmHost = normalizeForMatch(target.vmHost || "");
+  const vmType = normalizeForMatch(target.vmType || "");
+  const vmName = normalizeForMatch(target.vmName || "");
+  const vmId = normalizeForMatch(target.vmId || "");
+
+  let score = 0;
+  targetTokens.forEach((token) => {
+    if (!token) {
+      return;
+    }
+    if (name.includes(token)) {
+      score += 3;
+    }
+    if (vmHost.includes(token)) {
+      score += 2;
+    }
+    if (vmType.includes(token)) {
+      score += 1;
+    }
+    if (vmName.includes(token)) {
+      score += 2;
+    }
+    if (vmId.includes(token)) {
+      score += 2;
+    }
+  });
+
+  return score;
+}
+
+function findServerTargetByName(serverTargets: VoiceRouteServerTarget[], rawTarget: string): VoiceRouteServerTarget | null {
+  const target = normalizeForMatch(rawTarget);
+  if (!target) {
+    return null;
+  }
+
+  const direct = serverTargets.find((entry) => {
+    const name = normalizeForMatch(entry.name);
+    const vmHost = normalizeForMatch(entry.vmHost || "");
+    const vmType = normalizeForMatch(entry.vmType || "");
+    const vmName = normalizeForMatch(entry.vmName || "");
+    const vmId = normalizeForMatch(entry.vmId || "");
+    return name === target || vmHost === target || vmType === target || vmName === target || vmId === target;
+  });
+  if (direct) {
+    return direct;
+  }
+
+  const tokens = target.split(" ").filter(Boolean);
+  if (tokens.length === 0) {
+    return null;
+  }
+  let winner: VoiceRouteServerTarget | null = null;
+  let winnerScore = 0;
+  serverTargets.forEach((entry) => {
+    const score = scoreServerTarget(entry, tokens);
+    if (score <= winnerScore) {
+      return;
+    }
+    winner = entry;
+    winnerScore = score;
   });
   return winnerScore > 0 ? winner : null;
 }
@@ -248,9 +325,9 @@ function normalizeAgentStatus(value: string): "idle" | "monitoring" | "executing
   return null;
 }
 
-export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }: ResolveVoiceRouteArgs): VoiceRoute {
+export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId, serverTargets = [] }: ResolveVoiceRouteArgs): VoiceRoute {
   const cleaned = transcript.trim();
-  if (!cleaned || panels.length === 0) {
+  if (!cleaned || (panels.length === 0 && serverTargets.length === 0)) {
     return { kind: "none" };
   }
 
@@ -295,9 +372,10 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     const targetName = createAiMatch[1]?.trim() || "";
     const prompt = createAiMatch[2]?.trim() || "";
     const targetPanel = targetName ? findPanelByTarget(panels, targetName) : null;
+    const targetServer = targetName ? findServerTargetByName(serverTargets, targetName) : null;
     const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
     const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
-    const serverId = targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || null;
+    const serverId = targetPanel?.serverId || targetServer?.id || focusedPanel?.serverId || panels[0]?.serverId || serverTargets[0]?.id || null;
     if (serverId) {
       return {
         kind: "create_session",
@@ -315,9 +393,10 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
     const targetName = createShellMatch[1]?.trim() || "";
     const prompt = createShellMatch[2]?.trim() || "";
     const targetPanel = targetName ? findPanelByTarget(panels, targetName) : null;
+    const targetServer = targetName ? findServerTargetByName(serverTargets, targetName) : null;
     const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
     const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
-    const serverId = targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || null;
+    const serverId = targetPanel?.serverId || targetServer?.id || focusedPanel?.serverId || panels[0]?.serverId || serverTargets[0]?.id || null;
     if (serverId) {
       return {
         kind: "create_session",
