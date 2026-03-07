@@ -827,6 +827,7 @@ export default function AppShell() {
     requestCloudExport: requestCloudAuditExport,
     refreshCloudExports: refreshCloudAuditExports,
     retryCloudExport: retryCloudAuditExport,
+    deleteCloudExport: deleteCloudAuditExport,
     lastCloudExportJob: lastCloudAuditExportJob,
     cloudExportJobs: cloudAuditExportJobs,
   } = useAuditLog({
@@ -4233,6 +4234,12 @@ export default function AppShell() {
                 await runWithStatus("Retrying cloud audit export", async () => {
                   markActivity();
                   await retryCloudAuditExport(exportId);
+                });
+              }}
+              onDeleteCloudAuditExport={async (exportId) => {
+                await runWithStatus("Deleting cloud audit export", async () => {
+                  markActivity();
+                  await deleteCloudAuditExport(exportId);
                 });
               }}
               onOpenCloudAuditExport={(job) => {

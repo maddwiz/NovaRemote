@@ -66,6 +66,7 @@ type AuditLogHandle = {
   requestCloudExport: (format: "json" | "csv", rangeHours?: number) => Promise<TeamAuditExportJob>;
   refreshCloudExports: (limit?: number) => Promise<TeamAuditExportJob[]>;
   retryCloudExport: (exportId: string) => Promise<TeamAuditExportJob>;
+  deleteCloudExport: (exportId: string) => Promise<TeamAuditExportJob | null>;
   lastCloudExportJob: TeamAuditExportJob | null;
   cloudExportJobs: TeamAuditExportJob[];
   pendingCount: number;
@@ -542,6 +543,77 @@ describe("useAuditLog", () => {
     expect(
       cloudCalls.some((call) => String(call[0]) === "/v1/audit/exports/exp-failed/retry")
     ).toBe(true);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("deletes cloud export jobs and updates local export history", async () => {
+    cloudClientMock.cloudRequest.mockImplementation(async (path?: string) => {
+      const normalizedPath = String(path || "");
+      if (normalizedPath.startsWith("/v1/audit/exports?limit=")) {
+        return {
+          exports: [
+            {
+              exportId: "exp-delete",
+              format: "csv",
+              status: "ready",
+              createdAt: "2026-03-05T02:00:00.000Z",
+              downloadUrl: "https://cloud.novaremote.dev/exports/exp-delete.csv",
+            },
+            {
+              exportId: "exp-keep",
+              format: "json",
+              status: "ready",
+              createdAt: "2026-03-05T01:00:00.000Z",
+              downloadUrl: "https://cloud.novaremote.dev/exports/exp-keep.json",
+            },
+          ],
+        };
+      }
+      if (normalizedPath === "/v1/audit/exports/exp-delete") {
+        return {
+          export: {
+            exportId: "exp-delete",
+            format: "csv",
+            status: "ready",
+            createdAt: "2026-03-05T02:00:00.000Z",
+          },
+        };
+      }
+      return {};
+    });
+
+    let latest: AuditLogHandle | null = null;
+
+    function Harness() {
+      latest = useAuditLog({ identity, enabled: true, syncEnabled: true }) as AuditLogHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).refreshCloudExports(20);
+    });
+    await flush();
+    expect(latestOrThrow(latest).cloudExportJobs.map((entry) => entry.exportId)).toEqual(["exp-delete", "exp-keep"]);
+    expect(latestOrThrow(latest).lastCloudExportJob?.exportId).toBe("exp-delete");
+
+    await act(async () => {
+      await latestOrThrow(latest).deleteCloudExport("exp-delete");
+    });
+    await flush();
+
+    expect(latestOrThrow(latest).cloudExportJobs.map((entry) => entry.exportId)).toEqual(["exp-keep"]);
+    expect(latestOrThrow(latest).lastCloudExportJob?.exportId).toBe("exp-keep");
+    const cloudCalls = cloudClientMock.cloudRequest.mock.calls as unknown as Array<[string, ...unknown[]]>;
+    expect(cloudCalls.some((call) => String(call[0]) === "/v1/audit/exports/exp-delete")).toBe(true);
 
     await act(async () => {
       renderer?.unmount();

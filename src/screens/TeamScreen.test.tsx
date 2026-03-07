@@ -398,6 +398,8 @@ describe("TeamScreen", () => {
     const onRequestCloudAuditExportCsv = vi.fn(async () => undefined);
     const onRefreshCloudAuditExports = vi.fn(async () => undefined);
     const onOpenCloudAuditExport = vi.fn();
+    const onRetryCloudAuditExport = vi.fn(async () => undefined);
+    const onDeleteCloudAuditExport = vi.fn(async () => undefined);
     let renderer: TestRenderer.ReactTestRenderer | null = null;
 
     await act(async () => {
@@ -422,11 +424,19 @@ describe("TeamScreen", () => {
               createdAt: "2026-03-05T01:00:00.000Z",
               downloadUrl: "https://cloud.novaremote.dev/exports/exp-2.csv",
             },
+            {
+              exportId: "exp-3",
+              format: "json",
+              status: "failed",
+              createdAt: "2026-03-05T02:00:00.000Z",
+            },
           ]}
           onRequestCloudAuditExportJson={onRequestCloudAuditExportJson}
           onRequestCloudAuditExportCsv={onRequestCloudAuditExportCsv}
           onRefreshCloudAuditExports={onRefreshCloudAuditExports}
           onOpenCloudAuditExport={onOpenCloudAuditExport}
+          onRetryCloudAuditExport={onRetryCloudAuditExport}
+          onDeleteCloudAuditExport={onDeleteCloudAuditExport}
         />
       );
     });
@@ -437,12 +447,16 @@ describe("TeamScreen", () => {
       renderer?.root.findByProps({ accessibilityLabel: "Refresh cloud audit exports" }).props.onPress();
       renderer?.root.findByProps({ accessibilityLabel: "Open latest cloud audit export" }).props.onPress();
       renderer?.root.findByProps({ accessibilityLabel: "Open cloud audit export exp-2" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Retry cloud audit export exp-3" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Delete cloud audit export exp-2" }).props.onPress();
     });
 
     expect(onRequestCloudAuditExportJson).toHaveBeenCalledTimes(1);
     expect(onRequestCloudAuditExportCsv).toHaveBeenCalledTimes(1);
     expect(onRefreshCloudAuditExports).toHaveBeenCalledTimes(1);
     expect(onOpenCloudAuditExport).toHaveBeenCalledTimes(2);
+    expect(onRetryCloudAuditExport).toHaveBeenCalledWith("exp-3");
+    expect(onDeleteCloudAuditExport).toHaveBeenCalledWith("exp-2");
 
     await act(async () => {
       renderer?.unmount();

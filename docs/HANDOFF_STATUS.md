@@ -131,7 +131,7 @@ Updated: 2026-03-07
 - [~] Compliance expansion:
   - [x] team-managed session recording enforcement is in-app, and cloud scaffold now exposes member-effective policy reads (`GET /v1/team/settings/effective`) so non-admin clients still enforce admin-managed recording/safety settings
   - [x] audit export (`CSV`/`JSON`) from in-app queue
-  - [x] cloud audit export job requests + export history refresh/list/open actions in app (`useAuditLog` + TeamScreen)
+  - [x] cloud audit export job requests + export history refresh/list/open/retry/delete actions in app (`useAuditLog` + TeamScreen)
   - [x] cloud scaffold now emits system audit events for auth, server/invite/policy admin actions, fleet approval lifecycle, and export lifecycle updates
   - [~] cloud export lifecycle governance now includes scaffold-side `pending` -> `ready`/`failed` transitions, retry endpoint (`POST /v1/audit/exports/{exportId}/retry`), TTL cleanup, and richer metadata (`eventCount`, `attemptCount`, transition timestamps), while production deployment remains pending
 - [~] Fleet governance expansion:

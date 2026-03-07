@@ -523,6 +523,48 @@ export function useAuditLog({
     [cloudUrl, enabled, fetchImpl, identity, syncEnabled]
   );
 
+  const deleteCloudExport = useCallback(
+    async (exportId: string): Promise<TeamAuditExportJob | null> => {
+      if (!enabled || !syncEnabled) {
+        throw new Error("Cloud audit export is disabled.");
+      }
+      if (!identity?.accessToken) {
+        throw new Error("Sign in to a team account before deleting cloud audit exports.");
+      }
+      const normalizedExportId = exportId.trim();
+      if (!normalizedExportId) {
+        throw new Error("Export ID is required.");
+      }
+      const payload = await cloudRequest<Record<string, unknown>>(
+        `/v1/audit/exports/${encodeURIComponent(normalizedExportId)}`,
+        {
+          method: "DELETE",
+        },
+        {
+          accessToken: identity.accessToken,
+          cloudUrl: cloudUrl || getNovaCloudUrl(),
+          fetchImpl,
+        }
+      );
+      const removed = normalizeAuditExportJob(payload.export || payload.job || payload);
+      setCloudExportJobs((previous) => {
+        const next = previous.filter((entry) => entry.exportId !== normalizedExportId);
+        setLastCloudExportJob((current) => {
+          if (!current) {
+            return next[0] || null;
+          }
+          if (current.exportId === normalizedExportId) {
+            return next[0] || null;
+          }
+          return next.some((entry) => entry.exportId === current.exportId) ? current : next[0] || null;
+        });
+        return next;
+      });
+      return removed;
+    },
+    [cloudUrl, enabled, fetchImpl, identity, syncEnabled]
+  );
+
   useEffect(() => {
     if (!enabled || !syncEnabled || !identity?.accessToken) {
       setCloudExportJobs([]);
@@ -562,6 +604,7 @@ export function useAuditLog({
       requestCloudExport,
       refreshCloudExports,
       retryCloudExport,
+      deleteCloudExport,
     }),
     [
       clear,
@@ -576,6 +619,7 @@ export function useAuditLog({
       record,
       refreshCloudExports,
       retryCloudExport,
+      deleteCloudExport,
       requestCloudExport,
       syncNow,
       syncing,

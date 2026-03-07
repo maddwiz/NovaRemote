@@ -126,6 +126,7 @@ type TeamScreenProps = {
   onRequestCloudAuditExportCsv?: () => Promise<void>;
   onRefreshCloudAuditExports?: () => Promise<void>;
   onRetryCloudAuditExport?: (exportId: string) => Promise<void>;
+  onDeleteCloudAuditExport?: (exportId: string) => Promise<void>;
   onOpenCloudAuditExport?: (job?: TeamAuditExportJob) => void;
 };
 
@@ -173,6 +174,7 @@ export function TeamScreen({
   onRequestCloudAuditExportCsv,
   onRefreshCloudAuditExports,
   onRetryCloudAuditExport,
+  onDeleteCloudAuditExport,
   onOpenCloudAuditExport,
 }: TeamScreenProps) {
   const [email, setEmail] = useState<string>("");
@@ -211,6 +213,7 @@ export function TeamScreen({
   const canRequestCloudAuditExportCsv = Boolean(identity && onRequestCloudAuditExportCsv && !busy);
   const canRefreshCloudAuditExports = Boolean(identity && onRefreshCloudAuditExports && !busy);
   const canRetryCloudAuditExport = Boolean(identity && onRetryCloudAuditExport && !busy);
+  const canDeleteCloudAuditExport = Boolean(identity && onDeleteCloudAuditExport && !busy);
   const canOpenAnyCloudAuditExport = Boolean(identity && onOpenCloudAuditExport && !busy);
   const canOpenCloudAuditExport = Boolean(identity && cloudAuditExportJob?.downloadUrl && onOpenCloudAuditExport && !busy);
   const canOpenCloudDashboard = Boolean(identity && cloudDashboardUrl && onOpenCloudDashboard && !busy);
@@ -606,6 +609,23 @@ export function TeamScreen({
         });
     },
     [canRetryCloudAuditExport, onRetryCloudAuditExport]
+  );
+
+  const handleDeleteCloudAuditExport = useCallback(
+    (job: TeamAuditExportJob) => {
+      if (!onDeleteCloudAuditExport || !canDeleteCloudAuditExport) {
+        return;
+      }
+      setTeamStatus("");
+      void onDeleteCloudAuditExport(job.exportId)
+        .then(() => {
+          setTeamStatus(`Deleted export ${job.exportId}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canDeleteCloudAuditExport, onDeleteCloudAuditExport]
   );
 
   const handleOpenCloudAuditExport = useCallback(
@@ -1230,6 +1250,17 @@ export function TeamScreen({
                       disabled={!canRetryCloudAuditExport}
                     >
                       <Text style={styles.actionButtonText}>Retry</Text>
+                    </Pressable>
+                  ) : null}
+                  {onDeleteCloudAuditExport ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Delete cloud audit export ${job.exportId}`}
+                      style={[styles.actionDangerButton, !canDeleteCloudAuditExport ? styles.buttonDisabled : null]}
+                      onPress={() => handleDeleteCloudAuditExport(job)}
+                      disabled={!canDeleteCloudAuditExport}
+                    >
+                      <Text style={styles.actionDangerText}>Delete</Text>
                     </Pressable>
                   ) : null}
                 </View>
