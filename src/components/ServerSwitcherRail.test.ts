@@ -271,4 +271,27 @@ describe("ServerSwitcherRail", () => {
       renderer.unmount();
     });
   });
+
+  it("shows team permission badge on team-managed server chips", async () => {
+    const teamServer = makeServer("team-1", "Team Core", {
+      source: "team",
+      permissionLevel: "operator",
+    });
+    const connections = new Map<string, ServerConnection>([[teamServer.id, makeConnection(teamServer, "connected")]]);
+
+    const renderer = await renderRail({
+      servers: [teamServer],
+      connections,
+      focusedServerId: teamServer.id,
+      onFocusServer: () => {},
+      onAddServer: () => {},
+      unreadServers: new Set(),
+    });
+
+    expect(renderer.root.findByProps({ children: "TEAM OPERATOR" })).toBeDefined();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });

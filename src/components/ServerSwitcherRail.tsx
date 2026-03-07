@@ -109,7 +109,7 @@ export function ServerSwitcherRail({
           {server.name}
         </Text>
         {isTeamManagedServer(server) ? (
-          <Text style={[styles.modePill, styles.modePillShell]}>TEAM</Text>
+          <Text style={[styles.modePill, styles.modePillShell]}>{`TEAM ${(server.permissionLevel || "viewer").toUpperCase()}`}</Text>
         ) : null}
         {activeSessions > 0 ? <Text style={styles.modePill}>{activeSessions}</Text> : null}
         {unread ? <View style={styles.serverRailUnreadBadge} /> : null}
