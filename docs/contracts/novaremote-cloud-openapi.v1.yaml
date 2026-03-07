@@ -1047,6 +1047,14 @@ components:
         permissionLevel:
           type: string
           enum: [admin, operator, viewer]
+        vmHost:
+          type: string
+        vmType:
+          type: string
+        vmName:
+          type: string
+        vmId:
+          type: string
     TeamServerPatch:
       type: object
       properties:
@@ -1059,6 +1067,14 @@ components:
         permissionLevel:
           type: string
           enum: [admin, operator, viewer]
+        vmHost:
+          type: string
+        vmType:
+          type: string
+        vmName:
+          type: string
+        vmId:
+          type: string
     TeamMember:
       type: object
       required: [id, name, email, role]

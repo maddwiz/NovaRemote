@@ -197,6 +197,10 @@ type TeamServer = {
   baseUrl: string;
   defaultCwd: string;
   permissionLevel: "admin" | "operator" | "viewer";
+  vmHost?: string;
+  vmType?: string;
+  vmName?: string;
+  vmId?: string;
 };
 
 type FleetApproval = {
@@ -577,6 +581,10 @@ const teamServerCreateSchema = z.object({
   baseUrl: z.string().url(),
   defaultCwd: z.string().trim().min(1).default("/"),
   permissionLevel: z.enum(["admin", "operator", "viewer"]).default("operator"),
+  vmHost: z.string().trim().max(120).optional(),
+  vmType: z.string().trim().max(80).optional(),
+  vmName: z.string().trim().max(120).optional(),
+  vmId: z.string().trim().max(120).optional(),
 });
 
 const teamServerPatchSchema = teamServerCreateSchema.partial();
@@ -603,6 +611,14 @@ function normalizeCommandBlocklistPatterns(value: string[]): string[] {
 
 function normalizeServerBaseUrl(value: string): string {
   return value.trim().replace(/\/+$/, "");
+}
+
+function normalizeOptionalServerField(value: unknown): string | undefined {
+  if (typeof value !== "string") {
+    return undefined;
+  }
+  const normalized = value.trim();
+  return normalized ? normalized : undefined;
 }
 
 function normalizeAuditEvent(value: unknown): AuditEvent | null {
@@ -1412,6 +1428,10 @@ app.post("/v1/team/servers", requireTeamPermission("servers:write"), (req, res) 
     baseUrl: normalizeServerBaseUrl(parsed.data.baseUrl),
     defaultCwd: parsed.data.defaultCwd,
     permissionLevel: parsed.data.permissionLevel,
+    vmHost: normalizeOptionalServerField(parsed.data.vmHost),
+    vmType: normalizeOptionalServerField(parsed.data.vmType),
+    vmName: normalizeOptionalServerField(parsed.data.vmName),
+    vmId: normalizeOptionalServerField(parsed.data.vmId),
   };
   teamServers.unshift(nextServer);
   teamMembers.forEach((member) => {
@@ -1450,6 +1470,18 @@ app.patch("/v1/team/servers/:serverId", requireTeamPermission("servers:write"), 
   }
   if (parsed.data.permissionLevel) {
     target.permissionLevel = parsed.data.permissionLevel;
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "vmHost")) {
+    target.vmHost = normalizeOptionalServerField(parsed.data.vmHost);
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "vmType")) {
+    target.vmType = normalizeOptionalServerField(parsed.data.vmType);
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "vmName")) {
+    target.vmName = normalizeOptionalServerField(parsed.data.vmName);
+  }
+  if (Object.prototype.hasOwnProperty.call(req.body || {}, "vmId")) {
+    target.vmId = normalizeOptionalServerField(parsed.data.vmId);
   }
   recordSystemAuditEvent(
     "server_updated",
@@ -2569,6 +2601,10 @@ type TeamServer = {
   baseUrl: string;
   defaultCwd: string;
   permissionLevel: "admin" | "operator" | "viewer";
+  vmHost?: string;
+  vmType?: string;
+  vmName?: string;
+  vmId?: string;
 };
 
 type TeamInvite = {
@@ -2713,6 +2749,10 @@ export function App() {
         baseUrl: string;
         defaultCwd: string;
         permissionLevel: "admin" | "operator" | "viewer";
+        vmHost: string;
+        vmType: string;
+        vmName: string;
+        vmId: string;
       }
     >
   >({});
@@ -2721,6 +2761,10 @@ export function App() {
   const [serverUrlInput, setServerUrlInput] = useState<string>("");
   const [serverCwdInput, setServerCwdInput] = useState<string>("/");
   const [serverPermissionInput, setServerPermissionInput] = useState<"admin" | "operator" | "viewer">("operator");
+  const [serverVmHostInput, setServerVmHostInput] = useState<string>("");
+  const [serverVmTypeInput, setServerVmTypeInput] = useState<string>("");
+  const [serverVmNameInput, setServerVmNameInput] = useState<string>("");
+  const [serverVmIdInput, setServerVmIdInput] = useState<string>("");
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
   const [approvalStatusFilter, setApprovalStatusFilter] = useState<string>("");
   const [approvalRequesterFilter, setApprovalRequesterFilter] = useState<string>("");
@@ -2961,6 +3005,10 @@ export function App() {
             baseUrl: string;
             defaultCwd: string;
             permissionLevel: "admin" | "operator" | "viewer";
+            vmHost: string;
+            vmType: string;
+            vmName: string;
+            vmId: string;
           }
         > = {};
         nextServers.forEach((server) => {
@@ -2970,6 +3018,10 @@ export function App() {
             baseUrl: server.baseUrl,
             defaultCwd: server.defaultCwd,
             permissionLevel: server.permissionLevel,
+            vmHost: server.vmHost || "",
+            vmType: server.vmType || "",
+            vmName: server.vmName || "",
+            vmId: server.vmId || "",
           };
         });
         return next;
@@ -3024,6 +3076,10 @@ export function App() {
     const name = serverNameInput.trim();
     const baseUrl = serverUrlInput.trim();
     const defaultCwd = serverCwdInput.trim() || "/";
+    const vmHost = serverVmHostInput.trim();
+    const vmType = serverVmTypeInput.trim();
+    const vmName = serverVmNameInput.trim();
+    const vmId = serverVmIdInput.trim();
     if (!name || !baseUrl) {
       setStatus("Server name and URL are required.");
       return;
@@ -3042,6 +3098,10 @@ export function App() {
           baseUrl,
           defaultCwd,
           permissionLevel: serverPermissionInput,
+          vmHost: vmHost || undefined,
+          vmType: vmType || undefined,
+          vmName: vmName || undefined,
+          vmId: vmId || undefined,
         }),
       });
       if (!response.ok) {
@@ -3051,13 +3111,28 @@ export function App() {
       setServerUrlInput("");
       setServerCwdInput("/");
       setServerPermissionInput("operator");
+      setServerVmHostInput("");
+      setServerVmTypeInput("");
+      setServerVmNameInput("");
+      setServerVmIdInput("");
       await loadTeamData();
     } catch (error) {
       setStatus(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
     }
-  }, [accessToken, loadTeamData, serverCwdInput, serverNameInput, serverPermissionInput, serverUrlInput]);
+  }, [
+    accessToken,
+    loadTeamData,
+    serverCwdInput,
+    serverNameInput,
+    serverPermissionInput,
+    serverUrlInput,
+    serverVmHostInput,
+    serverVmIdInput,
+    serverVmNameInput,
+    serverVmTypeInput,
+  ]);
 
   const removeServer = useCallback(
     async (serverId: string) => {
@@ -3103,6 +3178,10 @@ export function App() {
         baseUrl: draft.baseUrl.trim(),
         defaultCwd: draft.defaultCwd.trim() || "/",
         permissionLevel: draft.permissionLevel,
+        vmHost: draft.vmHost.trim() || undefined,
+        vmType: draft.vmType.trim() || undefined,
+        vmName: draft.vmName.trim() || undefined,
+        vmId: draft.vmId.trim() || undefined,
       };
       if (!payload.name || !payload.baseUrl) {
         setStatus("Server name and URL are required.");
@@ -3768,6 +3847,42 @@ export function App() {
               <option value="admin">admin</option>
             </select>
           </label>
+          <label className="muted">
+            VM Host
+            <input
+              className="textInput"
+              value={serverVmHostInput}
+              onChange={(event) => setServerVmHostInput(event.target.value)}
+              placeholder="homelab-1"
+            />
+          </label>
+          <label className="muted">
+            VM Type
+            <input
+              className="textInput"
+              value={serverVmTypeInput}
+              onChange={(event) => setServerVmTypeInput(event.target.value)}
+              placeholder="proxmox"
+            />
+          </label>
+          <label className="muted">
+            VM Name
+            <input
+              className="textInput"
+              value={serverVmNameInput}
+              onChange={(event) => setServerVmNameInput(event.target.value)}
+              placeholder="dgx-spark"
+            />
+          </label>
+          <label className="muted">
+            VM Id
+            <input
+              className="textInput"
+              value={serverVmIdInput}
+              onChange={(event) => setServerVmIdInput(event.target.value)}
+              placeholder="vm-101"
+            />
+          </label>
         </div>
         <div className="actions">
           <button disabled={busy} onClick={() => void createServer()}>
@@ -3781,13 +3896,22 @@ export function App() {
             baseUrl: server.baseUrl,
             defaultCwd: server.defaultCwd,
             permissionLevel: server.permissionLevel,
+            vmHost: server.vmHost || "",
+            vmType: server.vmType || "",
+            vmName: server.vmName || "",
+            vmId: server.vmId || "",
           };
           return (
             <div key={server.id} className="providerRow">
+            <p className="muted">
+              {server.id} • {server.name}
+            </p>
+            {server.vmHost || server.vmType || server.vmName || server.vmId ? (
               <p className="muted">
-                {server.id} • {server.name}
+                {`VM: ${server.vmHost || "host?"} • ${server.vmType || "type?"} • ${server.vmName || "name?"} • ${server.vmId || "id?"}`}
               </p>
-              <div className="gridCols">
+            ) : null}
+            <div className="gridCols">
                 <label className="muted">
                   Name
                   <input
@@ -3855,6 +3979,70 @@ export function App() {
                     <option value="operator">operator</option>
                     <option value="admin">admin</option>
                   </select>
+                </label>
+                <label className="muted">
+                  VM Host
+                  <input
+                    className="textInput"
+                    value={draft.vmHost}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          vmHost: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="muted">
+                  VM Type
+                  <input
+                    className="textInput"
+                    value={draft.vmType}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          vmType: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="muted">
+                  VM Name
+                  <input
+                    className="textInput"
+                    value={draft.vmName}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          vmName: event.target.value,
+                        },
+                      }))
+                    }
+                  />
+                </label>
+                <label className="muted">
+                  VM Id
+                  <input
+                    className="textInput"
+                    value={draft.vmId}
+                    onChange={(event) =>
+                      setServerEditDrafts((previous) => ({
+                        ...previous,
+                        [server.id]: {
+                          ...draft,
+                          vmId: event.target.value,
+                        },
+                      }))
+                    }
+                  />
                 </label>
               </div>
               <div className="actions">

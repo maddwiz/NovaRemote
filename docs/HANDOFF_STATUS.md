@@ -80,6 +80,7 @@ Updated: 2026-03-07
   - [x] URL-precedence merge (team server replaces local duplicate for same base URL)
   - [x] cloud scaffold server listing is now filtered by member assignments (admin sees all)
   - [x] cloud scaffold validates member server-assignment updates against known server IDs
+  - [x] cloud scaffold server create/edit now persists VM metadata (`vmHost`/`vmType`/`vmName`/`vmId`) and dashboard forms expose those fields
 - [x] `useAuditLog` local queue + periodic cloud sync
 - [x] In-app audit queue export actions (`JSON` / `CSV`)
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
