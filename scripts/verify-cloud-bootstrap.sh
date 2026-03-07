@@ -174,5 +174,8 @@ assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Mark Failed"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Request JSON Export"
 assert_contains "${API_DIR}/render.yaml" "healthCheckPath: /healthz"
 assert_contains "${DASHBOARD_DIR}/render.yaml" "staticPublishPath: dist"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Filter requester"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "No export jobs match filters."
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Claim expires:"
 
 echo "Cloud bootstrap verification passed."

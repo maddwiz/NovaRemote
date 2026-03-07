@@ -2463,7 +2463,17 @@ type AuditExportJob = {
   format: "json" | "csv";
   status: "pending" | "ready" | "failed";
   createdAt: string;
+  readyAt?: string;
+  failedAt?: string;
+  lastTransitionAt?: string;
+  attemptCount?: number;
+  requestedByUserId?: string;
+  requestedByEmail?: string;
+  rangeHours?: number;
+  eventCount?: number;
+  expiresAt?: string;
   downloadUrl?: string;
+  detail?: string;
 };
 
 type AuditEvent = {
@@ -2566,6 +2576,9 @@ export function App() {
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditActionFilter, setAuditActionFilter] = useState<string>("");
   const [auditServerFilter, setAuditServerFilter] = useState<string>("");
+  const [exportStatusFilter, setExportStatusFilter] = useState<string>("");
+  const [exportFormatFilter, setExportFormatFilter] = useState<string>("");
+  const [exportRequestedByFilter, setExportRequestedByFilter] = useState<string>("");
   const [settings, setSettings] = useState<TeamSettings>({
     enforceDangerConfirm: null,
     requireFleetApproval: null,
@@ -3381,6 +3394,28 @@ export function App() {
     });
   }, [auditActionFilter, auditEvents, auditServerFilter]);
 
+  const filteredExportJobs = useMemo(() => {
+    const statusNeedle = exportStatusFilter.trim().toLowerCase();
+    const formatNeedle = exportFormatFilter.trim().toLowerCase();
+    const requestedByNeedle = exportRequestedByFilter.trim().toLowerCase();
+    return exportJobs.filter((job) => {
+      if (statusNeedle && !job.status.toLowerCase().includes(statusNeedle)) {
+        return false;
+      }
+      if (formatNeedle && !job.format.toLowerCase().includes(formatNeedle)) {
+        return false;
+      }
+      if (requestedByNeedle) {
+        const requestedBy =
+          (job.requestedByEmail || "").toLowerCase() || (job.requestedByUserId || "").toLowerCase();
+        if (!requestedBy.includes(requestedByNeedle)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [exportFormatFilter, exportJobs, exportRequestedByFilter, exportStatusFilter]);
+
   return (
     <main className="layout">
       <section className="panel">
@@ -3904,12 +3939,45 @@ export function App() {
         ) : null}
         {exportJobs.length > 0 ? (
           <div className="providerRow">
-            <p className="muted">Recent Export Jobs</p>
-            {exportJobs.map((job) => (
+            <p className="muted">{`Recent Export Jobs (${filteredExportJobs.length}/${exportJobs.length})`}</p>
+            <div className="gridCols">
+              <label className="muted">
+                Filter status
+                <input
+                  className="textInput"
+                  value={exportStatusFilter}
+                  onChange={(event) => setExportStatusFilter(event.target.value)}
+                  placeholder="pending"
+                />
+              </label>
+              <label className="muted">
+                Filter format
+                <input
+                  className="textInput"
+                  value={exportFormatFilter}
+                  onChange={(event) => setExportFormatFilter(event.target.value)}
+                  placeholder="csv"
+                />
+              </label>
+              <label className="muted">
+                Filter requester
+                <input
+                  className="textInput"
+                  value={exportRequestedByFilter}
+                  onChange={(event) => setExportRequestedByFilter(event.target.value)}
+                  placeholder="admin@"
+                />
+              </label>
+            </div>
+            {filteredExportJobs.length === 0 ? <p className="muted">No export jobs match filters.</p> : null}
+            {filteredExportJobs.map((job) => (
               <div key={job.exportId} className="providerRow">
                 <p className="muted">
                   {job.exportId} • {job.format.toUpperCase()} • {job.status} • {new Date(job.createdAt).toLocaleString()}
                 </p>
+                {job.requestedByEmail || job.requestedByUserId ? (
+                  <p className="muted">{`Requested by: ${job.requestedByEmail || job.requestedByUserId}`}</p>
+                ) : null}
                 {job.detail ? <p className="muted">{job.detail}</p> : null}
                 {job.expiresAt ? <p className="muted">{`Expires: ${new Date(job.expiresAt).toLocaleString()}`}</p> : null}
                 <div className="actions">
