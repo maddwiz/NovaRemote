@@ -2826,6 +2826,56 @@ function formatDurationMs(durationMs?: number): string {
   return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
 }
 
+function escapeCsvCell(value: string | number | boolean | null | undefined): string {
+  const text = String(value ?? "");
+  if (!/[",\n\r]/.test(text)) {
+    return text;
+  }
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function serializeAuditEventsCsv(events: AuditEvent[]): string {
+  const headers = [
+    "id",
+    "timestamp_iso",
+    "timestamp_ms",
+    "action",
+    "user_id",
+    "user_email",
+    "server_id",
+    "server_name",
+    "session",
+    "detail",
+    "approved",
+  ];
+  const rows = events.map((event) => [
+    event.id,
+    new Date(event.timestamp).toISOString(),
+    event.timestamp,
+    event.action,
+    event.userId,
+    event.userEmail,
+    event.serverId,
+    event.serverName,
+    event.session,
+    event.detail,
+    typeof event.approved === "boolean" ? (event.approved ? "true" : "false") : "",
+  ]);
+  return [headers, ...rows].map((row) => row.map((cell) => escapeCsvCell(cell)).join(",")).join("\n");
+}
+
+function triggerDownload(fileName: string, mimeType: string, content: string) {
+  const blob = new Blob([content], { type: `${mimeType};charset=utf-8` });
+  const downloadUrl = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = downloadUrl;
+  anchor.download = fileName;
+  document.body.appendChild(anchor);
+  anchor.click();
+  document.body.removeChild(anchor);
+  URL.revokeObjectURL(downloadUrl);
+}
+
 function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
   return result.status === "fulfilled" ? result.value : fallback;
 }
@@ -3782,6 +3832,24 @@ export function App() {
     });
   }, [auditActionFilter, auditEvents, auditServerFilter, auditUserFilter]);
 
+  const downloadFilteredAuditEvents = useCallback(
+    (format: "json" | "csv") => {
+      if (filteredAuditEvents.length === 0) {
+        setStatus("No filtered audit events to export.");
+        return;
+      }
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const fileName = `novaremote-audit-filtered-${stamp}.${format}`;
+      if (format === "json") {
+        triggerDownload(fileName, "application/json", JSON.stringify(filteredAuditEvents, null, 2));
+      } else {
+        triggerDownload(fileName, "text/csv", serializeAuditEventsCsv(filteredAuditEvents));
+      }
+      setStatus(`Downloaded ${filteredAuditEvents.length} filtered audit events as ${format.toUpperCase()}.`);
+    },
+    [filteredAuditEvents]
+  );
+
   const filteredExportJobs = useMemo(() => {
     const statusNeedle = exportStatusFilter.trim().toLowerCase();
     const formatNeedle = exportFormatFilter.trim().toLowerCase();
@@ -4630,6 +4698,14 @@ export function App() {
               placeholder="admin@"
             />
           </label>
+        </div>
+        <div className="actions">
+          <button disabled={filteredAuditEvents.length === 0} onClick={() => downloadFilteredAuditEvents("json")}>
+            Download Filtered JSON
+          </button>
+          <button disabled={filteredAuditEvents.length === 0} onClick={() => downloadFilteredAuditEvents("csv")}>
+            Download Filtered CSV
+          </button>
         </div>
         {filteredAuditEvents.length === 0 ? <p className="muted">No events match filters.</p> : null}
         {filteredAuditEvents.map((event) => (

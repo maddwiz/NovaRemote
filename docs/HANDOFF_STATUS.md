@@ -144,6 +144,7 @@ Updated: 2026-03-07
   - [x] cloud scaffold audit-event queue is now bounded at 10,000 records with drop-count metadata on ingest responses
   - [x] cloud audit export listing now supports `status` / `format` / `requestedBy` filters for dashboard and compliance tooling
   - [x] dashboard scaffold export history now supports local requester/status/format filtering and requester visibility
+  - [x] dashboard scaffold now supports one-click download of filtered audit-event views as local `JSON`/`CSV` artifacts
   - [x] cloud export observability expanded with per-export detail reads (`GET /v1/audit/exports/{exportId}`), list summaries, and dashboard range-hour export requests
   - [x] cloud export observability now tracks per-job `processingDurationMs` plus export-list summary `avgProcessingDurationMs` in scaffold lifecycle metadata, OpenAPI schema, and dashboard export views
   - [x] cloud audit events now support `user` + `approved` filters (API contract + scaffold route + dashboard user filter)
