@@ -769,6 +769,43 @@ paths:
                     type: boolean
                   export:
                     $ref: "#/components/schemas/AuditExportJob"
+  /v1/audit/exports/{exportId}/download:
+    get:
+      summary: Download a ready cloud-hosted audit export artifact
+      parameters:
+        - in: path
+          name: exportId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export artifact body
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  exportId:
+                    type: string
+                  format:
+                    type: string
+                    enum: [json]
+                  generatedAt:
+                    type: string
+                  rangeHours:
+                    type: integer
+                    nullable: true
+                  eventCount:
+                    type: integer
+                  events:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/AuditEvent"
+            text/csv:
+              schema:
+                type: string
+                description: CSV payload containing audit event rows
 components:
   securitySchemes:
     bearerAuth:

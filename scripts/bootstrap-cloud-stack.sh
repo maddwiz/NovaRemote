@@ -150,6 +150,7 @@ PORT=8788
 NOVA_CLOUD_JWT_SECRET=replace-me
 NOVA_CLOUD_TOKEN_TTL_SECONDS=7200
 NOVA_CLOUD_STATE_FILE=./data/state.json
+NOVA_CLOUD_PUBLIC_URL=https://api.novaremote.dev
 ENV
 fi
 
@@ -398,6 +399,12 @@ let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const AUDIT_EXPORT_PROCESSING_MS = 1_500;
 const AUDIT_EXPORT_MAX_PROCESSING_MS = 30_000;
 const AUDIT_EXPORT_TTL_MS = 60 * 60 * 1000;
+const cloudPublicBaseUrl = (process.env.NOVA_CLOUD_PUBLIC_URL || "https://cloud.novaremote.dev").trim().replace(/\/+$/, "");
+
+function buildCloudPublicUrl(pathname: string): string {
+  const normalizedPath = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  return `${cloudPublicBaseUrl}${normalizedPath}`;
+}
 
 function replaceArrayInPlace<T>(target: T[], source: T[]) {
   target.splice(0, target.length, ...source);
@@ -674,6 +681,76 @@ function computeMemberUsageByIdentity() {
   return { byUserId, byEmail };
 }
 
+function selectAuditEventsForExport(job: { rangeHours?: number }): AuditEvent[] {
+  const minTimestamp =
+    typeof job.rangeHours === "number" && Number.isFinite(job.rangeHours) && job.rangeHours > 0
+      ? Date.now() - Math.round(job.rangeHours) * 60 * 60 * 1000
+      : null;
+  return auditEvents
+    .filter((event) => {
+      if (!Number.isFinite(event.timestamp)) {
+        return false;
+      }
+      if (minTimestamp !== null && event.timestamp < minTimestamp) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => a.timestamp - b.timestamp);
+}
+
+function formatAuditTimestampIso(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) {
+    return "";
+  }
+  return new Date(timestamp).toISOString();
+}
+
+function escapeCsvCell(value: unknown): string {
+  const text = String(value ?? "");
+  if (!text) {
+    return "";
+  }
+  if (!/[",\n\r]/.test(text)) {
+    return text;
+  }
+  return `"${text.replace(/"/g, '""')}"`;
+}
+
+function serializeAuditEventsCsv(events: AuditEvent[]): string {
+  const headers = [
+    "id",
+    "timestamp_iso",
+    "timestamp_ms",
+    "action",
+    "user_id",
+    "user_email",
+    "server_id",
+    "server_name",
+    "session",
+    "detail",
+    "approved",
+    "device_id",
+    "app_version",
+  ];
+  const rows = events.map((event) => [
+    event.id,
+    formatAuditTimestampIso(event.timestamp),
+    event.timestamp,
+    event.action,
+    event.userId,
+    event.userEmail,
+    event.serverId,
+    event.serverName,
+    event.session,
+    event.detail,
+    typeof event.approved === "boolean" ? (event.approved ? "true" : "false") : "",
+    event.deviceId || "",
+    event.appVersion || "",
+  ]);
+  return [headers, ...rows].map((row) => row.map((cell) => escapeCsvCell(cell)).join(",")).join("\n");
+}
+
 function reconcileAuditExportJobs() {
   const nowMs = Date.now();
   let changed = false;
@@ -698,7 +775,8 @@ function reconcileAuditExportJobs() {
         changed = true;
         recordSystemAuditEvent("audit_export_failed", `Audit export ${job.exportId} timed out.`, {}, false);
       } else if (Number.isFinite(createdAtMs) && nowMs - createdAtMs >= AUDIT_EXPORT_PROCESSING_MS) {
-        const exportEventCount = typeof job.eventCount === "number" ? Math.max(0, Math.round(job.eventCount)) : auditEvents.length;
+        const scopedEvents = selectAuditEventsForExport(job);
+        const exportEventCount = scopedEvents.length;
         if (exportEventCount === 0) {
           job.status = "failed";
           job.failedAt = new Date(nowMs).toISOString();
@@ -711,7 +789,7 @@ function reconcileAuditExportJobs() {
         job.status = "ready";
         job.readyAt = new Date(nowMs).toISOString();
         job.lastTransitionAt = job.readyAt;
-        job.downloadUrl = `https://cloud.novaremote.dev/exports/${job.exportId}.${job.format}`;
+        job.downloadUrl = buildCloudPublicUrl(`/v1/audit/exports/${encodeURIComponent(job.exportId)}/download`);
         job.detail = `Snapshot contains ${exportEventCount} events`;
         changed = true;
         recordSystemAuditEvent("audit_export_ready", `Audit export ${job.exportId} is ready.`, {}, false);
@@ -1790,8 +1868,7 @@ app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) =>
   }
   const rangeHoursRaw = Number.parseInt(String(req.body?.rangeHours || ""), 10);
   const rangeHours = Number.isFinite(rangeHoursRaw) && rangeHoursRaw > 0 ? Math.min(rangeHoursRaw, 24 * 30) : undefined;
-  const minTimestamp = rangeHours ? Date.now() - rangeHours * 60 * 60 * 1000 : null;
-  const eventCount = minTimestamp === null ? auditEvents.length : auditEvents.filter((event) => event.timestamp >= minTimestamp).length;
+  const eventCount = selectAuditEventsForExport({ rangeHours }).length;
   const exportId = `audit-exp-${randomUUID().slice(0, 10)}`;
   const createdAt = new Date().toISOString();
   const expiresAt = new Date(Date.now() + AUDIT_EXPORT_TTL_MS).toISOString();
@@ -1830,8 +1907,7 @@ app.post("/v1/audit/exports/:exportId/retry", requireTeamPermission("audit:read"
     return res.status(409).json({ detail: `Only failed exports can be retried (current status: ${job.status}).`, export: job });
   }
   const nowIso = new Date().toISOString();
-  const minTimestamp = job.rangeHours ? Date.now() - job.rangeHours * 60 * 60 * 1000 : null;
-  const nextEventCount = minTimestamp === null ? auditEvents.length : auditEvents.filter((event) => event.timestamp >= minTimestamp).length;
+  const nextEventCount = selectAuditEventsForExport(job).length;
   job.status = "pending";
   job.createdAt = nowIso;
   job.readyAt = undefined;
@@ -1847,6 +1923,51 @@ app.post("/v1/audit/exports/:exportId/retry", requireTeamPermission("audit:read"
   recordSystemAuditEvent("audit_export_retried", `Retried audit export ${job.exportId}.`, {}, false);
   schedulePersist();
   res.json({ export: job, ok: true });
+});
+
+app.get("/v1/audit/exports/:exportId/download", requireTeamPermission("audit:read"), (req, res) => {
+  reconcileAuditExportJobs();
+  const exportId = String(req.params.exportId || "").trim();
+  const job = auditExportJobs.find((entry) => entry.exportId === exportId);
+  if (!job) {
+    return res.status(404).json({ detail: "Export not found" });
+  }
+  if (job.status !== "ready") {
+    return res.status(409).json({ detail: `Export is not ready (status: ${job.status}).`, export: job });
+  }
+  const scopedEvents = selectAuditEventsForExport(job);
+  if (scopedEvents.length === 0) {
+    job.status = "failed";
+    job.failedAt = new Date().toISOString();
+    job.lastTransitionAt = job.failedAt;
+    job.downloadUrl = undefined;
+    job.detail = "Export has no events available for download";
+    recordSystemAuditEvent("audit_export_failed", `Audit export ${job.exportId} lost all scoped events before download.`, {}, false);
+    schedulePersist();
+    return res.status(409).json({ detail: "Export has no events available for download", export: job });
+  }
+  recordSystemAuditEvent("audit_export_downloaded", `Downloaded audit export ${job.exportId}.`, {}, false);
+  const fileName = `novaremote-audit-${job.exportId}.${job.format}`;
+  res.setHeader("Content-Disposition", `attachment; filename=\"${fileName}\"`);
+  if (job.format === "json") {
+    res.type("application/json; charset=utf-8");
+    return res.status(200).send(
+      JSON.stringify(
+        {
+          exportId: job.exportId,
+          format: job.format,
+          generatedAt: new Date().toISOString(),
+          rangeHours: job.rangeHours ?? null,
+          eventCount: scopedEvents.length,
+          events: scopedEvents,
+        },
+        null,
+        2
+      )
+    );
+  }
+  res.type("text/csv; charset=utf-8");
+  return res.status(200).send(serializeAuditEventsCsv(scopedEvents));
 });
 
 app.delete("/v1/audit/exports/:exportId", requireTeamPermission("audit:read"), (req, res) => {

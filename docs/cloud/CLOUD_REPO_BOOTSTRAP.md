@@ -93,7 +93,7 @@ Fleet approval endpoints now include duplicate-pending detection, pending-expiry
 Approved fleet requests can also be claimed for execution (`claim-execution`) to generate an execution token and reviewer/executor metadata.
 The scaffold also emits system audit events for auth, server-fleet, invite, policy, approval-review, and export lifecycle actions.
 Team policy updates are schema-validated in the scaffold API, including timeout bounds and command blocklist regex validation.
-Audit export jobs now model lifecycle states (`pending` -> `ready` / `failed`) with TTL cleanup, retry support (`POST /v1/audit/exports/{exportId}/retry`), and richer metadata (`eventCount`, `attemptCount`, transition timestamps) in the scaffold.
+Audit export jobs now model lifecycle states (`pending` -> `ready` / `failed`) with TTL cleanup, retry support (`POST /v1/audit/exports/{exportId}/retry`), download artifacts (`GET /v1/audit/exports/{exportId}/download`), and richer metadata (`eventCount`, `attemptCount`, transition timestamps) in the scaffold.
 Team member responses now include server-derived usage snapshots (`sessionsCreated`, `commandsSent`, `fleetExecutions`, `lastActiveAt`) computed from the audit stream.
 Token provisioning now enforces server assignment + least-privilege permission clamping (requested level is capped by caller role and server policy).
 Team server listing now enforces per-member visibility (non-admin members only receive assigned servers).
@@ -112,6 +112,10 @@ Use:
 - `EXPO_PUBLIC_NOVA_CLOUD_URL=http://localhost:8788`
 
 in NovaRemote dev environments.
+
+Optional cloud scaffold setting:
+
+- `NOVA_CLOUD_PUBLIC_URL` sets the absolute base URL used in generated audit export `downloadUrl` values (defaults to `https://cloud.novaremote.dev`).
 
 ## 4. Production Hardening Checklist
 
