@@ -1947,7 +1947,40 @@ app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => 
   reconcileAuditExportJobs();
   const limitRaw = Number.parseInt(String(req.query?.limit || "20"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 200) : 20;
-  const ordered = [...auditExportJobs].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const statusRaw = String(req.query?.status || "").trim().toLowerCase();
+  const formatRaw = String(req.query?.format || "").trim().toLowerCase();
+  const requestedByNeedle = String(req.query?.requestedBy || "").trim().toLowerCase();
+  const statusFilter =
+    statusRaw === ""
+      ? null
+      : statusRaw === "pending" || statusRaw === "ready" || statusRaw === "failed"
+        ? statusRaw
+        : "invalid";
+  if (statusFilter === "invalid") {
+    return res.status(400).json({ detail: "status must be pending, ready, or failed" });
+  }
+  const formatFilter =
+    formatRaw === "" ? null : formatRaw === "json" || formatRaw === "csv" ? formatRaw : "invalid";
+  if (formatFilter === "invalid") {
+    return res.status(400).json({ detail: "format must be json or csv" });
+  }
+  const filtered = auditExportJobs.filter((job) => {
+    if (statusFilter && job.status !== statusFilter) {
+      return false;
+    }
+    if (formatFilter && job.format !== formatFilter) {
+      return false;
+    }
+    if (requestedByNeedle) {
+      const requestedByUserId = String(job.requestedByUserId || "").toLowerCase();
+      const requestedByEmail = String(job.requestedByEmail || "").toLowerCase();
+      if (!requestedByUserId.includes(requestedByNeedle) && !requestedByEmail.includes(requestedByNeedle)) {
+        return false;
+      }
+    }
+    return true;
+  });
+  const ordered = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   res.json({
     exports: ordered.slice(0, limit)
   });

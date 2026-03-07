@@ -703,6 +703,23 @@ paths:
           required: false
           schema:
             type: integer
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [pending, ready, failed]
+        - in: query
+          name: format
+          required: false
+          schema:
+            type: string
+            enum: [json, csv]
+        - in: query
+          name: requestedBy
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: Export jobs

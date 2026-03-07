@@ -138,6 +138,7 @@ Updated: 2026-03-07
   - [x] download-token auth in cloud scaffold now uses constant-time token checks plus least-privilege (`audit:read`) request identity
   - [x] cloud OpenAPI contract now models download auth as bearer-or-token (`auditExportToken`) for `/v1/audit/exports/{exportId}/download`
   - [x] cloud scaffold audit-event queue is now bounded at 10,000 records with drop-count metadata on ingest responses
+  - [x] cloud audit export listing now supports `status` / `format` / `requestedBy` filters for dashboard and compliance tooling
   - [~] cloud export lifecycle governance now includes scaffold-side `pending` -> `ready`/`failed` transitions, retry endpoint (`POST /v1/audit/exports/{exportId}/retry`), tokenized download endpoint (`GET /v1/audit/exports/{exportId}/download`), TTL cleanup, and richer metadata (`eventCount`, `attemptCount`, transition timestamps), while production deployment remains pending
 - [~] Fleet governance expansion:
   - [x] command blocklist + policy enforcement (including scaffold-side regex validation and policy payload bounds checks)
