@@ -43,6 +43,7 @@ Updated: 2026-03-07
 - [x] Preserve parser priority order so `open codex` resolves to `create_session` (not focus/send fallback)
 - [x] Expose cross-server session creation through app context/view model (`onCreateSession(serverId, kind)`)
 - [x] Glasses route handling for new actions (create/close/resize/move/swap)
+- [x] Prompt-aware voice creation parsing (`open codex ... with prompt ...`, `open terminal ... and run ...`) forwarded to session creation handlers
 - [x] Spatial panel state additions:
   - [x] per-panel scale
   - [x] fullscreen panel mode
