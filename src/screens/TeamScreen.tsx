@@ -31,14 +31,20 @@ type TeamSettingsInput = {
 type TeamSsoProviderDraft = {
   displayName: string;
   issuerUrl: string;
+  authUrl: string;
+  tokenUrl: string;
   clientId: string;
+  callbackUrl: string;
 };
 
 function createEmptySsoDraft(): TeamSsoProviderDraft {
   return {
     displayName: "",
     issuerUrl: "",
+    authUrl: "",
+    tokenUrl: "",
     clientId: "",
+    callbackUrl: "",
   };
 }
 
@@ -343,14 +349,20 @@ export function TeamScreen({
         const draft: TeamSsoProviderDraft = {
           displayName: config?.displayName || "",
           issuerUrl: config?.issuerUrl || "",
+          authUrl: config?.authUrl || "",
+          tokenUrl: config?.tokenUrl || "",
           clientId: config?.clientId || "",
+          callbackUrl: config?.callbackUrl || "",
         };
         const previousDraft = previous[provider];
         if (
           !previousDraft ||
           previousDraft.displayName !== draft.displayName ||
           previousDraft.issuerUrl !== draft.issuerUrl ||
-          previousDraft.clientId !== draft.clientId
+          previousDraft.authUrl !== draft.authUrl ||
+          previousDraft.tokenUrl !== draft.tokenUrl ||
+          previousDraft.clientId !== draft.clientId ||
+          previousDraft.callbackUrl !== draft.callbackUrl
         ) {
           next[provider] = draft;
           changed = true;
@@ -447,14 +459,20 @@ export function TeamScreen({
       const draft = ssoProviderDrafts[provider] || createEmptySsoDraft();
       const displayName = draft.displayName.trim();
       const issuerUrl = draft.issuerUrl.trim();
+      const authUrl = draft.authUrl.trim();
+      const tokenUrl = draft.tokenUrl.trim();
       const clientId = draft.clientId.trim();
+      const callbackUrl = draft.callbackUrl.trim();
       setTeamStatus("");
       void onUpdateSsoProvider({
         provider,
         enabled,
         displayName: displayName || undefined,
         issuerUrl: issuerUrl || undefined,
+        authUrl: authUrl || undefined,
+        tokenUrl: tokenUrl || undefined,
         clientId: clientId || undefined,
+        callbackUrl: callbackUrl || undefined,
       })
         .then(() => {
           setTeamStatus(`${provider.toUpperCase()} ${enabled ? "enabled" : "disabled"}.`);
@@ -474,14 +492,20 @@ export function TeamScreen({
       const draft = ssoProviderDrafts[providerConfig.provider] || createEmptySsoDraft();
       const displayName = draft.displayName.trim();
       const issuerUrl = draft.issuerUrl.trim();
+      const authUrl = draft.authUrl.trim();
+      const tokenUrl = draft.tokenUrl.trim();
       const clientId = draft.clientId.trim();
+      const callbackUrl = draft.callbackUrl.trim();
       setTeamStatus("");
       void onUpdateSsoProvider({
         provider: providerConfig.provider,
         enabled: providerConfig.enabled,
         displayName: displayName || undefined,
         issuerUrl: issuerUrl || undefined,
+        authUrl: authUrl || undefined,
+        tokenUrl: tokenUrl || undefined,
         clientId: clientId || undefined,
+        callbackUrl: callbackUrl || undefined,
       })
         .then(() => {
           setTeamStatus(`${providerConfig.provider.toUpperCase()} provider settings saved.`);
@@ -1226,7 +1250,12 @@ export function TeamScreen({
                 {`${providerConfig.provider.toUpperCase()} • ${providerConfig.enabled ? "enabled" : "disabled"}`}
               </Text>
               {providerConfig.issuerUrl ? <Text style={styles.emptyText}>{providerConfig.issuerUrl}</Text> : null}
+              {providerConfig.authUrl ? <Text style={styles.emptyText}>{`Auth URL: ${providerConfig.authUrl}`}</Text> : null}
+              {providerConfig.tokenUrl ? <Text style={styles.emptyText}>{`Token URL: ${providerConfig.tokenUrl}`}</Text> : null}
               {providerConfig.clientId ? <Text style={styles.emptyText}>{`Client ID: ${providerConfig.clientId}`}</Text> : null}
+              {providerConfig.callbackUrl ? (
+                <Text style={styles.emptyText}>{`Callback URL: ${providerConfig.callbackUrl}`}</Text>
+              ) : null}
               <TextInput
                 style={styles.input}
                 value={draft.displayName}
@@ -1267,6 +1296,44 @@ export function TeamScreen({
               />
               <TextInput
                 style={styles.input}
+                value={draft.authUrl}
+                onChangeText={(value) =>
+                  setSsoProviderDrafts((previous) => ({
+                    ...previous,
+                    [providerConfig.provider]: {
+                      ...(previous[providerConfig.provider] || createEmptySsoDraft()),
+                      authUrl: value,
+                    },
+                  }))
+                }
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Auth URL"
+                placeholderTextColor="#7f7aa8"
+                editable={canManageSsoProviders}
+                accessibilityLabel={`${providerConfig.provider.toUpperCase()} auth URL`}
+              />
+              <TextInput
+                style={styles.input}
+                value={draft.tokenUrl}
+                onChangeText={(value) =>
+                  setSsoProviderDrafts((previous) => ({
+                    ...previous,
+                    [providerConfig.provider]: {
+                      ...(previous[providerConfig.provider] || createEmptySsoDraft()),
+                      tokenUrl: value,
+                    },
+                  }))
+                }
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Token URL"
+                placeholderTextColor="#7f7aa8"
+                editable={canManageSsoProviders}
+                accessibilityLabel={`${providerConfig.provider.toUpperCase()} token URL`}
+              />
+              <TextInput
+                style={styles.input}
                 value={draft.clientId}
                 onChangeText={(value) =>
                   setSsoProviderDrafts((previous) => ({
@@ -1283,6 +1350,25 @@ export function TeamScreen({
                 placeholderTextColor="#7f7aa8"
                 editable={canManageSsoProviders}
                 accessibilityLabel={`${providerConfig.provider.toUpperCase()} client ID`}
+              />
+              <TextInput
+                style={styles.input}
+                value={draft.callbackUrl}
+                onChangeText={(value) =>
+                  setSsoProviderDrafts((previous) => ({
+                    ...previous,
+                    [providerConfig.provider]: {
+                      ...(previous[providerConfig.provider] || createEmptySsoDraft()),
+                      callbackUrl: value,
+                    },
+                  }))
+                }
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Callback URL"
+                placeholderTextColor="#7f7aa8"
+                editable={canManageSsoProviders}
+                accessibilityLabel={`${providerConfig.provider.toUpperCase()} callback URL`}
               />
               <View style={styles.rowInlineSpace}>
                 <Pressable

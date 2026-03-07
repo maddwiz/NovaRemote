@@ -4065,7 +4065,7 @@ export default function AppShell() {
                     action: "settings_changed",
                     serverId: "",
                     serverName: "team",
-                    detail: `team_sso_provider=${input.provider}:${input.enabled ? "enabled" : "disabled"};display:${Boolean(input.displayName)};issuer:${Boolean(input.issuerUrl)};client:${Boolean(input.clientId)}`,
+                    detail: `team_sso_provider=${input.provider}:${input.enabled ? "enabled" : "disabled"};display:${Boolean(input.displayName)};issuer:${Boolean(input.issuerUrl)};auth:${Boolean(input.authUrl)};token:${Boolean(input.tokenUrl)};client:${Boolean(input.clientId)};callback:${Boolean(input.callbackUrl)}`,
                   });
                   }
                 );

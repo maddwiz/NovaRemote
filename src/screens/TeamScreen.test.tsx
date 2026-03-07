@@ -889,7 +889,12 @@ describe("TeamScreen", () => {
     act(() => {
       renderer?.root.findByProps({ accessibilityLabel: "OIDC display name" }).props.onChangeText("Okta OIDC");
       renderer?.root.findByProps({ accessibilityLabel: "OIDC issuer URL" }).props.onChangeText("https://id.example.com");
+      renderer?.root.findByProps({ accessibilityLabel: "OIDC auth URL" }).props.onChangeText("https://id.example.com/auth");
+      renderer?.root.findByProps({ accessibilityLabel: "OIDC token URL" }).props.onChangeText("https://id.example.com/token");
       renderer?.root.findByProps({ accessibilityLabel: "OIDC client ID" }).props.onChangeText("novaremote-mobile");
+      renderer?.root
+        .findByProps({ accessibilityLabel: "OIDC callback URL" })
+        .props.onChangeText("novaremote://auth/team/sso/oidc");
     });
     await act(async () => {
       renderer?.root.findByProps({ accessibilityLabel: "Save oidc provider settings" }).props.onPress();
@@ -900,7 +905,10 @@ describe("TeamScreen", () => {
       enabled: false,
       displayName: "Okta OIDC",
       issuerUrl: "https://id.example.com",
+      authUrl: "https://id.example.com/auth",
+      tokenUrl: "https://id.example.com/token",
       clientId: "novaremote-mobile",
+      callbackUrl: "novaremote://auth/team/sso/oidc",
     });
 
     await act(async () => {
