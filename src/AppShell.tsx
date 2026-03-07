@@ -1322,10 +1322,18 @@ export default function AppShell() {
       if (!focusedServerId) {
         throw new Error("Connect to a server first.");
       }
+      markActivity();
       assertServerWritable(focusedServerId, "Stop session");
       await stopPoolSession(focusedServerId, session);
+      recordAuditEvent({
+        action: "command_sent",
+        serverId: focusedServerId,
+        serverName: activeServer?.name || "",
+        session,
+        detail: "stop_session",
+      });
     },
-    [assertServerWritable, focusedServerId, stopPoolSession]
+    [activeServer?.name, assertServerWritable, focusedServerId, markActivity, recordAuditEvent, stopPoolSession]
   );
 
   const sendControlChar = useCallback(
@@ -2138,8 +2146,15 @@ export default function AppShell() {
         throw new Error(`${session} is read-only. Disable read-only before stopping the session.`);
       }
       await stopPoolSession(serverId, session);
+      recordAuditEvent({
+        action: "command_sent",
+        serverId,
+        serverName: targetConnection.server.name,
+        session,
+        detail: "stop_session",
+      });
     },
-    [assertServerWritable, markActivity, poolConnections, scopedServerId, sessionReadOnly, stopPoolSession]
+    [assertServerWritable, markActivity, poolConnections, recordAuditEvent, scopedServerId, sessionReadOnly, stopPoolSession]
   );
 
   const sendServerSessionControlChar = useCallback(
