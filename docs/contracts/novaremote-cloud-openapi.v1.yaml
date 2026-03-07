@@ -341,6 +341,29 @@ paths:
   /v1/team/invites:
     get:
       summary: List active and historical team invites
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [pending, accepted, expired, revoked]
+        - in: query
+          name: role
+          required: false
+          schema:
+            type: string
+            enum: [admin, operator, viewer, billing]
+        - in: query
+          name: email
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: Team invites

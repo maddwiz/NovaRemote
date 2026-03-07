@@ -1016,10 +1016,31 @@ function normalizeFleetTargetsForIdentity(rawTargets: string[], identity: TeamId
   };
 }
 
+function reconcileTeamInvites() {
+  const nowMs = Date.now();
+  let changed = false;
+  teamInvites.forEach((invite) => {
+    if (invite.status !== "pending" || !invite.expiresAt) {
+      return;
+    }
+    const expiresAtMs = Date.parse(invite.expiresAt);
+    if (!Number.isFinite(expiresAtMs) || expiresAtMs > nowMs) {
+      return;
+    }
+    invite.status = "expired";
+    recordSystemAuditEvent("invite_expired", `Invite ${invite.id} expired before redemption.`, {}, false);
+    changed = true;
+  });
+  if (changed) {
+    schedulePersist();
+  }
+}
+
 function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
   member: (typeof teamMembers)[number] | null;
   detail?: string;
 } {
+  reconcileTeamInvites();
   const normalizedCode = inviteCode.trim().toUpperCase();
   if (!normalizedCode) {
     return { member: null, detail: "Invite code is required" };
@@ -1032,15 +1053,6 @@ function redeemInviteCode(inviteCode: string, expectedEmail?: string): {
   }
   if (invite.status !== "pending") {
     return { member: null, detail: `Invite is ${invite.status}` };
-  }
-  if (invite.expiresAt) {
-    const expiresAtMs = Date.parse(invite.expiresAt);
-    if (Number.isFinite(expiresAtMs) && expiresAtMs < Date.now()) {
-      invite.status = "expired";
-      recordSystemAuditEvent("invite_expired", `Invite ${invite.id} expired before redemption.`, {}, false);
-      schedulePersist();
-      return { member: null, detail: "Invite has expired" };
-    }
   }
   const inviteEmail = invite.email.toLowerCase();
   if (expectedEmail && expectedEmail.toLowerCase() !== inviteEmail) {
@@ -1611,8 +1623,46 @@ app.get("/v1/team/usage", requireTeamPermission("team:manage"), (_req, res) => {
   });
 });
 
-app.get("/v1/team/invites", requireTeamPermission("team:invite"), (_req, res) => {
-  res.json({ invites: teamInvites });
+app.get("/v1/team/invites", requireTeamPermission("team:invite"), (req, res) => {
+  reconcileTeamInvites();
+  const statusRaw = String(req.query?.status || "").trim().toLowerCase();
+  const roleRaw = String(req.query?.role || "").trim().toLowerCase();
+  const emailNeedle = String(req.query?.email || "").trim().toLowerCase();
+  const limitRaw = Number.parseInt(String(req.query?.limit || "200"), 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 2000) : 200;
+  const statusFilter =
+    statusRaw === ""
+      ? null
+      : statusRaw === "pending" || statusRaw === "accepted" || statusRaw === "expired" || statusRaw === "revoked"
+        ? statusRaw
+        : "invalid";
+  if (statusFilter === "invalid") {
+    return res.status(400).json({ detail: "status must be pending, accepted, expired, or revoked" });
+  }
+  const roleFilter =
+    roleRaw === ""
+      ? null
+      : roleRaw === "admin" || roleRaw === "operator" || roleRaw === "viewer" || roleRaw === "billing"
+        ? roleRaw
+        : "invalid";
+  if (roleFilter === "invalid") {
+    return res.status(400).json({ detail: "role must be admin, operator, viewer, or billing" });
+  }
+  const invites = teamInvites
+    .filter((invite) => {
+      if (statusFilter && invite.status !== statusFilter) {
+        return false;
+      }
+      if (roleFilter && invite.role !== roleFilter) {
+        return false;
+      }
+      if (emailNeedle && !invite.email.toLowerCase().includes(emailNeedle)) {
+        return false;
+      }
+      return true;
+    })
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  res.json({ invites: invites.slice(0, limit) });
 });
 
 app.post("/v1/team/invites", requireTeamPermission("team:invite"), (req, res) => {
@@ -2647,6 +2697,9 @@ export function App() {
   });
   const [inviteEmail, setInviteEmail] = useState<string>("");
   const [inviteRole, setInviteRole] = useState<string>("viewer");
+  const [inviteStatusFilter, setInviteStatusFilter] = useState<string>("");
+  const [inviteRoleFilter, setInviteRoleFilter] = useState<string>("");
+  const [inviteEmailFilter, setInviteEmailFilter] = useState<string>("");
   const [policyDanger, setPolicyDanger] = useState<"true" | "false" | "null">("null");
   const [policyFleet, setPolicyFleet] = useState<"true" | "false" | "null">("null");
   const [policyRecording, setPolicyRecording] = useState<"true" | "false" | "null">("null");
@@ -3507,6 +3560,24 @@ export function App() {
     });
   }, [approvalRequesterFilter, approvalStatusFilter, approvalTargetFilter, approvals]);
 
+  const filteredInvites = useMemo(() => {
+    const statusNeedle = inviteStatusFilter.trim().toLowerCase();
+    const roleNeedle = inviteRoleFilter.trim().toLowerCase();
+    const emailNeedle = inviteEmailFilter.trim().toLowerCase();
+    return invites.filter((invite) => {
+      if (statusNeedle && !invite.status.toLowerCase().includes(statusNeedle)) {
+        return false;
+      }
+      if (roleNeedle && !invite.role.toLowerCase().includes(roleNeedle)) {
+        return false;
+      }
+      if (emailNeedle && !invite.email.toLowerCase().includes(emailNeedle)) {
+        return false;
+      }
+      return true;
+    });
+  }, [inviteEmailFilter, inviteRoleFilter, inviteStatusFilter, invites]);
+
   return (
     <main className="layout">
       <section className="panel">
@@ -3774,7 +3845,7 @@ export function App() {
       </section>
 
       <section className="panel">
-        <h2 className="title">Team Invites</h2>
+        <h2 className="title">{`Team Invites (${filteredInvites.length}/${invites.length})`}</h2>
         <div className="gridCols">
           <label className="muted">
             Email
@@ -3796,13 +3867,43 @@ export function App() {
             </select>
           </label>
         </div>
+        <div className="gridCols">
+          <label className="muted">
+            Filter status
+            <input
+              className="textInput"
+              value={inviteStatusFilter}
+              onChange={(event) => setInviteStatusFilter(event.target.value)}
+              placeholder="pending"
+            />
+          </label>
+          <label className="muted">
+            Filter role
+            <input
+              className="textInput"
+              value={inviteRoleFilter}
+              onChange={(event) => setInviteRoleFilter(event.target.value)}
+              placeholder="viewer"
+            />
+          </label>
+          <label className="muted">
+            Filter email
+            <input
+              className="textInput"
+              value={inviteEmailFilter}
+              onChange={(event) => setInviteEmailFilter(event.target.value)}
+              placeholder="@example.com"
+            />
+          </label>
+        </div>
         <div className="actions">
           <button disabled={busy} onClick={() => void createInvite()}>
             Send Invite
           </button>
         </div>
         {invites.length === 0 ? <p className="muted">No invites found.</p> : null}
-        {invites.map((invite) => (
+        {invites.length > 0 && filteredInvites.length === 0 ? <p className="muted">No invites match filters.</p> : null}
+        {filteredInvites.map((invite) => (
           <div key={invite.id} className="providerRow">
             <p className="muted">
               {invite.email} • {invite.role} • {invite.status}
