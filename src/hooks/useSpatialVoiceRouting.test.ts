@@ -211,6 +211,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "home::build-01",
     });
+    const closeKillTerminalTargeted = resolveSpatialVoiceRoute({
+      transcript: "kill terminal build-01",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
+    const closeTerminalTargeted = resolveSpatialVoiceRoute({
+      transcript: "close terminal deploy",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
     const closeRemoveFocused = resolveSpatialVoiceRoute({
       transcript: "remove that",
       panels: PANELS,
@@ -238,6 +248,11 @@ describe("resolveSpatialVoiceRoute", () => {
     });
     const moveTargeted = resolveSpatialVoiceRoute({
       transcript: "pull up deploy",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const movePullUpFrontFocused = resolveSpatialVoiceRoute({
+      transcript: "pull up in front of me",
       panels: PANELS,
       focusedPanelId: "home::build-01",
     });
@@ -286,6 +301,14 @@ describe("resolveSpatialVoiceRoute", () => {
       kind: "close_panel",
       panelId: "cloud::deploy",
     });
+    expect(closeKillTerminalTargeted).toEqual({
+      kind: "close_panel",
+      panelId: "home::build-01",
+    });
+    expect(closeTerminalTargeted).toEqual({
+      kind: "close_panel",
+      panelId: "cloud::deploy",
+    });
     expect(closeRemoveFocused).toEqual({
       kind: "close_panel",
       panelId: "home::build-01",
@@ -313,6 +336,11 @@ describe("resolveSpatialVoiceRoute", () => {
     expect(moveTargeted).toEqual({
       kind: "move_panel",
       panelId: "cloud::deploy",
+      position: "center",
+    });
+    expect(movePullUpFrontFocused).toEqual({
+      kind: "move_panel",
+      panelId: "home::build-01",
       position: "center",
     });
     expect(swapPanels).toEqual({

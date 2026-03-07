@@ -338,6 +338,19 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
   const closeMatch = cleaned.match(
     /^(?:close|dismiss|remove|kill|shut)\s+(?:this(?:\s+panel)?|that(?:\s+panel)?|panel|terminal|(.+))$/i
   );
+  const closeTargetedTerminalMatch = cleaned.match(
+    /^(?:close|dismiss|kill|shut)\s+(?:panel|terminal|session)\s+(.+)$/i
+  );
+  if (closeTargetedTerminalMatch) {
+    const rawTarget = closeTargetedTerminalMatch[1]?.trim() || "";
+    const targetName = rawTarget.replace(/^(?:for|on)\s+/i, "").trim();
+    if (targetName) {
+      const targetPanel = findPanelByTarget(panels, targetName);
+      if (targetPanel) {
+        return { kind: "close_panel", panelId: targetPanel.id };
+      }
+    }
+  }
   if (closeMatch) {
     const targetName = closeMatch[1]?.trim() || "";
     const delegatesToPanelVisibilityRoute = /^(?:remove|close|hide)\s+(?:panel|session|terminal)\b/i.test(cleaned);
@@ -428,6 +441,12 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
   }
 
   const pullUpMatch = cleaned.match(/^pull\s+up\s+(.+)$/i);
+  if (/^pull\s+up(?:\s+in\s+front(?:\s+of\s+me)?)?$/i.test(cleaned)) {
+    const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
+    if (fallbackPanelId) {
+      return { kind: "move_panel", panelId: fallbackPanelId, position: "center" };
+    }
+  }
   if (pullUpMatch) {
     const targetName = pullUpMatch[1]?.trim() || "";
     const targetPanel = findPanelByTarget(panels, targetName);
