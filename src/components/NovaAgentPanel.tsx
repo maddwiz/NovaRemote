@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { useNovaAgentRuntime } from "../hooks/useNovaAgentRuntime";
@@ -257,6 +257,7 @@ export function NovaAgentPanel({
   onShowPaywall,
   onQueueCommand,
 }: NovaAgentPanelProps) {
+  const resolveDefaultSession = useCallback(() => sessions[0] || null, [sessions]);
   const {
     agents,
     loading,
@@ -279,6 +280,7 @@ export function NovaAgentPanel({
   } = useNovaAgentRuntime({
     serverId,
     onDispatchCommand: onQueueCommand,
+    resolveDefaultSession,
   });
 
   const [newAgentName, setNewAgentName] = useState<string>("");

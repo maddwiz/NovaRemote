@@ -2245,6 +2245,18 @@ export default function AppShell() {
     },
     [agentRuntimeServerId, sendServerSessionCommand, setError]
   );
+  const resolveFocusedServerAgentSession = useCallback((): string | null => {
+    if (!agentRuntimeServerId) {
+      return null;
+    }
+    const connection = poolConnections.get(agentRuntimeServerId);
+    if (!connection) {
+      return null;
+    }
+    const sessionCandidates = [...connection.openSessions, ...connection.allSessions];
+    const remoteSession = sessionCandidates.find((session) => !connection.localAiSessions.includes(session));
+    return remoteSession || null;
+  }, [agentRuntimeServerId, poolConnections]);
   const {
     agents: focusedServerAgents,
     addRuntimeAgent: addFocusedServerRuntimeAgent,
@@ -2257,6 +2269,7 @@ export default function AppShell() {
   } = useNovaAgentRuntime({
     serverId: agentRuntimeServerId,
     onDispatchCommand: dispatchFocusedServerAgentCommand,
+    resolveDefaultSession: resolveFocusedServerAgentSession,
   });
 
   const executeFocusedAgentServerAction = useCallback(

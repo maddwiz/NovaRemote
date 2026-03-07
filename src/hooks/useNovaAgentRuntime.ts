@@ -8,6 +8,7 @@ import { useNovaSpine } from "./useNovaSpine";
 type UseNovaAgentRuntimeArgs = {
   serverId: string | null;
   onDispatchCommand: (session: string, command: string) => void;
+  resolveDefaultSession?: () => string | null;
 };
 
 type AgentApprovalRequest = {
@@ -29,7 +30,7 @@ type ApproveReadyApprovalsOptions = {
   nextStatus?: NovaAgentStatus;
 };
 
-export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgentRuntimeArgs) {
+export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaultSession }: UseNovaAgentRuntimeArgs) {
   const {
     agents,
     loading,
@@ -101,6 +102,26 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
       if (!agent || agent.status === status) {
         return;
       }
+      if (status === "monitoring" && !agent.pendingApproval) {
+        const command = agent.currentGoal.trim();
+        const session = resolveDefaultSession?.()?.trim() || "";
+        if (command && session) {
+          requestApproval(agentId, {
+            summary: `Auto-queued monitoring goal for ${session}`,
+            command,
+            session,
+          });
+          addEntry({
+            memoryContextId: agent.memoryContextId,
+            agentId: agent.agentId,
+            kind: "approval_requested",
+            summary: `${agent.name} auto-queued monitoring goal`,
+            command,
+            session,
+          });
+          return;
+        }
+      }
       setAgentStatus(agentId, status);
       addEntry({
         memoryContextId: agent.memoryContextId,
@@ -109,7 +130,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand }: UseNovaAgen
         summary: `${agent.name} status set to ${status}`,
       });
     },
-    [addEntry, agentById, setAgentStatus]
+    [addEntry, agentById, requestApproval, resolveDefaultSession, setAgentStatus]
   );
 
   const setRuntimeAgentGoal = useCallback(

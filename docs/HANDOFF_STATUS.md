@@ -122,6 +122,7 @@ Updated: 2026-03-07
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
+- [x] Monitoring-status orchestration now auto-queues pending approvals for existing agent goals when a routable session is available (runtime + AppShell + panel wiring)
 - [~] Enterprise IAM expansion:
   - [x] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode
   - [x] Team SSO provider lifecycle (`GET/PATCH /v1/team/sso/providers`) wired in app (`useTeamAuth`, TeamScreen toggles) + cloud contract/scaffold
@@ -139,7 +140,7 @@ Updated: 2026-03-07
   - [x] inactivity timeout / session auto-disconnect policies
 - [~] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`) plus temp-dir bootstrap verification (`cloud:verify-bootstrap`), interactive dashboard scaffold wiring (built-in password/SSO sign-in helpers, invite-code redemption, refresh/logout session lifecycle, server fleet create/edit/delete, member role + server assignment management, invite lifecycle, policy editing, approvals, SSO toggles, audit event viewing/filtering, export request/history/delete lifecycle), file-backed local state persistence in the API scaffold, stricter refresh-token validation in scaffold auth routes, endpoint-level permission guards derived from team role in the scaffold API, server-derived member usage snapshots from audit history, and deployment templates (`Dockerfile`, `render.yaml`, scaffold CI workflows); production rollout/hardening remains pending
-- [~] NovaSpine context orchestration is implemented in-app; full autonomous agent lifecycle orchestration remains roadmap work
+- [~] NovaSpine context orchestration is implemented in-app; monitoring-goal auto-queue lifecycle groundwork is now shipped, while full autonomous agent lifecycle orchestration remains roadmap work
 - [~] Presence-aware voice channels are implemented in-app; full multi-user collaboration voice/presence channels remain roadmap work
 
 ## Notes

@@ -209,6 +209,108 @@ describe("useNovaAgentRuntime", () => {
     });
   });
 
+  it("auto-queues monitoring goals when a default session is available", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => "main",
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Monitor Agent", ["watch"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run healthcheck");
+    });
+
+    await act(async () => {
+      current().setRuntimeAgentStatus(agentId, "monitoring");
+    });
+
+    const updated = current().agents.find((agent) => agent.agentId === agentId);
+    expect(updated?.status).toBe("waiting_approval");
+    expect(updated?.pendingApproval?.command).toBe("npm run healthcheck");
+    expect(updated?.pendingApproval?.session).toBe("main");
+    expect(current().memoryEntries.some((entry) => entry.summary.includes("auto-queued monitoring goal"))).toBe(true);
+    expect(onDispatchCommand).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("keeps monitoring status when no default session is available", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => null,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Monitor Agent", ["watch"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run healthcheck");
+    });
+
+    await act(async () => {
+      current().setRuntimeAgentStatus(agentId, "monitoring");
+    });
+
+    const updated = current().agents.find((agent) => agent.agentId === agentId);
+    expect(updated?.status).toBe("monitoring");
+    expect(updated?.pendingApproval).toBeNull();
+    expect(onDispatchCommand).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("supports bulk approve-ready and deny-all pending approval flows", async () => {
     const onDispatchCommand = vi.fn();
     let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
