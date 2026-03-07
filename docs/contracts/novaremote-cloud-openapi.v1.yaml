@@ -778,6 +778,12 @@ paths:
           required: true
           schema:
             type: string
+        - in: query
+          name: token
+          required: false
+          description: Download token accepted when bearer auth is unavailable.
+          schema:
+            type: string
       responses:
         "200":
           description: Export artifact body
