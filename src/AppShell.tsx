@@ -1287,15 +1287,23 @@ export default function AppShell() {
           throw new Error("Session creation cancelled.");
         }
       }
-      return await createPoolSession(
+      const session = await createPoolSession(
         serverId,
         targetConnection.server.defaultCwd || DEFAULT_CWD,
         kind,
         trimmedPrompt,
         false
       );
+      recordAuditEvent({
+        action: "session_created",
+        serverId,
+        serverName: targetConnection.server.name,
+        session,
+        detail: `kind=${kind}`,
+      });
+      return session;
     },
-    [assertServerWritable, createPoolSession, markActivity, poolConnections, requestDangerApproval]
+    [assertServerWritable, createPoolSession, markActivity, poolConnections, recordAuditEvent, requestDangerApproval]
   );
 
   const sendCommand = useCallback(
