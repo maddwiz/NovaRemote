@@ -1,6 +1,6 @@
 # NovaRemote Handoff Status
 
-Updated: 2026-03-06
+Updated: 2026-03-07
 
 ## v1.2 Connection Pool + Switcher
 
@@ -101,6 +101,14 @@ Updated: 2026-03-06
   - [x] derive runtime server permission level from broker token permissions
   - [x] cloud token provisioning now enforces member server assignment and least-privilege clamping by caller role + server policy
   - [x] token broker now provisions immediately on team login and purges cached tokens on 401/403 revocation responses
+  - [x] cross-server command + control routes (including voice-driven sends) now enforce viewer write restrictions + blocklist policy and emit audit events with the correct target server context
+  - [x] session stop actions are now auditable (`command_sent` with `stop_session`) across focused and cross-server flows
+
+## v1.6.1 Multi-Server Session Lifecycle UX
+
+- [x] Cross-server "stop session" actions in Terminals all-servers mode and Glasses HUD now call pooled stop-session APIs directly instead of falling back to Ctrl-C injection
+- [x] View-model + context now expose server-scoped stop callbacks for spatial/remote surfaces
+- [x] Added coverage in `useTerminalsViewModel.test.ts` and `GlassesModeScreen.test.ts` for server-scoped stop routing
 
 ## v2.0+ NovaAdapt / Team Roadmap
 
