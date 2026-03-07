@@ -573,7 +573,7 @@ export function useVrInputRouter({
       }
 
       if (action.kind === "stop_session") {
-        if (!onStopSession) {
+        if (!onStopSession && !onSendControlChar) {
           publishHudStatus({
             message: "Session stop is unavailable",
             severity: "warning",
@@ -582,11 +582,19 @@ export function useVrInputRouter({
           return action;
         }
         try {
-          await onStopSession(action.serverId, action.session);
+          if (onStopSession) {
+            await onStopSession(action.serverId, action.session);
+          } else {
+            await onSendControlChar?.(action.serverId, action.session, "\u0003");
+          }
           publishHudStatus({
-            message: action.closePanel
-              ? `Stopped and closed ${action.serverId}/${action.session}`
-              : `Stopped ${action.serverId}/${action.session}`,
+            message: onStopSession
+              ? action.closePanel
+                ? `Stopped and closed ${action.serverId}/${action.session}`
+                : `Stopped ${action.serverId}/${action.session}`
+              : action.closePanel
+                ? `Sent Ctrl-C and closed ${action.serverId}/${action.session}`
+                : `Sent Ctrl-C to ${action.serverId}/${action.session}`,
             severity: "success",
             at: now(),
           });

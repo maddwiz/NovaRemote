@@ -338,6 +338,52 @@ describe("useVrInputRouter", () => {
     });
   });
 
+  it("falls back to control-char stop when stop-session callback is unavailable", async () => {
+    const applyVoiceTranscript = vi
+      .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
+      .mockReturnValueOnce({
+        kind: "stop_session",
+        panelId: "home::build",
+        serverId: "home",
+        session: "build",
+        closePanel: true,
+      });
+    const applyGesture = vi.fn<(event: VrGestureEvent) => VrWorkspaceGestureAction>(() => ({ kind: "none" }));
+    const onSendControlChar = vi.fn(async () => undefined);
+
+    let latest: UseVrInputRouterResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Router not ready");
+      }
+      return latest;
+    };
+    function Harness() {
+      latest = useVrInputRouter({
+        workspace: { applyVoiceTranscript, applyGesture },
+        onSendCommand: async () => undefined,
+        onSendControlChar,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      await current().dispatchVoice("close panel");
+    });
+
+    expect(onSendControlChar).toHaveBeenCalledWith("home", "build", "\u0003");
+    expect(current().hudStatus?.message).toContain("Sent Ctrl-C and closed home/build");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("dispatches reconnect actions through reconnect callbacks", async () => {
     const applyVoiceTranscript = vi
       .fn<(transcript: string, options?: { targetPanelId?: string | null }) => VrWorkspaceVoiceAction>()
