@@ -245,5 +245,8 @@ assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Invite summary: pending"
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "No approvals match filters."
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "No export jobs match filters."
 assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Claim expires:"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Auth URL"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Token URL"
+assert_contains "${DASHBOARD_DIR}/src/App.tsx" "Save Provider"
 
 echo "Cloud bootstrap verification passed."

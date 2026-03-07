@@ -2749,8 +2749,20 @@ type TeamSsoProviderConfig = {
   enabled: boolean;
   displayName?: string;
   issuerUrl?: string;
+  authUrl?: string;
+  tokenUrl?: string;
   clientId?: string;
+  callbackUrl?: string;
   updatedAt?: string;
+};
+
+type TeamSsoProviderDraft = {
+  displayName: string;
+  issuerUrl: string;
+  authUrl: string;
+  tokenUrl: string;
+  clientId: string;
+  callbackUrl: string;
 };
 
 type TeamMember = {
@@ -2920,6 +2932,17 @@ function parseBoolString(value: string): boolean | null {
   return null;
 }
 
+function createEmptySsoProviderDraft(): TeamSsoProviderDraft {
+  return {
+    displayName: "",
+    issuerUrl: "",
+    authUrl: "",
+    tokenUrl: "",
+    clientId: "",
+    callbackUrl: "",
+  };
+}
+
 function formatDurationMs(durationMs?: number): string {
   if (!Number.isFinite(durationMs)) {
     return "n/a";
@@ -3046,6 +3069,10 @@ export function App() {
   const [approvalReviewNotes, setApprovalReviewNotes] = useState<Record<string, string>>({});
   const [approvalExecutionSummaries, setApprovalExecutionSummaries] = useState<Record<string, string>>({});
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
+  const [ssoProviderDrafts, setSsoProviderDrafts] = useState<Record<"saml" | "oidc", TeamSsoProviderDraft>>({
+    saml: createEmptySsoProviderDraft(),
+    oidc: createEmptySsoProviderDraft(),
+  });
   const [invites, setInvites] = useState<TeamInvite[]>([]);
   const [inviteSummary, setInviteSummary] = useState<TeamInviteSummary>({
     pending: 0,
@@ -3261,6 +3288,10 @@ export function App() {
     setApprovalReviewNotes({});
     setApprovalExecutionSummaries({});
     setSsoProviders([]);
+    setSsoProviderDrafts({
+      saml: createEmptySsoProviderDraft(),
+      oidc: createEmptySsoProviderDraft(),
+    });
     setInvites([]);
     setInviteSummary({ pending: 0, accepted: 0, expired: 0, revoked: 0 });
     setExportJobs([]);
@@ -3385,7 +3416,40 @@ export function App() {
         });
         return next;
       });
-      setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
+      const nextSsoProviders = Array.isArray(ssoPayload.providers) ? ssoPayload.providers : [];
+      setSsoProviders(nextSsoProviders);
+      setSsoProviderDrafts((previous) => {
+        const next: Record<"saml" | "oidc", TeamSsoProviderDraft> = {
+          saml: { ...(previous.saml || createEmptySsoProviderDraft()) },
+          oidc: { ...(previous.oidc || createEmptySsoProviderDraft()) },
+        };
+        let changed = false;
+        (["saml", "oidc"] as const).forEach((provider) => {
+          const config = nextSsoProviders.find((entry) => entry.provider === provider);
+          const draft: TeamSsoProviderDraft = {
+            displayName: config?.displayName || "",
+            issuerUrl: config?.issuerUrl || "",
+            authUrl: config?.authUrl || "",
+            tokenUrl: config?.tokenUrl || "",
+            clientId: config?.clientId || "",
+            callbackUrl: config?.callbackUrl || "",
+          };
+          const prevDraft = previous[provider];
+          if (
+            !prevDraft ||
+            prevDraft.displayName !== draft.displayName ||
+            prevDraft.issuerUrl !== draft.issuerUrl ||
+            prevDraft.authUrl !== draft.authUrl ||
+            prevDraft.tokenUrl !== draft.tokenUrl ||
+            prevDraft.clientId !== draft.clientId ||
+            prevDraft.callbackUrl !== draft.callbackUrl
+          ) {
+            next[provider] = draft;
+            changed = true;
+          }
+        });
+        return changed ? next : previous;
+      });
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
       setInviteSummary({
         pending: Number(invitesPayload.summary?.pending || 0),
@@ -3745,8 +3809,18 @@ export function App() {
     async (provider: "saml" | "oidc", enabled: boolean) => {
       if (!accessToken.trim()) {
         setStatus("Paste an access token before editing SSO providers.");
-        return;
+        return false;
       }
+      const draft = ssoProviderDrafts[provider] || createEmptySsoProviderDraft();
+      const payload = {
+        enabled,
+        displayName: draft.displayName.trim() || undefined,
+        issuerUrl: draft.issuerUrl.trim() || undefined,
+        authUrl: draft.authUrl.trim() || undefined,
+        tokenUrl: draft.tokenUrl.trim() || undefined,
+        clientId: draft.clientId.trim() || undefined,
+        callbackUrl: draft.callbackUrl.trim() || undefined,
+      };
       setBusy(true);
       setStatus(`${enabled ? "Enabling" : "Disabling"} ${provider.toUpperCase()}...`);
       try {
@@ -3756,19 +3830,36 @@ export function App() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken.trim()}`,
           },
-          body: JSON.stringify({ enabled }),
+          body: JSON.stringify(payload),
         });
         if (!response.ok) {
           throw new Error(`${response.status} ${await response.text()}`);
         }
         await loadTeamData();
+        return true;
       } catch (error) {
         setStatus(error instanceof Error ? error.message : String(error));
+        return false;
       } finally {
         setBusy(false);
       }
     },
-    [accessToken, loadTeamData]
+    [accessToken, loadTeamData, ssoProviderDrafts]
+  );
+
+  const saveSsoProviderSettings = useCallback(
+    async (provider: "saml" | "oidc") => {
+      const providerConfig = ssoProviders.find((entry) => entry.provider === provider);
+      if (!providerConfig) {
+        setStatus(`Provider ${provider.toUpperCase()} is not loaded.`);
+        return;
+      }
+      const ok = await toggleSsoProvider(provider, providerConfig.enabled);
+      if (ok) {
+        setStatus(`Saved ${provider.toUpperCase()} provider settings.`);
+      }
+    },
+    [ssoProviders, toggleSsoProvider]
   );
 
   const reviewApproval = useCallback(
@@ -5028,22 +5119,136 @@ export function App() {
       <section className="panel">
         <h2 className="title">SSO Providers</h2>
         {ssoProviders.length === 0 ? <p className="muted">No providers loaded.</p> : null}
-        {ssoProviders.map((provider) => (
-          <div key={provider.provider} className="providerRow">
-            <p className="muted">
-              {provider.provider.toUpperCase()} • {provider.enabled ? "enabled" : "disabled"}{" "}
-              {provider.clientId ? `• ${provider.clientId}` : ""}
-            </p>
-            <div className="actions">
-              <button disabled={busy || provider.enabled} onClick={() => void toggleSsoProvider(provider.provider, true)}>
-                Enable
-              </button>
-              <button disabled={busy || !provider.enabled} onClick={() => void toggleSsoProvider(provider.provider, false)}>
-                Disable
-              </button>
+        {ssoProviders.map((provider) => {
+          const draft = ssoProviderDrafts[provider.provider] || createEmptySsoProviderDraft();
+          return (
+            <div key={provider.provider} className="providerRow">
+              <p className="muted">
+                {provider.provider.toUpperCase()} • {provider.enabled ? "enabled" : "disabled"}{" "}
+                {provider.clientId ? `• ${provider.clientId}` : ""}
+              </p>
+              {provider.issuerUrl ? <p className="muted">{`Issuer: ${provider.issuerUrl}`}</p> : null}
+              {provider.authUrl ? <p className="muted">{`Auth URL: ${provider.authUrl}`}</p> : null}
+              {provider.tokenUrl ? <p className="muted">{`Token URL: ${provider.tokenUrl}`}</p> : null}
+              {provider.callbackUrl ? <p className="muted">{`Callback URL: ${provider.callbackUrl}`}</p> : null}
+              <div className="gridCols">
+                <label className="muted">
+                  Display Name
+                  <input
+                    className="textInput"
+                    value={draft.displayName}
+                    onChange={(event) =>
+                      setSsoProviderDrafts((previous) => ({
+                        ...previous,
+                        [provider.provider]: {
+                          ...(previous[provider.provider] || createEmptySsoProviderDraft()),
+                          displayName: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="Okta OIDC"
+                  />
+                </label>
+                <label className="muted">
+                  Issuer URL
+                  <input
+                    className="textInput"
+                    value={draft.issuerUrl}
+                    onChange={(event) =>
+                      setSsoProviderDrafts((previous) => ({
+                        ...previous,
+                        [provider.provider]: {
+                          ...(previous[provider.provider] || createEmptySsoProviderDraft()),
+                          issuerUrl: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="https://id.example.com"
+                  />
+                </label>
+                <label className="muted">
+                  Auth URL
+                  <input
+                    className="textInput"
+                    value={draft.authUrl}
+                    onChange={(event) =>
+                      setSsoProviderDrafts((previous) => ({
+                        ...previous,
+                        [provider.provider]: {
+                          ...(previous[provider.provider] || createEmptySsoProviderDraft()),
+                          authUrl: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="https://id.example.com/auth"
+                  />
+                </label>
+                <label className="muted">
+                  Token URL
+                  <input
+                    className="textInput"
+                    value={draft.tokenUrl}
+                    onChange={(event) =>
+                      setSsoProviderDrafts((previous) => ({
+                        ...previous,
+                        [provider.provider]: {
+                          ...(previous[provider.provider] || createEmptySsoProviderDraft()),
+                          tokenUrl: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="https://id.example.com/token"
+                  />
+                </label>
+                <label className="muted">
+                  Client ID
+                  <input
+                    className="textInput"
+                    value={draft.clientId}
+                    onChange={(event) =>
+                      setSsoProviderDrafts((previous) => ({
+                        ...previous,
+                        [provider.provider]: {
+                          ...(previous[provider.provider] || createEmptySsoProviderDraft()),
+                          clientId: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="novaremote-mobile"
+                  />
+                </label>
+                <label className="muted">
+                  Callback URL
+                  <input
+                    className="textInput"
+                    value={draft.callbackUrl}
+                    onChange={(event) =>
+                      setSsoProviderDrafts((previous) => ({
+                        ...previous,
+                        [provider.provider]: {
+                          ...(previous[provider.provider] || createEmptySsoProviderDraft()),
+                          callbackUrl: event.target.value,
+                        },
+                      }))
+                    }
+                    placeholder="novaremote://auth/team/sso/oidc"
+                  />
+                </label>
+              </div>
+              <div className="actions">
+                <button disabled={busy || provider.enabled} onClick={() => void toggleSsoProvider(provider.provider, true)}>
+                  Enable
+                </button>
+                <button disabled={busy || !provider.enabled} onClick={() => void toggleSsoProvider(provider.provider, false)}>
+                  Disable
+                </button>
+                <button disabled={busy} onClick={() => void saveSsoProviderSettings(provider.provider)}>
+                  Save Provider
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </section>
 
       <section className="panel">
