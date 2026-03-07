@@ -2777,6 +2777,13 @@ type TeamMember = {
   lastActiveAt?: string;
 };
 
+type TeamUsage = {
+  activeMembers: number;
+  sessionsCreated: number;
+  commandsSent: number;
+  fleetExecutions: number;
+};
+
 type TeamServer = {
   id: string;
   name: string;
@@ -3018,6 +3025,12 @@ export function App() {
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [teamUsage, setTeamUsage] = useState<TeamUsage>({
+    activeMembers: 0,
+    sessionsCreated: 0,
+    commandsSent: 0,
+    fleetExecutions: 0,
+  });
   const [memberRoleFilter, setMemberRoleFilter] = useState<string>("");
   const [memberEmailFilter, setMemberEmailFilter] = useState<string>("");
   const [memberActiveOnly, setMemberActiveOnly] = useState<boolean>(false);
@@ -3270,6 +3283,7 @@ export function App() {
     setIdentity(null);
     setAccessToken("");
     setMembers([]);
+    setTeamUsage({ activeMembers: 0, sessionsCreated: 0, commandsSent: 0, fleetExecutions: 0 });
     setTeamServers([]);
     setServerEditDrafts({});
     setMemberServerDrafts({});
@@ -3313,6 +3327,7 @@ export function App() {
     try {
       const results = await Promise.allSettled([
         fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
+        fetchJson<{ usage?: Partial<TeamUsage> }>("/v1/team/usage", accessToken.trim()),
         fetchJson<{ servers?: TeamServer[] }>("/v1/team/servers", accessToken.trim()),
         fetchJson<{ approvals?: FleetApproval[]; summary?: Partial<FleetApprovalSummary> }>(
           "/v1/team/fleet/approvals",
@@ -3334,11 +3349,19 @@ export function App() {
         fetchJson<{ events?: AuditEvent[] }>("/v1/audit/events?limit=200", accessToken.trim()),
       ] as const);
       const membersPayload = settledValue(results[0], { members: [] as TeamMember[] });
-      const teamServersPayload = settledValue(results[1], { servers: [] as TeamServer[] });
-      const approvalsPayload = settledValue(results[2], { approvals: [] as FleetApproval[] });
-      const ssoPayload = settledValue(results[3], { providers: [] as TeamSsoProviderConfig[] });
-      const invitesPayload = settledValue(results[4], { invites: [] as TeamInvite[] });
-      const settingsPayload = settledValue(results[5], {
+      const usagePayload = settledValue(results[1], {
+        usage: {
+          activeMembers: 0,
+          sessionsCreated: 0,
+          commandsSent: 0,
+          fleetExecutions: 0,
+        } as TeamUsage,
+      });
+      const teamServersPayload = settledValue(results[2], { servers: [] as TeamServer[] });
+      const approvalsPayload = settledValue(results[3], { approvals: [] as FleetApproval[] });
+      const ssoPayload = settledValue(results[4], { providers: [] as TeamSsoProviderConfig[] });
+      const invitesPayload = settledValue(results[5], { invites: [] as TeamInvite[] });
+      const settingsPayload = settledValue(results[6], {
         settings: {
           enforceDangerConfirm: null,
           requireFleetApproval: null,
@@ -3347,10 +3370,16 @@ export function App() {
           commandBlocklist: [],
         } as TeamSettings,
       });
-      const exportsPayload = settledValue(results[6], { exports: [] as AuditExportJob[] });
-      const auditEventsPayload = settledValue(results[7], { events: [] as AuditEvent[] });
+      const exportsPayload = settledValue(results[7], { exports: [] as AuditExportJob[] });
+      const auditEventsPayload = settledValue(results[8], { events: [] as AuditEvent[] });
       const nextMembers = Array.isArray(membersPayload.members) ? membersPayload.members : [];
       setMembers(nextMembers);
+      setTeamUsage({
+        activeMembers: Number(usagePayload.usage?.activeMembers || 0),
+        sessionsCreated: Number(usagePayload.usage?.sessionsCreated || 0),
+        commandsSent: Number(usagePayload.usage?.commandsSent || 0),
+        fleetExecutions: Number(usagePayload.usage?.fleetExecutions || 0),
+      });
       const nextServers = Array.isArray(teamServersPayload.servers) ? teamServersPayload.servers : [];
       setTeamServers(nextServers);
       setServerEditDrafts((previous) => {
@@ -4391,6 +4420,9 @@ export function App() {
         {identity?.tokenExpiresAt ? (
           <p className="muted">{`Session expires: ${new Date(identity.tokenExpiresAt).toLocaleString()}`}</p>
         ) : null}
+        <p className="muted">
+          {`Team usage: members ${teamUsage.activeMembers} • sessions ${teamUsage.sessionsCreated} • commands ${teamUsage.commandsSent} • fleet ${teamUsage.fleetExecutions}`}
+        </p>
         <div className="gridCols">
           <label className="muted">
             Team Email

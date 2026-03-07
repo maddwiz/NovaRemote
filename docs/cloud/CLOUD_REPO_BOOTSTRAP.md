@@ -78,6 +78,7 @@ The generated dashboard scaffold currently wires:
 - refresh-session and logout helpers (`/v1/auth/refresh`, `/v1/auth/logout`) with auto-refresh scheduling
 - team server create/edit/delete controls
 - team member list + role update controls
+- aggregate team usage snapshot (`activeMembers`, `sessionsCreated`, `commandsSent`, `fleetExecutions`) from `/v1/team/usage`
 - member server-assignment controls
 - invite lifecycle controls (create + revoke)
 - invite status/role/email filters with status rollup summary counters
