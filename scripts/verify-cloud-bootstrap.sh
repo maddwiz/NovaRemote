@@ -116,6 +116,7 @@ assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/aud
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/audit/exports/{exportId}/retry"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/audit/exports/{exportId}/download"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/audit/exports"
+assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "auditExportToken"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "Download token accepted when bearer auth is unavailable."
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "/v1/auth/logout"
 assert_contains "${API_DIR}/contracts/novaremote-cloud-openapi.v1.yaml" "Duplicate pending approval request"

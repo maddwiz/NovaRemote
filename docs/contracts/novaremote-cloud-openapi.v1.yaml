@@ -784,6 +784,9 @@ paths:
           description: Download token accepted when bearer auth is unavailable.
           schema:
             type: string
+      security:
+        - bearerAuth: []
+        - auditExportToken: []
       responses:
         "200":
           description: Export artifact body
@@ -818,6 +821,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+    auditExportToken:
+      type: apiKey
+      in: query
+      name: token
+      description: Download token accepted when bearer auth is unavailable.
   schemas:
     AuthEnvelope:
       type: object
