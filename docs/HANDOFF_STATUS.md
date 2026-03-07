@@ -79,6 +79,7 @@ Updated: 2026-03-07
   - [x] permission-level badges/metadata in server UX
   - [x] URL-precedence merge (team server replaces local duplicate for same base URL)
   - [x] cloud scaffold server listing is now filtered by member assignments (admin sees all)
+  - [x] cloud scaffold server listing now supports `vmHost` / `vmType` / `permissionLevel` / `search` filters with dashboard server filter controls
   - [x] cloud scaffold validates member server-assignment updates against known server IDs
   - [x] cloud scaffold server create/edit now persists VM metadata (`vmHost`/`vmType`/`vmName`/`vmId`) and dashboard forms expose those fields
 - [x] `useAuditLog` local queue + periodic cloud sync

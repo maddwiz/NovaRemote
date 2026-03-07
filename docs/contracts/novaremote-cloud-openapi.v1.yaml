@@ -147,6 +147,33 @@ paths:
     get:
       summary: List team-managed servers visible to the user
       description: Response is filtered by team member server assignments unless the caller is an admin.
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: vmHost
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: vmType
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: permissionLevel
+          required: false
+          schema:
+            type: string
+            enum: [admin, operator, viewer]
+        - in: query
+          name: search
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: Team server list

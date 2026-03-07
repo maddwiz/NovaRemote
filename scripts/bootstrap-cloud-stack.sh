@@ -1409,10 +1409,57 @@ app.get("/v1/team/servers", requireTeamPermission("servers:read"), (req, res) =>
   if (!identity) {
     return unauthorized(res, "Authentication required");
   }
+  const vmHostNeedle = String(req.query?.vmHost || "").trim().toLowerCase();
+  const vmTypeNeedle = String(req.query?.vmType || "").trim().toLowerCase();
+  const searchNeedle = String(req.query?.search || "").trim().toLowerCase();
+  const permissionRaw = String(req.query?.permissionLevel || "").trim().toLowerCase();
+  const limitRaw = Number.parseInt(String(req.query?.limit || "500"), 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 5000) : 500;
+  const permissionFilter =
+    permissionRaw === ""
+      ? null
+      : permissionRaw === "admin" || permissionRaw === "operator" || permissionRaw === "viewer"
+        ? permissionRaw
+        : "invalid";
+  if (permissionFilter === "invalid") {
+    return res.status(400).json({ detail: "permissionLevel must be admin, operator, or viewer" });
+  }
   const visibleServerIds = resolveVisibleServerIds(identity);
   const visibleServers =
     identity.role === "admin" ? teamServers : teamServers.filter((server) => visibleServerIds.has(server.id));
-  res.json({ servers: visibleServers });
+  const filteredServers = visibleServers
+    .filter((server) => {
+      if (permissionFilter && server.permissionLevel !== permissionFilter) {
+        return false;
+      }
+      if (vmHostNeedle && !String(server.vmHost || "").toLowerCase().includes(vmHostNeedle)) {
+        return false;
+      }
+      if (vmTypeNeedle && !String(server.vmType || "").toLowerCase().includes(vmTypeNeedle)) {
+        return false;
+      }
+      if (searchNeedle) {
+        const haystack = [
+          server.id,
+          server.teamServerId,
+          server.name,
+          server.baseUrl,
+          server.defaultCwd,
+          server.vmHost || "",
+          server.vmType || "",
+          server.vmName || "",
+          server.vmId || "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(searchNeedle)) {
+          return false;
+        }
+      }
+      return true;
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
+  res.json({ servers: filteredServers.slice(0, limit) });
 });
 
 app.post("/v1/team/servers", requireTeamPermission("servers:write"), (req, res) => {
@@ -2761,6 +2808,9 @@ export function App() {
   const [serverUrlInput, setServerUrlInput] = useState<string>("");
   const [serverCwdInput, setServerCwdInput] = useState<string>("/");
   const [serverPermissionInput, setServerPermissionInput] = useState<"admin" | "operator" | "viewer">("operator");
+  const [serverSearchFilter, setServerSearchFilter] = useState<string>("");
+  const [serverVmHostFilter, setServerVmHostFilter] = useState<string>("");
+  const [serverVmTypeFilter, setServerVmTypeFilter] = useState<string>("");
   const [serverVmHostInput, setServerVmHostInput] = useState<string>("");
   const [serverVmTypeInput, setServerVmTypeInput] = useState<string>("");
   const [serverVmNameInput, setServerVmNameInput] = useState<string>("");
@@ -3721,6 +3771,38 @@ export function App() {
     });
   }, [memberActiveOnly, memberEmailFilter, memberRoleFilter, members]);
 
+  const filteredTeamServers = useMemo(() => {
+    const searchNeedle = serverSearchFilter.trim().toLowerCase();
+    const vmHostNeedle = serverVmHostFilter.trim().toLowerCase();
+    const vmTypeNeedle = serverVmTypeFilter.trim().toLowerCase();
+    return teamServers.filter((server) => {
+      if (vmHostNeedle && !String(server.vmHost || "").toLowerCase().includes(vmHostNeedle)) {
+        return false;
+      }
+      if (vmTypeNeedle && !String(server.vmType || "").toLowerCase().includes(vmTypeNeedle)) {
+        return false;
+      }
+      if (searchNeedle) {
+        const haystack = [
+          server.id,
+          server.name,
+          server.baseUrl,
+          server.defaultCwd,
+          server.vmHost || "",
+          server.vmType || "",
+          server.vmName || "",
+          server.vmId || "",
+        ]
+          .join(" ")
+          .toLowerCase();
+        if (!haystack.includes(searchNeedle)) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [serverSearchFilter, serverVmHostFilter, serverVmTypeFilter, teamServers]);
+
   return (
     <main className="layout">
       <section className="panel">
@@ -3816,7 +3898,7 @@ export function App() {
       </section>
 
       <section className="panel">
-        <h2 className="title">Team Servers ({teamServers.length})</h2>
+        <h2 className="title">{`Team Servers (${filteredTeamServers.length}/${teamServers.length})`}</h2>
         <div className="gridCols">
           <label className="muted">
             Name
@@ -3884,13 +3966,43 @@ export function App() {
             />
           </label>
         </div>
+        <div className="gridCols">
+          <label className="muted">
+            Filter search
+            <input
+              className="textInput"
+              value={serverSearchFilter}
+              onChange={(event) => setServerSearchFilter(event.target.value)}
+              placeholder="dgx"
+            />
+          </label>
+          <label className="muted">
+            Filter VM host
+            <input
+              className="textInput"
+              value={serverVmHostFilter}
+              onChange={(event) => setServerVmHostFilter(event.target.value)}
+              placeholder="homelab-1"
+            />
+          </label>
+          <label className="muted">
+            Filter VM type
+            <input
+              className="textInput"
+              value={serverVmTypeFilter}
+              onChange={(event) => setServerVmTypeFilter(event.target.value)}
+              placeholder="proxmox"
+            />
+          </label>
+        </div>
         <div className="actions">
           <button disabled={busy} onClick={() => void createServer()}>
             Add Server
           </button>
         </div>
         {teamServers.length === 0 ? <p className="muted">No servers loaded.</p> : null}
-        {teamServers.map((server) => {
+        {teamServers.length > 0 && filteredTeamServers.length === 0 ? <p className="muted">No servers match filters.</p> : null}
+        {filteredTeamServers.map((server) => {
           const draft = serverEditDrafts[server.id] || {
             name: server.name,
             baseUrl: server.baseUrl,
