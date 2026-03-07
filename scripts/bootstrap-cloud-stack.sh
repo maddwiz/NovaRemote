@@ -396,6 +396,7 @@ const stateFilePath =
 const saveDebounceMsRaw = Number.parseInt(process.env.NOVA_CLOUD_STATE_SAVE_DEBOUNCE_MS || "200", 10);
 const saveDebounceMs = Number.isFinite(saveDebounceMsRaw) && saveDebounceMsRaw >= 0 ? saveDebounceMsRaw : 200;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
+const AUDIT_EVENTS_MAX = 10_000;
 const AUDIT_EXPORT_PROCESSING_MS = 1_500;
 const AUDIT_EXPORT_MAX_PROCESSING_MS = 30_000;
 const AUDIT_EXPORT_TTL_MS = 60 * 60 * 1000;
@@ -495,6 +496,7 @@ async function loadState() {
   try {
     const raw = await fs.readFile(stateFilePath, "utf8");
     const parsed = JSON.parse(raw) as Record<string, unknown>;
+    let trimmedAuditEvents = 0;
     if (Array.isArray(parsed.teamServers)) {
       replaceArrayInPlace(teamServers, parsed.teamServers as TeamServer[]);
     }
@@ -515,6 +517,7 @@ async function loadState() {
     }
     if (Array.isArray(parsed.auditEvents)) {
       replaceArrayInPlace(auditEvents, parsed.auditEvents);
+      trimmedAuditEvents = trimAuditEvents();
     }
     if (Array.isArray(parsed.auditExportJobs)) {
       replaceArrayInPlace(auditExportJobs, parsed.auditExportJobs as typeof auditExportJobs);
@@ -523,6 +526,9 @@ async function loadState() {
       Object.assign(teamSettings, parsed.teamSettings);
     }
     syncBaseIdentityFromMembers();
+    if (trimmedAuditEvents > 0) {
+      schedulePersist();
+    }
   } catch (error) {
     const code = (error as NodeJS.ErrnoException).code;
     if (code !== "ENOENT") {
@@ -633,6 +639,15 @@ function normalizeAuditEvent(value: unknown): AuditEvent | null {
   };
 }
 
+function trimAuditEvents(): number {
+  if (auditEvents.length <= AUDIT_EVENTS_MAX) {
+    return 0;
+  }
+  const overflow = auditEvents.length - AUDIT_EVENTS_MAX;
+  auditEvents.splice(0, overflow);
+  return overflow;
+}
+
 type SystemAuditInput = {
   serverId?: string;
   serverName?: string;
@@ -656,6 +671,7 @@ function recordSystemAuditEvent(action: string, detail: string, input: SystemAud
     return;
   }
   auditEvents.push(event);
+  trimAuditEvents();
   if (persist) {
     schedulePersist();
   }
@@ -1922,8 +1938,9 @@ app.post("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => 
     .map((entry) => normalizeAuditEvent(entry))
     .filter((entry): entry is AuditEvent => Boolean(entry));
   auditEvents.push(...normalized);
+  const dropped = trimAuditEvents();
   schedulePersist();
-  res.json({ accepted: normalized.length, rejected: incoming.length - normalized.length });
+  res.json({ accepted: normalized.length, rejected: incoming.length - normalized.length, dropped });
 });
 
 app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {

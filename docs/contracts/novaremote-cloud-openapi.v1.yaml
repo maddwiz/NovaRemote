@@ -691,6 +691,9 @@ paths:
                     type: integer
                   rejected:
                     type: integer
+                  dropped:
+                    type: integer
+                    description: Number of oldest events dropped when the bounded audit queue exceeds 10,000 entries.
   /v1/audit/exports:
     get:
       summary: List cloud-hosted audit export jobs
