@@ -44,6 +44,7 @@ Updated: 2026-03-07
 - [x] Expose cross-server session creation through app context/view model (`onCreateSession(serverId, kind)`)
 - [x] Glasses route handling for new actions (create/close/resize/move/swap)
 - [x] Prompt-aware voice creation parsing (`open codex ... with prompt ...`, `open terminal ... and run ...`) forwarded to session creation handlers
+- [x] Voice create-session target resolution now falls back to pooled server metadata, so `"open codex on <server>"` works even before that server has an open panel/session
 - [x] Spatial panel state additions:
   - [x] per-panel scale
   - [x] fullscreen panel mode
