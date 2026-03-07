@@ -425,6 +425,8 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/TeamInvite"
+                  summary:
+                    $ref: "#/components/schemas/TeamInviteSummary"
     post:
       summary: Invite a new member
       requestBody:
@@ -1224,6 +1226,18 @@ components:
           type: string
         revokedAt:
           type: string
+    TeamInviteSummary:
+      type: object
+      required: [pending, accepted, expired, revoked]
+      properties:
+        pending:
+          type: integer
+        accepted:
+          type: integer
+        expired:
+          type: integer
+        revoked:
+          type: integer
     TeamSsoProviderConfig:
       type: object
       required: [provider, enabled]

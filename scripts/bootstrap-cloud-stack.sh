@@ -1798,7 +1798,13 @@ app.get("/v1/team/invites", requireTeamPermission("team:invite"), (req, res) => 
       return true;
     })
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
-  res.json({ invites: invites.slice(0, limit) });
+  const summary = {
+    pending: invites.filter((invite) => invite.status === "pending").length,
+    accepted: invites.filter((invite) => invite.status === "accepted").length,
+    expired: invites.filter((invite) => invite.status === "expired").length,
+    revoked: invites.filter((invite) => invite.status === "revoked").length,
+  };
+  res.json({ invites: invites.slice(0, limit), summary });
 });
 
 app.post("/v1/team/invites", requireTeamPermission("team:invite"), (req, res) => {
@@ -2780,6 +2786,13 @@ type TeamInvite = {
   expiresAt?: string;
 };
 
+type TeamInviteSummary = {
+  pending: number;
+  accepted: number;
+  expired: number;
+  revoked: number;
+};
+
 type TeamSettings = {
   enforceDangerConfirm: boolean | null;
   requireFleetApproval: boolean | null;
@@ -3034,6 +3047,12 @@ export function App() {
   const [approvalExecutionSummaries, setApprovalExecutionSummaries] = useState<Record<string, string>>({});
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
+  const [inviteSummary, setInviteSummary] = useState<TeamInviteSummary>({
+    pending: 0,
+    accepted: 0,
+    expired: 0,
+    revoked: 0,
+  });
   const [exportJobs, setExportJobs] = useState<AuditExportJob[]>([]);
   const [exportSummary, setExportSummary] = useState<{
     pending: number;
@@ -3243,6 +3262,7 @@ export function App() {
     setApprovalExecutionSummaries({});
     setSsoProviders([]);
     setInvites([]);
+    setInviteSummary({ pending: 0, accepted: 0, expired: 0, revoked: 0 });
     setExportJobs([]);
     setExportSummary({ pending: 0, ready: 0, failed: 0, avgProcessingDurationMs: null, oldestPendingAgeMs: null });
     setAuditEvents([]);
@@ -3268,7 +3288,7 @@ export function App() {
           accessToken.trim()
         ),
         fetchJson<{ providers?: TeamSsoProviderConfig[] }>("/v1/team/sso/providers", accessToken.trim()),
-        fetchJson<{ invites?: TeamInvite[] }>("/v1/team/invites", accessToken.trim()),
+        fetchJson<{ invites?: TeamInvite[]; summary?: Partial<TeamInviteSummary> }>("/v1/team/invites", accessToken.trim()),
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
         fetchJson<{
           exports?: AuditExportJob[];
@@ -3367,6 +3387,12 @@ export function App() {
       });
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
+      setInviteSummary({
+        pending: Number(invitesPayload.summary?.pending || 0),
+        accepted: Number(invitesPayload.summary?.accepted || 0),
+        expired: Number(invitesPayload.summary?.expired || 0),
+        revoked: Number(invitesPayload.summary?.revoked || 0),
+      });
       const nextExportJobs = Array.isArray(exportsPayload.exports) ? exportsPayload.exports : [];
       setExportJobs(nextExportJobs);
       setExportSummary({
@@ -4701,6 +4727,9 @@ export function App() {
 
       <section className="panel">
         <h2 className="title">{`Team Invites (${filteredInvites.length}/${invites.length})`}</h2>
+        <p className="muted">
+          {`Invite summary: pending ${inviteSummary.pending} • accepted ${inviteSummary.accepted} • expired ${inviteSummary.expired} • revoked ${inviteSummary.revoked}`}
+        </p>
         <div className="gridCols">
           <label className="muted">
             Email

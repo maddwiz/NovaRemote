@@ -88,6 +88,7 @@ Updated: 2026-03-07
 - [x] Team screen in app with login, members, roles, invites, usage, and audit sync controls
 - [x] Team invite lifecycle in app: list invites, create invite, and revoke pending invites
 - [x] Cloud scaffold invite listing now supports `status` / `role` / `email` filters with dashboard filter controls
+- [x] Cloud scaffold invite listing now includes `pending` / `accepted` / `expired` / `revoked` summary rollups for dashboard governance visibility
 - [x] Team cloud dashboard bridge in app (dashboard URL surfaced + quick-open action)
 - [x] Per-member usage telemetry surfaced in TeamScreen cards (sessions/commands/fleet)
 - [x] Cloud scaffold member listing now supports `role` / `email` / `activeSince` filters with dashboard member filter controls

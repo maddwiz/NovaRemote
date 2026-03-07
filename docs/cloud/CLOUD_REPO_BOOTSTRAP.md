@@ -80,6 +80,7 @@ The generated dashboard scaffold currently wires:
 - team member list + role update controls
 - member server-assignment controls
 - invite lifecycle controls (create + revoke)
+- invite status/role/email filters with status rollup summary counters
 - team policy controls (`danger confirm`, `fleet approval`, `recording`, `timeout`, `blocklist`)
 - fleet approval feed with status/execution-state/requester/reviewer/target filtering, approve/deny actions, optional review notes, execution claiming, optional completion summaries, and approval/execution rollup counters
 - SSO provider toggle controls (`OIDC`/`SAML`)
