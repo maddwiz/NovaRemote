@@ -3491,6 +3491,44 @@ export function App() {
     [accessToken, loadTeamData]
   );
 
+  const retryExport = useCallback(
+    async (exportId: string) => {
+      if (!accessToken.trim()) {
+        setStatus("Paste an access token before retrying exports.");
+        return;
+      }
+      setBusy(true);
+      setStatus(`Retrying export ${exportId}...`);
+      try {
+        const response = await fetch(`${cloudUrl}/v1/audit/exports/${exportId}/retry`, {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${accessToken.trim()}`,
+          },
+        });
+        if (!response.ok) {
+          throw new Error(`${response.status} ${await response.text()}`);
+        }
+        const payload = (await response.json()) as { export?: AuditExportJob; ok?: boolean };
+        if (payload?.export) {
+          setLastExport(payload.export);
+        }
+        setSelectedExportDetail((previous) => {
+          if (!previous || previous.export.exportId !== exportId) {
+            return previous;
+          }
+          return null;
+        });
+        await loadTeamData();
+      } catch (error) {
+        setStatus(error instanceof Error ? error.message : String(error));
+      } finally {
+        setBusy(false);
+      }
+    },
+    [accessToken, loadTeamData]
+  );
+
   const loadExportDetail = useCallback(
     async (exportId: string) => {
       if (!accessToken.trim()) {
@@ -4888,6 +4926,9 @@ export function App() {
                 <div className="actions">
                   <button disabled={busy} onClick={() => void loadExportDetail(job.exportId)}>
                     View Details
+                  </button>
+                  <button disabled={busy || job.status !== "failed"} onClick={() => void retryExport(job.exportId)}>
+                    Retry Export
                   </button>
                   {job.downloadUrl ? (
                     <a href={job.downloadUrl} target="_blank" rel="noreferrer">

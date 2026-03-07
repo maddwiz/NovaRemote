@@ -145,7 +145,7 @@ Updated: 2026-03-07
   - [x] cloud audit export listing now supports `status` / `format` / `requestedBy` filters for dashboard and compliance tooling
   - [x] dashboard scaffold export history now supports local requester/status/format filtering and requester visibility
   - [x] dashboard scaffold now supports one-click download of filtered audit-event views as local `JSON`/`CSV` artifacts
-  - [x] cloud export observability expanded with per-export detail reads (`GET /v1/audit/exports/{exportId}`), list summaries, and dashboard range-hour export requests + per-job detail drill-down (`inScopeEventCount` + `scopeDelta`)
+  - [x] cloud export observability expanded with per-export detail reads (`GET /v1/audit/exports/{exportId}`), list summaries, and dashboard range-hour export requests + per-job detail drill-down (`inScopeEventCount` + `scopeDelta`) + retry controls
   - [x] cloud export observability now tracks per-job `processingDurationMs` plus export-list summary `avgProcessingDurationMs` in scaffold lifecycle metadata, OpenAPI schema, and dashboard export views
   - [x] cloud audit events now support `user` + `approved` filters (API contract + scaffold route + dashboard user filter)
   - [~] cloud export lifecycle governance now includes scaffold-side `pending` -> `ready`/`failed` transitions, retry endpoint (`POST /v1/audit/exports/{exportId}/retry`), tokenized download endpoint (`GET /v1/audit/exports/{exportId}/download`), TTL cleanup, and richer metadata (`eventCount`, `attemptCount`, transition timestamps), while production deployment remains pending
