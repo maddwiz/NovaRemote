@@ -930,6 +930,63 @@ describe("GlassesModeScreen", () => {
     });
   });
 
+  it("passes prompt text through create-session voice routes", async () => {
+    const routeTranscript = vi
+      .fn<
+        (
+          transcript: string
+        ) => {
+          kind: string;
+          serverId?: string;
+          sessionKind?: "ai" | "shell";
+          prompt?: string;
+        }
+      >()
+      .mockReturnValueOnce({
+        kind: "create_session",
+        serverId: "home",
+        sessionKind: "ai",
+        prompt: "investigate memory leak",
+      });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const onCreateSession = vi.fn(async () => "ai-42");
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "open codex on home with prompt investigate memory leak",
+      onCreateSession,
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(onCreateSession).toHaveBeenCalledWith("home", "ai", "investigate memory leak");
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
   it("routes stop-session voice commands through server session stop handler", async () => {
     const routeTranscript = vi
       .fn<

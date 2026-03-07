@@ -289,30 +289,42 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId }:
   }
 
   const createAiMatch = cleaned.match(
-    /^(?:open|start|new|launch)\s+(?:codex|ai|ai\s+session|ai\s+cli|codex\s+cli|assistant)(?:\s+(?:on|for)\s+(.+))?$/i
+    /^(?:open|start|new|launch)\s+(?:codex|ai|ai\s+session|ai\s+cli|codex\s+cli|assistant)(?:\s+(?:on|for)\s+(.+?))?(?:\s+(?:with\s+prompt|prompt|and\s+ask)\s+(.+))?$/i
   );
   if (createAiMatch) {
     const targetName = createAiMatch[1]?.trim() || "";
+    const prompt = createAiMatch[2]?.trim() || "";
     const targetPanel = targetName ? findPanelByTarget(panels, targetName) : null;
     const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
     const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
     const serverId = targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || null;
     if (serverId) {
-      return { kind: "create_session", serverId, sessionKind: "ai" };
+      return {
+        kind: "create_session",
+        serverId,
+        sessionKind: "ai",
+        ...(prompt ? { prompt } : {}),
+      };
     }
   }
 
   const createShellMatch = cleaned.match(
-    /^(?:open|start|new|launch)\s+(?:terminal|shell|session|bash|zsh)(?:\s+(?:on|for)\s+(.+))?$/i
+    /^(?:open|start|new|launch)\s+(?:terminal|shell|session|bash|zsh)(?:\s+(?:on|for)\s+(.+?))?(?:\s+(?:and\s+run|run|with\s+command|with\s+cmd)\s+(.+))?$/i
   );
   if (createShellMatch) {
     const targetName = createShellMatch[1]?.trim() || "";
+    const prompt = createShellMatch[2]?.trim() || "";
     const targetPanel = targetName ? findPanelByTarget(panels, targetName) : null;
     const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
     const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
     const serverId = targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || null;
     if (serverId) {
-      return { kind: "create_session", serverId, sessionKind: "shell" };
+      return {
+        kind: "create_session",
+        serverId,
+        sessionKind: "shell",
+        ...(prompt ? { prompt } : {}),
+      };
     }
   }
 

@@ -186,6 +186,16 @@ describe("resolveSpatialVoiceRoute", () => {
       panels: PANELS,
       focusedPanelId: "dgx::main",
     });
+    const createAiWithPrompt = resolveSpatialVoiceRoute({
+      transcript: "open codex on dgx spark with prompt investigate memory leak",
+      panels: PANELS,
+      focusedPanelId: "home::build-01",
+    });
+    const createShellWithPrompt = resolveSpatialVoiceRoute({
+      transcript: "open terminal on homelab and run npm run build",
+      panels: PANELS,
+      focusedPanelId: "dgx::main",
+    });
     const closeFocused = resolveSpatialVoiceRoute({
       transcript: "close this",
       panels: PANELS,
@@ -251,6 +261,18 @@ describe("resolveSpatialVoiceRoute", () => {
       kind: "create_session",
       serverId: "home",
       sessionKind: "shell",
+    });
+    expect(createAiWithPrompt).toEqual({
+      kind: "create_session",
+      serverId: "dgx",
+      sessionKind: "ai",
+      prompt: "investigate memory leak",
+    });
+    expect(createShellWithPrompt).toEqual({
+      kind: "create_session",
+      serverId: "home",
+      sessionKind: "shell",
+      prompt: "npm run build",
     });
     expect(closeFocused).toEqual({
       kind: "close_panel",
@@ -646,6 +668,29 @@ describe("resolveSpatialVoiceRoute", () => {
       kind: "send_command",
       panelId: "cloud::deploy",
       command: "git status",
+    });
+  });
+
+  it("prioritizes create-session parsing over panel-name focus collisions", () => {
+    const route = resolveSpatialVoiceRoute({
+      transcript: "open codex",
+      panels: [
+        ...PANELS,
+        {
+          id: "cloud::codex",
+          serverId: "cloud",
+          serverName: "Cloud VM",
+          session: "codex",
+          sessionLabel: "codex",
+        },
+      ],
+      focusedPanelId: "dgx::main",
+    });
+
+    expect(route).toEqual({
+      kind: "create_session",
+      serverId: "dgx",
+      sessionKind: "ai",
     });
   });
 });
