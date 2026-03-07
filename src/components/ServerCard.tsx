@@ -27,7 +27,9 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare,
     <View style={[styles.serverCard, isActive ? styles.serverCardActive : null]}>
       <View style={styles.serverCardHeader}>
         <Text style={styles.serverName}>{server.name}</Text>
-        {teamManaged ? <Text style={[styles.modePill, styles.modePillShell]}>{`TEAM ${server.permissionLevel || "viewer"}`}</Text> : null}
+        {teamManaged ? (
+          <Text style={[styles.modePill, styles.modePillShell]}>{`TEAM ${(server.permissionLevel || "viewer").toUpperCase()}`}</Text>
+        ) : null}
         <Text style={styles.serverUrl}>{server.baseUrl}</Text>
         <Text style={styles.emptyText}>{`Backend: ${server.terminalBackend || "auto"}`}</Text>
         {server.vmHost ? <Text style={styles.emptyText}>{`VM Host: ${server.vmHost}`}</Text> : null}
