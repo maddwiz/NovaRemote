@@ -376,6 +376,7 @@ const auditExportJobs: Array<{
   requestedByEmail?: string;
   rangeHours?: number;
   eventCount?: number;
+  processingDurationMs?: number;
   expiresAt?: string;
   downloadUrl?: string;
   detail?: string;
@@ -849,6 +850,7 @@ function reconcileAuditExportJobs() {
         job.status = "failed";
         job.failedAt = new Date(nowMs).toISOString();
         job.lastTransitionAt = job.failedAt;
+        job.processingDurationMs = Math.max(0, nowMs - createdAtMs);
         job.downloadUrl = undefined;
         job.detail = "Export processing timed out before completion";
         changed = true;
@@ -860,21 +862,32 @@ function reconcileAuditExportJobs() {
           job.status = "failed";
           job.failedAt = new Date(nowMs).toISOString();
           job.lastTransitionAt = job.failedAt;
+          job.processingDurationMs = Math.max(0, nowMs - createdAtMs);
           job.downloadUrl = undefined;
           job.detail = "No audit events matched the requested export range";
           changed = true;
           recordSystemAuditEvent("audit_export_failed", `Audit export ${job.exportId} has no events to export.`, {}, false);
         } else {
-        job.status = "ready";
-        job.readyAt = new Date(nowMs).toISOString();
-        job.lastTransitionAt = job.readyAt;
-        const existingToken = extractDownloadTokenFromUrl(job.downloadUrl);
-        const downloadToken = existingToken || randomUUID().replace(/-/g, "");
-        job.downloadUrl = buildAuditExportDownloadUrl(job.exportId, downloadToken);
-        job.detail = `Snapshot contains ${exportEventCount} events`;
-        changed = true;
-        recordSystemAuditEvent("audit_export_ready", `Audit export ${job.exportId} is ready.`, {}, false);
+          job.status = "ready";
+          job.readyAt = new Date(nowMs).toISOString();
+          job.lastTransitionAt = job.readyAt;
+          job.processingDurationMs = Math.max(0, nowMs - createdAtMs);
+          const existingToken = extractDownloadTokenFromUrl(job.downloadUrl);
+          const downloadToken = existingToken || randomUUID().replace(/-/g, "");
+          job.downloadUrl = buildAuditExportDownloadUrl(job.exportId, downloadToken);
+          job.detail = `Snapshot contains ${exportEventCount} events`;
+          changed = true;
+          recordSystemAuditEvent("audit_export_ready", `Audit export ${job.exportId} is ready.`, {}, false);
         }
+      }
+    }
+
+    if ((job.status === "ready" || job.status === "failed") && typeof job.processingDurationMs !== "number") {
+      const transitionAtRaw = job.readyAt || job.failedAt || job.lastTransitionAt || "";
+      const transitionAtMs = Date.parse(transitionAtRaw);
+      if (Number.isFinite(createdAtMs) && Number.isFinite(transitionAtMs) && transitionAtMs >= createdAtMs) {
+        job.processingDurationMs = transitionAtMs - createdAtMs;
+        changed = true;
       }
     }
 
@@ -2305,6 +2318,7 @@ app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) =>
     requestedByEmail: identity.email,
     rangeHours,
     eventCount,
+    processingDurationMs: undefined,
     lastTransitionAt: createdAt,
     expiresAt,
     detail: `Export queued (${eventCount} events in scope)`
@@ -2341,6 +2355,7 @@ app.post("/v1/audit/exports/:exportId/retry", requireTeamPermission("audit:read"
   job.requestedByUserId = identity.userId;
   job.requestedByEmail = identity.email;
   job.eventCount = nextEventCount;
+  job.processingDurationMs = undefined;
   job.expiresAt = new Date(Date.now() + AUDIT_EXPORT_TTL_MS).toISOString();
   job.detail = `Retry queued (${nextEventCount} events in scope)`;
   recordSystemAuditEvent("audit_export_retried", `Retried audit export ${job.exportId}.`, {}, false);
@@ -2724,6 +2739,7 @@ type AuditExportJob = {
   requestedByEmail?: string;
   rangeHours?: number;
   eventCount?: number;
+  processingDurationMs?: number;
   expiresAt?: string;
   downloadUrl?: string;
   detail?: string;
@@ -2789,6 +2805,17 @@ function parseBoolString(value: string): boolean | null {
     return false;
   }
   return null;
+}
+
+function formatDurationMs(durationMs?: number): string {
+  if (!Number.isFinite(durationMs)) {
+    return "n/a";
+  }
+  if ((durationMs || 0) < 1000) {
+    return `${Math.max(0, Math.round(durationMs || 0))} ms`;
+  }
+  const seconds = (durationMs || 0) / 1000;
+  return `${seconds.toFixed(seconds >= 10 ? 1 : 2)} s`;
 }
 
 function settledValue<T>(result: PromiseSettledResult<T>, fallback: T): T {
@@ -4613,6 +4640,9 @@ export function App() {
             ) : null}
             {typeof lastExport.rangeHours === "number" ? <p className="muted">{`Range hours: ${lastExport.rangeHours}`}</p> : null}
             {typeof lastExport.eventCount === "number" ? <p className="muted">{`Event count: ${lastExport.eventCount}`}</p> : null}
+            {typeof lastExport.processingDurationMs === "number" ? (
+              <p className="muted">{`Processing: ${formatDurationMs(lastExport.processingDurationMs)}`}</p>
+            ) : null}
             {typeof lastExport.attemptCount === "number" ? <p className="muted">{`Attempt count: ${lastExport.attemptCount}`}</p> : null}
             {lastExport.lastTransitionAt ? (
               <p className="muted">{`Last transition: ${new Date(lastExport.lastTransitionAt).toLocaleString()}`}</p>
@@ -4672,6 +4702,9 @@ export function App() {
                 ) : null}
                 {typeof job.rangeHours === "number" ? <p className="muted">{`Range hours: ${job.rangeHours}`}</p> : null}
                 {typeof job.eventCount === "number" ? <p className="muted">{`Event count: ${job.eventCount}`}</p> : null}
+                {typeof job.processingDurationMs === "number" ? (
+                  <p className="muted">{`Processing: ${formatDurationMs(job.processingDurationMs)}`}</p>
+                ) : null}
                 {typeof job.attemptCount === "number" ? <p className="muted">{`Attempt count: ${job.attemptCount}`}</p> : null}
                 {job.lastTransitionAt ? <p className="muted">{`Last transition: ${new Date(job.lastTransitionAt).toLocaleString()}`}</p> : null}
                 {job.detail ? <p className="muted">{job.detail}</p> : null}

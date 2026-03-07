@@ -1351,6 +1351,9 @@ components:
           maximum: 720
         eventCount:
           type: integer
+        processingDurationMs:
+          type: integer
+          minimum: 0
         expiresAt:
           type: string
         downloadUrl:
