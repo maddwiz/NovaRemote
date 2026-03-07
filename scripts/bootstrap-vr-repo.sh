@@ -30,6 +30,7 @@ TARGET_REPO="$(cd "${TARGET_REPO}" && pwd)"
 mkdir -p \
   "${TARGET_REPO}/docs/vr" \
   "${TARGET_REPO}/contracts" \
+  "${TARGET_REPO}/.github/workflows" \
   "${TARGET_REPO}/api" \
   "${TARGET_REPO}/auth" \
   "${TARGET_REPO}/terminals" \
@@ -74,6 +75,16 @@ From the NovaRemote repo, run:
 ```bash
 npm run vr:sync-contracts -- /absolute/path/to/NovaRemoteVR
 ```
+
+## Bootstrap Validation
+
+Inside `NovaRemoteVR`, run:
+
+```bash
+bash ./scripts/verify-contract-sync.sh
+```
+
+This is also wired into `.github/workflows/contracts-sync.yml`.
 DOC
 fi
 
@@ -109,6 +120,75 @@ if [[ ! -f "${TARGET_REPO}/docs/vr/README.md" ]]; then
 # VR Docs
 
 This directory receives protocol contracts from NovaRemote and stores VR-specific architecture notes.
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/scripts/verify-contract-sync.sh" ]]; then
+  cat > "${TARGET_REPO}/scripts/verify-contract-sync.sh" <<'DOC'
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
+
+CONTRACT_DOC="${ROOT_DIR}/docs/vr/VR_PROTOCOL_CONTRACT.md"
+CONTRACT_SCHEMA="${ROOT_DIR}/contracts/novaremote-client-protocol.v1.json"
+SOURCE_STAMP="${ROOT_DIR}/contracts/NOVAREMOTE_CONTRACT_SOURCE.txt"
+
+assert_file() {
+  local file_path="$1"
+  if [[ ! -f "${file_path}" ]]; then
+    echo "Missing required file: ${file_path}"
+    exit 1
+  fi
+}
+
+assert_contains() {
+  local file_path="$1"
+  local pattern="$2"
+  if ! rg -F -q -- "${pattern}" "${file_path}"; then
+    echo "Expected pattern '${pattern}' not found in ${file_path}"
+    exit 1
+  fi
+}
+
+assert_file "${CONTRACT_DOC}"
+assert_file "${CONTRACT_SCHEMA}"
+assert_file "${SOURCE_STAMP}"
+
+assert_contains "${SOURCE_STAMP}" "protocol_doc=docs/vr/VR_PROTOCOL_CONTRACT.md"
+assert_contains "${SOURCE_STAMP}" "json_schema=docs/contracts/novaremote-client-protocol.v1.json"
+
+if ! rg -q -- '"\$schema"|"title"|"type"' "${CONTRACT_SCHEMA}"; then
+  echo "Contract schema file does not look like JSON schema: ${CONTRACT_SCHEMA}"
+  exit 1
+fi
+
+echo "VR contract sync verification passed."
+DOC
+  chmod +x "${TARGET_REPO}/scripts/verify-contract-sync.sh"
+fi
+
+if [[ ! -f "${TARGET_REPO}/.github/workflows/contracts-sync.yml" ]]; then
+  cat > "${TARGET_REPO}/.github/workflows/contracts-sync.yml" <<'DOC'
+name: Contract Sync
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+jobs:
+  verify-contract-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Install ripgrep
+        run: sudo apt-get update && sudo apt-get install -y ripgrep
+      - name: Verify contract sync
+        run: bash ./scripts/verify-contract-sync.sh
 DOC
 fi
 

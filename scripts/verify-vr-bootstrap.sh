@@ -42,6 +42,7 @@ assert_contains() {
 
 assert_dir "${VR_DIR}/contracts"
 assert_dir "${VR_DIR}/docs/vr"
+assert_dir "${VR_DIR}/.github/workflows"
 assert_dir "${VR_DIR}/api"
 assert_dir "${VR_DIR}/auth"
 assert_dir "${VR_DIR}/terminals"
@@ -60,6 +61,8 @@ assert_file "${VR_DIR}/docs/vr/README.md"
 assert_file "${VR_DIR}/docs/vr/VR_PROTOCOL_CONTRACT.md"
 assert_file "${VR_DIR}/contracts/novaremote-client-protocol.v1.json"
 assert_file "${VR_DIR}/contracts/NOVAREMOTE_CONTRACT_SOURCE.txt"
+assert_file "${VR_DIR}/scripts/verify-contract-sync.sh"
+assert_file "${VR_DIR}/.github/workflows/contracts-sync.yml"
 assert_file "${VR_DIR}/api/README.md"
 assert_file "${VR_DIR}/auth/README.md"
 assert_file "${VR_DIR}/terminals/README.md"
@@ -74,8 +77,12 @@ assert_file "${VR_DIR}/clients/visionos/README.md"
 assert_contains "${VR_DIR}/README.md" "Standalone immersive client for NovaRemote protocol contracts."
 assert_contains "${VR_DIR}/README.md" "clients/quest-unity"
 assert_contains "${VR_DIR}/README.md" "clients/visionos"
+assert_contains "${VR_DIR}/README.md" "verify-contract-sync.sh"
 assert_contains "${VR_DIR}/.gitignore" "[Ll]ibrary/"
 assert_contains "${VR_DIR}/.gitignore" "DerivedData/"
+assert_contains "${VR_DIR}/scripts/verify-contract-sync.sh" "VR contract sync verification passed."
+assert_contains "${VR_DIR}/.github/workflows/contracts-sync.yml" "verify-contract-sync"
+assert_contains "${VR_DIR}/.github/workflows/contracts-sync.yml" "bash ./scripts/verify-contract-sync.sh"
 assert_contains "${VR_DIR}/contracts/NOVAREMOTE_CONTRACT_SOURCE.txt" "protocol_doc=docs/vr/VR_PROTOCOL_CONTRACT.md"
 assert_contains "${VR_DIR}/contracts/NOVAREMOTE_CONTRACT_SOURCE.txt" "json_schema=docs/contracts/novaremote-client-protocol.v1.json"
 
@@ -90,5 +97,6 @@ if ! cmp -s "${ROOT_DIR}/docs/contracts/novaremote-client-protocol.v1.json" "${V
 fi
 
 bash "${ROOT_DIR}/scripts/sync-vr-contracts.sh" "${VR_DIR}" >/dev/null
+bash "${VR_DIR}/scripts/verify-contract-sync.sh" >/dev/null
 
 echo "VR bootstrap verification passed."

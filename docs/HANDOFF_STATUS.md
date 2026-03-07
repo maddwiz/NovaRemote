@@ -61,7 +61,7 @@ Updated: 2026-03-07
 ## v1.4 VR Command Center
 
 - [x] In this repo: VR preview route/screen + pooled multi-server controls + tests
-- [~] Separate production VR native app (`NovaRemoteVR`) track has executable bootstrap + contract sync scripts, plus temp-dir bootstrap verification (`vr:verify-bootstrap`) wired into CI; full native client implementation remains pending
+- [~] Separate production VR native app (`NovaRemoteVR`) track has executable bootstrap + contract sync scripts, temp-dir bootstrap verification (`vr:verify-bootstrap`) wired into CI, and scaffolded repo-side contract verification (`scripts/verify-contract-sync.sh` + `.github/workflows/contracts-sync.yml`); full native client implementation remains pending
 
 ## v1.5 VM Grouping
 

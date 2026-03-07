@@ -23,6 +23,10 @@ npm run vr:bootstrap-repo -- /absolute/path/to/NovaRemoteVR
 ```
 
 This creates the baseline directory structure, starter docs, and then syncs protocol contracts.
+It also scaffolds:
+
+- `scripts/verify-contract-sync.sh` (contract provenance + schema sanity checks)
+- `.github/workflows/contracts-sync.yml` (CI guard for contract drift)
 
 Optional: configure `origin` in the same command:
 
@@ -34,6 +38,12 @@ Bootstrap verification command (runs in a temp directory and checks scaffold + c
 
 ```bash
 npm run vr:verify-bootstrap
+```
+
+Inside `NovaRemoteVR`, you can run the standalone check directly:
+
+```bash
+bash ./scripts/verify-contract-sync.sh
 ```
 
 ## 2. Shared Contract Source of Truth
