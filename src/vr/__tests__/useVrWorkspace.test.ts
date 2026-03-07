@@ -559,11 +559,18 @@ describe("useVrWorkspace", () => {
       panelIdB: buildVrPanelId("home", "build-01"),
     });
 
-    const closePanelAction = current().applyVoiceTranscript("close homelab");
-    expect(closePanelAction).toEqual({
-      kind: "panel_remove",
-      panelId: buildVrPanelId("home", "build-01"),
+    let closePanelAction: ReturnType<UseVrWorkspaceResult["applyVoiceTranscript"]> = { kind: "none" };
+    await act(async () => {
+      closePanelAction = current().applyVoiceTranscript("close homelab");
     });
+    expect(closePanelAction).toEqual({
+      kind: "stop_session",
+      panelId: buildVrPanelId("home", "build-01"),
+      serverId: "home",
+      session: "build-01",
+      closePanel: true,
+    });
+    expect(current().panels.some((panel) => panel.id === buildVrPanelId("home", "build-01"))).toBe(false);
 
     await act(async () => {
       renderer?.unmount();

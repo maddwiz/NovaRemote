@@ -273,6 +273,7 @@ describe("useVrInputRouter", () => {
         panelId: "home::build",
         serverId: "home",
         session: "build",
+        closePanel: true,
       })
       .mockReturnValueOnce({
         kind: "open_on_mac",
@@ -318,7 +319,7 @@ describe("useVrInputRouter", () => {
       await current().dispatchVoice("stop session");
     });
     expect(onStopSession).toHaveBeenCalledWith("home", "build");
-    expect(current().hudStatus?.message).toContain("Stopped home/build");
+    expect(current().hudStatus?.message).toContain("Stopped and closed home/build");
 
     await act(async () => {
       await current().dispatchVoice("open on mac");

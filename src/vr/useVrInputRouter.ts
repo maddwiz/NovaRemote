@@ -584,7 +584,9 @@ export function useVrInputRouter({
         try {
           await onStopSession(action.serverId, action.session);
           publishHudStatus({
-            message: `Stopped ${action.serverId}/${action.session}`,
+            message: action.closePanel
+              ? `Stopped and closed ${action.serverId}/${action.session}`
+              : `Stopped ${action.serverId}/${action.session}`,
             severity: "success",
             at: now(),
           });

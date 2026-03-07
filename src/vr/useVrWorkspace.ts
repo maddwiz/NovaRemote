@@ -45,6 +45,7 @@ export type VrWorkspaceVoiceAction =
       panelId: string;
       serverId: string;
       session: string;
+      closePanel?: boolean;
     }
   | {
       kind: "open_on_mac";
@@ -772,7 +773,13 @@ export function useVrWorkspace({
           return { kind: "none" };
         }
         removePanel(panel.id);
-        return { kind: "panel_remove", panelId: panel.id };
+        return {
+          kind: "stop_session",
+          panelId: panel.id,
+          serverId: panel.serverId,
+          session: panel.session,
+          closePanel: true,
+        };
       }
       if (intent.kind === "reconnect_server") {
         const panel = universeById.get(intent.panelId);

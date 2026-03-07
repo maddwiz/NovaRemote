@@ -44,6 +44,7 @@ Updated: 2026-03-07
 - [x] Expose cross-server session creation through app context/view model (`onCreateSession(serverId, kind)`)
 - [x] Glasses route handling for new actions (create/close/resize/move/swap)
 - [x] Voice `close_panel` in glasses now routes through pooled server stop-session controls before removing the panel
+- [x] VR voice `close_panel` now also routes through pooled stop-session controls (with panel removal) for parity with glasses
 - [x] Prompt-aware voice creation parsing (`open codex ... with prompt ...`, `open terminal ... and run ...`) forwarded to session creation handlers
 - [x] Voice create-session target resolution now falls back to pooled server metadata, so `"open codex on <server>"` works even before that server has an open panel/session
 - [x] Create-session routing now prioritizes explicit server-target matches over fuzzy panel matches, preventing misroutes when similarly named VM panels are open
