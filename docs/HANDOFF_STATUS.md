@@ -92,6 +92,7 @@ Updated: 2026-03-07
 - [x] Cloud scaffold invite listing now includes `pending` / `accepted` / `expired` / `revoked` summary rollups for dashboard governance visibility
 - [x] Team cloud dashboard bridge in app (dashboard URL surfaced + quick-open action)
 - [x] Per-member usage telemetry surfaced in TeamScreen cards (sessions/commands/fleet)
+- [x] Cloud dashboard scaffold now surfaces aggregate usage counters from `/v1/team/usage` (`activeMembers`, `sessionsCreated`, `commandsSent`, `fleetExecutions`)
 - [x] Cloud scaffold member listing now supports `role` / `email` / `activeSince` filters with dashboard member filter controls
 - [x] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
 - [x] RevenueCat entitlement tier recognition (`pro`/`team`/`enterprise`) in app gating state
@@ -134,6 +135,7 @@ Updated: 2026-03-07
 - [~] Enterprise IAM expansion:
   - [x] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode
   - [x] Team SSO provider lifecycle (`GET/PATCH /v1/team/sso/providers`) wired in app (`useTeamAuth`, TeamScreen toggles + editable display/issuer/auth/token/client/callback fields) + cloud contract/scaffold
+  - [x] Cloud dashboard scaffold now supports full SSO provider metadata editing (`displayName`, `issuerUrl`, `authUrl`, `tokenUrl`, `clientId`, `callbackUrl`) in addition to enable/disable actions
   - [~] in-app role/invite controls + member filtering + member server-assignment controls are implemented, plus invite revoke + dashboard deep-link; cloud dashboard scaffold now includes role/invite/server-assignment admin controls while production deployment remains pending
   - [x] role-limited team context fetch now degrades gracefully on `403` responses in `useTeamAuth.refreshTeamContext` (forbidden endpoints fall back to safe defaults while auth/network errors still surface)
 - [~] Compliance expansion:
