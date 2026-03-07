@@ -1509,6 +1509,10 @@ app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (re
 });
 
 app.post("/v1/team/fleet/approvals/:approvalId/approve", requireTeamPermission("team:manage"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
@@ -1521,18 +1525,18 @@ app.post("/v1/team/fleet/approvals/:approvalId/approve", requireTeamPermission("
   if (approval.status !== "pending") {
     return res.status(409).json({ detail: `Approval is already ${approval.status}` });
   }
-  if (approval.requestedByUserId === baseIdentity.userId) {
+  if (approval.requestedByUserId === identity.userId) {
     return res.status(403).json({ detail: "Fleet approvals must be reviewed by another team member." });
   }
   approval.status = "approved";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
-  approval.reviewedByUserId = baseIdentity.userId;
-  approval.reviewedByEmail = baseIdentity.email;
+  approval.reviewedByUserId = identity.userId;
+  approval.reviewedByEmail = identity.email;
   approval.reviewedAt = approval.updatedAt;
   recordSystemAuditEvent(
     "fleet_approval_reviewed",
-    `Approved fleet request ${approval.id} by ${baseIdentity.email}.`,
+    `Approved fleet request ${approval.id} by ${identity.email}.`,
     { approved: true },
     false
   );
@@ -1541,6 +1545,10 @@ app.post("/v1/team/fleet/approvals/:approvalId/approve", requireTeamPermission("
 });
 
 app.post("/v1/team/fleet/approvals/:approvalId/deny", requireTeamPermission("team:manage"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+  if (!identity) {
+    return unauthorized(res, "Authentication required");
+  }
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
@@ -1553,18 +1561,18 @@ app.post("/v1/team/fleet/approvals/:approvalId/deny", requireTeamPermission("tea
   if (approval.status !== "pending") {
     return res.status(409).json({ detail: `Approval is already ${approval.status}` });
   }
-  if (approval.requestedByUserId === baseIdentity.userId) {
+  if (approval.requestedByUserId === identity.userId) {
     return res.status(403).json({ detail: "Fleet approvals must be reviewed by another team member." });
   }
   approval.status = "denied";
   approval.updatedAt = new Date().toISOString();
   approval.note = typeof req.body?.note === "string" && req.body.note.trim() ? req.body.note.trim() : approval.note;
-  approval.reviewedByUserId = baseIdentity.userId;
-  approval.reviewedByEmail = baseIdentity.email;
+  approval.reviewedByUserId = identity.userId;
+  approval.reviewedByEmail = identity.email;
   approval.reviewedAt = approval.updatedAt;
   recordSystemAuditEvent(
     "fleet_approval_reviewed",
-    `Denied fleet request ${approval.id} by ${baseIdentity.email}.`,
+    `Denied fleet request ${approval.id} by ${identity.email}.`,
     { approved: false },
     false
   );

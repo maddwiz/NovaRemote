@@ -78,6 +78,8 @@ assert_contains "${API_DIR}/src/server.ts" "function normalizeFleetTargetsForIde
 assert_contains "${API_DIR}/src/server.ts" "function findTeamServerByAnyId"
 assert_contains "${API_DIR}/src/server.ts" "Fleet approval already pending"
 assert_contains "${API_DIR}/src/server.ts" "Fleet approvals must be reviewed by another team member."
+assert_contains "${API_DIR}/src/server.ts" "approval.reviewedByUserId = identity.userId"
+assert_contains "${API_DIR}/src/server.ts" "approval.reviewedByEmail = identity.email"
 assert_contains "${API_DIR}/src/server.ts" "teamSettingsPatchSchema"
 assert_contains "${API_DIR}/src/server.ts" "Invalid command blocklist regex"
 assert_contains "${API_DIR}/src/server.ts" "Not authorized for this server."
