@@ -13,7 +13,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 25
     env:
       CI: true
     steps:
@@ -34,6 +34,12 @@ jobs:
 
       - name: Unit tests
         run: npm run test
+
+      - name: Verify cloud scaffold bootstrap
+        run: npm run cloud:verify-bootstrap
+
+      - name: Verify VR scaffold bootstrap
+        run: npm run vr:verify-bootstrap
 
       - name: Expo doctor
         run: |

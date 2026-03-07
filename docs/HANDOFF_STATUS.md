@@ -162,5 +162,6 @@ Updated: 2026-03-07
 
 ## Notes
 
+- GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.
 - All changes above were validated locally with `npm run ci` and pushed to `main`.
 - GitHub Actions CI is currently green on the latest push that updated this status.
