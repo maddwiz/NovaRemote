@@ -847,6 +847,9 @@ paths:
                         type: integer
                       failed:
                         type: integer
+                      avgProcessingDurationMs:
+                        type: [integer, "null"]
+                        minimum: 0
     post:
       summary: Request a cloud-hosted audit export job
       requestBody:

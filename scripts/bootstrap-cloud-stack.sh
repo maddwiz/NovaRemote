@@ -2266,10 +2266,18 @@ app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => 
     return true;
   });
   const ordered = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const completedDurations = filtered
+    .map((job) => (typeof job.processingDurationMs === "number" ? job.processingDurationMs : null))
+    .filter((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0);
+  const avgProcessingDurationMs =
+    completedDurations.length > 0
+      ? Math.round(completedDurations.reduce((total, value) => total + value, 0) / completedDurations.length)
+      : null;
   const summary = {
     pending: filtered.filter((job) => job.status === "pending").length,
     ready: filtered.filter((job) => job.status === "ready").length,
     failed: filtered.filter((job) => job.status === "failed").length,
+    avgProcessingDurationMs,
   };
   res.json({
     exports: ordered.slice(0, limit),
@@ -2870,10 +2878,16 @@ export function App() {
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
   const [exportJobs, setExportJobs] = useState<AuditExportJob[]>([]);
-  const [exportSummary, setExportSummary] = useState<{ pending: number; ready: number; failed: number }>({
+  const [exportSummary, setExportSummary] = useState<{
+    pending: number;
+    ready: number;
+    failed: number;
+    avgProcessingDurationMs: number | null;
+  }>({
     pending: 0,
     ready: 0,
     failed: 0,
+    avgProcessingDurationMs: null,
   });
   const [exportRangeHoursInput, setExportRangeHoursInput] = useState<string>("");
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -3057,7 +3071,7 @@ export function App() {
     setSsoProviders([]);
     setInvites([]);
     setExportJobs([]);
-    setExportSummary({ pending: 0, ready: 0, failed: 0 });
+    setExportSummary({ pending: 0, ready: 0, failed: 0, avgProcessingDurationMs: null });
     setAuditEvents([]);
     setLastExport(null);
     setStatus("Signed out.");
@@ -3081,7 +3095,7 @@ export function App() {
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
         fetchJson<{
           exports?: AuditExportJob[];
-          summary?: { pending?: number; ready?: number; failed?: number };
+          summary?: { pending?: number; ready?: number; failed?: number; avgProcessingDurationMs?: number | null };
         }>("/v1/audit/exports?limit=20", accessToken.trim()),
         fetchJson<{ events?: AuditEvent[] }>("/v1/audit/events?limit=200", accessToken.trim()),
       ] as const);
@@ -3149,6 +3163,11 @@ export function App() {
         pending: Number(exportsPayload.summary?.pending || 0),
         ready: Number(exportsPayload.summary?.ready || 0),
         failed: Number(exportsPayload.summary?.failed || 0),
+        avgProcessingDurationMs:
+          typeof exportsPayload.summary?.avgProcessingDurationMs === "number" &&
+          Number.isFinite(exportsPayload.summary?.avgProcessingDurationMs)
+            ? Math.max(0, Math.round(exportsPayload.summary?.avgProcessingDurationMs))
+            : null,
       });
       setAuditEvents(Array.isArray(auditEventsPayload.events) ? auditEventsPayload.events : []);
       const nextSettings = settingsPayload.settings || {
@@ -4661,7 +4680,13 @@ export function App() {
         {exportJobs.length > 0 ? (
           <div className="providerRow">
             <p className="muted">{`Recent Export Jobs (${filteredExportJobs.length}/${exportJobs.length})`}</p>
-            <p className="muted">{`Summary: pending ${exportSummary.pending} • ready ${exportSummary.ready} • failed ${exportSummary.failed}`}</p>
+            <p className="muted">
+              {`Summary: pending ${exportSummary.pending} • ready ${exportSummary.ready} • failed ${exportSummary.failed}${
+                typeof exportSummary.avgProcessingDurationMs === "number"
+                  ? ` • avg processing ${formatDurationMs(exportSummary.avgProcessingDurationMs)}`
+                  : ""
+              }`}
+            </p>
             <div className="gridCols">
               <label className="muted">
                 Filter status
