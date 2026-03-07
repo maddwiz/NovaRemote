@@ -540,6 +540,11 @@ paths:
           schema:
             type: string
         - in: query
+          name: reviewedBy
+          required: false
+          schema:
+            type: string
+        - in: query
           name: target
           required: false
           schema:

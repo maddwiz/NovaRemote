@@ -1882,6 +1882,7 @@ app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (req, 
   expireExecutionClaims();
   const statusRaw = String(req.query?.status || "").trim().toLowerCase();
   const requestedByNeedle = String(req.query?.requestedBy || "").trim().toLowerCase();
+  const reviewedByNeedle = String(req.query?.reviewedBy || "").trim().toLowerCase();
   const targetNeedle = String(req.query?.target || "").trim().toLowerCase();
   const limitRaw = Number.parseInt(String(req.query?.limit || "200"), 10);
   const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 2000) : 200;
@@ -1903,6 +1904,13 @@ app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (req, 
         const requesterEmail = String(approval.requestedByEmail || "").toLowerCase();
         const requesterUserId = String(approval.requestedByUserId || "").toLowerCase();
         if (!requesterEmail.includes(requestedByNeedle) && !requesterUserId.includes(requestedByNeedle)) {
+          return false;
+        }
+      }
+      if (reviewedByNeedle) {
+        const reviewerEmail = String(approval.reviewedByEmail || "").toLowerCase();
+        const reviewerUserId = String(approval.reviewedByUserId || "").toLowerCase();
+        if (!reviewerEmail.includes(reviewedByNeedle) && !reviewerUserId.includes(reviewedByNeedle)) {
           return false;
         }
       }
@@ -2736,6 +2744,7 @@ type FleetApproval = {
   targets?: string[];
   requestedByEmail: string;
   createdAt: string;
+  reviewedByUserId?: string;
   reviewedByEmail?: string;
   reviewedAt?: string;
   executionClaimedByEmail?: string;
@@ -2944,6 +2953,7 @@ export function App() {
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
   const [approvalStatusFilter, setApprovalStatusFilter] = useState<string>("");
   const [approvalRequesterFilter, setApprovalRequesterFilter] = useState<string>("");
+  const [approvalReviewerFilter, setApprovalReviewerFilter] = useState<string>("");
   const [approvalTargetFilter, setApprovalTargetFilter] = useState<string>("");
   const [approvalReviewNotes, setApprovalReviewNotes] = useState<Record<string, string>>({});
   const [approvalExecutionSummaries, setApprovalExecutionSummaries] = useState<Record<string, string>>({});
@@ -4022,6 +4032,7 @@ export function App() {
   const filteredApprovals = useMemo(() => {
     const statusNeedle = approvalStatusFilter.trim().toLowerCase();
     const requesterNeedle = approvalRequesterFilter.trim().toLowerCase();
+    const reviewerNeedle = approvalReviewerFilter.trim().toLowerCase();
     const targetNeedle = approvalTargetFilter.trim().toLowerCase();
     return approvals.filter((approval) => {
       if (statusNeedle && !String(approval.status || "").toLowerCase().includes(statusNeedle)) {
@@ -4033,6 +4044,13 @@ export function App() {
           return false;
         }
       }
+      if (reviewerNeedle) {
+        const reviewerEmail = String(approval.reviewedByEmail || "").toLowerCase();
+        const reviewerUserId = String(approval.reviewedByUserId || "").toLowerCase();
+        if (!reviewerEmail.includes(reviewerNeedle) && !reviewerUserId.includes(reviewerNeedle)) {
+          return false;
+        }
+      }
       if (targetNeedle) {
         const targets = Array.isArray(approval.targets) ? approval.targets : [];
         if (!targets.some((target) => String(target).toLowerCase().includes(targetNeedle))) {
@@ -4041,7 +4059,7 @@ export function App() {
       }
       return true;
     });
-  }, [approvalRequesterFilter, approvalStatusFilter, approvalTargetFilter, approvals]);
+  }, [approvalRequesterFilter, approvalReviewerFilter, approvalStatusFilter, approvalTargetFilter, approvals]);
 
   const filteredInvites = useMemo(() => {
     const statusNeedle = inviteStatusFilter.trim().toLowerCase();
@@ -4649,6 +4667,15 @@ export function App() {
               value={approvalRequesterFilter}
               onChange={(event) => setApprovalRequesterFilter(event.target.value)}
               placeholder="admin@"
+            />
+          </label>
+          <label className="muted">
+            Filter reviewer
+            <input
+              className="textInput"
+              value={approvalReviewerFilter}
+              onChange={(event) => setApprovalReviewerFilter(event.target.value)}
+              placeholder="reviewer@"
             />
           </label>
           <label className="muted">
