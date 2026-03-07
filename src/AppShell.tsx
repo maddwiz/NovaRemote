@@ -2123,6 +2123,25 @@ export default function AppShell() {
     [poolConnections, sendTextToServerSession]
   );
 
+  const stopServerSession = useCallback(
+    async (serverId: string, session: string) => {
+      const targetConnection = poolConnections.get(serverId);
+      if (!targetConnection || !targetConnection.connected) {
+        throw new Error("Target server is disconnected.");
+      }
+      markActivity();
+      assertServerWritable(serverId, "Stop session");
+      if (targetConnection.localAiSessions.includes(session)) {
+        throw new Error("Local LLM sessions cannot be stopped through server controls.");
+      }
+      if (scopedServerId === serverId && sessionReadOnly[session]) {
+        throw new Error(`${session} is read-only. Disable read-only before stopping the session.`);
+      }
+      await stopPoolSession(serverId, session);
+    },
+    [assertServerWritable, markActivity, poolConnections, scopedServerId, sessionReadOnly, stopPoolSession]
+  );
+
   const sendServerSessionControlChar = useCallback(
     async (serverId: string, session: string, char: string) => {
       const targetConnection = poolConnections.get(serverId);
@@ -3266,6 +3285,7 @@ export default function AppShell() {
     setShareConfig,
     setFocusedSession,
     handleStop,
+    stopServerSession,
     removeOpenSession,
     closeStream,
     recallPrev,

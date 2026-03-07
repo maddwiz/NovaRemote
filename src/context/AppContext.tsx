@@ -146,6 +146,7 @@ export type TerminalsViewModel = {
   onExportSession: (session: string) => void;
   onFocusSession: (session: string) => void;
   onStopSession: (session: string) => void;
+  onStopServerSession?: (serverId: string, session: string) => void;
   onHideSession: (session: string) => void;
   onHistoryPrev: (session: string) => void;
   onHistoryNext: (session: string) => void;

@@ -283,6 +283,7 @@ export function TerminalsScreen() {
     onExportSession,
     onFocusSession,
     onStopSession,
+    onStopServerSession,
     onHideSession,
     onHistoryPrev,
     onHistoryNext,
@@ -696,6 +697,10 @@ export function TerminalsScreen() {
           onStop={() => {
             if (isFocusedServer) {
               onStopSession(session);
+              return;
+            }
+            if (typeof onStopServerSession === "function") {
+              onStopServerSession(serverId, session);
               return;
             }
             onSendServerSessionControlChar(serverId, session, "\u0003");

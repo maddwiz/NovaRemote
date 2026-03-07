@@ -200,6 +200,7 @@ export function GlassesModeScreen() {
     onOpenServerSessionOnMac,
     onClearServerSessionDraft,
     onSendServerSessionControlChar,
+    onStopServerSession,
     onHistoryPrev,
     onHistoryNext,
     onSetGlassesBrand,
@@ -1109,7 +1110,11 @@ export function GlassesModeScreen() {
         if (!target) {
           return;
         }
-        onSendServerSessionControlChar(target.serverId, target.session, "\u0003");
+        if (typeof onStopServerSession === "function") {
+          onStopServerSession(target.serverId, target.session);
+        } else {
+          onSendServerSessionControlChar(target.serverId, target.session, "\u0003");
+        }
         return;
       }
       if (route.kind === "open_on_mac") {
@@ -1222,6 +1227,7 @@ export function GlassesModeScreen() {
       onShareServerSessionLive,
       onSendServerSessionCommand,
       onSendServerSessionControlChar,
+      onStopServerSession,
       onSetServerSessionDraft,
       pinPanel,
       panelIds,

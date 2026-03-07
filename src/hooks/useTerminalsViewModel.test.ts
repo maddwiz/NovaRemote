@@ -16,6 +16,11 @@ vi.mock("expo-haptics", () => ({
   selectionAsync: vi.fn(async () => undefined),
   notificationAsync: vi.fn(async () => undefined),
   impactAsync: vi.fn(async () => undefined),
+  ImpactFeedbackStyle: {
+    Light: "light",
+    Medium: "medium",
+    Heavy: "heavy",
+  },
   NotificationFeedbackType: {
     Success: "success",
     Warning: "warning",
@@ -182,6 +187,7 @@ function makeBaseArgs() {
     setShareConfig: vi.fn(),
     setFocusedSession: vi.fn(),
     handleStop: vi.fn(async () => undefined),
+    stopServerSession: vi.fn(async () => undefined),
     removeOpenSession: vi.fn(),
     closeStream: vi.fn(),
     recallPrev: vi.fn(),
@@ -642,6 +648,40 @@ describe("useTerminalsViewModel", () => {
         server_id: "dgx",
       })
     );
+  });
+
+  it("routes server stop actions through the dedicated pooled stop handler", async () => {
+    const stopServerSession = vi.fn(async () => undefined);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      stopServerSession,
+    });
+
+    model.onStopServerSession?.("home", "build");
+    await Promise.resolve();
+
+    expect(stopServerSession).toHaveBeenCalledWith("home", "build");
+  });
+
+  it("falls back to focused-session stop when pooled stop handler is unavailable", async () => {
+    const handleStop = vi.fn(async () => undefined);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      activeServer: {
+        id: "dgx",
+        name: "DGX",
+        baseUrl: "https://dgx.novaremote.test",
+        token: "dgx-token",
+        defaultCwd: "/workspace",
+      },
+      stopServerSession: undefined,
+      handleStop,
+    });
+
+    model.onStopServerSession?.("dgx", "main");
+    await Promise.resolve();
+
+    expect(handleStop).toHaveBeenCalledWith("main");
   });
 
   it("opens the vr command center route", () => {

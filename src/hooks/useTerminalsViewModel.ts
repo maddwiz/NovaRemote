@@ -143,6 +143,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     setShareConfig,
     setFocusedSession,
     handleStop,
+    stopServerSession,
     removeOpenSession,
     closeStream,
     recallPrev,
@@ -738,6 +739,25 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onStopSession: (session) => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
       void runWithStatus(`Stopping ${session}`, async () => {
+        if (isLocalSession(session)) {
+          throw new Error("Local LLM sessions do not support Ctrl-C.");
+        }
+        if (sessionReadOnly[session]) {
+          throw new Error(`${session} is read-only. Disable read-only before sending Ctrl-C.`);
+        }
+        await handleStop(session);
+      });
+    },
+    onStopServerSession: (serverId, session) => {
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+      void runWithStatus(`Stopping ${session}`, async () => {
+        if (typeof stopServerSession === "function") {
+          await stopServerSession(serverId, session);
+          return;
+        }
+        if (activeServer?.id !== serverId) {
+          throw new Error("Focus the target server before stopping sessions.");
+        }
         if (isLocalSession(session)) {
           throw new Error("Local LLM sessions do not support Ctrl-C.");
         }

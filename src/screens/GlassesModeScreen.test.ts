@@ -167,6 +167,7 @@ function makeTerminalsBase(connections: Map<string, ServerConnection>) {
     onOpenServerSessionOnMac: vi.fn(),
     onClearServerSessionDraft: vi.fn(),
     onSendServerSessionControlChar: vi.fn(),
+    onStopServerSession: vi.fn(),
     onHistoryPrev: vi.fn(),
     onHistoryNext: vi.fn(),
     onSetGlassesBrand: vi.fn(),
@@ -923,6 +924,62 @@ describe("GlassesModeScreen", () => {
       screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
     });
     expect(() => screen.root.findByProps({ children: "Closed Home build" })).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("routes stop-session voice commands through server session stop handler", async () => {
+    const routeTranscript = vi
+      .fn<
+        (
+          transcript: string
+        ) => {
+          kind: string;
+          panelId?: string;
+        }
+      >()
+      .mockReturnValueOnce({
+        kind: "stop_session",
+        panelId: "home::build",
+      });
+    useSpatialVoiceRoutingMock.mockReturnValue({
+      routeTranscript,
+    });
+
+    const onStopServerSession = vi.fn();
+    const onSendServerSessionControlChar = vi.fn();
+    const dgx = makeServer("dgx", "DGX");
+    const home = makeServer("home", "Home");
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, ["main"])],
+      [home.id, makeConnection(home, ["build"])],
+    ]);
+    const terminals = makeTerminals(connections, {
+      voiceTranscript: "stop session on home",
+      onStopServerSession,
+      onSendServerSessionControlChar,
+    });
+
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals,
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+
+    await act(async () => {
+      screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
+    });
+
+    expect(onStopServerSession).toHaveBeenCalledWith("home", "build");
+    expect(onSendServerSessionControlChar).not.toHaveBeenCalled();
 
     await act(async () => {
       screen.unmount();
