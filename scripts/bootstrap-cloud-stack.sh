@@ -1881,6 +1881,7 @@ app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (req, 
   expirePendingApprovals();
   expireExecutionClaims();
   const statusRaw = String(req.query?.status || "").trim().toLowerCase();
+  const executionStateRaw = String(req.query?.executionState || "").trim().toLowerCase();
   const requestedByNeedle = String(req.query?.requestedBy || "").trim().toLowerCase();
   const reviewedByNeedle = String(req.query?.reviewedBy || "").trim().toLowerCase();
   const targetNeedle = String(req.query?.target || "").trim().toLowerCase();
@@ -1894,6 +1895,21 @@ app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (req, 
         : "invalid";
   if (statusFilter === "invalid") {
     return res.status(400).json({ detail: "status must be pending, approved, denied, or expired" });
+  }
+  const executionStateFilter =
+    executionStateRaw === ""
+      ? null
+      : executionStateRaw === "unclaimed" ||
+          executionStateRaw === "claimed" ||
+          executionStateRaw === "completed" ||
+          executionStateRaw === "completed_succeeded" ||
+          executionStateRaw === "completed_failed"
+        ? executionStateRaw
+        : "invalid";
+  if (executionStateFilter === "invalid") {
+    return res
+      .status(400)
+      .json({ detail: "executionState must be unclaimed, claimed, completed, completed_succeeded, or completed_failed" });
   }
   const approvals = fleetApprovals
     .filter((approval) => {
@@ -1911,6 +1927,26 @@ app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (req, 
         const reviewerEmail = String(approval.reviewedByEmail || "").toLowerCase();
         const reviewerUserId = String(approval.reviewedByUserId || "").toLowerCase();
         if (!reviewerEmail.includes(reviewedByNeedle) && !reviewerUserId.includes(reviewedByNeedle)) {
+          return false;
+        }
+      }
+      if (executionStateFilter) {
+        const executionState = approval.executionCompletedAt
+          ? approval.executionResult === "failed"
+            ? "completed_failed"
+            : approval.executionResult === "succeeded"
+              ? "completed_succeeded"
+              : "completed"
+          : approval.status === "approved"
+            ? approval.executionClaimedAt
+              ? "claimed"
+              : "unclaimed"
+            : "none";
+        if (executionStateFilter === "completed") {
+          if (!executionState.startsWith("completed")) {
+            return false;
+          }
+        } else if (executionState !== executionStateFilter) {
           return false;
         }
       }
@@ -2952,6 +2988,7 @@ export function App() {
   const [serverVmIdInput, setServerVmIdInput] = useState<string>("");
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
   const [approvalStatusFilter, setApprovalStatusFilter] = useState<string>("");
+  const [approvalExecutionStateFilter, setApprovalExecutionStateFilter] = useState<string>("");
   const [approvalRequesterFilter, setApprovalRequesterFilter] = useState<string>("");
   const [approvalReviewerFilter, setApprovalReviewerFilter] = useState<string>("");
   const [approvalTargetFilter, setApprovalTargetFilter] = useState<string>("");
@@ -4031,12 +4068,33 @@ export function App() {
 
   const filteredApprovals = useMemo(() => {
     const statusNeedle = approvalStatusFilter.trim().toLowerCase();
+    const executionStateNeedle = approvalExecutionStateFilter.trim().toLowerCase();
     const requesterNeedle = approvalRequesterFilter.trim().toLowerCase();
     const reviewerNeedle = approvalReviewerFilter.trim().toLowerCase();
     const targetNeedle = approvalTargetFilter.trim().toLowerCase();
     return approvals.filter((approval) => {
       if (statusNeedle && !String(approval.status || "").toLowerCase().includes(statusNeedle)) {
         return false;
+      }
+      if (executionStateNeedle) {
+        const executionState = approval.executionCompletedAt
+          ? approval.executionResult === "failed"
+            ? "completed_failed"
+            : approval.executionResult === "succeeded"
+              ? "completed_succeeded"
+              : "completed"
+          : approval.status === "approved"
+            ? approval.executionClaimedAt
+              ? "claimed"
+              : "unclaimed"
+            : "none";
+        if (executionStateNeedle === "completed") {
+          if (!executionState.startsWith("completed")) {
+            return false;
+          }
+        } else if (!executionState.includes(executionStateNeedle)) {
+          return false;
+        }
       }
       if (requesterNeedle) {
         const requester = String(approval.requestedByEmail || "").toLowerCase();
@@ -4059,7 +4117,14 @@ export function App() {
       }
       return true;
     });
-  }, [approvalRequesterFilter, approvalReviewerFilter, approvalStatusFilter, approvalTargetFilter, approvals]);
+  }, [
+    approvalExecutionStateFilter,
+    approvalRequesterFilter,
+    approvalReviewerFilter,
+    approvalStatusFilter,
+    approvalTargetFilter,
+    approvals,
+  ]);
 
   const filteredInvites = useMemo(() => {
     const statusNeedle = inviteStatusFilter.trim().toLowerCase();
@@ -4667,6 +4732,15 @@ export function App() {
               value={approvalRequesterFilter}
               onChange={(event) => setApprovalRequesterFilter(event.target.value)}
               placeholder="admin@"
+            />
+          </label>
+          <label className="muted">
+            Filter execution state
+            <input
+              className="textInput"
+              value={approvalExecutionStateFilter}
+              onChange={(event) => setApprovalExecutionStateFilter(event.target.value)}
+              placeholder="claimed"
             />
           </label>
           <label className="muted">

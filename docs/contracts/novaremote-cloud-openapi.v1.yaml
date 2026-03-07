@@ -535,6 +535,12 @@ paths:
             type: string
             enum: [pending, approved, denied, expired]
         - in: query
+          name: executionState
+          required: false
+          schema:
+            type: string
+            enum: [unclaimed, claimed, completed, completed_succeeded, completed_failed]
+        - in: query
           name: requestedBy
           required: false
           schema:
