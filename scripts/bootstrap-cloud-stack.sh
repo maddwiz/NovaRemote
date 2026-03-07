@@ -374,6 +374,10 @@ const teamSettings = {
   requireFleetApproval: false
 };
 
+function effectiveTeamSettingsForIdentity(_identity: TeamIdentity) {
+  return { ...teamSettings };
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const stateFilePath =
@@ -1293,6 +1297,17 @@ app.put("/v1/team/members/:memberId/servers", requireTeamPermission("team:manage
 
 app.get("/v1/team/settings", requireTeamPermission("settings:manage"), (_req, res) => {
   res.json({ settings: teamSettings });
+});
+
+app.get("/v1/team/settings/effective", requireTeamPermission("servers:read"), (req, res) => {
+  const identity = (req as Request & { identity?: TeamIdentity }).identity;
+  if (!identity) {
+    return unauthorized(res, "Unauthorized");
+  }
+  return res.json({
+    settings: effectiveTeamSettingsForIdentity(identity),
+    managedBy: "team_admin",
+  });
 });
 
 app.patch("/v1/team/settings", requireTeamPermission("settings:manage"), (req, res) => {

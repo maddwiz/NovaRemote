@@ -231,7 +231,7 @@ beforeEach(() => {
       }
       return {};
     }
-    if (path === "/v1/team/settings") {
+    if (path === "/v1/team/settings" || path === "/v1/team/settings/effective") {
       if (String(init?.method || "GET").toUpperCase() === "PATCH") {
         const rawBody = String(init?.body || "{}");
         const payload = JSON.parse(rawBody) as Partial<typeof teamSettingsState>;
@@ -408,7 +408,12 @@ describe("useTeamAuth hook", () => {
           ],
         };
       }
-      if (path === "/v1/team/settings" || path === "/v1/team/members" || path === "/v1/team/usage") {
+      if (
+        path === "/v1/team/settings/effective" ||
+        path === "/v1/team/settings" ||
+        path === "/v1/team/members" ||
+        path === "/v1/team/usage"
+      ) {
         throw new Error("403 Forbidden");
       }
       return {};
@@ -440,8 +445,67 @@ describe("useTeamAuth hook", () => {
       requireFleetApproval: null,
     });
     expect(
-      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/settings")
+      cloudClientMock.cloudRequest.mock.calls.some((call) => String(call[0]) === "/v1/team/settings/effective")
     ).toBe(true);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("falls back to legacy /v1/team/settings when effective settings endpoint is unavailable", async () => {
+    secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
+    cloudClientMock.cloudRequest.mockImplementation(async (path: string) => {
+      if (path === "/v1/team/servers") {
+        return { servers: [] };
+      }
+      if (path === "/v1/team/members") {
+        return { members: [] };
+      }
+      if (path === "/v1/team/usage") {
+        return { usage: {} };
+      }
+      if (path === "/v1/team/settings/effective") {
+        throw new Error("404 Not Found");
+      }
+      if (path === "/v1/team/settings") {
+        return {
+          settings: {
+            enforceDangerConfirm: true,
+            commandBlocklist: ["rm\\s+-rf\\s+/"],
+            sessionTimeoutMinutes: 30,
+            requireSessionRecording: true,
+            requireFleetApproval: true,
+          },
+        };
+      }
+      return {};
+    });
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+    await flush();
+
+    expect(latestOrThrow(latest).teamSettings).toEqual({
+      enforceDangerConfirm: true,
+      commandBlocklist: ["rm\\s+-rf\\s+/"],
+      sessionTimeoutMinutes: 30,
+      requireSessionRecording: true,
+      requireFleetApproval: true,
+    });
+    const requestedPaths = cloudClientMock.cloudRequest.mock.calls.map((call) => String(call[0]));
+    expect(requestedPaths).toContain("/v1/team/settings/effective");
+    expect(requestedPaths).toContain("/v1/team/settings");
 
     await act(async () => {
       renderer?.unmount();

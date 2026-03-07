@@ -308,6 +308,23 @@ paths:
                 properties:
                   settings:
                     $ref: "#/components/schemas/TeamSettings"
+  /v1/team/settings/effective:
+    get:
+      summary: Retrieve effective team policy settings for the current member
+      description: Returns the policy view that should be enforced by clients for this signed-in member.
+      responses:
+        "200":
+          description: Effective team settings for the current member
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  settings:
+                    $ref: "#/components/schemas/TeamSettings"
+                  managedBy:
+                    type: string
+                    enum: [team_admin]
   /v1/team/usage:
     get:
       summary: Retrieve aggregate team usage counters

@@ -128,7 +128,7 @@ Updated: 2026-03-07
   - [~] in-app role/invite controls + member filtering + member server-assignment controls are implemented, plus invite revoke + dashboard deep-link; cloud dashboard scaffold now includes role/invite/server-assignment admin controls while production deployment remains pending
   - [x] role-limited team context fetch now degrades gracefully on `403` responses in `useTeamAuth.refreshTeamContext` (forbidden endpoints fall back to safe defaults while auth/network errors still surface)
 - [~] Compliance expansion:
-  - [~] team-managed session recording enforcement is in-app; cloud admin policy governance remains pending
+  - [x] team-managed session recording enforcement is in-app, and cloud scaffold now exposes member-effective policy reads (`GET /v1/team/settings/effective`) so non-admin clients still enforce admin-managed recording/safety settings
   - [x] audit export (`CSV`/`JSON`) from in-app queue
   - [x] cloud audit export job requests + export history refresh/list/open actions in app (`useAuditLog` + TeamScreen)
   - [x] cloud scaffold now emits system audit events for auth, server/invite/policy admin actions, fleet approval lifecycle, and export lifecycle updates

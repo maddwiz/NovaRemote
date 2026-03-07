@@ -805,14 +805,31 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
           : Promise.resolve<{ members?: unknown }>({ members: [] });
 
       const settingsPromise = cloudRequest<{ settings?: unknown }>(
-        "/v1/team/settings",
+        "/v1/team/settings/effective",
         { method: "GET" },
         {
           accessToken: currentIdentity.accessToken,
           cloudUrl: cloudUrl || getNovaCloudUrl(),
           fetchImpl,
         }
-      ).catch(fallbackOnForbidden({ settings: {} }));
+      ).catch(async (error) => {
+        const status = parseCloudErrorStatus(error);
+        if (status === 403) {
+          return { settings: {} };
+        }
+        if (status === 404) {
+          return cloudRequest<{ settings?: unknown }>(
+            "/v1/team/settings",
+            { method: "GET" },
+            {
+              accessToken: currentIdentity.accessToken,
+              cloudUrl: cloudUrl || getNovaCloudUrl(),
+              fetchImpl,
+            }
+          ).catch(fallbackOnForbidden({ settings: {} }));
+        }
+        throw error;
+      });
 
       const [serversPayload, membersPayload, settingsPayload, usagePayload, approvalsPayload, invitesPayload, ssoProvidersPayload] = await Promise.all([
         cloudRequest<{ servers?: unknown }>(
