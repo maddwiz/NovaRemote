@@ -27,7 +27,14 @@ assert_file() {
 assert_contains() {
   local file_path="$1"
   local pattern="$2"
-  if ! rg -F -q -- "${pattern}" "${file_path}"; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -F -q -- "${pattern}" "${file_path}"; then
+      return 0
+    fi
+  elif grep -F -q -- "${pattern}" "${file_path}"; then
+    return 0
+  fi
+  if ! grep -F -q -- "${pattern}" "${file_path}"; then
     echo "Expected pattern '${pattern}' not found in ${file_path}"
     exit 1
   fi
