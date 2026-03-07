@@ -154,13 +154,31 @@ describe("parseVrVoiceIntent", () => {
       sessionKind: "ai",
       prompt: undefined,
     });
+    expect(
+      parseVrVoiceIntent("open codex on homelab with prompt investigate memory leak", PANELS, "dgx-main")
+    ).toEqual({
+      kind: "create_session",
+      serverId: "homelab",
+      sessionKind: "ai",
+      prompt: "investigate memory leak",
+    });
     expect(parseVrVoiceIntent("new terminal", PANELS, "home-build")).toEqual({
       kind: "create_session",
       serverId: "homelab",
       sessionKind: "shell",
       prompt: undefined,
     });
+    expect(parseVrVoiceIntent("open terminal on homelab and run npm run build", PANELS, "dgx-main")).toEqual({
+      kind: "create_session",
+      serverId: "homelab",
+      sessionKind: "shell",
+      prompt: "npm run build",
+    });
     expect(parseVrVoiceIntent("close this", PANELS, "home-build")).toEqual({
+      kind: "close_panel",
+      panelId: "home-build",
+    });
+    expect(parseVrVoiceIntent("kill terminal build worker", PANELS, "dgx-main")).toEqual({
       kind: "close_panel",
       panelId: "home-build",
     });
@@ -178,6 +196,11 @@ describe("parseVrVoiceIntent", () => {
       kind: "move_panel",
       panelId: "home-build",
       position: "left",
+    });
+    expect(parseVrVoiceIntent("pull up in front of me", PANELS, "home-build")).toEqual({
+      kind: "move_panel",
+      panelId: "home-build",
+      position: "center",
     });
     expect(parseVrVoiceIntent("swap dgx spark and homelab", PANELS, "home-build")).toEqual({
       kind: "swap_panels",
