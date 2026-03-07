@@ -2933,6 +2933,8 @@ export function App() {
   const [approvalStatusFilter, setApprovalStatusFilter] = useState<string>("");
   const [approvalRequesterFilter, setApprovalRequesterFilter] = useState<string>("");
   const [approvalTargetFilter, setApprovalTargetFilter] = useState<string>("");
+  const [approvalReviewNotes, setApprovalReviewNotes] = useState<Record<string, string>>({});
+  const [approvalExecutionSummaries, setApprovalExecutionSummaries] = useState<Record<string, string>>({});
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
   const [exportJobs, setExportJobs] = useState<AuditExportJob[]>([]);
@@ -3127,6 +3129,8 @@ export function App() {
     setServerEditDrafts({});
     setMemberServerDrafts({});
     setApprovals([]);
+    setApprovalReviewNotes({});
+    setApprovalExecutionSummaries({});
     setSsoProviders([]);
     setInvites([]);
     setExportJobs([]);
@@ -3215,7 +3219,22 @@ export function App() {
         });
         return next;
       });
-      setApprovals(Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : []);
+      const nextApprovals = Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : [];
+      setApprovals(nextApprovals);
+      setApprovalReviewNotes((previous) => {
+        const next: Record<string, string> = {};
+        nextApprovals.forEach((approval) => {
+          next[approval.id] = previous[approval.id] ?? approval.note ?? "";
+        });
+        return next;
+      });
+      setApprovalExecutionSummaries((previous) => {
+        const next: Record<string, string> = {};
+        nextApprovals.forEach((approval) => {
+          next[approval.id] = previous[approval.id] ?? approval.executionSummary ?? "";
+        });
+        return next;
+      });
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
       const nextExportJobs = Array.isArray(exportsPayload.exports) ? exportsPayload.exports : [];
@@ -3600,12 +3619,16 @@ export function App() {
       setBusy(true);
       setStatus(`${action === "approve" ? "Approving" : "Denying"} ${approvalId}...`);
       try {
+        const note = (approvalReviewNotes[approvalId] || "").trim();
         const response = await fetch(`${cloudUrl}/v1/team/fleet/approvals/${approvalId}/${action}`, {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken.trim()}`,
           },
+          body: JSON.stringify({
+            note: note || undefined,
+          }),
         });
         if (!response.ok) {
           throw new Error(`${response.status} ${await response.text()}`);
@@ -3617,7 +3640,7 @@ export function App() {
         setBusy(false);
       }
     },
-    [accessToken, loadTeamData]
+    [accessToken, approvalReviewNotes, loadTeamData]
   );
 
   const claimApprovalExecution = useCallback(
@@ -3662,6 +3685,7 @@ export function App() {
       setBusy(true);
       setStatus(`Marking ${approvalId} ${status}...`);
       try {
+        const summary = (approvalExecutionSummaries[approvalId] || "").trim();
         const response = await fetch(`${cloudUrl}/v1/team/fleet/approvals/${approvalId}/complete`, {
           method: "POST",
           headers: {
@@ -3671,6 +3695,7 @@ export function App() {
           body: JSON.stringify({
             executionToken,
             status,
+            summary: summary || undefined,
           }),
         });
         if (!response.ok) {
@@ -3683,7 +3708,7 @@ export function App() {
         setBusy(false);
       }
     },
-    [accessToken, loadTeamData]
+    [accessToken, approvalExecutionSummaries, loadTeamData]
   );
 
   const updateMemberRole = useCallback(
@@ -4645,13 +4670,29 @@ export function App() {
             {approval.executionSummary ? <p className="muted">{`Summary: ${approval.executionSummary}`}</p> : null}
             {approval.executionToken ? <p className="muted">{`Execution token: ${approval.executionToken}`}</p> : null}
             {approval.status === "pending" ? (
-              <div className="actions">
-                <button disabled={busy} onClick={() => void reviewApproval(approval.id, "approve")}>
-                  Approve
-                </button>
-                <button disabled={busy} onClick={() => void reviewApproval(approval.id, "deny")}>
-                  Deny
-                </button>
+              <div className="providerRow">
+                <label className="muted">
+                  Review note (optional)
+                  <input
+                    className="textInput"
+                    value={approvalReviewNotes[approval.id] || ""}
+                    onChange={(event) =>
+                      setApprovalReviewNotes((previous) => ({
+                        ...previous,
+                        [approval.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="Reason / reviewer context"
+                  />
+                </label>
+                <div className="actions">
+                  <button disabled={busy} onClick={() => void reviewApproval(approval.id, "approve")}>
+                    Approve
+                  </button>
+                  <button disabled={busy} onClick={() => void reviewApproval(approval.id, "deny")}>
+                    Deny
+                  </button>
+                </div>
               </div>
             ) : null}
             {approval.status === "approved" && !approval.executionClaimedAt ? (
@@ -4665,19 +4706,35 @@ export function App() {
             Boolean(approval.executionClaimedAt) &&
             !approval.executionCompletedAt &&
             approval.executionToken ? (
-              <div className="actions">
-                <button
-                  disabled={busy}
-                  onClick={() => void completeApprovalExecution(approval.id, approval.executionToken || "", "succeeded")}
-                >
-                  Mark Succeeded
-                </button>
-                <button
-                  disabled={busy}
-                  onClick={() => void completeApprovalExecution(approval.id, approval.executionToken || "", "failed")}
-                >
-                  Mark Failed
-                </button>
+              <div className="providerRow">
+                <label className="muted">
+                  Execution summary (optional)
+                  <input
+                    className="textInput"
+                    value={approvalExecutionSummaries[approval.id] || ""}
+                    onChange={(event) =>
+                      setApprovalExecutionSummaries((previous) => ({
+                        ...previous,
+                        [approval.id]: event.target.value,
+                      }))
+                    }
+                    placeholder="What happened during execution"
+                  />
+                </label>
+                <div className="actions">
+                  <button
+                    disabled={busy}
+                    onClick={() => void completeApprovalExecution(approval.id, approval.executionToken || "", "succeeded")}
+                  >
+                    Mark Succeeded
+                  </button>
+                  <button
+                    disabled={busy}
+                    onClick={() => void completeApprovalExecution(approval.id, approval.executionToken || "", "failed")}
+                  >
+                    Mark Failed
+                  </button>
+                </div>
               </div>
             ) : null}
           </div>

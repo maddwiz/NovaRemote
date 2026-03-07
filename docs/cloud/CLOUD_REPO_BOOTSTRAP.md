@@ -81,7 +81,7 @@ The generated dashboard scaffold currently wires:
 - member server-assignment controls
 - invite lifecycle controls (create + revoke)
 - team policy controls (`danger confirm`, `fleet approval`, `recording`, `timeout`, `blocklist`)
-- fleet approval feed with approve/deny actions
+- fleet approval feed with approve/deny actions, optional review notes, execution claiming, and optional completion summaries
 - SSO provider toggle controls (`OIDC`/`SAML`)
 - audit event viewer with action/server/user filters plus one-click filtered `JSON`/`CSV` download actions
 - cloud audit export request actions (`JSON`/`CSV`) + export history list/open/detail/retry/delete controls with requester/status/format filters
