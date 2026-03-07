@@ -833,6 +833,7 @@ describe("GlassesModeScreen", () => {
     });
 
     const onCreateSession = vi.fn(async () => "ai-22");
+    const onStopServerSession = vi.fn();
     const dgx = makeServer("dgx", "DGX");
     const home = makeServer("home", "Home");
     const connections = new Map<string, ServerConnection>([
@@ -842,6 +843,7 @@ describe("GlassesModeScreen", () => {
     const terminals = makeTerminals(connections, {
       voiceTranscript: "open codex on home",
       onCreateSession,
+      onStopServerSession,
     });
 
     let screen!: TestRenderer.ReactTestRenderer;
@@ -923,7 +925,8 @@ describe("GlassesModeScreen", () => {
       );
       screen.root.findByProps({ accessibilityLabel: "Route transcript" }).props.onPress();
     });
-    expect(() => screen.root.findByProps({ children: "Closed Home build" })).not.toThrow();
+    expect(() => screen.root.findByProps({ children: "Stopped and closed Home build" })).not.toThrow();
+    expect(onStopServerSession).toHaveBeenCalledWith("home", "build");
 
     await act(async () => {
       screen.unmount();

@@ -847,8 +847,13 @@ export function GlassesModeScreen() {
         if (!target) {
           return;
         }
+        if (typeof onStopServerSession === "function") {
+          onStopServerSession(target.serverId, target.session);
+        } else {
+          onSendServerSessionControlChar(target.serverId, target.session, "\u0003");
+        }
         removePanelFromLayout(target.id);
-        setRouteStatus(`Closed ${target.serverName} ${target.sessionLabel}`);
+        setRouteStatus(`Stopped and closed ${target.serverName} ${target.sessionLabel}`);
         return;
       }
       if (route.kind === "resize_panel") {
