@@ -4055,17 +4055,20 @@ export default function AppShell() {
                   });
                 });
               }}
-              onUpdateSsoProvider={async ({ provider, enabled }) => {
-                await runWithStatus(`${enabled ? "Enabling" : "Disabling"} ${provider.toUpperCase()} SSO`, async () => {
+              onUpdateSsoProvider={async (input) => {
+                await runWithStatus(
+                  `${input.enabled ? "Enabling" : "Disabling"} ${input.provider.toUpperCase()} SSO`,
+                  async () => {
                   markActivity();
-                  await updateTeamSsoProvider({ provider, enabled });
+                  await updateTeamSsoProvider(input);
                   recordAuditEvent({
                     action: "settings_changed",
                     serverId: "",
                     serverName: "team",
-                    detail: `team_sso_provider=${provider}:${enabled ? "enabled" : "disabled"}`,
+                    detail: `team_sso_provider=${input.provider}:${input.enabled ? "enabled" : "disabled"};display:${Boolean(input.displayName)};issuer:${Boolean(input.issuerUrl)};client:${Boolean(input.clientId)}`,
                   });
-                });
+                  }
+                );
               }}
               onChangeMemberRole={async (memberId, role) => {
                 await runWithStatus("Updating team member role", async () => {

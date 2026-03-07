@@ -28,6 +28,20 @@ type TeamSettingsInput = {
   requireFleetApproval: boolean | null;
 };
 
+type TeamSsoProviderDraft = {
+  displayName: string;
+  issuerUrl: string;
+  clientId: string;
+};
+
+function createEmptySsoDraft(): TeamSsoProviderDraft {
+  return {
+    displayName: "",
+    issuerUrl: "",
+    clientId: "",
+  };
+}
+
 function policyValueLabel(value: boolean | null): string {
   if (value === true) {
     return "enforced on";
@@ -119,7 +133,16 @@ type TeamScreenProps = {
   onOpenCloudDashboard?: () => void;
   onInviteMember?: (input: { email: string; role: TeamRole }) => Promise<void>;
   onRevokeInvite?: (inviteId: string) => Promise<void>;
-  onUpdateSsoProvider?: (input: { provider: TeamSsoProvider; enabled: boolean }) => Promise<void>;
+  onUpdateSsoProvider?: (input: {
+    provider: TeamSsoProvider;
+    enabled: boolean;
+    displayName?: string;
+    issuerUrl?: string;
+    authUrl?: string;
+    tokenUrl?: string;
+    clientId?: string;
+    callbackUrl?: string;
+  }) => Promise<void>;
   onChangeMemberRole?: (memberId: string, role: TeamRole) => Promise<void>;
   onSetMemberServers?: (memberId: string, serverIds: string[]) => Promise<void>;
   onUpdateSettings?: (input: TeamSettingsInput) => Promise<void>;
@@ -210,6 +233,10 @@ export function TeamScreen({
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | TeamRole>("all");
   const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
   const [fleetApprovalNotes, setFleetApprovalNotes] = useState<Record<string, string>>({});
+  const [ssoProviderDrafts, setSsoProviderDrafts] = useState<Record<TeamSsoProvider, TeamSsoProviderDraft>>({
+    oidc: createEmptySsoDraft(),
+    saml: createEmptySsoDraft(),
+  });
   const [policyDangerConfirm, setPolicyDangerConfirm] = useState<boolean | null>(null);
   const [policyFleetApproval, setPolicyFleetApproval] = useState<boolean | null>(null);
   const [policySessionRecording, setPolicySessionRecording] = useState<boolean | null>(null);
@@ -305,6 +332,35 @@ export function TeamScreen({
   }, [fleetApprovals]);
 
   useEffect(() => {
+    setSsoProviderDrafts((previous) => {
+      let changed = false;
+      const next: Record<TeamSsoProvider, TeamSsoProviderDraft> = {
+        oidc: { ...previous.oidc },
+        saml: { ...previous.saml },
+      };
+      TEAM_SSO_PROVIDERS.forEach((provider) => {
+        const config = teamSsoProviders.find((entry) => entry.provider === provider);
+        const draft: TeamSsoProviderDraft = {
+          displayName: config?.displayName || "",
+          issuerUrl: config?.issuerUrl || "",
+          clientId: config?.clientId || "",
+        };
+        const previousDraft = previous[provider];
+        if (
+          !previousDraft ||
+          previousDraft.displayName !== draft.displayName ||
+          previousDraft.issuerUrl !== draft.issuerUrl ||
+          previousDraft.clientId !== draft.clientId
+        ) {
+          next[provider] = draft;
+          changed = true;
+        }
+      });
+      return changed ? next : previous;
+    });
+  }, [teamSsoProviders]);
+
+  useEffect(() => {
     if (!identity || !settings) {
       return;
     }
@@ -388,8 +444,18 @@ export function TeamScreen({
       if (!onUpdateSsoProvider || !canManageSsoProviders) {
         return;
       }
+      const draft = ssoProviderDrafts[provider] || createEmptySsoDraft();
+      const displayName = draft.displayName.trim();
+      const issuerUrl = draft.issuerUrl.trim();
+      const clientId = draft.clientId.trim();
       setTeamStatus("");
-      void onUpdateSsoProvider({ provider, enabled })
+      void onUpdateSsoProvider({
+        provider,
+        enabled,
+        displayName: displayName || undefined,
+        issuerUrl: issuerUrl || undefined,
+        clientId: clientId || undefined,
+      })
         .then(() => {
           setTeamStatus(`${provider.toUpperCase()} ${enabled ? "enabled" : "disabled"}.`);
         })
@@ -397,7 +463,34 @@ export function TeamScreen({
           setTeamStatus(error instanceof Error ? error.message : String(error));
         });
     },
-    [canManageSsoProviders, onUpdateSsoProvider]
+    [canManageSsoProviders, onUpdateSsoProvider, ssoProviderDrafts]
+  );
+
+  const handleSaveSsoProviderSettings = useCallback(
+    (providerConfig: TeamSsoProviderConfig) => {
+      if (!onUpdateSsoProvider || !canManageSsoProviders) {
+        return;
+      }
+      const draft = ssoProviderDrafts[providerConfig.provider] || createEmptySsoDraft();
+      const displayName = draft.displayName.trim();
+      const issuerUrl = draft.issuerUrl.trim();
+      const clientId = draft.clientId.trim();
+      setTeamStatus("");
+      void onUpdateSsoProvider({
+        provider: providerConfig.provider,
+        enabled: providerConfig.enabled,
+        displayName: displayName || undefined,
+        issuerUrl: issuerUrl || undefined,
+        clientId: clientId || undefined,
+      })
+        .then(() => {
+          setTeamStatus(`${providerConfig.provider.toUpperCase()} provider settings saved.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canManageSsoProviders, onUpdateSsoProvider, ssoProviderDrafts]
   );
 
   const handleChangeMemberRole = useCallback(
@@ -1125,13 +1218,72 @@ export function TeamScreen({
       {identity && (visibleSsoProviders.length > 0 || canManageSsoProviders) ? (
         <View style={styles.serverCard}>
           <Text style={styles.serverName}>SSO Providers</Text>
-          {visibleSsoProviders.map((providerConfig) => (
-            <View key={providerConfig.provider} style={styles.panel}>
+          {visibleSsoProviders.map((providerConfig) => {
+            const draft = ssoProviderDrafts[providerConfig.provider] || createEmptySsoDraft();
+            return (
+              <View key={providerConfig.provider} style={styles.panel}>
               <Text style={styles.serverSubtitle}>
                 {`${providerConfig.provider.toUpperCase()} • ${providerConfig.enabled ? "enabled" : "disabled"}`}
               </Text>
               {providerConfig.issuerUrl ? <Text style={styles.emptyText}>{providerConfig.issuerUrl}</Text> : null}
               {providerConfig.clientId ? <Text style={styles.emptyText}>{`Client ID: ${providerConfig.clientId}`}</Text> : null}
+              <TextInput
+                style={styles.input}
+                value={draft.displayName}
+                onChangeText={(value) =>
+                  setSsoProviderDrafts((previous) => ({
+                    ...previous,
+                    [providerConfig.provider]: {
+                      ...(previous[providerConfig.provider] || createEmptySsoDraft()),
+                      displayName: value,
+                    },
+                  }))
+                }
+                autoCapitalize="words"
+                autoCorrect={false}
+                placeholder="Display name"
+                placeholderTextColor="#7f7aa8"
+                editable={canManageSsoProviders}
+                accessibilityLabel={`${providerConfig.provider.toUpperCase()} display name`}
+              />
+              <TextInput
+                style={styles.input}
+                value={draft.issuerUrl}
+                onChangeText={(value) =>
+                  setSsoProviderDrafts((previous) => ({
+                    ...previous,
+                    [providerConfig.provider]: {
+                      ...(previous[providerConfig.provider] || createEmptySsoDraft()),
+                      issuerUrl: value,
+                    },
+                  }))
+                }
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Issuer URL"
+                placeholderTextColor="#7f7aa8"
+                editable={canManageSsoProviders}
+                accessibilityLabel={`${providerConfig.provider.toUpperCase()} issuer URL`}
+              />
+              <TextInput
+                style={styles.input}
+                value={draft.clientId}
+                onChangeText={(value) =>
+                  setSsoProviderDrafts((previous) => ({
+                    ...previous,
+                    [providerConfig.provider]: {
+                      ...(previous[providerConfig.provider] || createEmptySsoDraft()),
+                      clientId: value,
+                    },
+                  }))
+                }
+                autoCapitalize="none"
+                autoCorrect={false}
+                placeholder="Client ID"
+                placeholderTextColor="#7f7aa8"
+                editable={canManageSsoProviders}
+                accessibilityLabel={`${providerConfig.provider.toUpperCase()} client ID`}
+              />
               <View style={styles.rowInlineSpace}>
                 <Pressable
                   accessibilityRole="button"
@@ -1158,8 +1310,18 @@ export function TeamScreen({
                   <Text style={styles.actionDangerText}>Disable</Text>
                 </Pressable>
               </View>
-            </View>
-          ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Save ${providerConfig.provider} provider settings`}
+                style={[styles.actionButton, !canManageSsoProviders ? styles.buttonDisabled : null]}
+                onPress={() => handleSaveSsoProviderSettings(providerConfig)}
+                disabled={!canManageSsoProviders}
+              >
+                <Text style={styles.actionButtonText}>Save Provider</Text>
+              </Pressable>
+              </View>
+            );
+          })}
         </View>
       ) : null}
 

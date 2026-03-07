@@ -847,8 +847,61 @@ describe("TeamScreen", () => {
       renderer?.root.findByProps({ accessibilityLabel: "Disable saml provider" }).props.onPress();
     });
 
-    expect(onUpdateSsoProvider).toHaveBeenNthCalledWith(1, { provider: "oidc", enabled: true });
-    expect(onUpdateSsoProvider).toHaveBeenNthCalledWith(2, { provider: "saml", enabled: false });
+    expect(onUpdateSsoProvider).toHaveBeenNthCalledWith(
+      1,
+      expect.objectContaining({
+        provider: "oidc",
+        enabled: true,
+      })
+    );
+    expect(onUpdateSsoProvider).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        provider: "saml",
+        enabled: false,
+        issuerUrl: "https://idp.example.com/saml",
+      })
+    );
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("saves editable SSO provider metadata", async () => {
+    const onUpdateSsoProvider = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          loading={false}
+          busy={false}
+          canManage
+          teamSsoProviders={[{ provider: "oidc", enabled: false }]}
+          onUpdateSsoProvider={onUpdateSsoProvider}
+        />
+      );
+    });
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "OIDC display name" }).props.onChangeText("Okta OIDC");
+      renderer?.root.findByProps({ accessibilityLabel: "OIDC issuer URL" }).props.onChangeText("https://id.example.com");
+      renderer?.root.findByProps({ accessibilityLabel: "OIDC client ID" }).props.onChangeText("novaremote-mobile");
+    });
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Save oidc provider settings" }).props.onPress();
+    });
+
+    expect(onUpdateSsoProvider).toHaveBeenCalledWith({
+      provider: "oidc",
+      enabled: false,
+      displayName: "Okta OIDC",
+      issuerUrl: "https://id.example.com",
+      clientId: "novaremote-mobile",
+    });
 
     await act(async () => {
       renderer?.unmount();
