@@ -146,7 +146,14 @@ assert_file() {
 assert_contains() {
   local file_path="$1"
   local pattern="$2"
-  if ! rg -F -q -- "${pattern}" "${file_path}"; then
+  if command -v rg >/dev/null 2>&1; then
+    if rg -F -q -- "${pattern}" "${file_path}"; then
+      return 0
+    fi
+  elif grep -F -q -- "${pattern}" "${file_path}"; then
+    return 0
+  fi
+  if ! grep -F -q -- "${pattern}" "${file_path}"; then
     echo "Expected pattern '${pattern}' not found in ${file_path}"
     exit 1
   fi
@@ -159,7 +166,12 @@ assert_file "${SOURCE_STAMP}"
 assert_contains "${SOURCE_STAMP}" "protocol_doc=docs/vr/VR_PROTOCOL_CONTRACT.md"
 assert_contains "${SOURCE_STAMP}" "json_schema=docs/contracts/novaremote-client-protocol.v1.json"
 
-if ! rg -q -- '"\$schema"|"title"|"type"' "${CONTRACT_SCHEMA}"; then
+if command -v rg >/dev/null 2>&1; then
+  if ! rg -q -- '"\$schema"|"title"|"type"' "${CONTRACT_SCHEMA}"; then
+    echo "Contract schema file does not look like JSON schema: ${CONTRACT_SCHEMA}"
+    exit 1
+  fi
+elif ! grep -Eq -- '"\$schema"|"title"|"type"' "${CONTRACT_SCHEMA}"; then
   echo "Contract schema file does not look like JSON schema: ${CONTRACT_SCHEMA}"
   exit 1
 fi
@@ -185,8 +197,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install ripgrep
-        run: sudo apt-get update && sudo apt-get install -y ripgrep
       - name: Verify contract sync
         run: bash ./scripts/verify-contract-sync.sh
 DOC
