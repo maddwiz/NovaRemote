@@ -838,6 +838,15 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/AuditExportJob"
+                  summary:
+                    type: object
+                    properties:
+                      pending:
+                        type: integer
+                      ready:
+                        type: integer
+                      failed:
+                        type: integer
     post:
       summary: Request a cloud-hosted audit export job
       requestBody:
@@ -863,6 +872,26 @@ paths:
               schema:
                 $ref: "#/components/schemas/AuditExportJob"
   /v1/audit/exports/{exportId}:
+    get:
+      summary: Get details for a cloud-hosted audit export job
+      parameters:
+        - in: path
+          name: exportId
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Export job detail
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  export:
+                    $ref: "#/components/schemas/AuditExportJob"
+                  inScopeEventCount:
+                    type: integer
     delete:
       summary: Delete a cloud-hosted audit export job
       parameters:

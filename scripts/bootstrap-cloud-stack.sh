@@ -2253,9 +2253,30 @@ app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => 
     return true;
   });
   const ordered = [...filtered].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  const summary = {
+    pending: filtered.filter((job) => job.status === "pending").length,
+    ready: filtered.filter((job) => job.status === "ready").length,
+    failed: filtered.filter((job) => job.status === "failed").length,
+  };
   res.json({
-    exports: ordered.slice(0, limit)
+    exports: ordered.slice(0, limit),
+    summary,
   });
+});
+
+app.get("/v1/audit/exports/:exportId", requireTeamPermission("audit:read"), (req, res) => {
+  reconcileAuditExportJobs();
+  const exportId = String(req.params.exportId || "").trim();
+  const job = auditExportJobs.find((entry) => entry.exportId === exportId);
+  if (!job) {
+    return res.status(404).json({ detail: "Export not found" });
+  }
+  const inScopeEventCount = selectAuditEventsForExport(job).length;
+  const exportJob = {
+    ...job,
+    eventCount: typeof job.eventCount === "number" ? job.eventCount : inScopeEventCount,
+  };
+  res.json({ export: exportJob, inScopeEventCount });
 });
 
 app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {
@@ -2822,6 +2843,12 @@ export function App() {
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
   const [exportJobs, setExportJobs] = useState<AuditExportJob[]>([]);
+  const [exportSummary, setExportSummary] = useState<{ pending: number; ready: number; failed: number }>({
+    pending: 0,
+    ready: 0,
+    failed: 0,
+  });
+  const [exportRangeHoursInput, setExportRangeHoursInput] = useState<string>("");
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditActionFilter, setAuditActionFilter] = useState<string>("");
   const [auditServerFilter, setAuditServerFilter] = useState<string>("");
@@ -3003,6 +3030,7 @@ export function App() {
     setSsoProviders([]);
     setInvites([]);
     setExportJobs([]);
+    setExportSummary({ pending: 0, ready: 0, failed: 0 });
     setAuditEvents([]);
     setLastExport(null);
     setStatus("Signed out.");
@@ -3024,7 +3052,10 @@ export function App() {
         fetchJson<{ providers?: TeamSsoProviderConfig[] }>("/v1/team/sso/providers", accessToken.trim()),
         fetchJson<{ invites?: TeamInvite[] }>("/v1/team/invites", accessToken.trim()),
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
-        fetchJson<{ exports?: AuditExportJob[] }>("/v1/audit/exports?limit=20", accessToken.trim()),
+        fetchJson<{
+          exports?: AuditExportJob[];
+          summary?: { pending?: number; ready?: number; failed?: number };
+        }>("/v1/audit/exports?limit=20", accessToken.trim()),
         fetchJson<{ events?: AuditEvent[] }>("/v1/audit/events?limit=200", accessToken.trim()),
       ] as const);
       const membersPayload = settledValue(results[0], { members: [] as TeamMember[] });
@@ -3087,6 +3118,11 @@ export function App() {
       setSsoProviders(Array.isArray(ssoPayload.providers) ? ssoPayload.providers : []);
       setInvites(Array.isArray(invitesPayload.invites) ? invitesPayload.invites : []);
       setExportJobs(Array.isArray(exportsPayload.exports) ? exportsPayload.exports : []);
+      setExportSummary({
+        pending: Number(exportsPayload.summary?.pending || 0),
+        ready: Number(exportsPayload.summary?.ready || 0),
+        failed: Number(exportsPayload.summary?.failed || 0),
+      });
       setAuditEvents(Array.isArray(auditEventsPayload.events) ? auditEventsPayload.events : []);
       const nextSettings = settingsPayload.settings || {
         enforceDangerConfirm: null,
@@ -3267,6 +3303,16 @@ export function App() {
         setStatus("Paste an access token before requesting exports.");
         return;
       }
+      const rangeRaw = exportRangeHoursInput.trim();
+      let rangeHours: number | undefined;
+      if (rangeRaw) {
+        const parsed = Number.parseInt(rangeRaw, 10);
+        if (!Number.isFinite(parsed) || parsed <= 0 || parsed > 24 * 30) {
+          setStatus("Export range hours must be a number between 1 and 720.");
+          return;
+        }
+        rangeHours = parsed;
+      }
       setBusy(true);
       setStatus(`Requesting ${format.toUpperCase()} export...`);
       try {
@@ -3276,7 +3322,7 @@ export function App() {
             "Content-Type": "application/json",
             Authorization: `Bearer ${accessToken.trim()}`,
           },
-          body: JSON.stringify({ format }),
+          body: JSON.stringify({ format, rangeHours }),
         });
         if (!response.ok) {
           throw new Error(`${response.status} ${await response.text()}`);
@@ -3291,7 +3337,7 @@ export function App() {
         setBusy(false);
       }
     },
-    [accessToken, loadTeamData]
+    [accessToken, exportRangeHoursInput, loadTeamData]
   );
 
   const removeExport = useCallback(
@@ -3881,6 +3927,15 @@ export function App() {
             value={accessToken}
             onChange={(event) => setAccessToken(event.target.value)}
             placeholder="Generated on sign-in; can be pasted for manual testing"
+          />
+        </label>
+        <label className="muted">
+          Export Range Hours (optional, 1-720)
+          <input
+            className="textInput"
+            value={exportRangeHoursInput}
+            onChange={(event) => setExportRangeHoursInput(event.target.value)}
+            placeholder="24"
           />
         </label>
         <div className="actions">
@@ -4553,6 +4608,15 @@ export function App() {
             <p className="muted">
               {lastExport.exportId} • {lastExport.format.toUpperCase()} • {lastExport.status}
             </p>
+            {lastExport.requestedByEmail || lastExport.requestedByUserId ? (
+              <p className="muted">{`Requested by: ${lastExport.requestedByEmail || lastExport.requestedByUserId}`}</p>
+            ) : null}
+            {typeof lastExport.rangeHours === "number" ? <p className="muted">{`Range hours: ${lastExport.rangeHours}`}</p> : null}
+            {typeof lastExport.eventCount === "number" ? <p className="muted">{`Event count: ${lastExport.eventCount}`}</p> : null}
+            {typeof lastExport.attemptCount === "number" ? <p className="muted">{`Attempt count: ${lastExport.attemptCount}`}</p> : null}
+            {lastExport.lastTransitionAt ? (
+              <p className="muted">{`Last transition: ${new Date(lastExport.lastTransitionAt).toLocaleString()}`}</p>
+            ) : null}
             {lastExport.detail ? <p className="muted">{lastExport.detail}</p> : null}
             {lastExport.expiresAt ? <p className="muted">{`Expires: ${new Date(lastExport.expiresAt).toLocaleString()}`}</p> : null}
             {lastExport.downloadUrl ? (
@@ -4567,6 +4631,7 @@ export function App() {
         {exportJobs.length > 0 ? (
           <div className="providerRow">
             <p className="muted">{`Recent Export Jobs (${filteredExportJobs.length}/${exportJobs.length})`}</p>
+            <p className="muted">{`Summary: pending ${exportSummary.pending} • ready ${exportSummary.ready} • failed ${exportSummary.failed}`}</p>
             <div className="gridCols">
               <label className="muted">
                 Filter status
@@ -4605,6 +4670,10 @@ export function App() {
                 {job.requestedByEmail || job.requestedByUserId ? (
                   <p className="muted">{`Requested by: ${job.requestedByEmail || job.requestedByUserId}`}</p>
                 ) : null}
+                {typeof job.rangeHours === "number" ? <p className="muted">{`Range hours: ${job.rangeHours}`}</p> : null}
+                {typeof job.eventCount === "number" ? <p className="muted">{`Event count: ${job.eventCount}`}</p> : null}
+                {typeof job.attemptCount === "number" ? <p className="muted">{`Attempt count: ${job.attemptCount}`}</p> : null}
+                {job.lastTransitionAt ? <p className="muted">{`Last transition: ${new Date(job.lastTransitionAt).toLocaleString()}`}</p> : null}
                 {job.detail ? <p className="muted">{job.detail}</p> : null}
                 {job.expiresAt ? <p className="muted">{`Expires: ${new Date(job.expiresAt).toLocaleString()}`}</p> : null}
                 <div className="actions">
