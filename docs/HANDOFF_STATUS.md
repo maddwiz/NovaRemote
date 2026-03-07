@@ -87,6 +87,7 @@ Updated: 2026-03-07
 - [x] Wire audit events into command, fleet, file, process, and safety confirmation flows
 - [x] Team screen in app with login, members, roles, invites, usage, and audit sync controls
 - [x] Team invite lifecycle in app: list invites, create invite, and revoke pending invites
+- [x] TeamScreen invite management now includes status/role/email filtering plus in-app pending/accepted/expired/revoked rollup visibility
 - [x] Cloud scaffold invite listing now supports `status` / `role` / `email` filters with dashboard filter controls
 - [x] Cloud scaffold invite listing now includes `pending` / `accepted` / `expired` / `revoked` summary rollups for dashboard governance visibility
 - [x] Team cloud dashboard bridge in app (dashboard URL surfaced + quick-open action)
@@ -132,7 +133,7 @@ Updated: 2026-03-07
 - [x] Monitoring-status orchestration now auto-queues pending approvals for existing agent goals when a routable session is available (runtime + AppShell + panel wiring)
 - [~] Enterprise IAM expansion:
   - [x] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode
-  - [x] Team SSO provider lifecycle (`GET/PATCH /v1/team/sso/providers`) wired in app (`useTeamAuth`, TeamScreen toggles) + cloud contract/scaffold
+  - [x] Team SSO provider lifecycle (`GET/PATCH /v1/team/sso/providers`) wired in app (`useTeamAuth`, TeamScreen toggles + editable display/issuer/auth/token/client/callback fields) + cloud contract/scaffold
   - [~] in-app role/invite controls + member filtering + member server-assignment controls are implemented, plus invite revoke + dashboard deep-link; cloud dashboard scaffold now includes role/invite/server-assignment admin controls while production deployment remains pending
   - [x] role-limited team context fetch now degrades gracefully on `403` responses in `useTeamAuth.refreshTeamContext` (forbidden endpoints fall back to safe defaults while auth/network errors still surface)
 - [~] Compliance expansion:
