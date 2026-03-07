@@ -216,6 +216,7 @@ type FleetApproval = {
   executionClaimedByUserId?: string;
   executionClaimedByEmail?: string;
   executionClaimedAt?: string;
+  executionExpiresAt?: string;
   executionToken?: string;
   executionCompletedByUserId?: string;
   executionCompletedByEmail?: string;
@@ -397,6 +398,7 @@ const saveDebounceMsRaw = Number.parseInt(process.env.NOVA_CLOUD_STATE_SAVE_DEBO
 const saveDebounceMs = Number.isFinite(saveDebounceMsRaw) && saveDebounceMsRaw >= 0 ? saveDebounceMsRaw : 200;
 let persistTimer: ReturnType<typeof setTimeout> | null = null;
 const AUDIT_EVENTS_MAX = 10_000;
+const FLEET_EXECUTION_CLAIM_TTL_MS = 15 * 60 * 1000;
 const AUDIT_EXPORT_PROCESSING_MS = 1_500;
 const AUDIT_EXPORT_MAX_PROCESSING_MS = 30_000;
 const AUDIT_EXPORT_TTL_MS = 60 * 60 * 1000;
@@ -1191,6 +1193,45 @@ function expirePendingApprovals() {
   }
 }
 
+function expireExecutionClaimIfNeeded(approval: FleetApproval, nowMs: number): boolean {
+  if (approval.status !== "approved" || !approval.executionClaimedAt || !approval.executionToken || approval.executionCompletedAt) {
+    return false;
+  }
+  const explicitExpiryMs = approval.executionExpiresAt ? Date.parse(approval.executionExpiresAt) : Number.NaN;
+  const claimedAtMs = Date.parse(approval.executionClaimedAt);
+  const fallbackExpiryMs = Number.isFinite(claimedAtMs) ? claimedAtMs + FLEET_EXECUTION_CLAIM_TTL_MS : Number.NaN;
+  const expiryMs = Number.isFinite(explicitExpiryMs) ? explicitExpiryMs : fallbackExpiryMs;
+  if (!Number.isFinite(expiryMs) || expiryMs > nowMs) {
+    return false;
+  }
+  approval.executionClaimedByUserId = undefined;
+  approval.executionClaimedByEmail = undefined;
+  approval.executionClaimedAt = undefined;
+  approval.executionExpiresAt = undefined;
+  approval.executionToken = undefined;
+  approval.updatedAt = new Date(nowMs).toISOString();
+  recordSystemAuditEvent(
+    "fleet_execution_claim_expired",
+    `Execution claim token expired for fleet request ${approval.id}.`,
+    { approved: null },
+    false
+  );
+  return true;
+}
+
+function expireExecutionClaims() {
+  const nowMs = Date.now();
+  let changed = false;
+  fleetApprovals.forEach((approval) => {
+    if (expireExecutionClaimIfNeeded(approval, nowMs)) {
+      changed = true;
+    }
+  });
+  if (changed) {
+    schedulePersist();
+  }
+}
+
 app.get("/healthz", (_req, res) => {
   res.json({ ok: true });
 });
@@ -1652,6 +1693,7 @@ app.patch("/v1/team/sso/providers/:provider", requireTeamPermission("team:manage
 
 app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (_req, res) => {
   expirePendingApprovals();
+  expireExecutionClaims();
   res.json({ approvals: fleetApprovals });
 });
 
@@ -1789,6 +1831,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPerm
   if (!identity) {
     return unauthorized(res, "Authentication required");
   }
+  expireExecutionClaims();
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
@@ -1821,6 +1864,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPerm
   approval.executionClaimedByUserId = identity.userId;
   approval.executionClaimedByEmail = identity.email;
   approval.executionClaimedAt = claimedAt;
+  approval.executionExpiresAt = new Date(Date.now() + FLEET_EXECUTION_CLAIM_TTL_MS).toISOString();
   approval.executionToken = `fexec-${randomUUID()}`;
   approval.updatedAt = claimedAt;
   recordSystemAuditEvent(
@@ -1830,7 +1874,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/claim-execution", requireTeamPerm
     false
   );
   schedulePersist();
-  res.json({ approval, executionToken: approval.executionToken });
+  res.json({ approval, executionToken: approval.executionToken, executionExpiresAt: approval.executionExpiresAt });
 });
 
 app.post("/v1/team/fleet/approvals/:approvalId/complete", requireTeamPermission("fleet:execute"), (req, res) => {
@@ -1838,6 +1882,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/complete", requireTeamPermission(
   if (!identity) {
     return unauthorized(res, "Authentication required");
   }
+  expireExecutionClaims();
   const approval = fleetApprovals.find((entry) => entry.id === req.params.approvalId);
   if (!approval) {
     return res.status(404).json({ detail: "Approval not found" });
@@ -1864,7 +1909,7 @@ app.post("/v1/team/fleet/approvals/:approvalId/complete", requireTeamPermission(
     return forbidden(res, `Not authorized for targets: ${completionTargetValidation.unauthorizedTargets.join(", ")}`);
   }
   if (!approval.executionClaimedAt || !approval.executionToken) {
-    return res.status(409).json({ detail: "Execution must be claimed before completion." });
+    return res.status(409).json({ detail: "Execution must be claimed before completion (claim may have expired)." });
   }
   if (approval.executionCompletedAt) {
     return res.status(409).json({ detail: `Execution already completed at ${approval.executionCompletedAt}.`, approval });
@@ -2405,6 +2450,7 @@ type FleetApproval = {
   reviewedAt?: string;
   executionClaimedByEmail?: string;
   executionClaimedAt?: string;
+  executionExpiresAt?: string;
   executionToken?: string;
   executionCompletedByEmail?: string;
   executionCompletedAt?: string;
@@ -3667,6 +3713,9 @@ export function App() {
                 Execution claimed by {approval.executionClaimedByEmail}
                 {approval.executionClaimedAt ? ` • ${new Date(approval.executionClaimedAt).toLocaleString()}` : ""}
               </p>
+            ) : null}
+            {approval.executionExpiresAt && !approval.executionCompletedAt ? (
+              <p className="muted">{`Claim expires: ${new Date(approval.executionExpiresAt).toLocaleString()}`}</p>
             ) : null}
             {approval.executionCompletedByEmail ? (
               <p className="muted">

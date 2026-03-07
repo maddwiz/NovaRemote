@@ -570,6 +570,8 @@ paths:
                     $ref: "#/components/schemas/FleetApproval"
                   executionToken:
                     type: string
+                  executionExpiresAt:
+                    type: string
         "403":
           description: Caller is not authorized for one or more approval targets
         "409":
@@ -1152,6 +1154,8 @@ components:
         executionClaimedByEmail:
           type: string
         executionClaimedAt:
+          type: string
+        executionExpiresAt:
           type: string
         executionToken:
           type: string
