@@ -46,6 +46,9 @@ export function findApprovedFleetApproval(
     if (approval.status !== "approved") {
       continue;
     }
+    if (approval.executionClaimedAt || approval.executionCompletedAt) {
+      continue;
+    }
     if (requester && approval.requestedByUserId !== requester) {
       continue;
     }

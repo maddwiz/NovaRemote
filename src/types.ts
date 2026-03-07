@@ -134,6 +134,18 @@ export type TeamFleetApproval = {
   status: TeamFleetApprovalStatus;
   note?: string;
   expiresAt?: string;
+  reviewedByUserId?: string;
+  reviewedByEmail?: string;
+  reviewedAt?: string;
+  executionClaimedByUserId?: string;
+  executionClaimedByEmail?: string;
+  executionClaimedAt?: string;
+  executionToken?: string;
+  executionCompletedByUserId?: string;
+  executionCompletedByEmail?: string;
+  executionCompletedAt?: string;
+  executionResult?: "succeeded" | "failed";
+  executionSummary?: string;
 };
 
 export type TeamInviteStatus = "pending" | "accepted" | "expired" | "revoked";
@@ -389,6 +401,8 @@ export type AuditAction =
   | "fleet_approval_approved"
   | "fleet_approval_denied"
   | "fleet_approval_consumed"
+  | "fleet_execution_claimed"
+  | "fleet_execution_completed"
   | "file_written"
   | "file_deleted"
   | "process_killed"

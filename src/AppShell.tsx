@@ -706,6 +706,8 @@ export default function AppShell() {
     requestFleetApproval,
     approveFleetApproval,
     denyFleetApproval,
+    claimFleetExecution,
+    completeFleetExecution,
     logout: logoutTeam,
     refreshTeamContext,
   } = useTeamAuth({
@@ -1547,6 +1549,7 @@ export default function AppShell() {
       assertServerWritable(server.id, "Fleet execution");
     });
     const targetLabel = `${selectedServers.length} target${selectedServers.length === 1 ? "" : "s"}`;
+    let claimedFleetExecution: { approvalId: string; executionToken: string } | null = null;
 
     if (teamSettings.requireFleetApproval && teamIdentity?.role !== "admin") {
       const matchingApproval = findApprovedFleetApproval(
@@ -1561,6 +1564,22 @@ export default function AppShell() {
           serverId: "",
           serverName: "fleet",
           detail: `fleet_approval_consumed=${matchingApproval.id}`,
+          approved: true,
+        });
+        const claimedApproval = await claimFleetExecution(matchingApproval.id);
+        const executionToken = claimedApproval?.executionToken?.trim() || "";
+        if (!executionToken) {
+          throw new Error("Fleet approval claim did not return an execution token.");
+        }
+        claimedFleetExecution = {
+          approvalId: matchingApproval.id,
+          executionToken,
+        };
+        recordAuditEvent({
+          action: "fleet_execution_claimed",
+          serverId: "",
+          serverName: "fleet",
+          detail: `fleet_execution_claimed=${matchingApproval.id}`,
           approved: true,
         });
       } else {
@@ -1682,6 +1701,26 @@ export default function AppShell() {
         serverName: "fleet",
         detail: `targets=${selectedServers.length} ok=${okCount} command=${command.slice(0, 240)}`,
       });
+      if (claimedFleetExecution) {
+        const status: "succeeded" | "failed" = okCount === selectedServers.length ? "succeeded" : "failed";
+        const failedServers = settled.filter((entry) => !entry.ok).map((entry) => entry.serverName).slice(0, 6);
+        const summary = `${status} ok=${okCount}/${selectedServers.length}${
+          failedServers.length > 0 ? ` failed=${failedServers.join(",")}` : ""
+        }`;
+        await completeFleetExecution({
+          approvalId: claimedFleetExecution.approvalId,
+          executionToken: claimedFleetExecution.executionToken,
+          status,
+          summary,
+        });
+        recordAuditEvent({
+          action: "fleet_execution_completed",
+          serverId: "",
+          serverName: "fleet",
+          detail: `fleet_execution_completed=${claimedFleetExecution.approvalId}:${status}`,
+          approved: status === "succeeded",
+        });
+      }
     } finally {
       setFleetBusy(false);
     }
@@ -1697,6 +1736,8 @@ export default function AppShell() {
     recordAuditEvent,
     requestDangerApproval,
     requestFleetApproval,
+    claimFleetExecution,
+    completeFleetExecution,
     fleetApprovals,
     teamIdentity?.role,
     teamIdentity?.userId,
@@ -3938,6 +3979,37 @@ export default function AppShell() {
                     serverName: "fleet",
                     detail: `fleet_approval_denied=${approvalId}`,
                     approved: false,
+                  });
+                });
+              }}
+              onClaimFleetExecution={async (approvalId) => {
+                await runWithStatus("Claiming fleet execution", async () => {
+                  markActivity();
+                  await claimFleetExecution(approvalId);
+                  recordAuditEvent({
+                    action: "fleet_execution_claimed",
+                    serverId: "",
+                    serverName: "fleet",
+                    detail: `fleet_execution_claimed=${approvalId}`,
+                    approved: true,
+                  });
+                });
+              }}
+              onCompleteFleetExecution={async ({ approvalId, executionToken, status, summary }) => {
+                await runWithStatus(`Marking fleet execution ${status}`, async () => {
+                  markActivity();
+                  await completeFleetExecution({
+                    approvalId,
+                    executionToken,
+                    status,
+                    summary,
+                  });
+                  recordAuditEvent({
+                    action: "fleet_execution_completed",
+                    serverId: "",
+                    serverName: "fleet",
+                    detail: `fleet_execution_completed=${approvalId}:${status}`,
+                    approved: status === "succeeded",
                   });
                 });
               }}

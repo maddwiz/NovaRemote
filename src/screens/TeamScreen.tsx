@@ -108,6 +108,13 @@ type TeamScreenProps = {
   fleetApprovals?: TeamFleetApproval[];
   onApproveFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
   onDenyFleetApproval?: (approvalId: string, note?: string) => Promise<void>;
+  onClaimFleetExecution?: (approvalId: string) => Promise<void>;
+  onCompleteFleetExecution?: (input: {
+    approvalId: string;
+    executionToken: string;
+    status: "succeeded" | "failed";
+    summary?: string;
+  }) => Promise<void>;
   auditPendingCount?: number;
   auditLastSyncAt?: number | null;
   onSyncAudit?: () => Promise<void>;
@@ -152,6 +159,8 @@ export function TeamScreen({
   fleetApprovals = [],
   onApproveFleetApproval,
   onDenyFleetApproval,
+  onClaimFleetExecution,
+  onCompleteFleetExecution,
   auditPendingCount = 0,
   auditLastSyncAt = null,
   onSyncAudit,
@@ -190,6 +199,8 @@ export function TeamScreen({
   const canManageMemberServers = Boolean(identity && canManage && onSetMemberServers && teamServers.length > 0 && !busy);
   const canEditTeamPolicies = Boolean(identity && canManageSettings && onUpdateSettings && settings && !busy);
   const canReviewFleetApprovals = Boolean(identity && canManage && !busy && (onApproveFleetApproval || onDenyFleetApproval));
+  const canClaimFleetExecution = Boolean(identity && !busy && onClaimFleetExecution);
+  const canCompleteFleetExecution = Boolean(identity && !busy && onCompleteFleetExecution);
   const pendingFleetApprovals = fleetApprovals.filter((approval) => approval.status === "pending");
   const canSyncAudit = Boolean(identity && onSyncAudit && !busy);
   const canExportAuditJson = Boolean(identity && onExportAuditJson && !busy);
@@ -434,6 +445,51 @@ export function TeamScreen({
         });
     },
     [canReviewFleetApprovals, fleetApprovalNotes, onDenyFleetApproval]
+  );
+
+  const handleClaimFleetExecution = useCallback(
+    (approval: TeamFleetApproval) => {
+      if (!onClaimFleetExecution || !canClaimFleetExecution) {
+        return;
+      }
+      setTeamStatus("");
+      void onClaimFleetExecution(approval.id)
+        .then(() => {
+          setTeamStatus(`Claimed fleet execution ${approval.id}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canClaimFleetExecution, onClaimFleetExecution]
+  );
+
+  const handleCompleteFleetExecution = useCallback(
+    (approval: TeamFleetApproval, status: "succeeded" | "failed") => {
+      if (!onCompleteFleetExecution || !canCompleteFleetExecution) {
+        return;
+      }
+      const executionToken = approval.executionToken?.trim() || "";
+      if (!executionToken) {
+        setTeamStatus("Execution token is required before completion.");
+        return;
+      }
+      setTeamStatus("");
+      const summary = fleetApprovalNotes[approval.id]?.trim() || undefined;
+      void onCompleteFleetExecution({
+        approvalId: approval.id,
+        executionToken,
+        status,
+        summary,
+      })
+        .then(() => {
+          setTeamStatus(`Marked fleet execution ${approval.id} as ${status}.`);
+        })
+        .catch((error) => {
+          setTeamStatus(error instanceof Error ? error.message : String(error));
+        });
+    },
+    [canCompleteFleetExecution, fleetApprovalNotes, onCompleteFleetExecution]
   );
 
   const handleSyncAudit = useCallback(() => {
@@ -1158,6 +1214,23 @@ export function TeamScreen({
                 {`Targets: ${approval.targets.length > 0 ? approval.targets.join(", ") : "none"}`}
               </Text>
               {approval.note ? <Text style={styles.emptyText}>{`Note: ${approval.note}`}</Text> : null}
+              {approval.reviewedByEmail ? (
+                <Text style={styles.emptyText}>
+                  {`Reviewed by ${approval.reviewedByEmail}${approval.reviewedAt ? ` • ${new Date(approval.reviewedAt).toLocaleString()}` : ""}`}
+                </Text>
+              ) : null}
+              {approval.executionClaimedByEmail ? (
+                <Text style={styles.emptyText}>
+                  {`Claimed by ${approval.executionClaimedByEmail}${approval.executionClaimedAt ? ` • ${new Date(approval.executionClaimedAt).toLocaleString()}` : ""}`}
+                </Text>
+              ) : null}
+              {approval.executionCompletedByEmail ? (
+                <Text style={styles.emptyText}>
+                  {`Completed ${approval.executionResult || "done"} by ${approval.executionCompletedByEmail}${approval.executionCompletedAt ? ` • ${new Date(approval.executionCompletedAt).toLocaleString()}` : ""}`}
+                </Text>
+              ) : null}
+              {approval.executionSummary ? <Text style={styles.emptyText}>{`Execution summary: ${approval.executionSummary}`}</Text> : null}
+              {approval.executionToken ? <Text style={styles.emptyText}>{`Execution token: ${approval.executionToken}`}</Text> : null}
               {approval.status === "pending" ? (
                 <View style={styles.rowInlineSpace}>
                   <TextInput
@@ -1206,6 +1279,44 @@ export function TeamScreen({
                       <Text style={styles.actionDangerText}>Deny</Text>
                     </Pressable>
                   ) : null}
+                </View>
+              ) : null}
+              {approval.status === "approved" && !approval.executionClaimedAt && onClaimFleetExecution ? (
+                <View style={styles.rowInlineSpace}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Claim fleet execution ${approval.id}`}
+                    style={[styles.actionButton, !canClaimFleetExecution ? styles.buttonDisabled : null]}
+                    onPress={() => handleClaimFleetExecution(approval)}
+                    disabled={!canClaimFleetExecution}
+                  >
+                    <Text style={styles.actionButtonText}>Claim Execution</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              {approval.status === "approved" &&
+              Boolean(approval.executionClaimedAt) &&
+              !approval.executionCompletedAt &&
+              onCompleteFleetExecution ? (
+                <View style={styles.rowInlineSpace}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Mark fleet execution ${approval.id} succeeded`}
+                    style={[styles.actionButton, !canCompleteFleetExecution ? styles.buttonDisabled : null]}
+                    onPress={() => handleCompleteFleetExecution(approval, "succeeded")}
+                    disabled={!canCompleteFleetExecution}
+                  >
+                    <Text style={styles.actionButtonText}>Mark Succeeded</Text>
+                  </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Mark fleet execution ${approval.id} failed`}
+                    style={[styles.actionDangerButton, !canCompleteFleetExecution ? styles.buttonDisabled : null]}
+                    onPress={() => handleCompleteFleetExecution(approval, "failed")}
+                    disabled={!canCompleteFleetExecution}
+                  >
+                    <Text style={styles.actionDangerText}>Mark Failed</Text>
+                  </Pressable>
                 </View>
               ) : null}
             </View>

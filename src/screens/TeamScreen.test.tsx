@@ -585,6 +585,96 @@ describe("TeamScreen", () => {
     });
   });
 
+  it("routes fleet execution claim action for approved requests", async () => {
+    const onClaimFleetExecution = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          fleetApprovals={[
+            {
+              id: "approval-claim",
+              command: "docker compose up -d",
+              requestedByUserId: "user-2",
+              requestedByEmail: "ops@example.com",
+              targets: ["dgx"],
+              createdAt: "2026-03-05T00:00:00.000Z",
+              updatedAt: "2026-03-05T00:00:00.000Z",
+              status: "approved",
+            },
+          ]}
+          loading={false}
+          busy={false}
+          onClaimFleetExecution={onClaimFleetExecution}
+        />
+      );
+    });
+
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Claim fleet execution approval-claim" }).props.onPress();
+    });
+    expect(onClaimFleetExecution).toHaveBeenCalledWith("approval-claim");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("routes fleet execution completion actions with execution token", async () => {
+    const onCompleteFleetExecution = vi.fn(async () => undefined);
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          fleetApprovals={[
+            {
+              id: "approval-complete",
+              command: "docker compose up -d",
+              requestedByUserId: "user-2",
+              requestedByEmail: "ops@example.com",
+              targets: ["dgx"],
+              createdAt: "2026-03-05T00:00:00.000Z",
+              updatedAt: "2026-03-05T00:00:00.000Z",
+              status: "approved",
+              executionClaimedByUserId: "user-1",
+              executionClaimedByEmail: "dev@example.com",
+              executionClaimedAt: "2026-03-05T00:05:00.000Z",
+              executionToken: "exec-token-123",
+            },
+          ]}
+          loading={false}
+          busy={false}
+          onCompleteFleetExecution={onCompleteFleetExecution}
+        />
+      );
+    });
+
+    await act(async () => {
+      renderer?.root.findByProps({ accessibilityLabel: "Mark fleet execution approval-complete succeeded" }).props.onPress();
+      renderer?.root.findByProps({ accessibilityLabel: "Mark fleet execution approval-complete failed" }).props.onPress();
+    });
+    expect(onCompleteFleetExecution).toHaveBeenCalledWith({
+      approvalId: "approval-complete",
+      executionToken: "exec-token-123",
+      status: "succeeded",
+    });
+    expect(onCompleteFleetExecution).toHaveBeenCalledWith({
+      approvalId: "approval-complete",
+      executionToken: "exec-token-123",
+      status: "failed",
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("renders team invites and routes revoke action", async () => {
     const onRevokeInvite = vi.fn(async () => undefined);
     let renderer: TestRenderer.ReactTestRenderer | null = null;

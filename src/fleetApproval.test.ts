@@ -41,6 +41,20 @@ describe("fleetApproval", () => {
     expect(findApprovedFleetApproval(approvals, "docker compose up -d", ["dgx", "home"], "user-1")).toBeNull();
   });
 
+  it("does not reuse approvals that are already claimed or completed", () => {
+    const approvals: TeamFleetApproval[] = [
+      approval({
+        id: "approval-claimed",
+        executionClaimedAt: "2026-03-05T01:00:00.000Z",
+      }),
+      approval({
+        id: "approval-completed",
+        executionCompletedAt: "2026-03-05T01:05:00.000Z",
+      }),
+    ];
+    expect(findApprovedFleetApproval(approvals, "docker compose up -d", ["dgx", "home"], "user-1")).toBeNull();
+  });
+
   it("matches pending requests for the same command/targets/requester", () => {
     const approvals: TeamFleetApproval[] = [
       approval({

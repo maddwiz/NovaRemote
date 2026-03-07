@@ -592,6 +592,27 @@ function normalizeFleetApproval(value: unknown): TeamFleetApproval | null {
     status,
     note: normalizeOptionalString(parsed.note),
     expiresAt: expiresAt || undefined,
+    reviewedByUserId: normalizeOptionalString(parsed.reviewedByUserId || parsed.reviewed_by_user_id),
+    reviewedByEmail: normalizeOptionalString(parsed.reviewedByEmail || parsed.reviewed_by_email),
+    reviewedAt: normalizeOptionalString(parsed.reviewedAt || parsed.reviewed_at),
+    executionClaimedByUserId: normalizeOptionalString(parsed.executionClaimedByUserId || parsed.execution_claimed_by_user_id),
+    executionClaimedByEmail: normalizeOptionalString(parsed.executionClaimedByEmail || parsed.execution_claimed_by_email),
+    executionClaimedAt: normalizeOptionalString(parsed.executionClaimedAt || parsed.execution_claimed_at),
+    executionToken: normalizeOptionalString(parsed.executionToken || parsed.execution_token),
+    executionCompletedByUserId: normalizeOptionalString(
+      parsed.executionCompletedByUserId || parsed.execution_completed_by_user_id
+    ),
+    executionCompletedByEmail: normalizeOptionalString(
+      parsed.executionCompletedByEmail || parsed.execution_completed_by_email
+    ),
+    executionCompletedAt: normalizeOptionalString(parsed.executionCompletedAt || parsed.execution_completed_at),
+    executionResult:
+      normalizeRequiredString(parsed.executionResult || parsed.execution_result).toLowerCase() === "failed" ? "failed" : (
+        normalizeRequiredString(parsed.executionResult || parsed.execution_result).toLowerCase() === "succeeded"
+          ? "succeeded"
+          : undefined
+      ),
+    executionSummary: normalizeOptionalString(parsed.executionSummary || parsed.execution_summary),
   };
 }
 
@@ -1477,6 +1498,97 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
     [reviewFleetApproval]
   );
 
+  const claimFleetExecution = useCallback(
+    async (approvalId: string) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before claiming fleet execution.");
+      }
+      if (!hasTeamPermission(identity, "fleet:execute")) {
+        throw new Error("You do not have permission to claim fleet execution.");
+      }
+      const normalizedApprovalId = approvalId.trim();
+      if (!normalizedApprovalId) {
+        throw new Error("Approval ID is required.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const payload = await cloudRequest<Record<string, unknown>>(
+          `/v1/team/fleet/approvals/${encodeURIComponent(normalizedApprovalId)}/claim-execution`,
+          {
+            method: "POST",
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        const approval = normalizeFleetApproval(payload.approval || payload);
+        await refreshTeamContext(identity);
+        return approval;
+      } catch (claimError) {
+        setError(claimError instanceof Error ? claimError.message : String(claimError));
+        onError?.(claimError);
+        throw claimError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
+  const completeFleetExecution = useCallback(
+    async (input: { approvalId: string; executionToken: string; status: "succeeded" | "failed"; summary?: string }) => {
+      if (!identity) {
+        throw new Error("Sign in to a team account before completing fleet execution.");
+      }
+      if (!hasTeamPermission(identity, "fleet:execute")) {
+        throw new Error("You do not have permission to complete fleet execution.");
+      }
+      const approvalId = input.approvalId.trim();
+      const executionToken = input.executionToken.trim();
+      if (!approvalId) {
+        throw new Error("Approval ID is required.");
+      }
+      if (!executionToken) {
+        throw new Error("Execution token is required.");
+      }
+
+      setBusy(true);
+      setError(null);
+      try {
+        const payload = await cloudRequest<Record<string, unknown>>(
+          `/v1/team/fleet/approvals/${encodeURIComponent(approvalId)}/complete`,
+          {
+            method: "POST",
+            body: JSON.stringify({
+              executionToken,
+              status: input.status,
+              summary: normalizeOptionalString(input.summary),
+            }),
+          },
+          {
+            accessToken: identity.accessToken,
+            cloudUrl: cloudUrl || getNovaCloudUrl(),
+            fetchImpl,
+          }
+        );
+        const approval = normalizeFleetApproval(payload.approval || payload);
+        await refreshTeamContext(identity);
+        return approval;
+      } catch (completeError) {
+        setError(completeError instanceof Error ? completeError.message : String(completeError));
+        onError?.(completeError);
+        throw completeError;
+      } finally {
+        setBusy(false);
+      }
+    },
+    [cloudUrl, fetchImpl, identity, onError, refreshTeamContext]
+  );
+
   useEffect(() => {
     if (!enabled || !identity) {
       if (!identity) {
@@ -1551,6 +1663,8 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       requestFleetApproval,
       approveFleetApproval,
       denyFleetApproval,
+      claimFleetExecution,
+      completeFleetExecution,
       logout,
       setIdentityForTesting: setIdentity,
     }),
@@ -1564,6 +1678,8 @@ export function useTeamAuth({ enabled = true, cloudUrl, fetchImpl, onError }: Us
       loading,
       approveFleetApproval,
       denyFleetApproval,
+      claimFleetExecution,
+      completeFleetExecution,
       loginWithPassword,
       loginWithSso,
       logout,

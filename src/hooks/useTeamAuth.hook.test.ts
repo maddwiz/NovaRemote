@@ -65,7 +65,21 @@ type TeamAuthHandle = {
   requestFleetApproval: (input: { command: string; targets: string[]; note?: string }) => Promise<unknown>;
   approveFleetApproval: (approvalId: string, note?: string) => Promise<void>;
   denyFleetApproval: (approvalId: string, note?: string) => Promise<void>;
-  fleetApprovals: Array<{ id: string; status: string }>;
+  claimFleetExecution: (approvalId: string) => Promise<unknown>;
+  completeFleetExecution: (input: {
+    approvalId: string;
+    executionToken: string;
+    status: "succeeded" | "failed";
+    summary?: string;
+  }) => Promise<unknown>;
+  fleetApprovals: Array<{
+    id: string;
+    status: string;
+    executionToken?: string;
+    executionClaimedByUserId?: string;
+    executionCompletedAt?: string;
+    executionResult?: "succeeded" | "failed";
+  }>;
   teamSsoProviders: Array<{ provider: "saml" | "oidc"; enabled: boolean }>;
   teamSettings: {
     enforceDangerConfirm: boolean | null;
@@ -146,8 +160,17 @@ beforeEach(() => {
     targets: string[];
     createdAt: string;
     updatedAt: string;
-    status: "pending" | "approved" | "denied";
+    status: "pending" | "approved" | "denied" | "expired";
     note?: string;
+    executionClaimedByUserId?: string;
+    executionClaimedByEmail?: string;
+    executionClaimedAt?: string;
+    executionToken?: string;
+    executionCompletedByUserId?: string;
+    executionCompletedByEmail?: string;
+    executionCompletedAt?: string;
+    executionResult?: "succeeded" | "failed";
+    executionSummary?: string;
   }> = [];
   let ssoProviders: Array<{
     provider: "saml" | "oidc";
@@ -251,6 +274,44 @@ beforeEach(() => {
       const id = String(path).split("/")[5] || "";
       approvals = approvals.map((entry) => (entry.id === id ? { ...entry, status: "denied" as const } : entry));
       return {};
+    }
+    if (path.startsWith("/v1/team/fleet/approvals/") && path.endsWith("/claim-execution")) {
+      const id = String(path).split("/")[5] || "";
+      const claimedAt = "2026-03-05T00:05:00.000Z";
+      const executionToken = `exec-${id}`;
+      approvals = approvals.map((entry) =>
+        entry.id === id
+          ? {
+              ...entry,
+              status: "approved" as const,
+              executionClaimedByUserId: "user-1",
+              executionClaimedByEmail: "dev@example.com",
+              executionClaimedAt: claimedAt,
+              executionToken,
+            }
+          : entry
+      );
+      const approval = approvals.find((entry) => entry.id === id);
+      return { approval, executionToken };
+    }
+    if (path.startsWith("/v1/team/fleet/approvals/") && path.endsWith("/complete")) {
+      const id = String(path).split("/")[5] || "";
+      const rawBody = String(init?.body || "{}");
+      const payload = JSON.parse(rawBody) as { executionToken?: string; status?: "succeeded" | "failed"; summary?: string };
+      approvals = approvals.map((entry) =>
+        entry.id === id && payload.executionToken && entry.executionToken === payload.executionToken
+          ? {
+              ...entry,
+              executionCompletedByUserId: "user-1",
+              executionCompletedByEmail: "dev@example.com",
+              executionCompletedAt: "2026-03-05T00:10:00.000Z",
+              executionResult: payload.status === "failed" ? "failed" : "succeeded",
+              executionSummary: payload.summary,
+            }
+          : entry
+      );
+      const approval = approvals.find((entry) => entry.id === id);
+      return { approval, ok: true };
     }
     if (path === "/v1/team/invites") {
       const method = String(init?.method || "GET").toUpperCase();
@@ -917,6 +978,74 @@ describe("useTeamAuth hook", () => {
     });
   });
 
+  it("claims and completes approved fleet executions", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          userId: "reviewer-1",
+          email: "reviewer@example.com",
+        })
+      )
+    );
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).requestFleetApproval({
+        command: "docker compose up -d",
+        targets: ["dgx", "home"],
+      });
+    });
+    await flush();
+
+    const approvalId = latestOrThrow(latest).fleetApprovals[0]?.id || "";
+
+    await act(async () => {
+      await latestOrThrow(latest).approveFleetApproval(approvalId);
+    });
+    await flush();
+
+    await act(async () => {
+      await latestOrThrow(latest).claimFleetExecution(approvalId);
+    });
+    await flush();
+
+    const executionToken =
+      latestOrThrow(latest).fleetApprovals.find((entry) => entry.id === approvalId)?.executionToken || "";
+    expect(executionToken).toBeTruthy();
+
+    await act(async () => {
+      await latestOrThrow(latest).completeFleetExecution({
+        approvalId,
+        executionToken,
+        status: "succeeded",
+        summary: "All targets completed cleanly.",
+      });
+    });
+    await flush();
+
+    const completed = latestOrThrow(latest).fleetApprovals.find((entry) => entry.id === approvalId);
+    expect(completed?.executionResult).toBe("succeeded");
+    expect(completed?.executionCompletedAt).toBe("2026-03-05T00:10:00.000Z");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("blocks approving fleet requests created by the same user", async () => {
     secureStoreMock.storage.set(STORAGE_TEAM_IDENTITY, JSON.stringify(buildIdentity()));
 
@@ -996,6 +1125,51 @@ describe("useTeamAuth hook", () => {
       (call) => String(call[0]) === "/v1/team/fleet/approvals" && String(call[1]?.method || "GET").toUpperCase() === "POST"
     );
     expect(postedFleetApprovals).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("blocks claiming and completing fleet execution when fleet-execute permission is missing", async () => {
+    secureStoreMock.storage.set(
+      STORAGE_TEAM_IDENTITY,
+      JSON.stringify(
+        buildIdentity({
+          role: "viewer",
+          permissions: ["servers:read"],
+        })
+      )
+    );
+
+    let latest: TeamAuthHandle | null = null;
+
+    function Harness() {
+      latest = useTeamAuth({ enabled: true }) as TeamAuthHandle;
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await flush();
+
+    await act(async () => {
+      await expect(latestOrThrow(latest).claimFleetExecution("approval-1")).rejects.toThrow(
+        "You do not have permission to claim fleet execution."
+      );
+    });
+
+    await act(async () => {
+      await expect(
+        latestOrThrow(latest).completeFleetExecution({
+          approvalId: "approval-1",
+          executionToken: "token",
+          status: "failed",
+        })
+      ).rejects.toThrow("You do not have permission to complete fleet execution.");
+    });
 
     await act(async () => {
       renderer?.unmount();
