@@ -95,6 +95,7 @@ The scaffold also emits system audit events for auth, server-fleet, invite, poli
 Team policy updates are schema-validated in the scaffold API, including timeout bounds and command blocklist regex validation.
 Audit export jobs now model lifecycle states (`pending` -> `ready` / `failed`) with TTL cleanup, retry support (`POST /v1/audit/exports/{exportId}/retry`), tokenized download artifacts (`GET /v1/audit/exports/{exportId}/download`), and richer metadata (`eventCount`, `attemptCount`, `processingDurationMs`, transition timestamps) in the scaffold.
 Export list responses now include summary rollups (`pending`/`ready`/`failed`) plus `avgProcessingDurationMs` for lightweight compliance/ops observability in dashboard views.
+Per-export detail responses also include `inScopeEventCount` and `scopeDelta` so dashboards can detect drift between snapshot size and currently in-scope events.
 Team member responses now include server-derived usage snapshots (`sessionsCreated`, `commandsSent`, `fleetExecutions`, `lastActiveAt`) computed from the audit stream.
 Token provisioning now enforces server assignment + least-privilege permission clamping (requested level is capped by caller role and server policy).
 Team server listing now enforces per-member visibility (non-admin members only receive assigned servers).

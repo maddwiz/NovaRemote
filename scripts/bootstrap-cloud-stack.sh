@@ -2293,11 +2293,13 @@ app.get("/v1/audit/exports/:exportId", requireTeamPermission("audit:read"), (req
     return res.status(404).json({ detail: "Export not found" });
   }
   const inScopeEventCount = selectAuditEventsForExport(job).length;
+  const snapshotEventCount = typeof job.eventCount === "number" ? job.eventCount : inScopeEventCount;
+  const scopeDelta = inScopeEventCount - snapshotEventCount;
   const exportJob = {
     ...job,
-    eventCount: typeof job.eventCount === "number" ? job.eventCount : inScopeEventCount,
+    eventCount: snapshotEventCount,
   };
-  res.json({ export: exportJob, inScopeEventCount });
+  res.json({ export: exportJob, inScopeEventCount, scopeDelta });
 });
 
 app.post("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => {
@@ -2756,6 +2758,7 @@ type AuditExportJob = {
 type AuditExportDetail = {
   export: AuditExportJob;
   inScopeEventCount: number;
+  scopeDelta?: number;
 };
 
 type AuditEvent = {
@@ -4813,6 +4816,9 @@ export function App() {
           <div className="providerRow">
             <p className="muted">{`Detail: ${selectedExportDetail.export.exportId}`}</p>
             <p className="muted">{`In-scope events now: ${selectedExportDetail.inScopeEventCount}`}</p>
+            {typeof selectedExportDetail.scopeDelta === "number" ? (
+              <p className="muted">{`Scope delta: ${selectedExportDetail.scopeDelta}`}</p>
+            ) : null}
             {typeof selectedExportDetail.export.eventCount === "number" ? (
               <p className="muted">{`Snapshot event count: ${selectedExportDetail.export.eventCount}`}</p>
             ) : null}

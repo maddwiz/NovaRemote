@@ -895,6 +895,8 @@ paths:
                     $ref: "#/components/schemas/AuditExportJob"
                   inScopeEventCount:
                     type: integer
+                  scopeDelta:
+                    type: integer
     delete:
       summary: Delete a cloud-hosted audit export job
       parameters:
