@@ -104,6 +104,7 @@ Updated: 2026-03-07
   - [x] token broker now provisions immediately on team login and purges cached tokens on 401/403 revocation responses
   - [x] cross-server command + control routes (including voice-driven sends) now enforce viewer write restrictions + blocklist policy and emit audit events with the correct target server context
   - [x] session stop actions are now auditable (`command_sent` with `stop_session`) across focused and cross-server flows
+  - [x] shell session creation prompts (`start prompt` / voice `... and run ...`) now pass through danger/blocklist approval before execution
 
 ## v1.6.1 Multi-Server Session Lifecycle UX
 
