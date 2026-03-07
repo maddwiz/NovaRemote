@@ -446,6 +446,51 @@ describe("useConnectionPool websocket integration", () => {
     await harness.unmount();
   });
 
+  it("cleans up websocket refs when a session is hidden and does not reconnect removed streams", async () => {
+    fetchMock.mockImplementation(async (input: unknown) => {
+      const url = typeof input === "string" ? input : String(input);
+      if (url.includes("/tmux/sessions")) {
+        return jsonResponse({
+          sessions: [{ name: "main" }, { name: "build" }],
+        });
+      }
+      return await defaultFetchImpl(input);
+    });
+
+    const harness = await mountPool([makeServer("dgx", "DGX")]);
+    await harness.waitFor(
+      () => (harness.getPool().connections.get("dgx")?.allSessions.length || 0) === 2,
+      "all sessions discovered"
+    );
+    await harness.waitFor(() => FakeWebSocket.instances.length === 1, "main stream websocket");
+
+    await harness.act(async () => {
+      harness.getPool().toggleSessionVisible("dgx", "build");
+    });
+    await harness.waitFor(() => FakeWebSocket.instances.length === 2, "build stream websocket");
+
+    const buildWs = FakeWebSocket.instances[1];
+    expect(buildWs).toBeDefined();
+
+    await harness.act(async () => {
+      harness.getPool().toggleSessionVisible("dgx", "build");
+    });
+    await harness.waitFor(
+      () => !(harness.getPool().connections.get("dgx")?.openSessions || []).includes("build"),
+      "build session hidden"
+    );
+    expect(buildWs.readyState).toBe(FakeWebSocket.CLOSED);
+
+    const countAfterHide = FakeWebSocket.instances.length;
+    await harness.act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    await harness.flush();
+    expect(FakeWebSocket.instances.length).toBe(countAfterHide);
+
+    await harness.unmount();
+  });
+
   it("adds and removes servers while syncing pool entries and stream cleanup", async () => {
     const dgx = makeServer("dgx", "DGX");
     const lab = makeServer("lab", "Lab");
