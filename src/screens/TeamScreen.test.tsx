@@ -728,6 +728,72 @@ describe("TeamScreen", () => {
     });
   });
 
+  it("filters invites by status/role/email and renders summary rollups", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+
+    await act(async () => {
+      renderer = TestRenderer.create(
+        <TeamScreen
+          identity={identity}
+          members={[]}
+          teamInvites={[
+            {
+              id: "invite-pending",
+              email: "pending@example.com",
+              role: "viewer",
+              status: "pending",
+              createdAt: "2026-03-05T00:00:00.000Z",
+            },
+            {
+              id: "invite-accepted",
+              email: "accepted@example.com",
+              role: "operator",
+              status: "accepted",
+              createdAt: "2026-03-04T00:00:00.000Z",
+            },
+            {
+              id: "invite-expired",
+              email: "expired@example.com",
+              role: "viewer",
+              status: "expired",
+              createdAt: "2026-03-03T00:00:00.000Z",
+            },
+          ]}
+          loading={false}
+          busy={false}
+          canInvite
+          onRevokeInvite={async () => undefined}
+        />
+      );
+    });
+
+    expect(() =>
+      renderer?.root.findByProps({ children: "Invite summary: pending 1 • accepted 1 • expired 1 • revoked 0" })
+    ).not.toThrow();
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Filter invites by status" }).props.onChangeText("accepted");
+    });
+    expect(() => renderer?.root.findByProps({ children: "accepted@example.com • operator • accepted" })).not.toThrow();
+    expect(() => renderer?.root.findByProps({ children: "pending@example.com • viewer • pending" })).toThrow();
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Filter invites by status" }).props.onChangeText("");
+      renderer?.root.findByProps({ accessibilityLabel: "Filter invites by role" }).props.onChangeText("viewer");
+    });
+    expect(() => renderer?.root.findByProps({ children: "accepted@example.com • operator • accepted" })).toThrow();
+
+    act(() => {
+      renderer?.root.findByProps({ accessibilityLabel: "Filter invites by role" }).props.onChangeText("");
+      renderer?.root.findByProps({ accessibilityLabel: "Filter invites by email" }).props.onChangeText("none@match.test");
+    });
+    expect(() => renderer?.root.findByProps({ children: "No invites match current filters." })).not.toThrow();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("routes cloud dashboard open action when configured", async () => {
     const onOpenCloudDashboard = vi.fn();
     let renderer: TestRenderer.ReactTestRenderer | null = null;

@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
 import { TeamBadge } from "../components/TeamBadge";
@@ -70,6 +70,24 @@ function formatMemberUsage(member: TeamMember): string | null {
     return hasUsage ? `${usageParts.join(" • ")} • active ${lastActive}` : `active ${lastActive}`;
   }
   return hasUsage ? usageParts.join(" • ") : null;
+}
+
+function summarizeInvites(invites: TeamInvite[]) {
+  return invites.reduce(
+    (summary, invite) => {
+      if (invite.status === "pending") {
+        summary.pending += 1;
+      } else if (invite.status === "accepted") {
+        summary.accepted += 1;
+      } else if (invite.status === "expired") {
+        summary.expired += 1;
+      } else if (invite.status === "revoked") {
+        summary.revoked += 1;
+      }
+      return summary;
+    },
+    { pending: 0, accepted: 0, expired: 0, revoked: 0 }
+  );
 }
 
 type TeamScreenProps = {
@@ -185,6 +203,9 @@ export function TeamScreen({
   const [inviteCode, setInviteCode] = useState<string>("");
   const [inviteEmail, setInviteEmail] = useState<string>("");
   const [inviteRole, setInviteRole] = useState<TeamRole>("viewer");
+  const [inviteStatusFilter, setInviteStatusFilter] = useState<string>("");
+  const [inviteRoleFilter, setInviteRoleFilter] = useState<string>("");
+  const [inviteEmailFilter, setInviteEmailFilter] = useState<string>("");
   const [memberQuery, setMemberQuery] = useState<string>("");
   const [memberRoleFilter, setMemberRoleFilter] = useState<"all" | TeamRole>("all");
   const [memberServerDrafts, setMemberServerDrafts] = useState<Record<string, string[]>>({});
@@ -217,7 +238,25 @@ export function TeamScreen({
   const canOpenAnyCloudAuditExport = Boolean(identity && onOpenCloudAuditExport && !busy);
   const canOpenCloudAuditExport = Boolean(identity && cloudAuditExportJob?.downloadUrl && onOpenCloudAuditExport && !busy);
   const canOpenCloudDashboard = Boolean(identity && cloudDashboardUrl && onOpenCloudDashboard && !busy);
-  const pendingInvites = teamInvites.filter((invite) => invite.status === "pending");
+  const inviteSummary = useMemo(() => summarizeInvites(teamInvites), [teamInvites]);
+  const pendingInvites = inviteSummary.pending;
+  const filteredTeamInvites = useMemo(() => {
+    const statusNeedle = inviteStatusFilter.trim().toLowerCase();
+    const roleNeedle = inviteRoleFilter.trim().toLowerCase();
+    const emailNeedle = inviteEmailFilter.trim().toLowerCase();
+    return teamInvites.filter((invite) => {
+      if (statusNeedle && !invite.status.toLowerCase().includes(statusNeedle)) {
+        return false;
+      }
+      if (roleNeedle && !invite.role.toLowerCase().includes(roleNeedle)) {
+        return false;
+      }
+      if (emailNeedle && !invite.email.toLowerCase().includes(emailNeedle)) {
+        return false;
+      }
+      return true;
+    });
+  }, [inviteEmailFilter, inviteRoleFilter, inviteStatusFilter, teamInvites]);
   const visibleSsoProviders = TEAM_SSO_PROVIDERS.map(
     (provider) => teamSsoProviders.find((entry) => entry.provider === provider) || { provider, enabled: false }
   );
@@ -809,7 +848,7 @@ export function TeamScreen({
           </Text>
           <Text style={styles.emptyText}>{`Command blocklist rules: ${settings.commandBlocklist.length}`}</Text>
           <Text style={styles.emptyText}>{`Fleet approvals pending: ${pendingFleetApprovals.length}`}</Text>
-          <Text style={styles.emptyText}>{`Invites pending: ${pendingInvites.length}`}</Text>
+          <Text style={styles.emptyText}>{`Invites pending: ${pendingInvites}`}</Text>
           <Text style={styles.emptyText}>{`Fleet approval: ${policyValueLabel(settings.requireFleetApproval)}`}</Text>
           <Text style={styles.emptyText}>{`Session recording: ${policyValueLabel(settings.requireSessionRecording)}`}</Text>
           <Text style={styles.emptyText}>{`Audit queue: ${auditPendingCount}`}</Text>
@@ -1006,8 +1045,44 @@ export function TeamScreen({
 
       {identity && teamInvites.length > 0 ? (
         <View style={styles.serverCard}>
-          <Text style={styles.serverName}>{`Team Invites (${pendingInvites.length} pending)`}</Text>
-          {teamInvites.map((invite) => (
+          <Text style={styles.serverName}>{`Team Invites (${pendingInvites} pending)`}</Text>
+          <Text style={styles.emptyText}>
+            {`Invite summary: pending ${inviteSummary.pending} • accepted ${inviteSummary.accepted} • expired ${inviteSummary.expired} • revoked ${inviteSummary.revoked}`}
+          </Text>
+          <View style={styles.serverFiltersRow}>
+            <TextInput
+              style={[styles.input, styles.serverFilterInput]}
+              value={inviteStatusFilter}
+              onChangeText={setInviteStatusFilter}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="filter status"
+              placeholderTextColor="#7f7aa8"
+              accessibilityLabel="Filter invites by status"
+            />
+            <TextInput
+              style={[styles.input, styles.serverFilterInput]}
+              value={inviteRoleFilter}
+              onChangeText={setInviteRoleFilter}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="filter role"
+              placeholderTextColor="#7f7aa8"
+              accessibilityLabel="Filter invites by role"
+            />
+            <TextInput
+              style={[styles.input, styles.serverFilterInput]}
+              value={inviteEmailFilter}
+              onChangeText={setInviteEmailFilter}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder="filter email"
+              placeholderTextColor="#7f7aa8"
+              accessibilityLabel="Filter invites by email"
+            />
+          </View>
+          {filteredTeamInvites.length === 0 ? <Text style={styles.emptyText}>No invites match current filters.</Text> : null}
+          {filteredTeamInvites.map((invite) => (
             <View key={invite.id} style={styles.panel}>
               <Text style={styles.emptyText}>{`${invite.email} • ${invite.role} • ${invite.status}`}</Text>
               {invite.expiresAt ? (

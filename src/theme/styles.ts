@@ -200,6 +200,15 @@ export const styles = StyleSheet.create({
     paddingVertical: 10,
     fontSize: 15,
   },
+  serverFiltersRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  serverFilterInput: {
+    flexGrow: 1,
+    minWidth: 120,
+  },
   tailInput: {
     minWidth: 84,
     textAlign: "center",
