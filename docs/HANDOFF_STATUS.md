@@ -88,6 +88,7 @@ Updated: 2026-03-07
 - [x] Cloud scaffold invite listing now supports `status` / `role` / `email` filters with dashboard filter controls
 - [x] Team cloud dashboard bridge in app (dashboard URL surfaced + quick-open action)
 - [x] Per-member usage telemetry surfaced in TeamScreen cards (sessions/commands/fleet)
+- [x] Cloud scaffold member listing now supports `role` / `email` / `activeSince` filters with dashboard member filter controls
 - [x] Team/Enterprise packaging in monetization/paywall + seat-based product plumbing
 - [x] RevenueCat entitlement tier recognition (`pro`/`team`/`enterprise`) in app gating state
 - [x] Tier-aware paywall upgrade actions for Pro/Team/Enterprise (when package offerings are configured)

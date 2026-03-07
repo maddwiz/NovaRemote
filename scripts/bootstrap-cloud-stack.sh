@@ -1481,7 +1481,22 @@ app.delete("/v1/team/servers/:serverId", requireTeamPermission("servers:delete")
   res.json({ server: removed, ok: true });
 });
 
-app.get("/v1/team/members", requireTeamPermission("team:manage"), (_req, res) => {
+app.get("/v1/team/members", requireTeamPermission("team:manage"), (req, res) => {
+  const roleRaw = String(req.query?.role || "").trim().toLowerCase();
+  const emailNeedle = String(req.query?.email || "").trim().toLowerCase();
+  const activeSinceRaw = Number.parseInt(String(req.query?.activeSince || ""), 10);
+  const activeSince = Number.isFinite(activeSinceRaw) ? activeSinceRaw : null;
+  const limitRaw = Number.parseInt(String(req.query?.limit || "500"), 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 5000) : 500;
+  const roleFilter =
+    roleRaw === ""
+      ? null
+      : roleRaw === "admin" || roleRaw === "operator" || roleRaw === "viewer" || roleRaw === "billing"
+        ? roleRaw
+        : "invalid";
+  if (roleFilter === "invalid") {
+    return res.status(400).json({ detail: "role must be admin, operator, viewer, or billing" });
+  }
   const usageByIdentity = computeMemberUsageByIdentity();
   const members = teamMembers.map((member) => {
     const normalizedEmail = member.email.trim().toLowerCase();
@@ -1495,8 +1510,37 @@ app.get("/v1/team/members", requireTeamPermission("team:manage"), (_req, res) =>
       fleetExecutions: stats?.fleetExecutions ?? 0,
       lastActiveAt,
     };
+  })
+  .filter((member) => {
+    if (roleFilter && member.role !== roleFilter) {
+      return false;
+    }
+    if (emailNeedle && !member.email.toLowerCase().includes(emailNeedle)) {
+      return false;
+    }
+    if (activeSince !== null) {
+      const lastActiveMs = member.lastActiveAt ? Date.parse(member.lastActiveAt) : Number.NaN;
+      if (!Number.isFinite(lastActiveMs) || lastActiveMs < activeSince) {
+        return false;
+      }
+    }
+    return true;
+  })
+  .sort((a, b) => {
+    const aMs = a.lastActiveAt ? Date.parse(a.lastActiveAt) : Number.NaN;
+    const bMs = b.lastActiveAt ? Date.parse(b.lastActiveAt) : Number.NaN;
+    if (Number.isFinite(aMs) && Number.isFinite(bMs)) {
+      return bMs - aMs;
+    }
+    if (Number.isFinite(bMs)) {
+      return 1;
+    }
+    if (Number.isFinite(aMs)) {
+      return -1;
+    }
+    return a.email.localeCompare(b.email);
   });
-  res.json({ members });
+  res.json({ members: members.slice(0, limit) });
 });
 
 app.patch("/v1/team/members/:memberId", requireTeamPermission("team:manage"), (req, res) => {
@@ -2657,6 +2701,9 @@ export function App() {
   const [identity, setIdentity] = useState<TeamIdentity | null>(null);
   const [healthOk, setHealthOk] = useState<boolean | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
+  const [memberRoleFilter, setMemberRoleFilter] = useState<string>("");
+  const [memberEmailFilter, setMemberEmailFilter] = useState<string>("");
+  const [memberActiveOnly, setMemberActiveOnly] = useState<boolean>(false);
   const [teamServers, setTeamServers] = useState<TeamServer[]>([]);
   const [serverEditDrafts, setServerEditDrafts] = useState<
     Record<
@@ -3578,6 +3625,23 @@ export function App() {
     });
   }, [inviteEmailFilter, inviteRoleFilter, inviteStatusFilter, invites]);
 
+  const filteredMembers = useMemo(() => {
+    const roleNeedle = memberRoleFilter.trim().toLowerCase();
+    const emailNeedle = memberEmailFilter.trim().toLowerCase();
+    return members.filter((member) => {
+      if (roleNeedle && !member.role.toLowerCase().includes(roleNeedle)) {
+        return false;
+      }
+      if (emailNeedle && !member.email.toLowerCase().includes(emailNeedle)) {
+        return false;
+      }
+      if (memberActiveOnly && !member.lastActiveAt) {
+        return false;
+      }
+      return true;
+    });
+  }, [memberActiveOnly, memberEmailFilter, memberRoleFilter, members]);
+
   return (
     <main className="layout">
       <section className="panel">
@@ -3807,9 +3871,38 @@ export function App() {
       </section>
 
       <section className="panel">
-        <h2 className="title">Team Members ({members.length})</h2>
+        <h2 className="title">{`Team Members (${filteredMembers.length}/${members.length})`}</h2>
+        <div className="gridCols">
+          <label className="muted">
+            Filter role
+            <input
+              className="textInput"
+              value={memberRoleFilter}
+              onChange={(event) => setMemberRoleFilter(event.target.value)}
+              placeholder="operator"
+            />
+          </label>
+          <label className="muted">
+            Filter email
+            <input
+              className="textInput"
+              value={memberEmailFilter}
+              onChange={(event) => setMemberEmailFilter(event.target.value)}
+              placeholder="@example.com"
+            />
+          </label>
+          <label className="muted">
+            <input
+              type="checkbox"
+              checked={memberActiveOnly}
+              onChange={(event) => setMemberActiveOnly(event.target.checked)}
+            />{" "}
+            Active members only
+          </label>
+        </div>
         {members.length === 0 ? <p className="muted">No members loaded.</p> : null}
-        {members.map((member) => (
+        {members.length > 0 && filteredMembers.length === 0 ? <p className="muted">No members match filters.</p> : null}
+        {filteredMembers.map((member) => (
           <div key={member.id} className="providerRow">
             <p className="muted">
               {member.name} ({member.email}) • {member.role}

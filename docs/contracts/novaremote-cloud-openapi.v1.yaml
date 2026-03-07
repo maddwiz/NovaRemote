@@ -216,6 +216,28 @@ paths:
   /v1/team/members:
     get:
       summary: List team members and role metadata
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: role
+          required: false
+          schema:
+            type: string
+            enum: [admin, operator, viewer, billing]
+        - in: query
+          name: email
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: activeSince
+          required: false
+          schema:
+            type: integer
       responses:
         "200":
           description: Team member list
