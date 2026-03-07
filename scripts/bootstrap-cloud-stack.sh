@@ -1691,10 +1691,47 @@ app.patch("/v1/team/sso/providers/:provider", requireTeamPermission("team:manage
   res.json({ provider: entry });
 });
 
-app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (_req, res) => {
+app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (req, res) => {
   expirePendingApprovals();
   expireExecutionClaims();
-  res.json({ approvals: fleetApprovals });
+  const statusRaw = String(req.query?.status || "").trim().toLowerCase();
+  const requestedByNeedle = String(req.query?.requestedBy || "").trim().toLowerCase();
+  const targetNeedle = String(req.query?.target || "").trim().toLowerCase();
+  const limitRaw = Number.parseInt(String(req.query?.limit || "200"), 10);
+  const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(limitRaw, 2000) : 200;
+  const statusFilter =
+    statusRaw === ""
+      ? null
+      : statusRaw === "pending" || statusRaw === "approved" || statusRaw === "denied" || statusRaw === "expired"
+        ? statusRaw
+        : "invalid";
+  if (statusFilter === "invalid") {
+    return res.status(400).json({ detail: "status must be pending, approved, denied, or expired" });
+  }
+  const approvals = fleetApprovals
+    .filter((approval) => {
+      if (statusFilter && approval.status !== statusFilter) {
+        return false;
+      }
+      if (requestedByNeedle) {
+        const requesterEmail = String(approval.requestedByEmail || "").toLowerCase();
+        const requesterUserId = String(approval.requestedByUserId || "").toLowerCase();
+        if (!requesterEmail.includes(requestedByNeedle) && !requesterUserId.includes(requestedByNeedle)) {
+          return false;
+        }
+      }
+      if (targetNeedle) {
+        const hasTargetMatch = normalizeApprovalTargets(approval.targets).some((target) =>
+          target.toLowerCase().includes(targetNeedle)
+        );
+        if (!hasTargetMatch) {
+          return false;
+        }
+      }
+      return true;
+    })
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  res.json({ approvals: approvals.slice(0, limit) });
 });
 
 app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (req, res) => {
@@ -2461,6 +2498,7 @@ type FleetApproval = {
   id: string;
   command: string;
   status: string;
+  targets?: string[];
   requestedByEmail: string;
   createdAt: string;
   reviewedByEmail?: string;
@@ -2587,6 +2625,9 @@ export function App() {
   const [serverCwdInput, setServerCwdInput] = useState<string>("/");
   const [serverPermissionInput, setServerPermissionInput] = useState<"admin" | "operator" | "viewer">("operator");
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
+  const [approvalStatusFilter, setApprovalStatusFilter] = useState<string>("");
+  const [approvalRequesterFilter, setApprovalRequesterFilter] = useState<string>("");
+  const [approvalTargetFilter, setApprovalTargetFilter] = useState<string>("");
   const [ssoProviders, setSsoProviders] = useState<TeamSsoProviderConfig[]>([]);
   const [invites, setInvites] = useState<TeamInvite[]>([]);
   const [exportJobs, setExportJobs] = useState<AuditExportJob[]>([]);
@@ -3442,6 +3483,30 @@ export function App() {
     });
   }, [exportFormatFilter, exportJobs, exportRequestedByFilter, exportStatusFilter]);
 
+  const filteredApprovals = useMemo(() => {
+    const statusNeedle = approvalStatusFilter.trim().toLowerCase();
+    const requesterNeedle = approvalRequesterFilter.trim().toLowerCase();
+    const targetNeedle = approvalTargetFilter.trim().toLowerCase();
+    return approvals.filter((approval) => {
+      if (statusNeedle && !String(approval.status || "").toLowerCase().includes(statusNeedle)) {
+        return false;
+      }
+      if (requesterNeedle) {
+        const requester = String(approval.requestedByEmail || "").toLowerCase();
+        if (!requester.includes(requesterNeedle)) {
+          return false;
+        }
+      }
+      if (targetNeedle) {
+        const targets = Array.isArray(approval.targets) ? approval.targets : [];
+        if (!targets.some((target) => String(target).toLowerCase().includes(targetNeedle))) {
+          return false;
+        }
+      }
+      return true;
+    });
+  }, [approvalRequesterFilter, approvalStatusFilter, approvalTargetFilter, approvals]);
+
   return (
     <main className="layout">
       <section className="panel">
@@ -3756,13 +3821,46 @@ export function App() {
       </section>
 
       <section className="panel">
-        <h2 className="title">Fleet Approvals ({approvals.length})</h2>
+        <h2 className="title">{`Fleet Approvals (${filteredApprovals.length}/${approvals.length})`}</h2>
+        <div className="gridCols">
+          <label className="muted">
+            Filter status
+            <input
+              className="textInput"
+              value={approvalStatusFilter}
+              onChange={(event) => setApprovalStatusFilter(event.target.value)}
+              placeholder="pending"
+            />
+          </label>
+          <label className="muted">
+            Filter requester
+            <input
+              className="textInput"
+              value={approvalRequesterFilter}
+              onChange={(event) => setApprovalRequesterFilter(event.target.value)}
+              placeholder="admin@"
+            />
+          </label>
+          <label className="muted">
+            Filter target
+            <input
+              className="textInput"
+              value={approvalTargetFilter}
+              onChange={(event) => setApprovalTargetFilter(event.target.value)}
+              placeholder="srv-dgx"
+            />
+          </label>
+        </div>
         {approvals.length === 0 ? <p className="muted">No approvals loaded.</p> : null}
-        {approvals.map((approval) => (
+        {approvals.length > 0 && filteredApprovals.length === 0 ? <p className="muted">No approvals match filters.</p> : null}
+        {filteredApprovals.map((approval) => (
           <div key={approval.id} className="providerRow">
             <p className="muted">
               {approval.status} • {approval.command} • {approval.requestedByEmail}
             </p>
+            {Array.isArray(approval.targets) && approval.targets.length > 0 ? (
+              <p className="muted">{`Targets: ${approval.targets.join(", ")}`}</p>
+            ) : null}
             {approval.reviewedByEmail ? (
               <p className="muted">
                 Reviewed by {approval.reviewedByEmail}

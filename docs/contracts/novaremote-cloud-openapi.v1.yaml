@@ -450,6 +450,28 @@ paths:
   /v1/team/fleet/approvals:
     get:
       summary: List fleet approval records
+      parameters:
+        - in: query
+          name: limit
+          required: false
+          schema:
+            type: integer
+        - in: query
+          name: status
+          required: false
+          schema:
+            type: string
+            enum: [pending, approved, denied, expired]
+        - in: query
+          name: requestedBy
+          required: false
+          schema:
+            type: string
+        - in: query
+          name: target
+          required: false
+          schema:
+            type: string
       responses:
         "200":
           description: Fleet approvals
