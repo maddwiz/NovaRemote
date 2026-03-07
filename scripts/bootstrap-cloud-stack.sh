@@ -1060,8 +1060,9 @@ function forbidden(res: Response, detail: string) {
 }
 
 function requireTeamPermission(permission: TeamPermission) {
-  return (_req: Request, res: Response, next: NextFunction) => {
-    if (!baseIdentity.permissions.includes(permission)) {
+  return (req: Request, res: Response, next: NextFunction) => {
+    const identity = (req as Request & { identity?: TeamIdentity }).identity || null;
+    if (!identity || !identity.permissions.includes(permission)) {
       return forbidden(res, `Missing permission: ${permission}`);
     }
     next();
