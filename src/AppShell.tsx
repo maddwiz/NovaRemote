@@ -970,16 +970,24 @@ export default function AppShell() {
   );
 
   const assertCommandAllowed = useCallback(
-    (command: string, context: string) => {
+    (
+      command: string,
+      context: string,
+      scope?: {
+        serverId?: string;
+        serverName?: string;
+        session?: string;
+      }
+    ) => {
       const blockedPattern = findBlockedCommandPattern(command, teamSettings.commandBlocklist);
       if (!blockedPattern) {
         return;
       }
       recordAuditEvent({
         action: "command_dangerous_denied",
-        serverId: focusedServerId || "",
-        serverName: activeServer?.name || "",
-        session: "",
+        serverId: scope?.serverId ?? focusedServerId ?? "",
+        serverName: scope?.serverName ?? activeServer?.name ?? "",
+        session: scope?.session ?? "",
         detail: `${context}: blocked by pattern ${blockedPattern}`.slice(0, 400),
         approved: false,
       });
@@ -1029,12 +1037,17 @@ export default function AppShell() {
       options: {
         forceConfirm?: boolean;
         skipFocusedServerCheck?: boolean;
+        auditScope?: {
+          serverId?: string;
+          serverName?: string;
+          session?: string;
+        };
       } = {}
     ) => {
       if (!options.skipFocusedServerCheck && focusedServerId) {
         assertServerWritable(focusedServerId, context);
       }
-      assertCommandAllowed(command, context);
+      assertCommandAllowed(command, context, options.auditScope);
       const shouldConfirm = options.forceConfirm || (requireDangerConfirm && isDangerousShellCommand(command));
       if (!shouldConfirm) {
         return true;
@@ -1615,6 +1628,11 @@ export default function AppShell() {
       {
         forceConfirm: Boolean(teamSettings.requireFleetApproval),
         skipFocusedServerCheck: true,
+        auditScope: {
+          serverId: "",
+          serverName: "fleet",
+          session: "",
+        },
       }
     );
     if (!approved) {
@@ -1972,6 +1990,13 @@ export default function AppShell() {
       if (!targetConnection) {
         throw new Error("Selected server is not available.");
       }
+      markActivity();
+      assertServerWritable(serverId, "Send command");
+      assertCommandAllowed(trimmed, `Send to ${session}`, {
+        serverId,
+        serverName: targetConnection.server.name,
+        session,
+      });
 
       const focusedTarget = scopedServerId === serverId;
       const localSession = targetConnection.localAiSessions.includes(session);
@@ -1987,6 +2012,13 @@ export default function AppShell() {
           if (focusedTarget) {
             await addCommand(session, sent);
           }
+          recordAuditEvent({
+            action: "command_sent",
+            serverId,
+            serverName: targetConnection.server.name,
+            session,
+            detail: `${mode}:${trimmed.slice(0, 400)}`,
+          });
         }
         return;
       }
@@ -2007,8 +2039,28 @@ export default function AppShell() {
       if (focusedTarget) {
         await addCommand(session, trimmed);
       }
+      recordAuditEvent({
+        action: "command_sent",
+        serverId,
+        serverName: targetConnection.server.name,
+        session,
+        detail: `${mode}:${trimmed.slice(0, 400)}`,
+      });
     },
-    [addCommand, poolConnections, queueSessionCommand, scopedServerId, sendPoolCommand, sendViaExternalLlmToServer, sessionReadOnly, setPoolDrafts]
+    [
+      addCommand,
+      assertCommandAllowed,
+      assertServerWritable,
+      markActivity,
+      poolConnections,
+      queueSessionCommand,
+      recordAuditEvent,
+      scopedServerId,
+      sendPoolCommand,
+      sendViaExternalLlmToServer,
+      sessionReadOnly,
+      setPoolDrafts,
+    ]
   );
 
   const sendTextToSession = useCallback(
@@ -2077,6 +2129,8 @@ export default function AppShell() {
       if (!targetConnection || !targetConnection.connected) {
         throw new Error("Target server is disconnected.");
       }
+      markActivity();
+      assertServerWritable(serverId, "Send control");
       if (targetConnection.localAiSessions.includes(session)) {
         throw new Error("Local LLM sessions do not support terminal control characters.");
       }
@@ -2084,8 +2138,15 @@ export default function AppShell() {
         throw new Error(`${session} is read-only. Disable read-only before sending control keys.`);
       }
       await sendPoolControlChar(serverId, session, char);
+      recordAuditEvent({
+        action: "command_sent",
+        serverId,
+        serverName: targetConnection.server.name,
+        session,
+        detail: `control:${char}`,
+      });
     },
-    [poolConnections, scopedServerId, sendPoolControlChar, sessionReadOnly]
+    [assertServerWritable, markActivity, poolConnections, recordAuditEvent, scopedServerId, sendPoolControlChar, sessionReadOnly]
   );
 
   const agentRuntimeServerId = focusedServerId;
