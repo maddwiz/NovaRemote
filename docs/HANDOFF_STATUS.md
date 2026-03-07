@@ -140,6 +140,7 @@ Updated: 2026-03-07
   - [x] cloud scaffold audit-event queue is now bounded at 10,000 records with drop-count metadata on ingest responses
   - [x] cloud audit export listing now supports `status` / `format` / `requestedBy` filters for dashboard and compliance tooling
   - [x] dashboard scaffold export history now supports local requester/status/format filtering and requester visibility
+  - [x] cloud audit events now support `user` + `approved` filters (API contract + scaffold route + dashboard user filter)
   - [~] cloud export lifecycle governance now includes scaffold-side `pending` -> `ready`/`failed` transitions, retry endpoint (`POST /v1/audit/exports/{exportId}/retry`), tokenized download endpoint (`GET /v1/audit/exports/{exportId}/download`), TTL cleanup, and richer metadata (`eventCount`, `attemptCount`, transition timestamps), while production deployment remains pending
 - [~] Fleet governance expansion:
   - [x] command blocklist + policy enforcement (including scaffold-side regex validation and policy payload bounds checks)

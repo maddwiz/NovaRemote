@@ -1948,10 +1948,17 @@ app.get("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => {
   const actionFilter = String(req.query?.action || "").trim().toLowerCase();
   const serverIdFilter = String(req.query?.serverId || "").trim();
   const sessionFilter = String(req.query?.session || "").trim();
+  const userFilter = String(req.query?.user || "").trim().toLowerCase();
+  const approvedRaw = String(req.query?.approved || "").trim().toLowerCase();
   const fromTimestampRaw = Number.parseInt(String(req.query?.fromTimestamp || ""), 10);
   const toTimestampRaw = Number.parseInt(String(req.query?.toTimestamp || ""), 10);
   const fromTimestamp = Number.isFinite(fromTimestampRaw) ? fromTimestampRaw : null;
   const toTimestamp = Number.isFinite(toTimestampRaw) ? toTimestampRaw : null;
+  const approvedFilter =
+    approvedRaw === "" ? null : approvedRaw === "true" ? true : approvedRaw === "false" ? false : "invalid";
+  if (approvedFilter === "invalid") {
+    return res.status(400).json({ detail: "approved must be true or false" });
+  }
 
   const filtered = auditEvents
     .filter((event) => {
@@ -1962,6 +1969,16 @@ app.get("/v1/audit/events", requireTeamPermission("audit:read"), (req, res) => {
         return false;
       }
       if (sessionFilter && event.session !== sessionFilter) {
+        return false;
+      }
+      if (userFilter) {
+        const userId = String(event.userId || "").toLowerCase();
+        const userEmail = String(event.userEmail || "").toLowerCase();
+        if (!userId.includes(userFilter) && !userEmail.includes(userFilter)) {
+          return false;
+        }
+      }
+      if (approvedFilter !== null && event.approved !== approvedFilter) {
         return false;
       }
       if (fromTimestamp !== null && event.timestamp < fromTimestamp) {
@@ -2576,6 +2593,7 @@ export function App() {
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [auditActionFilter, setAuditActionFilter] = useState<string>("");
   const [auditServerFilter, setAuditServerFilter] = useState<string>("");
+  const [auditUserFilter, setAuditUserFilter] = useState<string>("");
   const [exportStatusFilter, setExportStatusFilter] = useState<string>("");
   const [exportFormatFilter, setExportFormatFilter] = useState<string>("");
   const [exportRequestedByFilter, setExportRequestedByFilter] = useState<string>("");
@@ -3379,6 +3397,7 @@ export function App() {
   const filteredAuditEvents = useMemo(() => {
     const actionNeedle = auditActionFilter.trim().toLowerCase();
     const serverNeedle = auditServerFilter.trim().toLowerCase();
+    const userNeedle = auditUserFilter.trim().toLowerCase();
     return auditEvents.filter((event) => {
       if (actionNeedle && !event.action.toLowerCase().includes(actionNeedle)) {
         return false;
@@ -3390,9 +3409,16 @@ export function App() {
       ) {
         return false;
       }
+      if (
+        userNeedle &&
+        !event.userId.toLowerCase().includes(userNeedle) &&
+        !event.userEmail.toLowerCase().includes(userNeedle)
+      ) {
+        return false;
+      }
       return true;
     });
-  }, [auditActionFilter, auditEvents, auditServerFilter]);
+  }, [auditActionFilter, auditEvents, auditServerFilter, auditUserFilter]);
 
   const filteredExportJobs = useMemo(() => {
     const statusNeedle = exportStatusFilter.trim().toLowerCase();
@@ -3900,6 +3926,15 @@ export function App() {
               value={auditServerFilter}
               onChange={(event) => setAuditServerFilter(event.target.value)}
               placeholder="srv-dgx"
+            />
+          </label>
+          <label className="muted">
+            Filter user
+            <input
+              className="textInput"
+              value={auditUserFilter}
+              onChange={(event) => setAuditUserFilter(event.target.value)}
+              placeholder="admin@"
             />
           </label>
         </div>
