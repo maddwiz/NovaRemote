@@ -135,6 +135,7 @@ Updated: 2026-03-07
   - [x] audit export (`CSV`/`JSON`) from in-app queue
   - [x] cloud audit export job requests + export history refresh/list/open/retry/delete actions in app (`useAuditLog` + TeamScreen)
   - [x] cloud scaffold now emits system audit events for auth, server/invite/policy admin actions, fleet approval lifecycle, and export lifecycle updates
+  - [x] download-token auth in cloud scaffold now uses constant-time token checks plus least-privilege (`audit:read`) request identity
   - [~] cloud export lifecycle governance now includes scaffold-side `pending` -> `ready`/`failed` transitions, retry endpoint (`POST /v1/audit/exports/{exportId}/retry`), tokenized download endpoint (`GET /v1/audit/exports/{exportId}/download`), TTL cleanup, and richer metadata (`eventCount`, `attemptCount`, transition timestamps), while production deployment remains pending
 - [~] Fleet governance expansion:
   - [x] command blocklist + policy enforcement (including scaffold-side regex validation and policy payload bounds checks)

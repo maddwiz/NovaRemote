@@ -159,7 +159,7 @@ if [[ ! -f "${API_REPO}/src/server.ts" ]]; then
 import cors from "cors";
 import express, { type NextFunction, type Request, type Response } from "express";
 import helmet from "helmet";
-import { randomUUID } from "node:crypto";
+import { randomUUID, timingSafeEqual } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -431,6 +431,24 @@ function buildAuditExportDownloadUrl(exportId: string, token: string): string {
   return buildCloudPublicUrl(
     `/v1/audit/exports/${encodeURIComponent(exportId)}/download?token=${encodeURIComponent(token)}`
   );
+}
+
+function tokensEqual(expected: string, provided: string): boolean {
+  const left = expected.trim();
+  const right = provided.trim();
+  if (!left || !right) {
+    return false;
+  }
+  const leftBuffer = Buffer.from(left, "utf8");
+  const rightBuffer = Buffer.from(right, "utf8");
+  if (leftBuffer.length !== rightBuffer.length) {
+    return false;
+  }
+  try {
+    return timingSafeEqual(leftBuffer, rightBuffer);
+  } catch {
+    return false;
+  }
 }
 
 function replaceArrayInPlace<T>(target: T[], source: T[]) {
@@ -1079,10 +1097,11 @@ function requireAuth(req: Request, res: Response, next: NextFunction) {
       reconcileAuditExportJobs();
       const exportJob = auditExportJobs.find((entry) => entry.exportId === exportId);
       const expectedToken = extractDownloadTokenFromUrl(exportJob?.downloadUrl);
-      if (exportJob && exportJob.status === "ready" && expectedToken && expectedToken === downloadToken) {
+      if (exportJob && exportJob.status === "ready" && tokensEqual(expectedToken, downloadToken)) {
         (req as Request & { identity?: TeamIdentity }).identity = {
           ...baseIdentity,
-          permissions: [...baseIdentity.permissions],
+          role: "viewer",
+          permissions: ["audit:read"],
         };
         return next();
       }
