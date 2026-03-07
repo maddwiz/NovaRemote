@@ -1,0 +1,24 @@
+# NovaRemote Product Roadmap
+
+Updated: 2026-03-07
+
+## Milestones
+
+| Version | Track | Scope | Status |
+|---|---|---|---|
+| v1.2 | Connection Pool + Server Switcher | Multi-server pooled state, concurrent websockets, instant server switching, switcher rail, unread badges, pooled fleet base-path reuse | Complete |
+| v1.3 | Spatial AR (Glasses) | Multi-panel glasses workspace, pooled panel sourcing, expanded brand presets, shared spatial voice routing | Complete |
+| v1.3.1 | Voice Session + Panel Management (Glasses/VR) | Hands-free create/close/resize/move/swap panel flows, prompt-aware session creation, pooled server-target fallback, parser priority guarantees | Complete |
+| v1.4 | VR Command Center | In-repo VR workspace/runtime preview and pooled controls; separate native VR repo bootstrap + contract sync scaffolding | In progress (native production client pending) |
+| v1.5 | VM Grouping + Fleet Scoping | VM metadata model, server grouping by VM host/type, VM-aware fleet target helpers | Complete |
+| v1.6 | Team MVP (Enterprise Foundation) | Team auth, token broker, team server governance, audit log + exports, team screen, tier-aware paywall, enforced safety/fleet/session policies | Complete (app-side) |
+| v2.0 | Enterprise Readiness | SSO/OIDC/SAML lifecycle, fleet approval governance, compliance export workflows, cloud/dashboard scaffolding and bootstrap verification | In progress (production rollout/hardening pending) |
+| v2.0+ | NovaAdapt + NovaSpine | Agent runtime integration, context snapshots, approvals, voice controls for agent lifecycle | In progress |
+| v2.1 | Team Collaboration | Presence-aware collaboration and voice channels across team workspaces | In progress |
+
+## Notes
+
+- The two added handoffs are now represented as:
+  - `v1.3.1`: Voice Session Management for Glasses/VR mode.
+  - `v1.6` through `v2.0`: Enterprise Readiness and Team Licenses rollout.
+- Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).
