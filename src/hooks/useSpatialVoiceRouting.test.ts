@@ -744,6 +744,33 @@ describe("resolveSpatialVoiceRoute", () => {
     });
   });
 
+  it("prefers explicit server-target matches over fuzzy panel-name matches for create-session routes", () => {
+    const route = resolveSpatialVoiceRoute({
+      transcript: "open codex on cloud vm",
+      panels: [
+        {
+          id: "home::build-01",
+          serverId: "home",
+          serverName: "Homelab",
+          vmHost: "Rack A",
+          vmType: "qemu",
+          vmName: "build-worker-vm",
+          vmId: "201",
+          session: "build-01",
+          sessionLabel: "build-01",
+        },
+      ],
+      focusedPanelId: "home::build-01",
+      serverTargets: SERVER_TARGETS,
+    });
+
+    expect(route).toEqual({
+      kind: "create_session",
+      serverId: "cloud",
+      sessionKind: "ai",
+    });
+  });
+
   it("can create sessions when no panels are open but server targets are available", () => {
     const route = resolveSpatialVoiceRoute({
       transcript: "new terminal on homelab and run npm run build",
