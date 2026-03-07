@@ -406,6 +406,33 @@ function buildCloudPublicUrl(pathname: string): string {
   return `${cloudPublicBaseUrl}${normalizedPath}`;
 }
 
+function extractDownloadTokenFromUrl(downloadUrl?: string): string {
+  const rawUrl = String(downloadUrl || "").trim();
+  if (!rawUrl) {
+    return "";
+  }
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.searchParams.get("token")?.trim() || "";
+  } catch {
+    const match = rawUrl.match(/[?&]token=([^&#]+)/);
+    if (!match) {
+      return "";
+    }
+    try {
+      return decodeURIComponent(match[1]).trim();
+    } catch {
+      return match[1].trim();
+    }
+  }
+}
+
+function buildAuditExportDownloadUrl(exportId: string, token: string): string {
+  return buildCloudPublicUrl(
+    `/v1/audit/exports/${encodeURIComponent(exportId)}/download?token=${encodeURIComponent(token)}`
+  );
+}
+
 function replaceArrayInPlace<T>(target: T[], source: T[]) {
   target.splice(0, target.length, ...source);
 }
@@ -789,10 +816,23 @@ function reconcileAuditExportJobs() {
         job.status = "ready";
         job.readyAt = new Date(nowMs).toISOString();
         job.lastTransitionAt = job.readyAt;
-        job.downloadUrl = buildCloudPublicUrl(`/v1/audit/exports/${encodeURIComponent(job.exportId)}/download`);
+        const existingToken = extractDownloadTokenFromUrl(job.downloadUrl);
+        const downloadToken = existingToken || randomUUID().replace(/-/g, "");
+        job.downloadUrl = buildAuditExportDownloadUrl(job.exportId, downloadToken);
         job.detail = `Snapshot contains ${exportEventCount} events`;
         changed = true;
         recordSystemAuditEvent("audit_export_ready", `Audit export ${job.exportId} is ready.`, {}, false);
+        }
+      }
+    }
+
+    if (job.status === "ready") {
+      const existingToken = extractDownloadTokenFromUrl(job.downloadUrl);
+      if (existingToken) {
+        const expectedDownloadUrl = buildAuditExportDownloadUrl(job.exportId, existingToken);
+        if (job.downloadUrl !== expectedDownloadUrl) {
+          job.downloadUrl = expectedDownloadUrl;
+          changed = true;
         }
       }
     }
@@ -1029,6 +1069,26 @@ function requireTeamPermission(permission: TeamPermission) {
 }
 
 function requireAuth(req: Request, res: Response, next: NextFunction) {
+  const originalPath = String(req.originalUrl || req.url || "").split("?")[0] || "";
+  const downloadMatch = originalPath.match(/\/v1\/audit\/exports\/([^/]+)\/download$/);
+  const downloadToken = String(req.query?.token || "").trim();
+  if (downloadMatch && downloadToken) {
+    const exportId = decodeURIComponent(downloadMatch[1] || "").trim();
+    if (exportId) {
+      reconcileAuditExportJobs();
+      const exportJob = auditExportJobs.find((entry) => entry.exportId === exportId);
+      const expectedToken = extractDownloadTokenFromUrl(exportJob?.downloadUrl);
+      if (exportJob && exportJob.status === "ready" && expectedToken && expectedToken === downloadToken) {
+        (req as Request & { identity?: TeamIdentity }).identity = {
+          ...baseIdentity,
+          permissions: [...baseIdentity.permissions],
+        };
+        return next();
+      }
+    }
+    return unauthorized(res, "Invalid export token");
+  }
+
   const header = req.header("authorization") || "";
   const token = header.startsWith("Bearer ") ? header.slice("Bearer ".length).trim() : "";
   if (!token || token !== baseIdentity.accessToken) {

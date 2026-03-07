@@ -135,7 +135,7 @@ Updated: 2026-03-07
   - [x] audit export (`CSV`/`JSON`) from in-app queue
   - [x] cloud audit export job requests + export history refresh/list/open/retry/delete actions in app (`useAuditLog` + TeamScreen)
   - [x] cloud scaffold now emits system audit events for auth, server/invite/policy admin actions, fleet approval lifecycle, and export lifecycle updates
-  - [~] cloud export lifecycle governance now includes scaffold-side `pending` -> `ready`/`failed` transitions, retry endpoint (`POST /v1/audit/exports/{exportId}/retry`), download endpoint (`GET /v1/audit/exports/{exportId}/download`), TTL cleanup, and richer metadata (`eventCount`, `attemptCount`, transition timestamps), while production deployment remains pending
+  - [~] cloud export lifecycle governance now includes scaffold-side `pending` -> `ready`/`failed` transitions, retry endpoint (`POST /v1/audit/exports/{exportId}/retry`), tokenized download endpoint (`GET /v1/audit/exports/{exportId}/download`), TTL cleanup, and richer metadata (`eventCount`, `attemptCount`, transition timestamps), while production deployment remains pending
 - [~] Fleet governance expansion:
   - [x] command blocklist + policy enforcement (including scaffold-side regex validation and policy payload bounds checks)
   - [~] fleet approval request/review + approved-execution matching is wired in-app and surfaced in dashboard scaffold (including approve/deny actions); scaffold API now enforces duplicate-pending + self-approval guardrails, pending-expiry normalization, approved-execution claim tokens/metadata, and request-identity-based review attribution for approve/deny actions, while production orchestration rollout remains pending
