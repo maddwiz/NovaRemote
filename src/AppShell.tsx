@@ -1220,6 +1220,18 @@ export default function AppShell() {
     markActivity();
     assertServerWritable(focusedServerId, "Create session");
     const trimmedPrompt = startPrompt.trim();
+    if (startKind === "shell" && trimmedPrompt) {
+      const approved = await requestDangerApproval(trimmedPrompt, "Create session prompt", {
+        auditScope: {
+          serverId: focusedServerId,
+          serverName: activeServer.name,
+          session: "",
+        },
+      });
+      if (!approved) {
+        throw new Error("Session creation cancelled.");
+      }
+    }
     const session = await createPoolSession(
       focusedServerId,
       startCwd,
@@ -1246,6 +1258,7 @@ export default function AppShell() {
     assertServerWritable,
     markActivity,
     recordAuditEvent,
+    requestDangerApproval,
     startCwd,
     startKind,
     startOpenOnMac,
@@ -1260,15 +1273,29 @@ export default function AppShell() {
       }
       markActivity();
       assertServerWritable(serverId, "Create session");
+      const trimmedPrompt = prompt.trim();
+      if (kind === "shell" && trimmedPrompt) {
+        const approved = await requestDangerApproval(trimmedPrompt, "Create session prompt", {
+          skipFocusedServerCheck: true,
+          auditScope: {
+            serverId,
+            serverName: targetConnection.server.name,
+            session: "",
+          },
+        });
+        if (!approved) {
+          throw new Error("Session creation cancelled.");
+        }
+      }
       return await createPoolSession(
         serverId,
         targetConnection.server.defaultCwd || DEFAULT_CWD,
         kind,
-        prompt.trim(),
+        trimmedPrompt,
         false
       );
     },
-    [assertServerWritable, createPoolSession, markActivity, poolConnections]
+    [assertServerWritable, createPoolSession, markActivity, poolConnections, requestDangerApproval]
   );
 
   const sendCommand = useCallback(
