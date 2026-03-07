@@ -850,6 +850,9 @@ paths:
                       avgProcessingDurationMs:
                         type: [integer, "null"]
                         minimum: 0
+                      oldestPendingAgeMs:
+                        type: [integer, "null"]
+                        minimum: 0
     post:
       summary: Request a cloud-hosted audit export job
       requestBody:

@@ -2273,11 +2273,23 @@ app.get("/v1/audit/exports", requireTeamPermission("audit:read"), (req, res) => 
     completedDurations.length > 0
       ? Math.round(completedDurations.reduce((total, value) => total + value, 0) / completedDurations.length)
       : null;
+  const pendingAges = filtered
+    .filter((job) => job.status === "pending")
+    .map((job) => {
+      const createdAtMs = Date.parse(job.createdAt);
+      if (!Number.isFinite(createdAtMs)) {
+        return null;
+      }
+      return Math.max(0, Date.now() - createdAtMs);
+    })
+    .filter((value): value is number => typeof value === "number");
+  const oldestPendingAgeMs = pendingAges.length > 0 ? Math.max(...pendingAges) : null;
   const summary = {
     pending: filtered.filter((job) => job.status === "pending").length,
     ready: filtered.filter((job) => job.status === "ready").length,
     failed: filtered.filter((job) => job.status === "failed").length,
     avgProcessingDurationMs,
+    oldestPendingAgeMs,
   };
   res.json({
     exports: ordered.slice(0, limit),
@@ -2943,11 +2955,13 @@ export function App() {
     ready: number;
     failed: number;
     avgProcessingDurationMs: number | null;
+    oldestPendingAgeMs: number | null;
   }>({
     pending: 0,
     ready: 0,
     failed: 0,
     avgProcessingDurationMs: null,
+    oldestPendingAgeMs: null,
   });
   const [exportRangeHoursInput, setExportRangeHoursInput] = useState<string>("");
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -3134,7 +3148,7 @@ export function App() {
     setSsoProviders([]);
     setInvites([]);
     setExportJobs([]);
-    setExportSummary({ pending: 0, ready: 0, failed: 0, avgProcessingDurationMs: null });
+    setExportSummary({ pending: 0, ready: 0, failed: 0, avgProcessingDurationMs: null, oldestPendingAgeMs: null });
     setAuditEvents([]);
     setLastExport(null);
     setSelectedExportDetail(null);
@@ -3159,7 +3173,13 @@ export function App() {
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
         fetchJson<{
           exports?: AuditExportJob[];
-          summary?: { pending?: number; ready?: number; failed?: number; avgProcessingDurationMs?: number | null };
+          summary?: {
+            pending?: number;
+            ready?: number;
+            failed?: number;
+            avgProcessingDurationMs?: number | null;
+            oldestPendingAgeMs?: number | null;
+          };
         }>("/v1/audit/exports?limit=20", accessToken.trim()),
         fetchJson<{ events?: AuditEvent[] }>("/v1/audit/events?limit=200", accessToken.trim()),
       ] as const);
@@ -3247,6 +3267,11 @@ export function App() {
           typeof exportsPayload.summary?.avgProcessingDurationMs === "number" &&
           Number.isFinite(exportsPayload.summary?.avgProcessingDurationMs)
             ? Math.max(0, Math.round(exportsPayload.summary?.avgProcessingDurationMs))
+            : null,
+        oldestPendingAgeMs:
+          typeof exportsPayload.summary?.oldestPendingAgeMs === "number" &&
+          Number.isFinite(exportsPayload.summary?.oldestPendingAgeMs)
+            ? Math.max(0, Math.round(exportsPayload.summary?.oldestPendingAgeMs))
             : null,
       });
       setSelectedExportDetail((previous) => {
@@ -4930,6 +4955,10 @@ export function App() {
               {`Summary: pending ${exportSummary.pending} • ready ${exportSummary.ready} • failed ${exportSummary.failed}${
                 typeof exportSummary.avgProcessingDurationMs === "number"
                   ? ` • avg processing ${formatDurationMs(exportSummary.avgProcessingDurationMs)}`
+                  : ""
+              }${
+                typeof exportSummary.oldestPendingAgeMs === "number"
+                  ? ` • oldest pending ${formatDurationMs(exportSummary.oldestPendingAgeMs)}`
                   : ""
               }`}
             </p>
