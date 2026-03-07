@@ -45,6 +45,8 @@ Updated: 2026-03-07
 - [x] Glasses route handling for new actions (create/close/resize/move/swap)
 - [x] Prompt-aware voice creation parsing (`open codex ... with prompt ...`, `open terminal ... and run ...`) forwarded to session creation handlers
 - [x] Voice create-session target resolution now falls back to pooled server metadata, so `"open codex on <server>"` works even before that server has an open panel/session
+- [x] Create-session routing now prioritizes explicit server-target matches over fuzzy panel matches, preventing misroutes when similarly named VM panels are open
+- [x] VR voice parser now receives pooled server targets, so `"open codex on <server>"` / `"new terminal on <vm host>"` resolve even when no panel is open yet
 - [x] Spatial panel state additions:
   - [x] per-panel scale
   - [x] fullscreen panel mode

@@ -375,7 +375,7 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId, s
     const targetServer = targetName ? findServerTargetByName(serverTargets, targetName) : null;
     const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
     const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
-    const serverId = targetPanel?.serverId || targetServer?.id || focusedPanel?.serverId || panels[0]?.serverId || serverTargets[0]?.id || null;
+    const serverId = targetServer?.id || targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || serverTargets[0]?.id || null;
     if (serverId) {
       return {
         kind: "create_session",
@@ -396,7 +396,7 @@ export function resolveSpatialVoiceRoute({ transcript, panels, focusedPanelId, s
     const targetServer = targetName ? findServerTargetByName(serverTargets, targetName) : null;
     const fallbackPanelId = resolveFocusedPanelId(panels, focusedPanelId);
     const focusedPanel = fallbackPanelId ? panels.find((panel) => panel.id === fallbackPanelId) || null : null;
-    const serverId = targetPanel?.serverId || targetServer?.id || focusedPanel?.serverId || panels[0]?.serverId || serverTargets[0]?.id || null;
+    const serverId = targetServer?.id || targetPanel?.serverId || focusedPanel?.serverId || panels[0]?.serverId || serverTargets[0]?.id || null;
     if (serverId) {
       return {
         kind: "create_session",

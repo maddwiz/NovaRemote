@@ -155,6 +155,60 @@ describe("useVrWorkspace", () => {
     });
   });
 
+  it("routes voice create-session commands to servers without open panels", async () => {
+    const dgx = makeServer("dgx", "DGX Spark");
+    const cloud = makeServer("cloud", "Cloud VM", {
+      vmHost: "Rack B",
+      vmType: "qemu",
+      vmName: "cloud-build",
+      vmId: "303",
+    });
+
+    const connections = new Map<string, ServerConnection>([
+      [dgx.id, makeConnection(dgx, [])],
+      [cloud.id, makeConnection(cloud, [])],
+    ]);
+
+    let latest: UseVrWorkspaceResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Workspace not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVrWorkspace({ connections });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(current().panels).toHaveLength(0);
+    expect(current().applyVoiceTranscript("open codex on cloud vm")).toEqual({
+      kind: "create_session",
+      serverId: "cloud",
+      sessionKind: "ai",
+      prompt: undefined,
+    });
+    expect(current().applyVoiceTranscript("new terminal on rack b")).toEqual({
+      kind: "create_session",
+      serverId: "cloud",
+      sessionKind: "shell",
+      prompt: undefined,
+    });
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("routes voice commands to the target server/session", async () => {
     const dgx = makeServer("dgx", "DGX Spark");
     const homelab = makeServer("home", "Homelab", {

@@ -1,7 +1,8 @@
-import { findPanelByTarget, resolveSpatialVoiceRoute, VoiceRoutePanel } from "../spatialVoiceRoutingCore";
+import { findPanelByTarget, resolveSpatialVoiceRoute, VoiceRoutePanel, VoiceRouteServerTarget } from "../spatialVoiceRoutingCore";
 import { VrLayoutPreset } from "./contracts";
 
 export type VrRoutePanel = VoiceRoutePanel;
+export type VrVoiceServerTarget = VoiceRouteServerTarget;
 
 export type VrVoiceIntent =
   | { kind: "none" }
@@ -91,7 +92,12 @@ function isAllServersTarget(target: string): boolean {
   );
 }
 
-export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], focusedPanelId: string | null): VrVoiceIntent {
+export function parseVrVoiceIntent(
+  transcript: string,
+  panels: VrRoutePanel[],
+  focusedPanelId: string | null,
+  serverTargets: VrVoiceServerTarget[] = []
+): VrVoiceIntent {
   const cleaned = transcript.trim();
   if (cleaned) {
     const approveReadyAgentsMatch = cleaned.match(
@@ -256,6 +262,7 @@ export function parseVrVoiceIntent(transcript: string, panels: VrRoutePanel[], f
     transcript,
     panels,
     focusedPanelId,
+    serverTargets,
   });
 
   if (route.kind === "none") {

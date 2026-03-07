@@ -12,7 +12,7 @@ import {
 import { resolveVrGestureAction, VrGestureAction, VrGestureEvent } from "./inputGestures";
 import { buildPresetLayout } from "./layoutPresets";
 import { useVrWorkspacePrefs } from "./useVrWorkspacePrefs";
-import { parseVrVoiceIntent, VrRoutePanel } from "./voiceRouting";
+import { parseVrVoiceIntent, VrRoutePanel, VrVoiceServerTarget } from "./voiceRouting";
 
 export type VrWorkspacePanel = VrPanelState & {
   output: string;
@@ -453,6 +453,18 @@ export function useVrWorkspace({
       })),
     [universe]
   );
+  const routeServerTargets = useMemo<VrVoiceServerTarget[]>(
+    () =>
+      Array.from(connections.values()).map((connection) => ({
+        id: connection.server.id,
+        name: connection.server.name,
+        vmHost: connection.server.vmHost,
+        vmType: connection.server.vmType,
+        vmName: connection.server.vmName,
+        vmId: connection.server.vmId,
+      })),
+    [connections]
+  );
 
   const focusPanel = useCallback((panelId: string) => {
     if (!panelId) {
@@ -723,7 +735,7 @@ export function useVrWorkspace({
         targetedPanelId && universeById.has(targetedPanelId)
           ? targetedPanelId
           : focusedPanelId;
-      const intent = parseVrVoiceIntent(transcript, routePanels, routingPanelId);
+      const intent = parseVrVoiceIntent(transcript, routePanels, routingPanelId, routeServerTargets);
       const resolveTargetPanel = (panelId?: string): UniversePanel | null => {
         if (panelId) {
           return universeById.get(panelId) || null;
@@ -1058,6 +1070,7 @@ export function useVrWorkspace({
       removePanel,
       rotateWorkspace,
       routePanels,
+      routeServerTargets,
       serverScopeIds,
       setPanelMini,
       setPanelOpacity,

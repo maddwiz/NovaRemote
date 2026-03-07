@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { findVrPanelByTarget, parseVrVoiceIntent, VrRoutePanel } from "../voiceRouting";
+import { findVrPanelByTarget, parseVrVoiceIntent, VrRoutePanel, VrVoiceServerTarget } from "../voiceRouting";
 
 const PANELS: VrRoutePanel[] = [
   {
@@ -20,6 +20,29 @@ const PANELS: VrRoutePanel[] = [
     vmId: "202",
     session: "build-01",
     sessionLabel: "Build Worker",
+  },
+];
+
+const SERVER_TARGETS: VrVoiceServerTarget[] = [
+  {
+    id: "dgx",
+    name: "DGX Spark",
+  },
+  {
+    id: "homelab",
+    name: "Homelab",
+    vmHost: "Rack A",
+    vmType: "qemu",
+    vmName: "build-worker-vm",
+    vmId: "202",
+  },
+  {
+    id: "cloud",
+    name: "Cloud VM",
+    vmHost: "Rack B",
+    vmType: "kvm",
+    vmName: "cloud-build",
+    vmId: "303",
   },
 ];
 
@@ -365,5 +388,21 @@ describe("parseVrVoiceIntent", () => {
   it("falls back to focused panel when not explicitly routed", () => {
     const intent = parseVrVoiceIntent("git status", PANELS, "home-build");
     expect(intent).toEqual({ kind: "send", panelId: "home-build", command: "git status" });
+  });
+
+  it("resolves create-session targets from server metadata when target server has no panel", () => {
+    expect(parseVrVoiceIntent("open codex on cloud vm", PANELS, "dgx-main", SERVER_TARGETS)).toEqual({
+      kind: "create_session",
+      serverId: "cloud",
+      sessionKind: "ai",
+      prompt: undefined,
+    });
+
+    expect(parseVrVoiceIntent("new terminal on rack b", [], null, SERVER_TARGETS)).toEqual({
+      kind: "create_session",
+      serverId: "cloud",
+      sessionKind: "shell",
+      prompt: undefined,
+    });
   });
 });
