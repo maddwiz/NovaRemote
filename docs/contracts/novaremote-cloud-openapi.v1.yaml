@@ -567,6 +567,27 @@ paths:
                     type: array
                     items:
                       $ref: "#/components/schemas/FleetApproval"
+                  summary:
+                    type: object
+                    properties:
+                      pending:
+                        type: integer
+                      approved:
+                        type: integer
+                      denied:
+                        type: integer
+                      expired:
+                        type: integer
+                      unclaimed:
+                        type: integer
+                      claimed:
+                        type: integer
+                      completed:
+                        type: integer
+                      completedSucceeded:
+                        type: integer
+                      completedFailed:
+                        type: integer
     post:
       summary: Request fleet approval for command execution
       description: Targets are normalized to canonical team server IDs and validated against caller server access.

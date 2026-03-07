@@ -1961,7 +1961,22 @@ app.get("/v1/team/fleet/approvals", requireTeamPermission("team:manage"), (req, 
       return true;
     })
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  res.json({ approvals: approvals.slice(0, limit) });
+  const summary = {
+    pending: approvals.filter((approval) => approval.status === "pending").length,
+    approved: approvals.filter((approval) => approval.status === "approved").length,
+    denied: approvals.filter((approval) => approval.status === "denied").length,
+    expired: approvals.filter((approval) => approval.status === "expired").length,
+    unclaimed: approvals.filter(
+      (approval) => approval.status === "approved" && !approval.executionClaimedAt && !approval.executionCompletedAt
+    ).length,
+    claimed: approvals.filter(
+      (approval) => approval.status === "approved" && Boolean(approval.executionClaimedAt) && !approval.executionCompletedAt
+    ).length,
+    completed: approvals.filter((approval) => Boolean(approval.executionCompletedAt)).length,
+    completedSucceeded: approvals.filter((approval) => approval.executionResult === "succeeded").length,
+    completedFailed: approvals.filter((approval) => approval.executionResult === "failed").length,
+  };
+  res.json({ approvals: approvals.slice(0, limit), summary });
 });
 
 app.post("/v1/team/fleet/approvals", requireTeamPermission("fleet:execute"), (req, res) => {
@@ -2793,6 +2808,18 @@ type FleetApproval = {
   executionSummary?: string;
 };
 
+type FleetApprovalSummary = {
+  pending: number;
+  approved: number;
+  denied: number;
+  expired: number;
+  unclaimed: number;
+  claimed: number;
+  completed: number;
+  completedSucceeded: number;
+  completedFailed: number;
+};
+
 type AuditExportJob = {
   exportId: string;
   format: "json" | "csv";
@@ -2987,6 +3014,17 @@ export function App() {
   const [serverVmNameInput, setServerVmNameInput] = useState<string>("");
   const [serverVmIdInput, setServerVmIdInput] = useState<string>("");
   const [approvals, setApprovals] = useState<FleetApproval[]>([]);
+  const [approvalSummary, setApprovalSummary] = useState<FleetApprovalSummary>({
+    pending: 0,
+    approved: 0,
+    denied: 0,
+    expired: 0,
+    unclaimed: 0,
+    claimed: 0,
+    completed: 0,
+    completedSucceeded: 0,
+    completedFailed: 0,
+  });
   const [approvalStatusFilter, setApprovalStatusFilter] = useState<string>("");
   const [approvalExecutionStateFilter, setApprovalExecutionStateFilter] = useState<string>("");
   const [approvalRequesterFilter, setApprovalRequesterFilter] = useState<string>("");
@@ -3190,6 +3228,17 @@ export function App() {
     setServerEditDrafts({});
     setMemberServerDrafts({});
     setApprovals([]);
+    setApprovalSummary({
+      pending: 0,
+      approved: 0,
+      denied: 0,
+      expired: 0,
+      unclaimed: 0,
+      claimed: 0,
+      completed: 0,
+      completedSucceeded: 0,
+      completedFailed: 0,
+    });
     setApprovalReviewNotes({});
     setApprovalExecutionSummaries({});
     setSsoProviders([]);
@@ -3214,7 +3263,10 @@ export function App() {
       const results = await Promise.allSettled([
         fetchJson<{ members?: TeamMember[] }>("/v1/team/members", accessToken.trim()),
         fetchJson<{ servers?: TeamServer[] }>("/v1/team/servers", accessToken.trim()),
-        fetchJson<{ approvals?: FleetApproval[] }>("/v1/team/fleet/approvals", accessToken.trim()),
+        fetchJson<{ approvals?: FleetApproval[]; summary?: Partial<FleetApprovalSummary> }>(
+          "/v1/team/fleet/approvals",
+          accessToken.trim()
+        ),
         fetchJson<{ providers?: TeamSsoProviderConfig[] }>("/v1/team/sso/providers", accessToken.trim()),
         fetchJson<{ invites?: TeamInvite[] }>("/v1/team/invites", accessToken.trim()),
         fetchJson<{ settings?: TeamSettings }>("/v1/team/settings", accessToken.trim()),
@@ -3288,6 +3340,17 @@ export function App() {
       });
       const nextApprovals = Array.isArray(approvalsPayload.approvals) ? approvalsPayload.approvals : [];
       setApprovals(nextApprovals);
+      setApprovalSummary({
+        pending: Number(approvalsPayload.summary?.pending || 0),
+        approved: Number(approvalsPayload.summary?.approved || 0),
+        denied: Number(approvalsPayload.summary?.denied || 0),
+        expired: Number(approvalsPayload.summary?.expired || 0),
+        unclaimed: Number(approvalsPayload.summary?.unclaimed || 0),
+        claimed: Number(approvalsPayload.summary?.claimed || 0),
+        completed: Number(approvalsPayload.summary?.completed || 0),
+        completedSucceeded: Number(approvalsPayload.summary?.completedSucceeded || 0),
+        completedFailed: Number(approvalsPayload.summary?.completedFailed || 0),
+      });
       setApprovalReviewNotes((previous) => {
         const next: Record<string, string> = {};
         nextApprovals.forEach((approval) => {
@@ -4715,6 +4778,12 @@ export function App() {
 
       <section className="panel">
         <h2 className="title">{`Fleet Approvals (${filteredApprovals.length}/${approvals.length})`}</h2>
+        <p className="muted">
+          {`Summary: pending ${approvalSummary.pending} • approved ${approvalSummary.approved} • denied ${approvalSummary.denied} • expired ${approvalSummary.expired}`}
+        </p>
+        <p className="muted">
+          {`Execution: unclaimed ${approvalSummary.unclaimed} • claimed ${approvalSummary.claimed} • completed ${approvalSummary.completed} (ok ${approvalSummary.completedSucceeded} / failed ${approvalSummary.completedFailed})`}
+        </p>
         <div className="gridCols">
           <label className="muted">
             Filter status

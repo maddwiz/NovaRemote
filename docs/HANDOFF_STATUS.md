@@ -153,6 +153,7 @@ Updated: 2026-03-07
   - [x] command blocklist + policy enforcement (including scaffold-side regex validation and policy payload bounds checks)
   - [x] approved execution claims now carry TTL metadata (`executionExpiresAt`) with scaffold-side expiration + re-claim enforcement
   - [x] fleet approval listing now supports `status` / `executionState` / `requestedBy` / `reviewedBy` / `target` filters (API contract + scaffold route + dashboard filter controls)
+  - [x] fleet approval list responses now include status/execution rollup summaries for dashboard governance visibility
   - [x] dashboard scaffold fleet-review actions now forward optional review notes and completion summaries to approve/deny/complete endpoints
   - [~] fleet approval request/review + approved-execution matching is wired in-app and surfaced in dashboard scaffold (including approve/deny actions); scaffold API now enforces duplicate-pending + self-approval guardrails, pending-expiry normalization, approved-execution claim tokens/metadata, and request-identity-based review attribution for approve/deny actions, while production orchestration rollout remains pending
   - [x] inactivity timeout / session auto-disconnect policies
