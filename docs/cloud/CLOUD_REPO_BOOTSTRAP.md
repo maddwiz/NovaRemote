@@ -83,8 +83,8 @@ The generated dashboard scaffold currently wires:
 - team policy controls (`danger confirm`, `fleet approval`, `recording`, `timeout`, `blocklist`)
 - fleet approval feed with approve/deny actions
 - SSO provider toggle controls (`OIDC`/`SAML`)
-- audit event viewer with action/server filters
-- cloud audit export request actions (`JSON`/`CSV`) + export history list/open/delete controls
+- audit event viewer with action/server/user filters plus one-click filtered `JSON`/`CSV` download actions
+- cloud audit export request actions (`JSON`/`CSV`) + export history list/open/delete controls with requester/status/format filters
 
 The generated API scaffold now persists state to a local JSON file (`NOVA_CLOUD_STATE_FILE`, default `./data/state.json`) so local restarts retain team data.
 It also applies endpoint-level permission guards (`requireTeamPermission`) derived from the signed-in role for local RBAC validation.
@@ -93,7 +93,8 @@ Fleet approval endpoints now include duplicate-pending detection, pending-expiry
 Approved fleet requests can also be claimed for execution (`claim-execution`) to generate an execution token and reviewer/executor metadata.
 The scaffold also emits system audit events for auth, server-fleet, invite, policy, approval-review, and export lifecycle actions.
 Team policy updates are schema-validated in the scaffold API, including timeout bounds and command blocklist regex validation.
-Audit export jobs now model lifecycle states (`pending` -> `ready` / `failed`) with TTL cleanup, retry support (`POST /v1/audit/exports/{exportId}/retry`), tokenized download artifacts (`GET /v1/audit/exports/{exportId}/download`), and richer metadata (`eventCount`, `attemptCount`, transition timestamps) in the scaffold.
+Audit export jobs now model lifecycle states (`pending` -> `ready` / `failed`) with TTL cleanup, retry support (`POST /v1/audit/exports/{exportId}/retry`), tokenized download artifacts (`GET /v1/audit/exports/{exportId}/download`), and richer metadata (`eventCount`, `attemptCount`, `processingDurationMs`, transition timestamps) in the scaffold.
+Export list responses now include summary rollups (`pending`/`ready`/`failed`) plus `avgProcessingDurationMs` for lightweight compliance/ops observability in dashboard views.
 Team member responses now include server-derived usage snapshots (`sessionsCreated`, `commandsSent`, `fleetExecutions`, `lastActiveAt`) computed from the audit stream.
 Token provisioning now enforces server assignment + least-privilege permission clamping (requested level is capped by caller role and server policy).
 Team server listing now enforces per-member visibility (non-admin members only receive assigned servers).
