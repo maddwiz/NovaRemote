@@ -1,5 +1,15 @@
-import { Audio } from "expo-av";
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  getRecordingPermissionsAsync,
+  RecordingPresets,
+  requestRecordingPermissionsAsync,
+  setAudioModeAsync,
+  useAudioRecorder,
+  useAudioRecorderState,
+  type AudioRecorder,
+  type PermissionResponse,
+  type RecordingOptions,
+} from "expo-audio";
+import { useCallback, useEffect, useState } from "react";
 
 import { normalizeBaseUrl } from "../api/client";
 import { ServerProfile } from "../types";
@@ -8,6 +18,11 @@ const BASE_TRANSCRIBE_ENDPOINTS = ["/voice/transcribe", "/speech/transcribe", "/
 const VAD_TRANSCRIBE_ENDPOINTS = ["/voice/transcribe-vad", "/speech/transcribe-vad", "/ai/transcribe-vad", "/llm/transcribe-vad"];
 const TRANSCRIBE_AUDIO_MIME = "audio/m4a";
 const TRANSCRIBE_AUDIO_FORMAT = "m4a-aac";
+
+const VOICE_RECORDING_OPTIONS: RecordingOptions = {
+  ...RecordingPresets.HIGH_QUALITY,
+  isMeteringEnabled: true,
+};
 
 type UseVoiceCaptureArgs = {
   activeServer: ServerProfile | null;
@@ -20,6 +35,12 @@ type VoiceTranscribeOptions = {
   vadEnabled?: boolean;
   vadSilenceMs?: number;
 };
+
+type VoicePermissionStatus = "granted" | "denied" | "undetermined" | null;
+
+function toPermissionStatus(permission: PermissionResponse): VoicePermissionStatus {
+  return permission.granted ? "granted" : (permission.status as VoicePermissionStatus);
+}
 
 function readTranscript(payload: unknown): string {
   if (typeof payload === "string") {
@@ -51,34 +72,38 @@ function readTranscript(payload: unknown): string {
   return "";
 }
 
-async function stopAndCleanupRecording(recording: Audio.Recording | null): Promise<void> {
-  if (!recording) {
+async function stopAndCleanupRecording(recorder: AudioRecorder | null): Promise<void> {
+  if (!recorder) {
     return;
   }
   try {
-    await recording.stopAndUnloadAsync();
+    if (recorder.isRecording) {
+      await recorder.stop();
+    }
   } catch {
     // best effort
   }
 }
 
 export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs) {
-  const recordingRef = useRef<Audio.Recording | null>(null);
+  const recorder = useAudioRecorder(VOICE_RECORDING_OPTIONS);
+  const recorderState = useAudioRecorderState(recorder, 120);
+
   const [recording, setRecording] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
   const [lastTranscript, setLastTranscript] = useState<string>("");
   const [lastError, setLastError] = useState<string | null>(null);
   const [meteringDb, setMeteringDb] = useState<number | null>(null);
-  const [permissionStatus, setPermissionStatus] = useState<"granted" | "denied" | "undetermined" | null>(null);
+  const [permissionStatus, setPermissionStatus] = useState<VoicePermissionStatus>(null);
 
   const resetAudioMode = useCallback(async () => {
     try {
-      await Audio.setAudioModeAsync({
-        allowsRecordingIOS: false,
-        playsInSilentModeIOS: true,
-        shouldDuckAndroid: true,
-        staysActiveInBackground: false,
-        playThroughEarpieceAndroid: false,
+      await setAudioModeAsync({
+        allowsRecording: false,
+        playsInSilentMode: true,
+        interruptionMode: "duckOthers",
+        shouldPlayInBackground: false,
+        shouldRouteThroughEarpiece: false,
       });
     } catch {
       // best effort
@@ -86,8 +111,8 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
   }, []);
 
   const requestCapturePermission = useCallback(async () => {
-    const next = await Audio.requestPermissionsAsync();
-    const status = next.granted ? "granted" : (next.status as "granted" | "denied" | "undetermined");
+    const next = await requestRecordingPermissionsAsync();
+    const status = toPermissionStatus(next);
     setPermissionStatus(status);
     return next.granted;
   }, []);
@@ -96,12 +121,11 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     let mounted = true;
     async function loadPermission() {
       try {
-        const current = await Audio.getPermissionsAsync();
+        const current = await getRecordingPermissionsAsync();
         if (!mounted) {
           return;
         }
-        const status = current.granted ? "granted" : (current.status as "granted" | "denied" | "undetermined");
-        setPermissionStatus(status);
+        setPermissionStatus(toPermissionStatus(current));
       } catch {
         if (mounted) {
           setPermissionStatus(null);
@@ -113,6 +137,16 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       mounted = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!recording) {
+      return;
+    }
+    const level = recorderState.metering;
+    if (typeof level === "number" && Number.isFinite(level)) {
+      setMeteringDb(level);
+    }
+  }, [recording, recorderState.metering]);
 
   const startCapture = useCallback(async () => {
     if (recording || busy) {
@@ -128,39 +162,26 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     setLastTranscript("");
     setMeteringDb(null);
 
-    await Audio.setAudioModeAsync({
-      allowsRecordingIOS: true,
-      playsInSilentModeIOS: true,
-      shouldDuckAndroid: true,
-      staysActiveInBackground: false,
-      playThroughEarpieceAndroid: false,
+    await setAudioModeAsync({
+      allowsRecording: true,
+      playsInSilentMode: true,
+      interruptionMode: "duckOthers",
+      shouldPlayInBackground: false,
+      shouldRouteThroughEarpiece: false,
     });
-    try {
-      const recorder = new Audio.Recording();
-      recorder.setProgressUpdateInterval(120);
-      recorder.setOnRecordingStatusUpdate((status) => {
-        const level = (status as { metering?: unknown }).metering;
-        if (typeof level === "number" && Number.isFinite(level)) {
-          setMeteringDb(level);
-        }
-      });
-      await recorder.prepareToRecordAsync({
-        ...Audio.RecordingOptionsPresets.HIGH_QUALITY,
-        isMeteringEnabled: true,
-      } as Audio.RecordingOptions);
-      await recorder.startAsync();
 
-      recordingRef.current = recorder;
+    try {
+      await recorder.prepareToRecordAsync(VOICE_RECORDING_OPTIONS);
+      recorder.record();
       setRecording(true);
     } catch (error) {
       await resetAudioMode();
       throw error;
     }
-  }, [busy, recording, requestCapturePermission, resetAudioMode]);
+  }, [busy, recorder, recording, requestCapturePermission, resetAudioMode]);
 
   const stopAndTranscribe = useCallback(async (options: VoiceTranscribeOptions = {}): Promise<string> => {
-    const recorder = recordingRef.current;
-    if (!recorder) {
+    if (!recording && !recorderState.isRecording) {
       throw new Error("Voice capture has not started.");
     }
 
@@ -170,11 +191,13 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     setMeteringDb(null);
 
     try {
-      await recorder.stopAndUnloadAsync();
-      recordingRef.current = null;
+      if (recorder.isRecording || recorderState.isRecording) {
+        await recorder.stop();
+      }
+
       await resetAudioMode();
 
-      const uri = recorder.getURI();
+      const uri = recorder.uri || recorder.getStatus().url;
       if (!uri) {
         throw new Error("Audio capture failed. Please try again.");
       }
@@ -275,37 +298,34 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       await resetAudioMode();
       setBusy(false);
     }
-  }, [activeServer, connected, resetAudioMode]);
+  }, [activeServer, connected, recorder, recorderState.isRecording, recording, resetAudioMode]);
 
   const stopCapture = useCallback(async (): Promise<boolean> => {
-    const recorder = recordingRef.current;
-    if (!recorder) {
+    if (!recording && !recorderState.isRecording) {
       setRecording(false);
       setMeteringDb(null);
       await resetAudioMode();
       return false;
     }
-    recordingRef.current = null;
+
     setRecording(false);
     setMeteringDb(null);
     try {
-      await recorder.stopAndUnloadAsync();
+      await recorder.stop();
     } catch {
       // best effort
     }
     await resetAudioMode();
     return true;
-  }, [resetAudioMode]);
+  }, [recording, recorder, recorderState.isRecording, resetAudioMode]);
 
   useEffect(() => {
     return () => {
-      const recorder = recordingRef.current;
-      recordingRef.current = null;
       void stopAndCleanupRecording(recorder).finally(() => {
         void resetAudioMode();
       });
     };
-  }, [resetAudioMode]);
+  }, [recorder, resetAudioMode]);
 
   return {
     recording,

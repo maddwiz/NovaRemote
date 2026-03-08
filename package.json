@@ -40,7 +40,8 @@
     "anser": "^2.3.5",
     "crypto-js": "^4.2.0",
     "expo": "~55.0.5",
-    "expo-av": "^16.0.8",
+    "expo-asset": "~55.0.8",
+    "expo-audio": "~55.0.8",
     "expo-camera": "~55.0.9",
     "expo-haptics": "^55.0.8",
     "expo-linking": "^55.0.7",
@@ -65,14 +66,6 @@
     "typescript": "~5.9.2",
     "vitest": "^4.0.18"
   },
-  "expo": {
-    "doctor": {
-      "reactNativeDirectoryCheck": {
-        "exclude": [
-          "expo-av"
-        ]
-      }
-    }
-  },
+  "expo": {},
   "private": true
 }
