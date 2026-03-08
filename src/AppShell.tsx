@@ -3499,6 +3499,8 @@ export default function AppShell() {
           alwaysBounceVertical
           scrollEnabled
           nestedScrollEnabled
+          directionalLockEnabled
+          canCancelContentTouches
           contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="always"
           refreshControl={
