@@ -164,6 +164,19 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: 0.2,
   },
+  navModeButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#3f3a75",
+    backgroundColor: "rgba(19, 14, 41, 0.94)",
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+  },
+  navModeButtonText: {
+    color: "#9ad4ff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   navCompactTitle: {
     color: "#e4d8ff",
     fontSize: 14,

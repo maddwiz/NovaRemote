@@ -14,6 +14,7 @@ import { getWorkspaceLocalMember, getWorkspacePermissions } from "../workspacePe
 import { groupServersByVmHost } from "../serverSwitcherRailModel";
 
 type ServersScreenProps = {
+  simpleMode?: boolean;
   servers: ServerProfile[];
   activeServerId: string | null;
   serverNameInput: string;
@@ -102,6 +103,7 @@ type ServersScreenProps = {
 };
 
 export function ServersScreen({
+  simpleMode = false,
   servers,
   activeServerId,
   serverNameInput,
@@ -173,6 +175,7 @@ export function ServersScreen({
   onBackToTerminals,
 }: ServersScreenProps) {
   const vmTypes: VmType[] = ["proxmox", "vmware", "hyper-v", "docker", "lxc", "qemu", "virtualbox", "cloud"];
+  const [showAdvancedServerOptions, setShowAdvancedServerOptions] = useState<boolean>(() => !simpleMode);
   const [showQrScanner, setShowQrScanner] = useState<boolean>(false);
   const [qrError, setQrError] = useState<string>("");
   const { parseQrPayload } = useQrSetup();
@@ -208,6 +211,12 @@ export function ServersScreen({
     }
     setWorkspaceServerIds([seedId]);
   }, [activeServerId, servers, workspaceServerIds.length]);
+
+  useEffect(() => {
+    if (simpleMode) {
+      setShowAdvancedServerOptions(false);
+    }
+  }, [simpleMode]);
   const groupedServers = useMemo(
     () => groupServersByVmHost(servers, { standalonePosition: "first" }),
     [servers]
@@ -350,6 +359,7 @@ export function ServersScreen({
         })}
       </View>
 
+      {!simpleMode || showAdvancedServerOptions ? (
       <View style={styles.serverCard}>
         <Text style={styles.panelLabel}>Team Workspaces (Preview)</Text>
         <Text style={styles.serverSubtitle}>
@@ -545,6 +555,7 @@ export function ServersScreen({
           })}
         </View>
       </View>
+      ) : null}
 
       <View style={styles.formDivider} />
       <Text style={styles.panelLabel}>{editingServerId ? "Edit Server" : "Add Server"}</Text>
@@ -598,7 +609,27 @@ export function ServersScreen({
         onChangeText={onSetServerCwd}
       />
       {qrError ? <Text style={styles.emptyText}>{qrError}</Text> : null}
+      {simpleMode ? (
+        <View style={styles.serverCard}>
+          <View style={styles.rowInlineSpace}>
+            <Text style={styles.panelLabel}>Server Advanced Options</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={showAdvancedServerOptions ? "Hide server advanced options" : "Show server advanced options"}
+              style={styles.actionButton}
+              onPress={() => setShowAdvancedServerOptions((prev) => !prev)}
+            >
+              <Text style={styles.actionButtonText}>{showAdvancedServerOptions ? "Hide" : "Show"}</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.serverSubtitle}>
+            SSH fallback, VM metadata, backend hints, integrations, safety toggles, and growth settings.
+          </Text>
+        </View>
+      ) : null}
 
+      {!simpleMode || showAdvancedServerOptions ? (
+      <>
       <View style={styles.serverCard}>
         <Text style={styles.panelLabel}>Direct SSH Fallback (Optional)</Text>
         <Text style={styles.serverSubtitle}>Launches an installed SSH app via `ssh://` when companion APIs are unavailable.</Text>
@@ -862,6 +893,8 @@ export function ServersScreen({
         {growthStatus ? <Text style={styles.emptyText}>{growthStatus}</Text> : null}
         {sharedTemplatesStatus ? <Text style={styles.emptyText}>{sharedTemplatesStatus}</Text> : null}
       </View>
+      </>
+      ) : null}
 
       <View style={styles.rowInlineSpace}>
         <Pressable accessibilityRole="button" accessibilityLabel={editingServerId ? "Update server profile" : "Save server profile"} style={[styles.buttonPrimary, styles.flexButton]} onPress={onSaveServer}>

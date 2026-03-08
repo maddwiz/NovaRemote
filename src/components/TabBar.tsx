@@ -7,13 +7,15 @@ import { RouteTab } from "../types";
 type TabBarProps = {
   route: RouteTab;
   onChange: (next: RouteTab) => void;
+  simpleMode?: boolean;
+  onToggleSimpleMode?: () => void;
 };
 
-export function TabBar({ route, onChange }: TabBarProps) {
+export function TabBar({ route, onChange, simpleMode = false, onToggleSimpleMode }: TabBarProps) {
   const { width } = useWindowDimensions();
   const compact = width < 680;
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
-  const tabs: Array<{ key: RouteTab; label: string; accessibilityLabel: string }> = [
+  const allTabs: Array<{ key: RouteTab; label: string; accessibilityLabel: string }> = [
     { key: "terminals", label: "Terminals", accessibilityLabel: "Open terminals tab" },
     { key: "servers", label: "Servers", accessibilityLabel: "Open servers tab" },
     { key: "snippets", label: "Snippets", accessibilityLabel: "Open snippets tab" },
@@ -22,9 +24,13 @@ export function TabBar({ route, onChange }: TabBarProps) {
     { key: "team", label: "Team", accessibilityLabel: "Open team tab" },
     { key: "vr", label: "VR", accessibilityLabel: "Open VR command center tab" },
   ];
+  const tabs = useMemo(
+    () => (simpleMode ? allTabs.filter((tab) => tab.key === "terminals" || tab.key === "servers") : allTabs),
+    [allTabs, simpleMode]
+  );
   const activeTabLabel = useMemo(
-    () => tabs.find((tab) => tab.key === route)?.label || "Navigation",
-    [route, tabs]
+    () => allTabs.find((tab) => tab.key === route)?.label || "Navigation",
+    [route, allTabs]
   );
 
   const tabButtons = tabs.map((tab) => (
@@ -60,6 +66,16 @@ export function TabBar({ route, onChange }: TabBarProps) {
           <Text style={styles.navCompactTitle} numberOfLines={1}>
             {activeTabLabel}
           </Text>
+          {onToggleSimpleMode ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={simpleMode ? "Switch to full interface" : "Switch to simple interface"}
+              style={styles.navModeButton}
+              onPress={onToggleSimpleMode}
+            >
+              <Text style={styles.navModeButtonText}>{simpleMode ? "Full" : "Simple"}</Text>
+            </Pressable>
+          ) : null}
         </View>
 
         <Modal visible={drawerOpen} transparent animationType="fade" onRequestClose={() => setDrawerOpen(false)}>
@@ -84,6 +100,21 @@ export function TabBar({ route, onChange }: TabBarProps) {
                   </Pressable>
                 ))}
               </View>
+              {onToggleSimpleMode ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={simpleMode ? "Switch to full interface" : "Switch to simple interface"}
+                  style={styles.navModeButton}
+                  onPress={() => {
+                    setDrawerOpen(false);
+                    onToggleSimpleMode();
+                  }}
+                >
+                  <Text style={styles.navModeButtonText}>
+                    {simpleMode ? "Switch to Full Interface" : "Switch to Simple Interface"}
+                  </Text>
+                </Pressable>
+              ) : null}
             </View>
             <Pressable
               accessibilityRole="button"
@@ -100,6 +131,18 @@ export function TabBar({ route, onChange }: TabBarProps) {
   return (
     <View style={styles.tabRow}>
       {tabButtons}
+      {onToggleSimpleMode ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={simpleMode ? "Switch to full interface" : "Switch to simple interface"}
+          style={styles.tabButton}
+          onPress={onToggleSimpleMode}
+        >
+          <Text numberOfLines={1} style={styles.tabButtonText}>
+            {simpleMode ? "Full UI" : "Simple UI"}
+          </Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
