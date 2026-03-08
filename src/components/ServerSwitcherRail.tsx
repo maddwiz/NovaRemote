@@ -1,5 +1,5 @@
 import React from "react";
-import { Alert, Pressable, ScrollView, Text, View } from "react-native";
+import { Alert, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 
 import { useVmGroupPrefs } from "../hooks/useVmGroupPrefs";
 import { isTeamManagedServer } from "../teamServers";
@@ -70,6 +70,8 @@ export function ServerSwitcherRail({
   onAddServer,
   unreadServers,
 }: ServerSwitcherRailProps) {
+  const { width } = useWindowDimensions();
+  const compact = width < 680;
   const groupedServers = React.useMemo(() => groupServersByVmHost(servers), [servers]);
   const groupKeys = React.useMemo(() => groupedServers.map((group) => group.key), [groupedServers]);
   const { isGroupCollapsed, toggleGroupCollapsed } = useVmGroupPrefs({
@@ -87,7 +89,11 @@ export function ServerSwitcherRail({
         key={server.id}
         accessibilityRole="button"
         accessibilityLabel={`Switch to ${server.name}`}
-        style={[styles.serverRailChip, focused ? styles.serverRailChipFocused : null]}
+        style={[
+          styles.serverRailChip,
+          compact ? styles.serverRailChipCompact : null,
+          focused ? styles.serverRailChipFocused : null,
+        ]}
         onPress={() => onFocusServer(server.id)}
         onLongPress={() => {
           Alert.alert(
@@ -117,95 +123,114 @@ export function ServerSwitcherRail({
     );
   };
 
-  return (
-    <View style={styles.serverRail}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {groupedServers.map((group) => (
-          <View key={group.key} style={styles.serverRailGroupCard}>
-            <View style={styles.serverRailGroupHeader}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={`Focus ${group.label} host`}
-                style={styles.serverRailGroupHeaderAction}
-                onPress={() => {
-                  const firstServer = group.servers[0];
-                  if (!firstServer) {
-                    return;
-                  }
-                  if (group.servers.length > 1) {
-                    toggleGroupCollapsed(group.key);
-                  } else {
-                    onFocusServer(firstServer.id);
-                  }
-                }}
-                onLongPress={() => {
-                  const groupServerIds = group.servers.map((server) => server.id);
-                  Alert.alert(
-                    group.label,
-                    "Host options",
-                    buildServerGroupMenuActions({
-                      onReconnectGroup: () => {
-                        if (onReconnectServers) {
-                          onReconnectServers(groupServerIds);
-                          return;
-                        }
-                        if (onReconnectServer) {
-                          groupServerIds.forEach((serverId) => onReconnectServer(serverId));
-                        }
-                      },
-                      onFocusFirstServer: () => {
-                        const firstServer = group.servers[0];
-                        if (firstServer) {
-                          onFocusServer(firstServer.id);
-                        }
-                      },
-                      onViewDetails: () => {
-                        Alert.alert(
-                          `${group.label} details`,
-                          formatServerGroupDetails(group, connections, unreadServers)
-                        );
-                      },
-                    })
-                  );
-                }}
-              >
-                <View style={[styles.serverRailDot, dotStyleForGroup(group, connections)]} />
-                <Text style={styles.serverRailGroupLabel}>{group.label}</Text>
-                <Text style={styles.serverRailGroupToggle}>{isGroupCollapsed(group.key) ? "Show" : "Hide"}</Text>
-                {group.servers.some((server) => unreadServers.has(server.id)) ? (
-                  <View style={styles.serverRailGroupUnreadBadge} />
+  const railContent = (
+    <>
+      {groupedServers.map((group) => (
+        <View
+          key={group.key}
+          style={[styles.serverRailGroupCard, compact ? styles.serverRailGroupCardCompact : null]}
+        >
+          <View style={styles.serverRailGroupHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={`Focus ${group.label} host`}
+              style={styles.serverRailGroupHeaderAction}
+              onPress={() => {
+                const firstServer = group.servers[0];
+                if (!firstServer) {
+                  return;
+                }
+                if (group.servers.length > 1) {
+                  toggleGroupCollapsed(group.key);
+                } else {
+                  onFocusServer(firstServer.id);
+                }
+              }}
+              onLongPress={() => {
+                const groupServerIds = group.servers.map((server) => server.id);
+                Alert.alert(
+                  group.label,
+                  "Host options",
+                  buildServerGroupMenuActions({
+                    onReconnectGroup: () => {
+                      if (onReconnectServers) {
+                        onReconnectServers(groupServerIds);
+                        return;
+                      }
+                      if (onReconnectServer) {
+                        groupServerIds.forEach((serverId) => onReconnectServer(serverId));
+                      }
+                    },
+                    onFocusFirstServer: () => {
+                      const firstServer = group.servers[0];
+                      if (firstServer) {
+                        onFocusServer(firstServer.id);
+                      }
+                    },
+                    onViewDetails: () => {
+                      Alert.alert(
+                        `${group.label} details`,
+                        formatServerGroupDetails(group, connections, unreadServers)
+                      );
+                    },
+                  })
+                );
+              }}
+            >
+              <View style={[styles.serverRailDot, dotStyleForGroup(group, connections)]} />
+              <Text style={styles.serverRailGroupLabel}>{group.label}</Text>
+              <Text style={styles.serverRailGroupToggle}>{isGroupCollapsed(group.key) ? "Show" : "Hide"}</Text>
+              {group.servers.some((server) => unreadServers.has(server.id)) ? (
+                <View style={styles.serverRailGroupUnreadBadge} />
+              ) : null}
+            </Pressable>
+            <Text style={styles.serverRailGroupCount}>{group.servers.length}</Text>
+          </View>
+          {isGroupCollapsed(group.key) ? (
+            <Text style={styles.serverRailGroupSummary}>
+              {`${group.vmTypeGroups.length} type(s) • ${group.servers.length} server(s)`}
+            </Text>
+          ) : (
+            group.vmTypeGroups.map((vmTypeGroup) => (
+              <View key={`${group.key}-${vmTypeGroup.key}`} style={styles.serverRailVmTypeRow}>
+                {group.vmTypeGroups.length > 1 ? (
+                  <Text style={styles.serverRailVmTypeLabel}>{vmTypeGroup.label}</Text>
                 ) : null}
-              </Pressable>
-              <Text style={styles.serverRailGroupCount}>{group.servers.length}</Text>
-            </View>
-            {isGroupCollapsed(group.key) ? (
-              <Text style={styles.serverRailGroupSummary}>
-                {`${group.vmTypeGroups.length} type(s) • ${group.servers.length} server(s)`}
-              </Text>
-            ) : (
-              group.vmTypeGroups.map((vmTypeGroup) => (
-                <View key={`${group.key}-${vmTypeGroup.key}`} style={styles.serverRailVmTypeRow}>
-                  {group.vmTypeGroups.length > 1 ? (
-                    <Text style={styles.serverRailVmTypeLabel}>{vmTypeGroup.label}</Text>
-                  ) : null}
+                {compact ? (
+                  <View style={styles.serverRailVmTypeListCompact}>
+                    {vmTypeGroup.servers.map((server) => renderServerChip(server))}
+                  </View>
+                ) : (
                   <View style={styles.serverRailVmTypeChips}>
                     {vmTypeGroup.servers.map((server) => renderServerChip(server))}
                   </View>
-                </View>
-              ))
-            )}
-          </View>
-        ))}
+                )}
+              </View>
+            ))
+          )}
+        </View>
+      ))}
 
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Add server"
-          style={styles.serverRailChip}
-          onPress={onAddServer}
-        >
-          <Text style={styles.serverRailName}>+ Add</Text>
-        </Pressable>
-      </ScrollView>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add server"
+        style={styles.serverRailChip}
+        onPress={onAddServer}
+      >
+        <Text style={styles.serverRailName}>+ Add</Text>
+      </Pressable>
+    </>
+  );
+
+  return (
+    <View style={styles.serverRail}>
+      {compact ? (
+        <View style={styles.serverRailCompactList}>{railContent}</View>
+      ) : (
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
+          {railContent}
+        </ScrollView>
+      )}
     </View>
   );
 }

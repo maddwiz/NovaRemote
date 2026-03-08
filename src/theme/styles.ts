@@ -36,7 +36,7 @@ export const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: 14,
-    paddingBottom: 34,
+    paddingBottom: 140,
     paddingTop: 8,
     gap: 12,
   },
@@ -422,6 +422,11 @@ export const styles = StyleSheet.create({
     paddingVertical: 6,
     marginRight: 8,
   },
+  serverRailGroupCardCompact: {
+    marginRight: 0,
+    marginBottom: 8,
+    width: "100%",
+  },
   serverRailGroupHeader: {
     flexDirection: "row",
     alignItems: "center",
@@ -485,6 +490,10 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     gap: 6,
   },
+  serverRailVmTypeListCompact: {
+    gap: 6,
+    alignItems: "flex-start",
+  },
   serverRailChip: {
     flexDirection: "row",
     alignItems: "center",
@@ -495,6 +504,11 @@ export const styles = StyleSheet.create({
     backgroundColor: "rgba(24, 16, 49, 0.95)",
     paddingHorizontal: 12,
     paddingVertical: 7,
+  },
+  serverRailChipCompact: {
+    marginBottom: 6,
+    maxWidth: "100%",
+    flexShrink: 1,
   },
   serverRailChipFocused: {
     borderColor: "#0ea8c8",
@@ -531,6 +545,11 @@ export const styles = StyleSheet.create({
     height: 8,
     borderRadius: 4,
     backgroundColor: "#ff8c42",
+  },
+  serverRailCompactList: {
+    gap: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   serverPoolSummary: {
     borderRadius: 12,

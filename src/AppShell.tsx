@@ -3493,7 +3493,13 @@ export default function AppShell() {
         keyboardVerticalOffset={12}
       >
         <ScrollView
+          style={styles.flex}
           contentContainerStyle={styles.container}
+          showsVerticalScrollIndicator
+          alwaysBounceVertical
+          scrollEnabled
+          nestedScrollEnabled
+          contentInsetAdjustmentBehavior="automatic"
           keyboardShouldPersistTaps="always"
           refreshControl={
             route === "terminals" ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#27d9ff" /> : undefined
