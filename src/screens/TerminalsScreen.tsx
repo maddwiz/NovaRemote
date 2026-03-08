@@ -367,6 +367,7 @@ export function TerminalsScreen() {
   const [layoutMode, setLayoutMode] = useState<"stack" | "tabs" | "grid" | "split">("stack");
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
   const [showAllServerTerminals, setShowAllServerTerminals] = useState(false);
+  const [showAdvancedControls, setShowAdvancedControls] = useState<boolean>(() => allSessions.length === 0);
   const [glassesSession, setGlassesSession] = useState<string | null>(null);
   const [processFilter, setProcessFilter] = useState<string>("");
   const [processSorts, setProcessSorts] = useState<ProcessSortMode[]>(["cpu"]);
@@ -1980,6 +1981,11 @@ export function TerminalsScreen() {
       </View>
     </>
   );
+  const topPanelChildren = React.Children.toArray(
+    (topPanels as React.ReactElement<{ children?: React.ReactNode }>).props.children
+  );
+  const primaryPanels = topPanelChildren.slice(0, 2);
+  const advancedPanels = topPanelChildren.slice(2);
 
   const openTerminalsTitle = showAllServerTerminals ? "Open Terminals (All Servers)" : "Open Terminals";
 
@@ -2044,11 +2050,30 @@ export function TerminalsScreen() {
 
   return (
     <>
-      {topPanels}
+      {primaryPanels}
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
         {renderOpenTerminals()}
       </View>
+      <View style={styles.panel}>
+        <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
+          <Text style={styles.panelLabel}>Advanced Controls</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showAdvancedControls ? "Hide advanced controls" : "Show advanced controls"}
+            style={styles.actionButton}
+            onPress={() => setShowAdvancedControls((prev) => !prev)}
+          >
+            <Text style={styles.actionButtonText}>{showAdvancedControls ? "Hide" : "Show"}</Text>
+          </Pressable>
+        </View>
+        <Text style={styles.serverSubtitle}>
+          {showAdvancedControls
+            ? "Advanced sections are visible below."
+            : "Reveal fleet execute, process manager, theme, glasses, collaboration, and deeper session controls."}
+        </Text>
+      </View>
+      {showAdvancedControls ? advancedPanels : null}
       {processKillModal}
     </>
   );
