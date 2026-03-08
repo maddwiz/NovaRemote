@@ -615,11 +615,9 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
   return command;
 }
 
-const SIMPLE_UI_MODE_STORAGE_KEY = "novaremote.simple_ui_mode";
-
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
-  const [simpleMode, setSimpleMode] = useState<boolean>(true);
+  const simpleMode = true;
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [paywallVisible, setPaywallVisible] = useState<boolean>(false);
@@ -680,31 +678,6 @@ export default function AppShell() {
 
   const markActivity = useCallback(() => {
     lastActivityAtRef.current = Date.now();
-  }, []);
-
-  useEffect(() => {
-    let mounted = true;
-    void SecureStore.getItemAsync(SIMPLE_UI_MODE_STORAGE_KEY)
-      .then((stored) => {
-        if (!mounted || stored === null) {
-          return;
-        }
-        setSimpleMode(stored === "1");
-      })
-      .catch(() => {
-        // Keep default mode when secure storage is unavailable.
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
-
-  const toggleSimpleMode = useCallback(() => {
-    setSimpleMode((previous) => {
-      const next = !previous;
-      void SecureStore.setItemAsync(SIMPLE_UI_MODE_STORAGE_KEY, next ? "1" : "0");
-      return next;
-    });
   }, []);
 
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
@@ -4354,7 +4327,6 @@ export default function AppShell() {
             <TabBar
               route={route}
               simpleMode={simpleMode}
-              onToggleSimpleMode={toggleSimpleMode}
               onChange={handleTabChange}
               compactBottomNav
             />
