@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
+import { Alert, NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
 
 import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
@@ -267,6 +267,7 @@ export function TerminalsScreen() {
     onRefreshAllServers,
     onOpenServers,
     onFocusServer,
+    onCreateSession,
     onReconnectServer,
     onReconnectServers,
     onReconnectAllServers,
@@ -423,6 +424,26 @@ export function TerminalsScreen() {
       return;
     }
     onSendServerSessionCommand(focusedServerId, session, command, "shell");
+  };
+  const activeServerId = focusedServerId || activeServer?.id || null;
+  const canQuickStartAi = capabilities.codex || hasExternalLlm;
+
+  const handleQuickStartSession = (kind: "shell" | "ai") => {
+    if (!activeServerId) {
+      onOpenServers();
+      return;
+    }
+    if (kind === "shell" && !capabilities.terminal) {
+      Alert.alert("Shell unavailable", "The focused server does not support shell sessions.");
+      return;
+    }
+    if (kind === "ai" && !canQuickStartAi) {
+      Alert.alert("AI unavailable", "Configure server AI or an external LLM profile first.");
+      return;
+    }
+    void onCreateSession(activeServerId, kind).catch((error: unknown) => {
+      Alert.alert("Could not start session", error instanceof Error ? error.message : String(error));
+    });
   };
 
   const onStartPromptKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
@@ -1997,6 +2018,43 @@ export function TerminalsScreen() {
   const sessionSetupPanels = [advancedPanels[9], advancedPanels[10], advancedPanels[12]].filter(Boolean);
 
   const openTerminalsTitle = showAllServerTerminals ? "Open Terminals (All Servers)" : "Open Terminals";
+  const quickStartPanel = (
+    <View style={styles.panel}>
+      <Text style={styles.panelLabel}>Quick Start</Text>
+      <Text style={styles.serverSubtitle}>Pick one action to get running fast.</Text>
+      <View style={styles.actionsWrap}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Start a new shell terminal now"
+          style={[styles.buttonPrimary, !connected || !capabilities.terminal ? styles.buttonDisabled : null]}
+          onPress={() => handleQuickStartSession("shell")}
+          disabled={!connected || !capabilities.terminal}
+        >
+          <Text style={styles.buttonPrimaryText}>New Shell</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Start a new AI terminal now"
+          style={[styles.buttonGhost, !connected || !canQuickStartAi ? styles.buttonDisabled : null]}
+          onPress={() => handleQuickStartSession("ai")}
+          disabled={!connected || !canQuickStartAi}
+        >
+          <Text style={styles.buttonGhostText}>New AI</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={showAdvancedControls ? "Hide expert controls" : "Show expert controls"}
+          style={styles.actionButton}
+          onPress={() => setShowAdvancedControls((prev) => !prev)}
+        >
+          <Text style={styles.actionButtonText}>{showAdvancedControls ? "Hide Expert" : "Show Expert"}</Text>
+        </Pressable>
+      </View>
+      <Text style={styles.emptyText}>
+        1) Choose server. 2) Tap New Shell or New AI. 3) Open Expert controls only when needed.
+      </Text>
+    </View>
+  );
 
   const processKillModal = (
     <ProcessKillConfirmModal
@@ -2031,6 +2089,7 @@ export function TerminalsScreen() {
           </Pressable>
         </View>
         {topPanels}
+        {quickStartPanel}
         <View style={styles.panel}>
           <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
           {renderOpenTerminals()}
@@ -2044,7 +2103,10 @@ export function TerminalsScreen() {
     return (
       <>
         <View style={styles.splitRow}>
-          <View style={styles.splitLeft}>{topPanels}</View>
+          <View style={styles.splitLeft}>
+            {topPanels}
+            {quickStartPanel}
+          </View>
           <View style={styles.splitRight}>
             <View style={styles.panel}>
               <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
@@ -2060,6 +2122,7 @@ export function TerminalsScreen() {
   return (
     <>
       {primaryPanels}
+      {quickStartPanel}
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
         {renderOpenTerminals()}
