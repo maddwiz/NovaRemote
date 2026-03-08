@@ -465,6 +465,88 @@ describe("useNovaAgentRuntime", () => {
     });
   });
 
+  it("uses memory session fallback when monitoring cycle has no default session", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => null,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Fallback Agent", ["watch"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().requestAgentApproval(agentId, {
+        command: "echo seed",
+        session: "build",
+      });
+    });
+    await act(async () => {
+      const approved = current().approveAgentApproval(agentId, { nextStatus: "monitoring" });
+      expect(approved).toBe(true);
+    });
+    onDispatchCommand.mockClear();
+
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run monitor");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseUpdatedAt = current().agents.find((agent) => agent.agentId === agentId)?.updatedAt || "";
+    const nowMs = Date.parse(baseUpdatedAt) + 61_000;
+
+    let cycleResult: { requested: string[]; approved: string[]; skipped: string[] } = {
+      requested: [],
+      approved: [],
+      skipped: [],
+    };
+    await act(async () => {
+      cycleResult = current().runMonitoringCycle({
+        intervalMs: 60_000,
+        nowMs,
+      });
+    });
+
+    const updated = current().agents.find((agent) => agent.agentId === agentId);
+    expect(cycleResult.requested).toEqual([agentId]);
+    expect(cycleResult.approved).toEqual([]);
+    expect(updated?.status).toBe("waiting_approval");
+    expect(updated?.pendingApproval?.session).toBe("build");
+    expect(updated?.pendingApproval?.command).toBe("npm run monitor");
+    expect(onDispatchCommand).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("auto-approves monitoring cycles for autonomous agents", async () => {
     const onDispatchCommand = vi.fn();
     let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
@@ -536,6 +618,87 @@ describe("useNovaAgentRuntime", () => {
     expect(agent?.status).toBe("monitoring");
     expect(agent?.pendingApproval).toBeNull();
     expect(onDispatchCommand).toHaveBeenCalledWith("main", "npm run monitor");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("auto-approves monitoring cycles with memory-session fallback for autonomous agents", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => null,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Auto Fallback", ["autonomous"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().requestAgentApproval(agentId, {
+        command: "echo seed",
+        session: "build",
+      });
+    });
+    await act(async () => {
+      const approved = current().approveAgentApproval(agentId, { nextStatus: "monitoring" });
+      expect(approved).toBe(true);
+    });
+    onDispatchCommand.mockClear();
+
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run monitor");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const baseUpdatedAt = current().agents.find((agent) => agent.agentId === agentId)?.updatedAt || "";
+    const nowMs = Date.parse(baseUpdatedAt) + 61_000;
+
+    let cycleResult: { requested: string[]; approved: string[]; skipped: string[] } = {
+      requested: [],
+      approved: [],
+      skipped: [],
+    };
+    await act(async () => {
+      cycleResult = current().runMonitoringCycle({
+        intervalMs: 60_000,
+        nowMs,
+      });
+    });
+
+    const updated = current().agents.find((agent) => agent.agentId === agentId);
+    expect(cycleResult.requested).toContain(agentId);
+    expect(cycleResult.approved).toContain(agentId);
+    expect(updated?.status).toBe("monitoring");
+    expect(updated?.pendingApproval).toBeNull();
+    expect(onDispatchCommand).toHaveBeenCalledWith("build", "npm run monitor");
 
     await act(async () => {
       renderer?.unmount();

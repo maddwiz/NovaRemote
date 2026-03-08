@@ -133,6 +133,7 @@ Updated: 2026-03-07
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
 - [x] Monitoring-status orchestration now auto-queues pending approvals for existing agent goals when a routable session is available (runtime + AppShell + panel wiring)
 - [x] Focused-server monitoring lifecycle now runs on an interval with cooldown gating, queues monitoring approvals automatically, and supports autonomous self-approval dispatch when agent capabilities include `autonomous` / `auto-approve`
+- [x] Monitoring/autonomous cycles now fall back to each agent's latest known routed session from NovaMemory when no current default session is available, reducing stalled monitoring loops after focus/surface changes
 - [~] Enterprise IAM expansion:
   - [x] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode
   - [x] Team SSO provider lifecycle (`GET/PATCH /v1/team/sso/providers`) wired in app (`useTeamAuth`, TeamScreen toggles + editable display/issuer/auth/token/client/callback fields) + cloud contract/scaffold

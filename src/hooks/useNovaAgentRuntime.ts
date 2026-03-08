@@ -90,6 +90,23 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
     return map;
   }, [agents]);
 
+  const latestSessionByAgentId = useMemo(() => {
+    const map = new Map<string, { session: string; createdAtMs: number }>();
+    memoryEntries.forEach((entry) => {
+      const agentId = entry.agentId?.trim() || "";
+      const session = entry.session?.trim() || "";
+      if (!agentId || !session) {
+        return;
+      }
+      const createdAtMs = parseTimestampMs(entry.createdAt) ?? 0;
+      const existing = map.get(agentId);
+      if (!existing || createdAtMs >= existing.createdAtMs) {
+        map.set(agentId, { session, createdAtMs });
+      }
+    });
+    return new Map(Array.from(map.entries()).map(([agentId, value]) => [agentId, value.session]));
+  }, [memoryEntries]);
+
   const addRuntimeAgent = useCallback(
     (name: string, capabilities: string[] = []) => {
       const created = addAgent(name, capabilities);
@@ -132,7 +149,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
       }
       if (status === "monitoring" && !agent.pendingApproval) {
         const command = agent.currentGoal.trim();
-        const session = resolveDefaultSession?.()?.trim() || "";
+        const session = resolveDefaultSession?.()?.trim() || latestSessionByAgentId.get(agent.agentId)?.trim() || "";
         if (command && session) {
           requestApproval(agentId, {
             summary: `Auto-queued monitoring goal for ${session}`,
@@ -158,7 +175,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
         summary: `${agent.name} status set to ${status}`,
       });
     },
-    [addEntry, agentById, requestApproval, resolveDefaultSession, setAgentStatus]
+    [addEntry, agentById, latestSessionByAgentId, requestApproval, resolveDefaultSession, setAgentStatus]
   );
 
   const setRuntimeAgentGoal = useCallback(
@@ -353,6 +370,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
           return;
         }
         const goal = agent.currentGoal.trim();
+        const agentDefaultSession = defaultSession || latestSessionByAgentId.get(agent.agentId)?.trim() || "";
         if (!goal) {
           skipped.push(agent.agentId);
           return;
@@ -368,7 +386,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
             return;
           }
           const pendingCommand = agent.pendingApproval.command?.trim() || goal;
-          const pendingSession = agent.pendingApproval.session?.trim() || defaultSession;
+          const pendingSession = agent.pendingApproval.session?.trim() || agentDefaultSession;
           if (!pendingCommand || !pendingSession) {
             skipped.push(agent.agentId);
             return;
@@ -386,15 +404,15 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
           return;
         }
 
-        if (!cooldownElapsed || !defaultSession) {
+        if (!cooldownElapsed || !agentDefaultSession) {
           skipped.push(agent.agentId);
           return;
         }
 
         const didRequest = requestAgentApproval(agent.agentId, {
-          summary: `Monitoring cycle queued for ${defaultSession}`,
+          summary: `Monitoring cycle queued for ${agentDefaultSession}`,
           command: goal,
-          session: defaultSession,
+          session: agentDefaultSession,
         });
         if (!didRequest) {
           skipped.push(agent.agentId);
@@ -406,7 +424,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
         }
         const didApprove = approveAgentApproval(agent.agentId, {
           commandOverride: goal,
-          sessionOverride: defaultSession,
+          sessionOverride: agentDefaultSession,
           nextStatus: "monitoring",
         });
         if (didApprove) {
@@ -416,7 +434,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
 
       return { requested, approved, skipped };
     },
-    [agents, approveAgentApproval, requestAgentApproval, resolveDefaultSession]
+    [agents, approveAgentApproval, latestSessionByAgentId, requestAgentApproval, resolveDefaultSession]
   );
 
   const clearAgentMemory = useCallback(
