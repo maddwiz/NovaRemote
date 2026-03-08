@@ -316,4 +316,54 @@ describe("useVoiceChannels", () => {
       renderer?.unmount();
     });
   });
+
+  it("syncs remote participants while preserving local presence", async () => {
+    let latest: UseVoiceChannelsResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVoiceChannels();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    let channelId = "";
+    await act(async () => {
+      const created = current().createChannel({ workspaceId: "workspace-a", name: "Incident" });
+      channelId = created?.id || "";
+      current().joinChannel(channelId);
+      current().setChannelParticipantActive(channelId, "engineer-2", true);
+      current().setActiveSpeaker(channelId, "engineer-2");
+    });
+
+    await act(async () => {
+      current().syncChannelParticipants(channelId, ["engineer-3"], { preserveLocalParticipant: true });
+    });
+
+    const synced = current().channels.find((channel) => channel.id === channelId);
+    expect(synced?.activeParticipantIds).toContain("local-user");
+    expect(synced?.activeParticipantIds).toContain("engineer-3");
+    expect(synced?.activeParticipantIds).not.toContain("engineer-2");
+    expect(synced?.activeSpeakerId).toBeNull();
+
+    await act(async () => {
+      current().syncChannelParticipants(channelId, ["engineer-3"], { preserveLocalParticipant: false });
+    });
+
+    const remoteOnly = current().channels.find((channel) => channel.id === channelId);
+    expect(remoteOnly?.activeParticipantIds).toEqual(["engineer-3"]);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

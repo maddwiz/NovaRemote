@@ -20,6 +20,11 @@ export type UseVoiceChannelsResult = {
   toggleMute: (channelId: string) => void;
   setChannelParticipantActive: (channelId: string, participantId: string, active: boolean) => void;
   setActiveSpeaker: (channelId: string, participantId: string | null) => void;
+  syncChannelParticipants: (
+    channelId: string,
+    participantIds: string[],
+    options?: { preserveLocalParticipant?: boolean }
+  ) => void;
 };
 
 const LOCAL_VOICE_PARTICIPANT_ID = "local-user";
@@ -347,6 +352,55 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
     );
   }, []);
 
+  const syncChannelParticipants = useCallback(
+    (
+      channelId: string,
+      participantIds: string[],
+      options: { preserveLocalParticipant?: boolean } = {}
+    ) => {
+      const normalizedParticipants = Array.from(
+        new Set(participantIds.map((value) => normalizeParticipantId(value)).filter(Boolean))
+      ).sort();
+      const preserveLocalParticipant = options.preserveLocalParticipant !== false;
+      setChannels((previous) =>
+        sortChannels(
+          previous.map((channel) => {
+            if (channel.id !== channelId) {
+              return channel;
+            }
+
+            const nextParticipantsSet = new Set(normalizedParticipants);
+            if (preserveLocalParticipant && (channel.activeParticipantIds || []).includes(LOCAL_VOICE_PARTICIPANT_ID)) {
+              nextParticipantsSet.add(LOCAL_VOICE_PARTICIPANT_ID);
+            }
+            const nextParticipants = Array.from(nextParticipantsSet).sort();
+            const currentParticipants = Array.from(new Set(channel.activeParticipantIds || [])).sort();
+            const participantsChanged =
+              nextParticipants.length !== currentParticipants.length ||
+              nextParticipants.some((value, index) => value !== currentParticipants[index]);
+
+            const activeSpeakerStillPresent =
+              !channel.activeSpeakerId || nextParticipantsSet.has(normalizeParticipantId(channel.activeSpeakerId));
+            const nextActiveSpeakerId = activeSpeakerStillPresent ? channel.activeSpeakerId || null : null;
+            const activeSpeakerChanged = nextActiveSpeakerId !== (channel.activeSpeakerId || null);
+
+            if (!participantsChanged && !activeSpeakerChanged) {
+              return channel;
+            }
+
+            return {
+              ...channel,
+              activeParticipantIds: nextParticipants,
+              activeSpeakerId: nextActiveSpeakerId,
+              updatedAt: new Date().toISOString(),
+            };
+          })
+        )
+      );
+    },
+    []
+  );
+
   return useMemo(
     () => ({
       channels,
@@ -359,6 +413,7 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
       toggleMute,
       setChannelParticipantActive,
       setActiveSpeaker,
+      syncChannelParticipants,
     }),
     [
       channels,
@@ -371,6 +426,7 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
       toggleMute,
       setChannelParticipantActive,
       setActiveSpeaker,
+      syncChannelParticipants,
     ]
   );
 }

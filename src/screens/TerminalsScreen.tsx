@@ -356,6 +356,7 @@ export function TerminalsScreen() {
     leaveChannel,
     toggleMute,
     setActiveSpeaker,
+    syncChannelParticipants,
   } = useVoiceChannels();
   const wantsSplit = width >= 900;
   const splitEnabled = !wantsSplit || isPro;
@@ -440,6 +441,40 @@ export function TerminalsScreen() {
     }
     setActiveSpeaker(joinedChannel.id, nextSpeakerId);
   }, [setActiveSpeaker, voiceChannels, voiceRecording]);
+
+  useEffect(() => {
+    if (typeof syncChannelParticipants !== "function") {
+      return;
+    }
+    const joinedChannel = voiceChannels.find((channel) => channel.joined);
+    if (!joinedChannel) {
+      return;
+    }
+    const workspace = sharedWorkspaces.find((entry) => entry.id === joinedChannel.workspaceId);
+    if (!workspace || !focusedServerId || !workspace.serverIds.includes(focusedServerId)) {
+      return;
+    }
+    const nextRemoteParticipants = Array.from(
+      new Set(
+        Object.values(sessionPresence)
+          .flat()
+          .filter((collaborator) => !collaborator.isSelf)
+          .map((collaborator) => collaborator.id.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    ).sort();
+    const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
+      .map((participantId) => participantId.trim().toLowerCase())
+      .filter((participantId) => participantId && participantId !== "local-user")
+      .sort();
+    const hasSameParticipants =
+      nextRemoteParticipants.length === existingRemoteParticipants.length &&
+      nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
+    if (hasSameParticipants) {
+      return;
+    }
+    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, { preserveLocalParticipant: true });
+  }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels]);
 
   useEffect(() => {
     const valid = new Set(processes.map((entry) => entry.pid));
