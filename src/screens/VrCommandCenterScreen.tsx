@@ -53,6 +53,7 @@ export function VrCommandCenterScreen() {
     onDenyAllPendingAgentsForServers,
     onConnectAllServers,
     onDisconnectAllServers,
+    sessionPresence = {},
   } = useAppContext().terminals;
   const [voiceInput, setVoiceInput] = useState<string>("");
   const [voiceStatus, setVoiceStatus] = useState<string | null>(null);
@@ -77,6 +78,7 @@ export function VrCommandCenterScreen() {
     joinChannel,
     leaveChannel,
     toggleMute,
+    syncChannelParticipants,
   } = useVoiceChannels();
   const vmHostScopeOptions = useMemo(() => {
     const labels = new Map<string, string>();
@@ -244,6 +246,40 @@ export function VrCommandCenterScreen() {
       setActiveVmHostScope(null);
     }
   }, [activeVmHostScope, vmHostScopeOptions]);
+
+  useEffect(() => {
+    if (typeof syncChannelParticipants !== "function") {
+      return;
+    }
+    const joinedChannel = voiceChannels.find((channel) => channel.joined);
+    if (!joinedChannel) {
+      return;
+    }
+    const workspace = sharedWorkspaces.find((entry) => entry.id === joinedChannel.workspaceId);
+    if (!workspace || !focusedServerId || !workspace.serverIds.includes(focusedServerId)) {
+      return;
+    }
+    const nextRemoteParticipants = Array.from(
+      new Set(
+        Object.values(sessionPresence)
+          .flat()
+          .filter((collaborator) => !collaborator.isSelf)
+          .map((collaborator) => collaborator.id.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    ).sort();
+    const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
+      .map((participantId) => participantId.trim().toLowerCase())
+      .filter((participantId) => participantId && participantId !== "local-user")
+      .sort();
+    const hasSameParticipants =
+      nextRemoteParticipants.length === existingRemoteParticipants.length &&
+      nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
+    if (hasSameParticipants) {
+      return;
+    }
+    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, { preserveLocalParticipant: true });
+  }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels]);
 
   const agentTargetServerIds = useMemo(() => {
     if (agentScope === "all") {

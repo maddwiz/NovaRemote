@@ -171,6 +171,7 @@ beforeEach(() => {
     joinChannel: vi.fn(),
     leaveChannel: vi.fn(),
     toggleMute: vi.fn(),
+    syncChannelParticipants: vi.fn(),
   });
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const joined = args.map((value) => String(value)).join(" ");
@@ -230,6 +231,7 @@ describe("VrCommandCenterScreen", () => {
     const terminals = {
       connections: options?.connections || defaultConnections,
       focusedServerId: dgx.id,
+      sessionPresence: {},
       onReconnectServer: vi.fn(),
       onReconnectServers: vi.fn(),
       onShareServerSessionLive: vi.fn(),
@@ -294,6 +296,86 @@ describe("VrCommandCenterScreen", () => {
       renderer.root.findByProps({ accessibilityLabel: "Send command to focused panel" }).props.onPress();
     });
     expect(runtime.dispatchVoice).toHaveBeenCalledWith("npm run build", { targetPanelId: "dgx::main" });
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("syncs joined workspace channel participants from focused server collaboration presence", async () => {
+    const runtime = makeRuntime();
+    const syncChannelParticipants = vi.fn();
+    const workspaces: SharedWorkspace[] = [
+      {
+        id: "workspace-1",
+        name: "Platform Ops",
+        serverIds: ["dgx"],
+        members: [{ id: "local-user", name: "Local User", role: "owner" }],
+        channelId: "channel-workspace-1",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+    const channels: VoiceChannel[] = [
+      {
+        id: "voice-1",
+        workspaceId: "workspace-1",
+        name: "incident",
+        joined: true,
+        muted: false,
+        activeParticipantIds: ["local-user", "stale-user"],
+        activeSpeakerId: "stale-user",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        updatedAt: "2026-01-01T00:00:00.000Z",
+      },
+    ];
+
+    useVoiceChannelsMock.mockReturnValue({
+      channels,
+      loading: false,
+      createChannel: vi.fn(),
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+      syncChannelParticipants,
+    });
+
+    const renderer = await renderScreen(runtime, {
+      workspaces,
+      terminalsOverrides: {
+        focusedServerId: "dgx",
+        sessionPresence: {
+          main: [
+            {
+              id: "remote-a",
+              name: "Remote A",
+              role: "editor",
+              readOnly: false,
+              isSelf: false,
+              lastSeenAt: 1,
+            },
+            {
+              id: "local-user",
+              name: "Local User",
+              role: "owner",
+              readOnly: false,
+              isSelf: true,
+              lastSeenAt: 1,
+            },
+          ],
+        },
+      },
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(syncChannelParticipants).toHaveBeenCalledWith("voice-1", ["remote-a"], {
+      preserveLocalParticipant: true,
+    });
 
     await act(async () => {
       renderer.unmount();

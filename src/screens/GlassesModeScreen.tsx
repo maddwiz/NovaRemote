@@ -186,6 +186,7 @@ export function GlassesModeScreen() {
     onApproveReadyAgentsForServers,
     onDenyAllPendingAgentsForServers,
     sessionAliases,
+    sessionPresence = {},
     sessionReadOnly,
     glassesMode,
     voiceRecording,
@@ -232,6 +233,7 @@ export function GlassesModeScreen() {
     leaveChannel,
     toggleMute,
     setActiveSpeaker,
+    syncChannelParticipants,
   } = useVoiceChannels();
   const [panelIds, setPanelIds] = useState<string[]>([]);
   const [pinnedPanelIds, setPinnedPanelIds] = useState<string[]>([]);
@@ -349,6 +351,40 @@ export function GlassesModeScreen() {
     }
     setActiveSpeaker(joinedChannel.id, nextSpeakerId);
   }, [setActiveSpeaker, voiceChannels, voiceRecording]);
+
+  useEffect(() => {
+    if (typeof syncChannelParticipants !== "function") {
+      return;
+    }
+    const joinedChannel = voiceChannels.find((channel) => channel.joined);
+    if (!joinedChannel) {
+      return;
+    }
+    const workspace = sharedWorkspaces.find((entry) => entry.id === joinedChannel.workspaceId);
+    if (!workspace || !focusedServerId || !workspace.serverIds.includes(focusedServerId)) {
+      return;
+    }
+    const nextRemoteParticipants = Array.from(
+      new Set(
+        Object.values(sessionPresence)
+          .flat()
+          .filter((collaborator) => !collaborator.isSelf)
+          .map((collaborator) => collaborator.id.trim().toLowerCase())
+          .filter(Boolean)
+      )
+    ).sort();
+    const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
+      .map((participantId) => participantId.trim().toLowerCase())
+      .filter((participantId) => participantId && participantId !== "local-user")
+      .sort();
+    const hasSameParticipants =
+      nextRemoteParticipants.length === existingRemoteParticipants.length &&
+      nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
+    if (hasSameParticipants) {
+      return;
+    }
+    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, { preserveLocalParticipant: true });
+  }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels]);
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);

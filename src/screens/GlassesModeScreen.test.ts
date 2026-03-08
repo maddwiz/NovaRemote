@@ -139,6 +139,7 @@ function makeTerminalsBase(connections: Map<string, ServerConnection>) {
     onApproveReadyAgentsForServers: vi.fn(async () => []),
     onDenyAllPendingAgentsForServers: vi.fn(async () => []),
     sessionAliases: {},
+    sessionPresence: {},
     sessionReadOnly: {},
     glassesMode: {
       enabled: true,
@@ -225,6 +226,8 @@ beforeEach(() => {
     joinChannel: vi.fn(),
     leaveChannel: vi.fn(),
     toggleMute: vi.fn(),
+    setActiveSpeaker: vi.fn(),
+    syncChannelParticipants: vi.fn(),
   });
 
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
@@ -486,6 +489,101 @@ describe("GlassesModeScreen", () => {
     expect(joinChannel).toHaveBeenCalledWith("voice-1");
     expect(routeTranscript).not.toHaveBeenCalled();
     expect(() => screen.root.findByProps({ children: "Joined #incident" })).not.toThrow();
+
+    await act(async () => {
+      screen.unmount();
+    });
+  });
+
+  it("syncs joined workspace channel participants from focused server collaboration presence", async () => {
+    const syncChannelParticipants = vi.fn();
+    useVoiceChannelsMock.mockReturnValue({
+      channels: [
+        {
+          id: "voice-1",
+          workspaceId: "workspace-1",
+          name: "incident",
+          joined: true,
+          muted: false,
+          activeParticipantIds: ["local-user", "stale-user"],
+          activeSpeakerId: "stale-user",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createChannel: vi.fn(),
+      deleteChannel: vi.fn(),
+      pruneWorkspaceChannels: vi.fn(),
+      joinChannel: vi.fn(),
+      leaveChannel: vi.fn(),
+      toggleMute: vi.fn(),
+      setActiveSpeaker: vi.fn(),
+      syncChannelParticipants,
+    });
+
+    useSharedWorkspacesMock.mockReturnValue({
+      workspaces: [
+        {
+          id: "workspace-1",
+          name: "Platform Ops",
+          serverIds: ["dgx"],
+          members: [{ id: "local-user", name: "Local User", role: "owner" }],
+          channelId: "channel-workspace-1",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
+      ],
+      loading: false,
+      createWorkspace: vi.fn(),
+      deleteWorkspace: vi.fn(),
+      renameWorkspace: vi.fn(),
+      setWorkspaceServers: vi.fn(),
+      setMemberRole: vi.fn(),
+    });
+
+    const dgx = makeServer("dgx", "DGX");
+    const connections = new Map<string, ServerConnection>([[dgx.id, makeConnection(dgx, ["main"])]]);
+    let screen!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      screen = TestRenderer.create(
+        React.createElement(AppProvider, {
+          value: {
+            terminals: makeTerminals(connections, {
+              focusedServerId: "dgx",
+              sessionPresence: {
+                main: [
+                  {
+                    id: "remote-a",
+                    name: "Remote A",
+                    role: "editor",
+                    readOnly: false,
+                    isSelf: false,
+                    lastSeenAt: 1,
+                  },
+                  {
+                    id: "local-user",
+                    name: "Local User",
+                    role: "owner",
+                    readOnly: false,
+                    isSelf: true,
+                    lastSeenAt: 1,
+                  },
+                ],
+              },
+            }),
+          },
+          children: React.createElement(GlassesModeScreen),
+        })
+      );
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(syncChannelParticipants).toHaveBeenCalledWith("voice-1", ["remote-a"], {
+      preserveLocalParticipant: true,
+    });
 
     await act(async () => {
       screen.unmount();
