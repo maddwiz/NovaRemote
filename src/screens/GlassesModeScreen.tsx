@@ -28,7 +28,7 @@ import {
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
-import { deriveVoicePresence } from "../voicePresence";
+import { buildVoiceParticipantDirectory, deriveVoicePresence, resolveVoiceParticipantLabel } from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 type BrandProfile = {
@@ -314,6 +314,10 @@ export function GlassesModeScreen() {
     });
     return grouped;
   }, [voiceChannels]);
+  const voiceParticipantDirectory = useMemo(
+    () => buildVoiceParticipantDirectory(sessionPresence, sharedWorkspaces.flatMap((workspace) => workspace.members)),
+    [sessionPresence, sharedWorkspaces]
+  );
   const visibleVoiceWorkspaces = useMemo(() => {
     if (activeWorkspaceId) {
       const scoped = workspaceById.get(activeWorkspaceId);
@@ -1773,6 +1777,10 @@ export function GlassesModeScreen() {
                 <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
                   {channels.map((channel) => {
                     const active = channel.joined;
+                    const onlineCount = (channel.activeParticipantIds || []).length;
+                    const activeSpeakerLabel = channel.activeSpeakerId
+                      ? resolveVoiceParticipantLabel(channel.activeSpeakerId, voiceParticipantDirectory)
+                      : "";
                     return (
                       <Pressable
                         accessibilityRole="button"
@@ -1794,12 +1802,21 @@ export function GlassesModeScreen() {
                         }}
                       >
                         <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
-                          {`#${channel.name}${channel.muted ? " (muted)" : ""}`}
+                          {`#${channel.name}${onlineCount > 0 ? ` • ${onlineCount} online` : ""}${
+                            activeSpeakerLabel ? ` • speaking ${activeSpeakerLabel}` : ""
+                          }${channel.muted ? " (muted)" : ""}`}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </ScrollView>
+              ) : null}
+              {joined?.activeSpeakerId ? (
+                <Text style={styles.emptyText}>
+                  {`Active speaker: ${resolveVoiceParticipantLabel(joined.activeSpeakerId, voiceParticipantDirectory, {
+                    includeRole: true,
+                  })}`}
+                </Text>
               ) : null}
               {permissions.canManageChannels && channels.length > 0 ? (
                 <View style={styles.actionsWrap}>

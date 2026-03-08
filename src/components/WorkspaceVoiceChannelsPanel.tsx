@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { styles } from "../theme/styles";
 import { SharedWorkspace, VoiceChannel } from "../types";
+import { resolveVoiceParticipantLabel, VoiceParticipantDirectoryEntry } from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 type WorkspaceVoiceChannelsPanelProps = {
@@ -14,6 +15,7 @@ type WorkspaceVoiceChannelsPanelProps = {
   onJoinChannel: (channelId: string) => void;
   onLeaveChannel: (channelId: string) => void;
   onToggleMute: (channelId: string) => void;
+  participantDirectory?: Record<string, VoiceParticipantDirectoryEntry>;
   onOpenServers: () => void;
 };
 
@@ -26,6 +28,7 @@ export function WorkspaceVoiceChannelsPanel({
   onJoinChannel,
   onLeaveChannel,
   onToggleMute,
+  participantDirectory = {},
   onOpenServers,
 }: WorkspaceVoiceChannelsPanelProps) {
   const [newChannelNamesByWorkspace, setNewChannelNamesByWorkspace] = useState<Record<string, string>>({});
@@ -129,6 +132,9 @@ export function WorkspaceVoiceChannelsPanel({
                   const active = channel.joined;
                   const activeParticipants = channel.activeParticipantIds || [];
                   const onlineCount = activeParticipants.length;
+                  const activeSpeakerLabel = channel.activeSpeakerId
+                    ? resolveVoiceParticipantLabel(channel.activeSpeakerId, participantDirectory)
+                    : "";
                   return (
                     <Pressable
                       accessibilityRole="button"
@@ -146,17 +152,21 @@ export function WorkspaceVoiceChannelsPanel({
                         }
                         onJoinChannel(channel.id);
                       }}
-                    >
-                      <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
-                        {`#${channel.name}${onlineCount > 0 ? ` • ${onlineCount} online` : ""}${channel.muted ? " (muted)" : ""}`}
-                      </Text>
-                    </Pressable>
+                      >
+                        <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
+                          {`#${channel.name}${onlineCount > 0 ? ` • ${onlineCount} online` : ""}${
+                            activeSpeakerLabel ? ` • speaking ${activeSpeakerLabel}` : ""
+                          }${channel.muted ? " (muted)" : ""}`}
+                        </Text>
+                      </Pressable>
                   );
                 })}
               </ScrollView>
             ) : null}
             {joinedChannel?.activeSpeakerId ? (
-              <Text style={styles.emptyText}>{`Active speaker: ${joinedChannel.activeSpeakerId}`}</Text>
+              <Text style={styles.emptyText}>
+                {`Active speaker: ${resolveVoiceParticipantLabel(joinedChannel.activeSpeakerId, participantDirectory, { includeRole: true })}`}
+              </Text>
             ) : null}
             {permissions.canManageChannels && workspaceChannels.length > 0 ? (
               <View style={styles.actionsWrap}>

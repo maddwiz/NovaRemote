@@ -179,4 +179,51 @@ describe("WorkspaceVoiceChannelsPanel", () => {
       renderer.unmount();
     });
   });
+
+  it("renders participant display names for active speaker labels", async () => {
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(WorkspaceVoiceChannelsPanel, {
+          workspaces: [makeWorkspace()],
+          channels: [
+            makeChannel({
+              id: "voice-joined",
+              name: "release",
+              joined: true,
+              muted: false,
+              activeSpeakerId: "engineer-2",
+              activeParticipantIds: ["local-user", "engineer-2"],
+            }),
+          ],
+          loading: false,
+          onCreateChannel: vi.fn(),
+          onDeleteChannel: vi.fn(),
+          onJoinChannel: vi.fn(),
+          onLeaveChannel: vi.fn(),
+          onToggleMute: vi.fn(),
+          participantDirectory: {
+            "engineer-2": {
+              id: "engineer-2",
+              name: "Engineer Two",
+              role: "editor",
+              lastSeenAt: 1000,
+              isSelf: false,
+            },
+          },
+          onOpenServers: vi.fn(),
+        })
+      );
+    });
+
+    expect(() =>
+      renderer.root.findByProps({
+        children: "Active speaker: Engineer Two (editor)",
+      })
+    ).not.toThrow();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });

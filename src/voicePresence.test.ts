@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { deriveVoicePresence } from "./voicePresence";
+import { buildVoiceParticipantDirectory, deriveVoicePresence, resolveVoiceParticipantLabel } from "./voicePresence";
 
 describe("deriveVoicePresence", () => {
   it("collects unique remote participants from presence snapshots", () => {
@@ -93,5 +93,42 @@ describe("deriveVoicePresence", () => {
     expect(result.remoteParticipantIds).toEqual(["engineer-a"]);
     expect(result.activeRemoteSpeakerId).toBeNull();
   });
-});
 
+  it("builds participant directory and resolves display labels", () => {
+    const directory = buildVoiceParticipantDirectory(
+      {
+        main: [
+          {
+            id: "engineer-a",
+            name: "Engineer A",
+            role: "editor",
+            readOnly: false,
+            isSelf: false,
+            lastSeenAt: 1_000,
+          },
+        ],
+        build: [
+          {
+            id: "engineer-a",
+            name: "Engineer Alpha",
+            role: "editor",
+            readOnly: false,
+            isSelf: false,
+            lastSeenAt: 2_000,
+          },
+        ],
+      },
+      [
+        {
+          id: "local-user",
+          name: "Local User",
+          role: "owner",
+        },
+      ]
+    );
+
+    expect(resolveVoiceParticipantLabel("engineer-a", directory)).toBe("Engineer Alpha");
+    expect(resolveVoiceParticipantLabel("local-user", directory, { includeRole: true })).toBe("Local User (owner)");
+    expect(resolveVoiceParticipantLabel("unknown-id", directory)).toBe("unknown-id");
+  });
+});

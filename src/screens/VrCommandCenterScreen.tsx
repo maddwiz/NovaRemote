@@ -9,7 +9,7 @@ import { styles } from "../theme/styles";
 import { VrLayoutPreset } from "../vr/contracts";
 import { useVrLiveRuntime } from "../vr/useVrLiveRuntime";
 import { buildVrPanelId } from "../vr/useVrWorkspace";
-import { deriveVoicePresence } from "../voicePresence";
+import { buildVoiceParticipantDirectory, deriveVoicePresence, resolveVoiceParticipantLabel } from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 const VR_PRESETS: VrLayoutPreset[] = ["arc", "grid", "stacked", "cockpit", "custom"];
@@ -215,6 +215,10 @@ export function VrCommandCenterScreen() {
     });
     return grouped;
   }, [voiceChannels]);
+  const voiceParticipantDirectory = useMemo(
+    () => buildVoiceParticipantDirectory(sessionPresence, sharedWorkspaces.flatMap((workspace) => workspace.members)),
+    [sessionPresence, sharedWorkspaces]
+  );
   const workspaceById = useMemo(() => {
     return new Map(sharedWorkspaces.map((workspace) => [workspace.id, workspace]));
   }, [sharedWorkspaces]);
@@ -1021,6 +1025,10 @@ export function VrCommandCenterScreen() {
                 <View style={styles.vrRuntimeActionRow}>
                   {workspaceChannels.map((channel) => {
                     const active = channel.joined;
+                    const onlineCount = (channel.activeParticipantIds || []).length;
+                    const activeSpeakerLabel = channel.activeSpeakerId
+                      ? resolveVoiceParticipantLabel(channel.activeSpeakerId, voiceParticipantDirectory)
+                      : "";
                     return (
                       <Pressable
                         key={`vr-channel-${channel.id}`}
@@ -1044,12 +1052,21 @@ export function VrCommandCenterScreen() {
                         }}
                       >
                         <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>
-                          {`#${channel.name}${channel.muted ? " (muted)" : ""}`}
+                          {`#${channel.name}${onlineCount > 0 ? ` • ${onlineCount} online` : ""}${
+                            activeSpeakerLabel ? ` • speaking ${activeSpeakerLabel}` : ""
+                          }${channel.muted ? " (muted)" : ""}`}
                         </Text>
                       </Pressable>
                     );
                   })}
                 </View>
+              ) : null}
+              {joinedChannel?.activeSpeakerId ? (
+                <Text style={styles.emptyText}>
+                  {`Active speaker: ${resolveVoiceParticipantLabel(joinedChannel.activeSpeakerId, voiceParticipantDirectory, {
+                    includeRole: true,
+                  })}`}
+                </Text>
               ) : null}
               {permissions.canManageChannels && workspaceChannels.length > 0 ? (
                 <View style={styles.vrRuntimeActionRow}>

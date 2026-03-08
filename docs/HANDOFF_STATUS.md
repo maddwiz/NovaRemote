@@ -170,6 +170,7 @@ Updated: 2026-03-07
 - [x] Glasses and VR workspace voice channels now sync remote collaborator participant presence from focused-server collaboration sessions, preserving local participation and pruning stale remote speakers
 - [x] Cross-surface voice presence now derives remote active speaker state from collaborator `lastSeenAt` snapshots and syncs speaker + participant updates through shared channel state (Terminals + Glasses + VR)
 - [x] Presence sync now applies to every joined workspace voice channel (not only the first joined channel), enabling multi-workspace collaboration channel state parity across Terminals + Glasses + VR
+- [x] Workspace channel UIs now resolve participant/speaker IDs to human labels (name/role) via merged collaboration + workspace-member directories across Terminals panel, Glasses HUD channels, and VR channel controls
 - [~] Presence-aware voice channels are implemented in-app; full multi-user collaboration voice/presence channels remain roadmap work
 
 ## Notes

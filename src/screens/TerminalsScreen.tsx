@@ -16,7 +16,7 @@ import { styles } from "../theme/styles";
 import { getWorkspacePermissions } from "../workspacePermissions";
 import { buildVmHostTargetGroups, buildVmHostVmTypeTargetGroups } from "../fleetTargets";
 import { buildOpenTerminalEntries } from "../openTerminalEntries";
-import { deriveVoicePresence } from "../voicePresence";
+import { buildVoiceParticipantDirectory, deriveVoicePresence } from "../voicePresence";
 import {
   TERMINAL_BG_OPACITY_OPTIONS,
   TERMINAL_FONT_OPTIONS,
@@ -406,6 +406,10 @@ export function TerminalsScreen() {
   const vmHostTargetGroups = useMemo(() => buildVmHostTargetGroups(servers), [servers]);
   const vmHostVmTypeTargetGroups = useMemo(() => buildVmHostVmTypeTargetGroups(servers), [servers]);
   const disconnectedServerCount = Math.max(0, servers.length - connectedServerCount);
+  const voiceParticipantDirectory = useMemo(
+    () => buildVoiceParticipantDirectory(sessionPresence, sharedWorkspaces.flatMap((workspace) => workspace.members)),
+    [sessionPresence, sharedWorkspaces]
+  );
 
   const queueAgentCommand = (session: string, command: string) => {
     if (!focusedServerId || !session || !command.trim()) {
@@ -1301,6 +1305,7 @@ export function TerminalsScreen() {
         onJoinChannel={joinChannel}
         onLeaveChannel={leaveChannel}
         onToggleMute={toggleMute}
+        participantDirectory={voiceParticipantDirectory}
         onOpenServers={onOpenServers}
       />
 
