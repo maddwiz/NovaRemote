@@ -221,6 +221,11 @@ describe("WorkspaceVoiceChannelsPanel", () => {
         children: "Active speaker: Engineer Two (editor)",
       })
     ).not.toThrow();
+    expect(() =>
+      renderer.root.findByProps({
+        children: "Participants: local-user, Engineer Two",
+      })
+    ).not.toThrow();
 
     await act(async () => {
       renderer.unmount();

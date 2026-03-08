@@ -101,6 +101,26 @@ export function resolveVoiceParticipantLabel(
   return entry.name;
 }
 
+export function summarizeVoiceParticipants(
+  participantIds: string[],
+  directory: Record<string, VoiceParticipantDirectoryEntry>,
+  options: { maxNames?: number; includeRole?: boolean } = {}
+): string {
+  const maxNames = Math.max(1, Math.floor(options.maxNames ?? 3));
+  const labels = Array.from(
+    new Set(
+      participantIds
+        .map((participantId) => resolveVoiceParticipantLabel(participantId, directory, { includeRole: options.includeRole }))
+        .filter(Boolean)
+    )
+  );
+  if (labels.length <= maxNames) {
+    return labels.join(", ");
+  }
+  const visible = labels.slice(0, maxNames);
+  return `${visible.join(", ")} +${labels.length - maxNames}`;
+}
+
 export function deriveVoicePresence(
   sessionPresence: Record<string, SessionCollaborator[]>,
   options: {

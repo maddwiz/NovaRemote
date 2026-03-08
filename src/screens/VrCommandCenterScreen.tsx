@@ -9,7 +9,12 @@ import { styles } from "../theme/styles";
 import { VrLayoutPreset } from "../vr/contracts";
 import { useVrLiveRuntime } from "../vr/useVrLiveRuntime";
 import { buildVrPanelId } from "../vr/useVrWorkspace";
-import { buildVoiceParticipantDirectory, deriveVoicePresence, resolveVoiceParticipantLabel } from "../voicePresence";
+import {
+  buildVoiceParticipantDirectory,
+  deriveVoicePresence,
+  resolveVoiceParticipantLabel,
+  summarizeVoiceParticipants,
+} from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 const VR_PRESETS: VrLayoutPreset[] = ["arc", "grid", "stacked", "cockpit", "custom"];
@@ -961,6 +966,9 @@ export function VrCommandCenterScreen() {
         {sharedWorkspaces.map((workspace) => {
           const workspaceChannels = voiceChannelsByWorkspace.get(workspace.id) || [];
           const joinedChannel = workspaceChannels.find((channel) => channel.joined);
+          const joinedParticipantSummary = joinedChannel
+            ? summarizeVoiceParticipants(joinedChannel.activeParticipantIds || [], voiceParticipantDirectory, { maxNames: 4 })
+            : "";
           const permissions = getWorkspacePermissions(workspace);
           const localMember = workspace.members.find((member) => member.id === "local-user") || workspace.members[0] || null;
           const localRoleLabel = localMember ? `${localMember.name} (${localMember.role})` : "No local workspace role";
@@ -1067,6 +1075,9 @@ export function VrCommandCenterScreen() {
                     includeRole: true,
                   })}`}
                 </Text>
+              ) : null}
+              {joinedParticipantSummary ? (
+                <Text style={styles.emptyText}>{`Participants: ${joinedParticipantSummary}`}</Text>
               ) : null}
               {permissions.canManageChannels && workspaceChannels.length > 0 ? (
                 <View style={styles.vrRuntimeActionRow}>

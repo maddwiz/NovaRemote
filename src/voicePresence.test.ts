@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import { buildVoiceParticipantDirectory, deriveVoicePresence, resolveVoiceParticipantLabel } from "./voicePresence";
+import {
+  buildVoiceParticipantDirectory,
+  deriveVoicePresence,
+  resolveVoiceParticipantLabel,
+  summarizeVoiceParticipants,
+} from "./voicePresence";
 
 describe("deriveVoicePresence", () => {
   it("collects unique remote participants from presence snapshots", () => {
@@ -130,5 +135,10 @@ describe("deriveVoicePresence", () => {
     expect(resolveVoiceParticipantLabel("engineer-a", directory)).toBe("Engineer Alpha");
     expect(resolveVoiceParticipantLabel("local-user", directory, { includeRole: true })).toBe("Local User (owner)");
     expect(resolveVoiceParticipantLabel("unknown-id", directory)).toBe("unknown-id");
+    expect(
+      summarizeVoiceParticipants(["local-user", "engineer-a", "unknown-id"], directory, {
+        maxNames: 2,
+      })
+    ).toBe("Local User, Engineer Alpha +1");
   });
 });

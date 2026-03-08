@@ -3,7 +3,11 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { styles } from "../theme/styles";
 import { SharedWorkspace, VoiceChannel } from "../types";
-import { resolveVoiceParticipantLabel, VoiceParticipantDirectoryEntry } from "../voicePresence";
+import {
+  resolveVoiceParticipantLabel,
+  summarizeVoiceParticipants,
+  VoiceParticipantDirectoryEntry,
+} from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 type WorkspaceVoiceChannelsPanelProps = {
@@ -73,6 +77,9 @@ export function WorkspaceVoiceChannelsPanel({
       {workspaces.map((workspace) => {
         const workspaceChannels = voiceChannelsByWorkspace.get(workspace.id) || [];
         const joinedChannel = workspaceChannels.find((channel) => channel.joined);
+        const joinedParticipantSummary = joinedChannel
+          ? summarizeVoiceParticipants(joinedChannel.activeParticipantIds || [], participantDirectory, { maxNames: 4 })
+          : "";
         const permissions = getWorkspacePermissions(workspace);
         const memberSummary = workspace.members
           .map((member) => `${member.name} (${member.role})`)
@@ -168,6 +175,7 @@ export function WorkspaceVoiceChannelsPanel({
                 {`Active speaker: ${resolveVoiceParticipantLabel(joinedChannel.activeSpeakerId, participantDirectory, { includeRole: true })}`}
               </Text>
             ) : null}
+            {joinedParticipantSummary ? <Text style={styles.emptyText}>{`Participants: ${joinedParticipantSummary}`}</Text> : null}
             {permissions.canManageChannels && workspaceChannels.length > 0 ? (
               <View style={styles.actionsWrap}>
                 {workspaceChannels.map((channel) => (

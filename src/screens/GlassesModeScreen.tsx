@@ -28,7 +28,12 @@ import {
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
-import { buildVoiceParticipantDirectory, deriveVoicePresence, resolveVoiceParticipantLabel } from "../voicePresence";
+import {
+  buildVoiceParticipantDirectory,
+  deriveVoicePresence,
+  resolveVoiceParticipantLabel,
+  summarizeVoiceParticipants,
+} from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 type BrandProfile = {
@@ -1732,6 +1737,9 @@ export function GlassesModeScreen() {
         {visibleVoiceWorkspaces.map((workspace) => {
           const channels = voiceChannelsByWorkspace.get(workspace.id) || [];
           const joined = channels.find((channel) => channel.joined) || null;
+          const joinedParticipantSummary = joined
+            ? summarizeVoiceParticipants(joined.activeParticipantIds || [], voiceParticipantDirectory, { maxNames: 4 })
+            : "";
           const permissions = getWorkspacePermissions(workspace);
           const draft = (newChannelNamesByWorkspace[workspace.id] || "").trim();
           return (
@@ -1818,6 +1826,7 @@ export function GlassesModeScreen() {
                   })}`}
                 </Text>
               ) : null}
+              {joinedParticipantSummary ? <Text style={styles.emptyText}>{`Participants: ${joinedParticipantSummary}`}</Text> : null}
               {permissions.canManageChannels && channels.length > 0 ? (
                 <View style={styles.actionsWrap}>
                   {channels.map((channel) => (
