@@ -126,7 +126,7 @@ Updated: 2026-03-07
 
 ## v2.0+ NovaAdapt / Team Roadmap
 
-- [~] Early NovaAdapt runtime/panel scaffolding exists
+- [x] NovaAdapt runtime/panel lifecycle is now implemented in-app (agent CRUD, status/goal/capability updates, approvals, memory timeline, monitoring controls, voice-routed lifecycle actions across AR/VR surfaces)
 - [x] In-app NovaSpine context snapshots are wired (`useNovaSpine` + runtime/panel integration for context status, pending approvals, and recent timeline state)
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
@@ -174,7 +174,8 @@ Updated: 2026-03-07
 - [x] Presence sync now applies to every joined workspace voice channel (not only the first joined channel), enabling multi-workspace collaboration channel state parity across Terminals + Glasses + VR
 - [x] Workspace channel UIs now resolve participant/speaker IDs to human labels (name/role) via merged collaboration + workspace-member directories across Terminals panel, Glasses HUD channels, and VR channel controls
 - [x] Channel UIs now surface live participant summaries (online + speaker + participant list) across Terminals, Glasses, and VR collaboration controls for faster multi-user situational awareness
-- [~] Presence-aware voice channels are implemented in-app; full multi-user collaboration voice/presence channels remain roadmap work
+- [x] Presence-aware collaboration voice channels are implemented in-app across Terminals + Glasses + VR (participant/speaker identity mapping, joined-channel multi-workspace sync, live summaries)
+- [~] Dedicated production-grade multi-user voice transport/presence backplane rollout remains roadmap work
 
 ## Notes
 
