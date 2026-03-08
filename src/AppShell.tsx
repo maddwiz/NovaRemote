@@ -2671,6 +2671,17 @@ export default function AppShell() {
         cloudDashboardUrl: cloudDashboardUrl || null,
         auditPendingCount: pendingAuditEvents,
       },
+      processes: {
+        available: capabilities.processes,
+        busy: processesBusy,
+        items: processes.slice(0, 20).map((process) => ({
+          pid: process.pid,
+          name: process.name,
+          cpuPercent: process.cpu_percent,
+          memPercent: process.mem_percent,
+          command: process.command,
+        })),
+      },
       servers: brokeredServers.map((server) => {
         const connection = poolConnections.get(server.id);
         const sessionNames = Array.from(new Set([...(connection?.openSessions || []), ...(connection?.allSessions || [])]));
@@ -2682,6 +2693,10 @@ export default function AppShell() {
           vmType: server.vmType,
           vmName: server.vmName,
           vmId: server.vmId,
+          hasPortainerUrl: Boolean(server.portainerUrl),
+          hasProxmoxUrl: Boolean(server.proxmoxUrl),
+          hasGrafanaUrl: Boolean(server.grafanaUrl),
+          hasSshFallback: Boolean(server.sshHost),
           sessions: sessionNames.map((session) => ({
             session,
             mode:
@@ -2710,6 +2725,7 @@ export default function AppShell() {
     activeServer?.defaultCwd,
     brokeredServers,
     cloudDashboardUrl,
+    capabilities.processes,
     currentPath,
     fileEntries,
     focusedServerId,
@@ -2722,6 +2738,8 @@ export default function AppShell() {
     glassesMode.wakePhraseEnabled,
     includeHidden,
     pendingAuditEvents,
+    processes,
+    processesBusy,
     poolConnections,
     poolLifecyclePaused,
     route,
@@ -2761,6 +2779,23 @@ export default function AppShell() {
           return assistantSelectedFilePath;
         }
         return "";
+      };
+
+      const countProcessEntries = (payload: unknown): number => {
+        if (Array.isArray(payload)) {
+          return payload.filter((entry) => entry && typeof entry === "object" && Number.isFinite(Number((entry as { pid?: unknown }).pid)))
+            .length;
+        }
+        if (payload && typeof payload === "object") {
+          const record = payload as { processes?: unknown[]; items?: unknown[] };
+          if (Array.isArray(record.processes)) {
+            return record.processes.length;
+          }
+          if (Array.isArray(record.items)) {
+            return record.items.length;
+          }
+        }
+        return 0;
       };
 
       const setFilesSurfaceTarget = (serverId: string) => {
@@ -3079,6 +3114,84 @@ export default function AppShell() {
             continue;
           }
 
+          if (action.type === "refresh_processes") {
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            markActivity();
+            if (server.id === focusedServerId) {
+              await refreshProcesses();
+              results.push({ action: action.type, ok: true, detail: `Refreshed processes on ${server.name}` });
+              continue;
+            }
+            const payload = await apiRequest<unknown>(serverProfile.baseUrl, serverProfile.token, "/proc/list");
+            const count = countProcessEntries(payload);
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: count > 0 ? `Found ${count} processes on ${server.name}` : `No processes returned from ${server.name}`,
+            });
+            continue;
+          }
+
+          if (action.type === "kill_process") {
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            markActivity();
+            assertServerWritable(server.id, "Kill process");
+            await apiRequest(serverProfile.baseUrl, serverProfile.token, "/proc/kill", {
+              method: "POST",
+              body: JSON.stringify({
+                pid: action.pid,
+                signal: action.signal || "TERM",
+              }),
+            });
+            if (server.id === focusedServerId) {
+              await refreshProcesses();
+            }
+            recordAuditEvent({
+              action: "process_killed",
+              serverId: server.id,
+              serverName: server.name,
+              session: "",
+              detail: `pid=${action.pid} signal=${action.signal || "TERM"}`,
+            });
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: `Sent ${action.signal || "TERM"} to PID ${action.pid} on ${server.name}`,
+            });
+            continue;
+          }
+
+          if (action.type === "open_server_link") {
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("servers");
+            markActivity();
+            if (action.target === "ssh") {
+              await openSshFallback(serverProfile);
+            } else {
+              const targetUrl =
+                action.target === "portainer"
+                  ? serverProfile.portainerUrl
+                  : action.target === "proxmox"
+                    ? serverProfile.proxmoxUrl
+                    : serverProfile.grafanaUrl;
+              if (!targetUrl) {
+                throw new Error(`${server.name} does not have a ${action.target} URL configured.`);
+              }
+              await Linking.openURL(targetUrl);
+            }
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: `Opened ${action.target} for ${server.name}`,
+            });
+            continue;
+          }
+
           if (action.type === "create_agent") {
             await createAgentForServer(server.id, action.name);
             if (action.goal) {
@@ -3142,8 +3255,11 @@ export default function AppShell() {
       denyAllPendingAgentsForServer,
       disconnectAllServers,
       focusServer,
+      focusedServerId,
       brokeredServers,
       markActivity,
+      openSshFallback,
+      refreshProcesses,
       queueAgentCommandForServer,
       recordAuditEvent,
       refreshCloudAuditExports,
@@ -3178,7 +3294,7 @@ export default function AppShell() {
 
   const novaAssistant = useNovaAssistant({
     activeProfile,
-    sendPrompt,
+    sendPromptDetailed,
     buildContext: buildNovaAssistantContext,
     executeActions: executeNovaAssistantActions,
   });

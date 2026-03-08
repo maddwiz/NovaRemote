@@ -1,9 +1,12 @@
 import { useCallback, useMemo, useState } from "react";
 
 import { makeId } from "../constants";
-import { LlmProfile } from "../types";
+import { LlmProfile, LlmSendOptions, LlmSendResult } from "../types";
 import {
   buildNovaAssistantPrompt,
+  buildNovaAssistantPlanningTool,
+  buildNovaAssistantToolPrompt,
+  extractNovaAssistantToolPlan,
   formatNovaAssistantExecutionSummary,
   NovaAssistantAction,
   NovaAssistantExecutionResult,
@@ -14,7 +17,7 @@ import {
 
 type UseNovaAssistantArgs = {
   activeProfile: LlmProfile | null;
-  sendPrompt: (profile: LlmProfile, prompt: string) => Promise<string>;
+  sendPromptDetailed: (profile: LlmProfile, prompt: string, options?: LlmSendOptions) => Promise<LlmSendResult>;
   buildContext: () => NovaAssistantRuntimeContext;
   executeActions: (
     actions: NovaAssistantAction[],
@@ -42,11 +45,15 @@ function buildMessage(role: NovaAssistantMessage["role"], content: string): Nova
 function buildGreeting(): NovaAssistantMessage {
   return buildMessage(
     "assistant",
-    "I am Nova. Talk naturally and I can navigate the app, create sessions, route commands, and manage NovaAdapt agents."
+    "I am Nova. Talk naturally and I can navigate the app, manage sessions, work with files, handle team workflows, inspect processes, and coordinate NovaAdapt agents."
   );
 }
 
-export function useNovaAssistant({ activeProfile, sendPrompt, buildContext, executeActions }: UseNovaAssistantArgs) {
+function supportsNativeNovaTools(profile: LlmProfile | null): boolean {
+  return profile?.kind === "openai_compatible" || profile?.kind === "azure_openai";
+}
+
+export function useNovaAssistant({ activeProfile, sendPromptDetailed, buildContext, executeActions }: UseNovaAssistantArgs) {
   const [messages, setMessages] = useState<NovaAssistantMessage[]>(() => [buildGreeting()]);
   const [draft, setDraft] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
@@ -83,16 +90,38 @@ export function useNovaAssistant({ activeProfile, sendPrompt, buildContext, exec
 
       try {
         const context = buildContext();
-        const prompt = buildNovaAssistantPrompt({
-          history: nextHistory,
-          context,
-          input: trimmed,
-        });
-        const raw = await sendPrompt(activeProfile, prompt);
-        const plan = parseNovaAssistantPlan(raw);
+        const useNativeTools = supportsNativeNovaTools(activeProfile);
+        let reply = "";
+        let actions: NovaAssistantAction[] = [];
+
+        if (useNativeTools) {
+          const prompt = buildNovaAssistantToolPrompt({
+            history: nextHistory,
+            context,
+            input: trimmed,
+          });
+          const response = await sendPromptDetailed(activeProfile, prompt, {
+            customTools: [buildNovaAssistantPlanningTool()],
+            maxToolRounds: 2,
+          });
+          const toolPlan = extractNovaAssistantToolPlan(response.toolCalls);
+          reply = response.text.trim() || toolPlan?.reply.trim() || "Done.";
+          actions = toolPlan?.actions || [];
+        } else {
+          const prompt = buildNovaAssistantPrompt({
+            history: nextHistory,
+            context,
+            input: trimmed,
+          });
+          const response = await sendPromptDetailed(activeProfile, prompt);
+          const plan = parseNovaAssistantPlan(response.text);
+          reply = plan.reply.trim() || "Done.";
+          actions = plan.actions;
+        }
+
         const results =
-          plan.actions.length > 0 ? await executeActions(plan.actions, context) : ([] as NovaAssistantExecutionResult[]);
-        const finalReply = `${plan.reply.trim() || "Done."}${formatNovaAssistantExecutionSummary(results)}`.trim();
+          actions.length > 0 ? await executeActions(actions, context) : ([] as NovaAssistantExecutionResult[]);
+        const finalReply = `${reply}${formatNovaAssistantExecutionSummary(results)}`.trim();
         setMessages((prev) => [...prev, buildMessage("assistant", finalReply)]);
         return true;
       } catch (error) {
@@ -104,7 +133,7 @@ export function useNovaAssistant({ activeProfile, sendPrompt, buildContext, exec
         setBusy(false);
       }
     },
-    [activeProfile, buildContext, executeActions, messages, sendPrompt]
+    [activeProfile, buildContext, executeActions, messages, sendPromptDetailed]
   );
 
   const submitDraft = useCallback(async (): Promise<boolean> => {

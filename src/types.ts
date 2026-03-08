@@ -509,9 +509,17 @@ export type LlmToolExecution = {
   error?: string;
 };
 
+export type LlmToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  run: (args: Record<string, unknown>, context: Record<string, string>) => string;
+};
+
 export type LlmSendOptions = {
   imageUrl?: string;
   enableBuiltInTools?: boolean;
+  customTools?: LlmToolDefinition[];
   toolContext?: Record<string, string>;
   maxToolRounds?: number;
 };

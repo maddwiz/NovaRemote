@@ -1,6 +1,6 @@
 import { useCallback } from "react";
 
-import { LlmProfile, LlmSendOptions, LlmSendResult, LlmToolExecution } from "../types";
+import { LlmProfile, LlmSendOptions, LlmSendResult, LlmToolDefinition, LlmToolExecution } from "../types";
 
 type OpenAiChatMessage = {
   content?: string | Array<{ type?: string; text?: string }>;
@@ -50,12 +50,7 @@ type GeminiResponse = {
   };
 };
 
-type BuiltInTool = {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  run: (args: Record<string, unknown>, context: Record<string, string>) => string;
-};
+type BuiltInTool = LlmToolDefinition;
 
 type ParsedToolCall = {
   id: string;
@@ -388,9 +383,25 @@ async function executeToolCalls(
 }
 
 function normalizeOptions(options?: LlmSendOptions) {
+  const customTools = Array.isArray(options?.customTools)
+    ? options.customTools.filter(
+        (tool): tool is LlmToolDefinition =>
+          Boolean(
+            tool &&
+              typeof tool.name === "string" &&
+              tool.name.trim() &&
+              typeof tool.description === "string" &&
+              tool.description.trim() &&
+              tool.parameters &&
+              typeof tool.parameters === "object" &&
+              typeof tool.run === "function"
+          )
+      )
+    : [];
   return {
     imageUrl: options?.imageUrl?.trim() || "",
     enableBuiltInTools: Boolean(options?.enableBuiltInTools),
+    customTools,
     toolContext: asStringRecord(options?.toolContext),
     maxToolRounds: Math.max(1, Math.min(Math.round(options?.maxToolRounds || 3), 5)),
   };
@@ -413,7 +424,7 @@ export function useLlmClient() {
       const normalizedOptions = normalizeOptions(options);
       const useVision = Boolean(normalizedOptions.imageUrl);
       const wantedTools = normalizedOptions.enableBuiltInTools;
-      const tools = wantedTools ? builtInTools() : [];
+      const tools = [...(wantedTools ? builtInTools() : []), ...normalizedOptions.customTools];
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",

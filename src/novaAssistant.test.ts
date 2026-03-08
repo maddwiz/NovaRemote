@@ -2,6 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildNovaAssistantPrompt,
+  buildNovaAssistantPlanningTool,
+  buildNovaAssistantToolPrompt,
+  extractNovaAssistantToolPlan,
   novaAssistantTestUtils,
   parseNovaAssistantPlan,
   resolveAssistantServer,
@@ -32,6 +35,14 @@ const context: NovaAssistantRuntimeContext = {
     cloudDashboardUrl: "https://nova.example/dashboard",
     auditPendingCount: 2,
   },
+  processes: {
+    available: true,
+    busy: false,
+    items: [
+      { pid: 321, name: "node", cpuPercent: 12.5, memPercent: 8.1, command: "node server.js" },
+      { pid: 654, name: "vite", cpuPercent: 3.2, memPercent: 1.4, command: "vite" },
+    ],
+  },
   settings: {
     glassesEnabled: false,
     glassesVoiceAutoSend: false,
@@ -49,6 +60,10 @@ const context: NovaAssistantRuntimeContext = {
       name: "DGX Spark",
       connected: true,
       vmHost: "Lab Rack",
+      hasPortainerUrl: true,
+      hasProxmoxUrl: false,
+      hasGrafanaUrl: true,
+      hasSshFallback: true,
       sessions: [
         { session: "build-main", mode: "shell", localAi: false, live: true },
         { session: "codex-ui", mode: "ai", localAi: false, live: true },
@@ -59,6 +74,10 @@ const context: NovaAssistantRuntimeContext = {
       name: "Cloud VM",
       connected: true,
       vmHost: "AWS",
+      hasPortainerUrl: false,
+      hasProxmoxUrl: false,
+      hasGrafanaUrl: false,
+      hasSshFallback: true,
       sessions: [{ session: "deploy", mode: "shell", localAi: false, live: false }],
     },
   ],
@@ -96,6 +115,9 @@ describe("novaAssistant", () => {
           { type: "open_file", path: "/workspace/app/package.json" },
           { type: "tail_file", path: "/workspace/app/logs/app.log", lines: 120 },
           { type: "save_file", path: "/workspace/app/.env", content: "A=1" },
+          { type: "refresh_processes", serverRef: "dgx" },
+          { type: "kill_process", serverRef: "dgx", pid: 321, signal: "TERM" },
+          { type: "open_server_link", serverRef: "dgx", target: "grafana" },
           { type: "team_refresh" },
           { type: "team_open_dashboard" },
           { type: "team_sync_audit" },
@@ -110,6 +132,9 @@ describe("novaAssistant", () => {
       { type: "open_file", path: "/workspace/app/package.json", serverRef: undefined },
       { type: "tail_file", path: "/workspace/app/logs/app.log", lines: 120, serverRef: undefined },
       { type: "save_file", path: "/workspace/app/.env", content: "A=1", serverRef: undefined },
+      { type: "refresh_processes", serverRef: "dgx" },
+      { type: "kill_process", serverRef: "dgx", pid: 321, signal: "TERM" },
+      { type: "open_server_link", serverRef: "dgx", target: "grafana" },
       { type: "team_refresh" },
       { type: "team_open_dashboard" },
       { type: "team_sync_audit" },
@@ -156,9 +181,48 @@ describe("novaAssistant", () => {
     expect(prompt).toContain('"name": "DGX Spark"');
     expect(prompt).toContain('"currentPath": "/workspace/app"');
     expect(prompt).toContain('"teamName": "Nova Team"');
+    expect(prompt).toContain('"pid": 321');
     expect(prompt).toContain('"type":"send_command"');
     expect(prompt).toContain('"type":"save_file"');
+    expect(prompt).toContain('"type":"kill_process"');
     expect(prompt).toContain('"type":"team_request_audit_export"');
+  });
+
+  it("builds a native tool prompt and extracts planned actions from tool calls", () => {
+    const prompt = buildNovaAssistantToolPrompt({
+      context,
+      history: [],
+      input: "Open package.json and then request a csv audit export.",
+    });
+    expect(prompt).toContain("plan_nova_actions");
+    expect(prompt).toContain("Respond conversationally");
+
+    const tool = buildNovaAssistantPlanningTool();
+    expect(tool.name).toBe("plan_nova_actions");
+
+    const plan = extractNovaAssistantToolPlan([
+      {
+        name: "plan_nova_actions",
+        arguments: JSON.stringify({
+          reply: "I’ll open the file and queue the export.",
+          actions: [
+            { type: "open_file", path: "/workspace/app/package.json" },
+            { type: "open_server_link", serverRef: "dgx", target: "grafana" },
+            { type: "team_request_audit_export", format: "csv", rangeHours: 24 },
+          ],
+        }),
+        output: '{"accepted":true}',
+      },
+    ]);
+
+    expect(plan).toEqual({
+      reply: "I’ll open the file and queue the export.",
+      actions: [
+        { type: "open_file", path: "/workspace/app/package.json", serverRef: undefined },
+        { type: "open_server_link", serverRef: "dgx", target: "grafana" },
+        { type: "team_request_audit_export", format: "csv", rangeHours: 24 },
+      ],
+    });
   });
 
   it("exposes helper parse fallback for malformed objects", () => {

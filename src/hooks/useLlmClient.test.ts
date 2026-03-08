@@ -21,10 +21,17 @@ describe("llmClientTestUtils", () => {
   });
 
   it("normalizes llm send options", () => {
+    const customTool = {
+      name: "demo_tool",
+      description: "demo",
+      parameters: { type: "object", properties: {} },
+      run: () => "{}",
+    };
     const normalized = llmClientTestUtils.normalizeOptions({
       imageUrl: "  https://example.com/x.png  ",
       enableBuiltInTools: true,
       maxToolRounds: 99,
+      customTools: [customTool],
       toolContext: {
         project: " NovaRemote ",
         empty: "   ",
@@ -34,6 +41,7 @@ describe("llmClientTestUtils", () => {
     expect(normalized.imageUrl).toBe("https://example.com/x.png");
     expect(normalized.enableBuiltInTools).toBe(true);
     expect(normalized.maxToolRounds).toBe(5);
+    expect(normalized.customTools).toEqual([customTool]);
     expect(normalized.toolContext).toEqual({ project: "NovaRemote" });
   });
 });

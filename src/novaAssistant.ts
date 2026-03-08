@@ -1,5 +1,13 @@
 import { normalizeForMatch } from "./spatialVoiceRoutingCore";
-import { AiEnginePreference, NovaAgentStatus, RouteTab, TerminalSendMode } from "./types";
+import {
+  AiEnginePreference,
+  LlmToolDefinition,
+  LlmToolExecution,
+  NovaAgentStatus,
+  ProcessSignal,
+  RouteTab,
+  TerminalSendMode,
+} from "./types";
 
 export type NovaAssistantRole = "user" | "assistant";
 
@@ -25,6 +33,10 @@ export type NovaAssistantServerContext = {
   vmType?: string;
   vmName?: string;
   vmId?: string;
+  hasPortainerUrl?: boolean;
+  hasProxmoxUrl?: boolean;
+  hasGrafanaUrl?: boolean;
+  hasSshFallback?: boolean;
   sessions: NovaAssistantSessionContext[];
 };
 
@@ -47,6 +59,17 @@ export type NovaAssistantRuntimeContext = {
     role: string | null;
     cloudDashboardUrl: string | null;
     auditPendingCount: number;
+  };
+  processes: {
+    available: boolean;
+    busy: boolean;
+    items: Array<{
+      pid: number;
+      name: string;
+      cpuPercent?: number;
+      memPercent?: number;
+      command?: string;
+    }>;
   };
   servers: NovaAssistantServerContext[];
   settings: {
@@ -82,6 +105,9 @@ export type NovaAssistantAction =
   | { type: "open_file"; serverRef?: string; path?: string }
   | { type: "tail_file"; serverRef?: string; path?: string; lines?: number }
   | { type: "save_file"; serverRef?: string; path: string; content: string }
+  | { type: "refresh_processes"; serverRef?: string }
+  | { type: "kill_process"; serverRef?: string; pid: number; signal?: ProcessSignal }
+  | { type: "open_server_link"; serverRef?: string; target: "ssh" | "portainer" | "proxmox" | "grafana" }
   | { type: "create_agent"; serverRef?: string; name: string; goal?: string }
   | {
       type: "update_agent";
@@ -123,6 +149,8 @@ export type NovaAssistantExecutionResult = {
   ok: boolean;
   detail: string;
 };
+
+export const NOVA_ASSISTANT_TOOL_NAME = "plan_nova_actions";
 
 type NovaAssistantPreferenceKey = Extract<NovaAssistantAction, { type: "set_preference" }>["key"];
 
@@ -185,6 +213,11 @@ function coerceMode(value: unknown): TerminalSendMode | null {
 function coerceAgentStatus(value: unknown): NovaAgentStatus | null {
   const normalized = trimText(value).toLowerCase() as NovaAgentStatus;
   return ALLOWED_AGENT_STATUSES.includes(normalized) ? normalized : null;
+}
+
+function coerceProcessSignal(value: unknown): ProcessSignal | null {
+  const normalized = trimText(value).toUpperCase();
+  return normalized === "TERM" || normalized === "KILL" || normalized === "INT" ? normalized : null;
 }
 
 function normalizeAction(input: unknown): NovaAssistantAction | null {
@@ -305,6 +338,38 @@ function normalizeAction(input: unknown): NovaAssistantAction | null {
       serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
       path,
       content: typeof raw.content === "string" ? raw.content : "",
+    };
+  }
+
+  if (type === "refresh_processes") {
+    return {
+      type: "refresh_processes",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+    };
+  }
+
+  if (type === "kill_process") {
+    const pid = coerceNumber(raw.pid);
+    if (pid === null || pid <= 0) {
+      return null;
+    }
+    return {
+      type: "kill_process",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      pid: Math.round(pid),
+      signal: coerceProcessSignal(raw.signal) || undefined,
+    };
+  }
+
+  if (type === "open_server_link") {
+    const target = trimText(raw.target || raw.link || raw.linkType).toLowerCase();
+    if (target !== "ssh" && target !== "portainer" && target !== "proxmox" && target !== "grafana") {
+      return null;
+    }
+    return {
+      type: "open_server_link",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      target,
     };
   }
 
@@ -491,6 +556,7 @@ function serializeContext(context: NovaAssistantRuntimeContext): string {
       activeProfileName: context.activeProfileName,
       files: context.files,
       team: context.team,
+      processes: context.processes,
       settings: context.settings,
       servers: context.servers.map((server) => ({
         id: server.id,
@@ -500,6 +566,10 @@ function serializeContext(context: NovaAssistantRuntimeContext): string {
         vmType: server.vmType,
         vmName: server.vmName,
         vmId: server.vmId,
+        hasPortainerUrl: server.hasPortainerUrl,
+        hasProxmoxUrl: server.hasProxmoxUrl,
+        hasGrafanaUrl: server.hasGrafanaUrl,
+        hasSshFallback: server.hasSshFallback,
         sessions: server.sessions.slice(0, 8).map((session) => ({
           session: session.session,
           mode: session.mode,
@@ -543,6 +613,9 @@ export function buildNovaAssistantPrompt(args: {
     '- {"type":"open_file","serverRef":"optional","path":"optional"}',
     '- {"type":"tail_file","serverRef":"optional","path":"optional","lines":200}',
     '- {"type":"save_file","serverRef":"optional","path":"/path/to/file","content":"full file content"}',
+    '- {"type":"refresh_processes","serverRef":"optional"}',
+    '- {"type":"kill_process","serverRef":"optional","pid":1234,"signal":"TERM|KILL|INT"}',
+    '- {"type":"open_server_link","serverRef":"optional","target":"ssh|portainer|proxmox|grafana"}',
     '- {"type":"create_agent","serverRef":"...","name":"...","goal":"optional"}',
     '- {"type":"update_agent","serverRef":"...","name":"...","status":"idle|monitoring|executing|waiting_approval","goal":"optional","queuedCommand":"optional"}',
     '- {"type":"approve_agents","serverRef":"..."}',
@@ -563,6 +636,157 @@ export function buildNovaAssistantPrompt(args: {
     "",
     `Latest user message: ${args.input.trim()}`,
   ].join("\n");
+}
+
+export function buildNovaAssistantToolPrompt(args: {
+  history: NovaAssistantMessage[];
+  context: NovaAssistantRuntimeContext;
+  input: string;
+}): string {
+  return [
+    "You are Nova, the conversational control layer for the NovaRemote app.",
+    "Respond conversationally. If app actions are needed, call the plan_nova_actions tool with a short reply and the structured actions to execute.",
+    "If no app action is needed, answer normally and do not call the tool.",
+    "Rules:",
+    "- Prefer exact server IDs or exact server names from context.",
+    '- You may use placeholders "$focused_server", "$focused_session", and "$last_session".',
+    "- Do not invent servers, sessions, routes, links, or settings keys.",
+    "- Dangerous shell commands may require confirmation in-app; it is still valid to request those actions when the user explicitly asks for them.",
+    "Available action types for the tool: navigate, focus_server, focus_session, create_session, send_command, set_draft, stop_session, list_files, open_file, tail_file, save_file, refresh_processes, kill_process, open_server_link, create_agent, update_agent, approve_agents, deny_agents, team_refresh, team_open_dashboard, team_sync_audit, team_request_audit_export, team_refresh_audit_exports, set_preference, set_pool_paused.",
+    "",
+    "Current app context:",
+    serializeContext(args.context),
+    "",
+    "Recent conversation:",
+    serializeHistory(args.history) || "(none)",
+    "",
+    `Latest user message: ${args.input.trim()}`,
+  ].join("\n");
+}
+
+export function buildNovaAssistantPlanningTool(): LlmToolDefinition {
+  return {
+    name: NOVA_ASSISTANT_TOOL_NAME,
+    description:
+      "Queue NovaRemote app actions and include the short user-facing reply that should accompany those actions.",
+    parameters: {
+      type: "object",
+      properties: {
+        reply: {
+          type: "string",
+          description: "Short natural-language response to the user about what Nova is doing.",
+        },
+        actions: {
+          type: "array",
+          description: "Ordered app actions for NovaRemote to execute.",
+          items: {
+            type: "object",
+            properties: {
+              type: {
+                type: "string",
+                enum: [
+                  "navigate",
+                  "focus_server",
+                  "focus_session",
+                  "create_session",
+                  "send_command",
+                  "set_draft",
+                  "stop_session",
+                  "list_files",
+                  "open_file",
+                  "tail_file",
+                  "save_file",
+                  "refresh_processes",
+                  "kill_process",
+                  "open_server_link",
+                  "create_agent",
+                  "update_agent",
+                  "approve_agents",
+                  "deny_agents",
+                  "team_refresh",
+                  "team_open_dashboard",
+                  "team_sync_audit",
+                  "team_request_audit_export",
+                  "team_refresh_audit_exports",
+                  "set_preference",
+                  "set_pool_paused",
+                ],
+              },
+              route: { type: "string" },
+              serverRef: { type: "string" },
+              sessionRef: { type: "string" },
+              kind: { type: "string", enum: ["ai", "shell"] },
+              prompt: { type: "string" },
+              command: { type: "string" },
+              mode: { type: "string", enum: ["ai", "shell"] },
+              createIfMissing: { type: "boolean" },
+              createKind: { type: "string", enum: ["ai", "shell"] },
+              text: { type: "string" },
+              path: { type: "string" },
+              includeHidden: { type: "boolean" },
+              lines: { type: "number" },
+              content: { type: "string" },
+              pid: { type: "number" },
+              signal: { type: "string", enum: ["TERM", "KILL", "INT"] },
+              target: { type: "string", enum: ["ssh", "portainer", "proxmox", "grafana"] },
+              name: { type: "string" },
+              status: { type: "string", enum: ["idle", "monitoring", "executing", "waiting_approval"] },
+              goal: { type: "string" },
+              queuedCommand: { type: "string" },
+              format: { type: "string", enum: ["json", "csv"] },
+              rangeHours: { type: "number" },
+              key: {
+                type: "string",
+                enum: [
+                  "glasses.enabled",
+                  "glasses.voiceAutoSend",
+                  "glasses.voiceLoop",
+                  "glasses.wakePhraseEnabled",
+                  "glasses.minimalMode",
+                  "glasses.textScale",
+                  "start.aiEngine",
+                  "start.kind",
+                ],
+              },
+              value: {
+                description: "Preference value for set_preference actions.",
+              },
+              paused: { type: "boolean" },
+            },
+            required: ["type"],
+            additionalProperties: false,
+          },
+        },
+      },
+      required: ["reply", "actions"],
+      additionalProperties: false,
+    },
+    run: (args) => {
+      const plan = parseNovaAssistantPlan(JSON.stringify(args));
+      return JSON.stringify({
+        accepted: true,
+        reply: plan.reply,
+        actionCount: plan.actions.length,
+      });
+    },
+  };
+}
+
+export function extractNovaAssistantToolPlan(toolCalls: LlmToolExecution[]): NovaAssistantPlan | null {
+  const plans = toolCalls
+    .filter((call) => call.name === NOVA_ASSISTANT_TOOL_NAME)
+    .map((call) => parseNovaAssistantPlan(call.arguments));
+  if (plans.length === 0) {
+    return null;
+  }
+  return {
+    reply:
+      plans
+        .map((plan) => plan.reply.trim())
+        .filter(Boolean)
+        .at(-1) || "",
+    actions: plans.flatMap((plan) => plan.actions),
+  };
 }
 
 export function parseNovaAssistantPlan(raw: string): NovaAssistantPlan {
