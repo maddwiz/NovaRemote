@@ -8,6 +8,7 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
+  Pressable,
   RefreshControl,
   SafeAreaView,
   Share,
@@ -18,14 +19,16 @@ import {
 
 import { apiRequest, normalizeBaseUrl } from "./api/client";
 import { FullscreenTerminal } from "./components/FullscreenTerminal";
+import { HomeNavHub } from "./components/HomeNavHub";
+import { LaunchIntro } from "./components/LaunchIntro";
 import { LockScreen } from "./components/LockScreen";
 import { DangerConfirmModal } from "./components/DangerConfirmModal";
 import { OnboardingModal } from "./components/OnboardingModal";
+import { PageSlideMenu } from "./components/PageSlideMenu";
 import { PaywallModal } from "./components/PaywallModal";
 import { SessionPlaybackModal } from "./components/SessionPlaybackModal";
 import { ShareServerModal } from "./components/ShareServerModal";
 import { StatusPill } from "./components/StatusPill";
-import { TabBar } from "./components/TabBar";
 import { TutorialModal } from "./components/TutorialModal";
 import { AppProvider } from "./context/AppContext";
 import { BRAND_LOGO } from "./branding";
@@ -618,6 +621,9 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
   const simpleMode = true;
+  const [homeHubVisible, setHomeHubVisible] = useState<boolean>(false);
+  const [pageMenuVisible, setPageMenuVisible] = useState<boolean>(false);
+  const [showLaunchIntro, setShowLaunchIntro] = useState<boolean>(true);
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [paywallVisible, setPaywallVisible] = useState<boolean>(false);
@@ -666,6 +672,7 @@ export default function AppShell() {
   const appOpenTrackedRef = useRef<boolean>(false);
   const crossServerWatchRulesRef = useRef<Record<string, Record<string, WatchRule>>>({});
   const lastActivityAtRef = useRef<number>(Date.now());
+  const homeHubInitializedRef = useRef<boolean>(false);
 
   const setReady = useCallback((text: string = "Ready") => {
     setStatus({ text, error: false });
@@ -683,6 +690,14 @@ export default function AppShell() {
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
   const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
   const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
+
+  useEffect(() => {
+    if (onboardingLoading || !unlocked || !onboardingCompleted || homeHubInitializedRef.current) {
+      return;
+    }
+    homeHubInitializedRef.current = true;
+    setHomeHubVisible(true);
+  }, [onboardingCompleted, onboardingLoading, unlocked]);
   const {
     loading: teamLoading,
     busy: teamBusy,
@@ -3463,21 +3478,85 @@ export default function AppShell() {
   });
 
   const handleTabChange = useCallback(
-    (next: RouteTab) => {
+    (next: RouteTab): boolean => {
       markActivity();
       void Haptics.selectionAsync();
       if (next === "snippets" && !isPro) {
         setPaywallVisible(true);
-        return;
+        return false;
       }
       if (next === "files" && !capabilities.files) {
         setStatus({ text: "Active server does not support file APIs.", error: true });
-        return;
+        return false;
       }
       setRoute(next);
+      return true;
     },
     [capabilities.files, isPro, markActivity]
   );
+
+  const openRouteFromHomeHub = useCallback(
+    (next: RouteTab) => {
+      const changed = handleTabChange(next);
+      if (changed) {
+        setHomeHubVisible(false);
+      }
+    },
+    [handleTabChange]
+  );
+
+  const openRouteFromMenu = useCallback(
+    (next: RouteTab) => {
+      const changed = handleTabChange(next);
+      if (changed) {
+        setHomeHubVisible(false);
+      }
+    },
+    [handleTabChange]
+  );
+
+  const togglePoolLifecycleFromMenu = useCallback(() => {
+    markActivity();
+    if (poolLifecyclePaused) {
+      connectAllServers();
+      setReady("Connection pool resumed");
+      return;
+    }
+    disconnectAllServers();
+    setReady("Connection pool paused");
+  }, [connectAllServers, disconnectAllServers, markActivity, poolLifecyclePaused, setReady]);
+
+  const createMenuSession = useCallback(
+    (kind: "shell" | "ai") => {
+      if (!focusedServerId) {
+        setStatus({ text: "Select a server before creating a session.", error: true });
+        return;
+      }
+      void runWithStatus(kind === "ai" ? "Starting AI session" : "Starting shell session", async () => {
+        const session = await createSessionForServer(focusedServerId, kind);
+        setStatus({
+          text: `${kind === "ai" ? "AI" : "Shell"} session started: ${session}`,
+          error: false,
+        });
+        setRoute("terminals");
+        setHomeHubVisible(false);
+      });
+    },
+    [createSessionForServer, focusedServerId, runWithStatus]
+  );
+
+  const refreshAllFromMenu = useCallback(() => {
+    void runWithStatus("Refreshing all servers", async () => {
+      await refreshAllServers();
+    });
+  }, [refreshAllServers, runWithStatus]);
+
+  const reconnectAllFromMenu = useCallback(() => {
+    void runWithStatus("Reconnecting all servers", async () => {
+      reconnectAllServers();
+    });
+  }, [reconnectAllServers, runWithStatus]);
+
   const routeLabel: Record<RouteTab, string> = {
     terminals: "Terminals",
     servers: "Servers",
@@ -3489,6 +3568,13 @@ export default function AppShell() {
     vr: "VR",
   };
   const activeRouteLabel = routeLabel[route] || "NovaRemote";
+
+  useEffect(() => {
+    if (!homeHubVisible && route !== "glasses") {
+      return;
+    }
+    setPageMenuVisible(false);
+  }, [homeHubVisible, route]);
 
   if (lockLoading || onboardingLoading || tutorialLoading || safetyLoading) {
     return (
@@ -3521,11 +3607,7 @@ export default function AppShell() {
       >
         <ScrollView
           style={styles.flex}
-          contentContainerStyle={[
-            styles.container,
-            styles.containerGrow,
-            route !== "glasses" ? styles.containerWithBottomDock : null,
-          ]}
+          contentContainerStyle={[styles.container, styles.containerGrow]}
           showsVerticalScrollIndicator
           alwaysBounceVertical
           scrollEnabled
@@ -3534,24 +3616,55 @@ export default function AppShell() {
           keyboardShouldPersistTaps="handled"
           keyboardDismissMode="on-drag"
           refreshControl={
-            route === "terminals" ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#27d9ff" /> : undefined
+            !homeHubVisible && route === "terminals" ? (
+              <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#27d9ff" />
+            ) : undefined
           }
         >
-          {route !== "glasses" ? (
-            <View style={styles.appTopBar}>
-              <Image source={BRAND_LOGO} style={styles.appTopBarLogo} resizeMode="cover" />
-              <View style={styles.appTopBarMeta}>
-                <Text style={styles.appTopBarTitle}>NovaRemote</Text>
-                <Text style={styles.appTopBarSubtitle}>{`${activeRouteLabel} • ${activeServerName}`}</Text>
-              </View>
-              <View style={styles.appTopBarMetaCompact}>
-                <Text style={styles.appTopBarRoutePill}>{activeRouteLabel}</Text>
-                <StatusPill status={status} />
-              </View>
-            </View>
-          ) : null}
+          {homeHubVisible ? (
+            <HomeNavHub
+              onOpenRoute={openRouteFromHomeHub}
+              activeServerName={activeServerName}
+              statusText={status.text}
+            />
+          ) : (
+            <>
+              {route !== "glasses" ? (
+                <View style={styles.shellHeaderBar}>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Open page menu"
+                    style={styles.shellHeaderMenuButton}
+                    onPress={() => setPageMenuVisible(true)}
+                  >
+                    <Text style={styles.shellHeaderMenuText}>Menu</Text>
+                  </Pressable>
 
-          {route === "servers" ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Return to home hub"
+                    style={styles.shellHeaderBrand}
+                    onPress={() => {
+                      setHomeHubVisible(true);
+                      setPageMenuVisible(false);
+                    }}
+                  >
+                    <Image source={BRAND_LOGO} style={styles.shellHeaderLogo} resizeMode="cover" />
+                    <View style={styles.flex}>
+                      <Text style={styles.shellHeaderBrandTitle}>{activeRouteLabel}</Text>
+                      <Text numberOfLines={1} style={styles.shellHeaderBrandMeta}>
+                        {activeServerName}
+                      </Text>
+                    </View>
+                  </Pressable>
+
+                  <View style={styles.shellHeaderStatusWrap}>
+                    <StatusPill status={status} />
+                  </View>
+                </View>
+              ) : null}
+
+              {route === "servers" ? (
             <ServersScreen
               simpleMode={simpleMode}
               servers={servers}
@@ -3770,7 +3883,7 @@ export default function AppShell() {
               }}
               onBackToTerminals={() => setRoute("terminals")}
             />
-          ) : null}
+              ) : null}
 
           {route === "terminals" ? (
             <AppProvider value={{ terminals: terminalsViewModel }}>
@@ -4319,17 +4432,28 @@ export default function AppShell() {
               }}
             />
           ) : null}
+            </>
+          )}
         </ScrollView>
-        {route !== "glasses" ? (
-          <View style={styles.bottomNavDock}>
-            <TabBar
-              route={route}
-              simpleMode={simpleMode}
-              onChange={handleTabChange}
-              compactBottomNav
-            />
-          </View>
-        ) : null}
+        <PageSlideMenu
+          visible={pageMenuVisible && !homeHubVisible && route !== "glasses"}
+          route={route}
+          onClose={() => setPageMenuVisible(false)}
+          onGoHome={() => setHomeHubVisible(true)}
+          onNavigate={openRouteFromMenu}
+          poolLifecyclePaused={poolLifecyclePaused}
+          onTogglePoolLifecycle={togglePoolLifecycleFromMenu}
+          onRefreshAll={refreshAllFromMenu}
+          onReconnectAll={reconnectAllFromMenu}
+          onCreateShell={() => createMenuSession("shell")}
+          onCreateAi={() => createMenuSession("ai")}
+          tokenMasked={tokenMasked}
+          onToggleTokenMask={() => setTokenMasked((prev) => !prev)}
+          includeHidden={includeHidden}
+          onToggleIncludeHidden={setIncludeHidden}
+          tailLines={tailLines}
+          onSetTailLines={setTailLines}
+        />
       </KeyboardAvoidingView>
 
       <FullscreenTerminal
@@ -4607,7 +4731,7 @@ export default function AppShell() {
       />
 
       <OnboardingModal
-        visible={!onboardingCompleted}
+        visible={!showLaunchIntro && !onboardingCompleted}
         notificationsGranted={permissionStatus === "granted"}
         microphoneGranted={voicePermissionStatus === "granted"}
         onRequestNotifications={() => {
@@ -4661,6 +4785,7 @@ export default function AppShell() {
                 terminalBackend: DEFAULT_TERMINAL_BACKEND,
               });
               setRoute("terminals");
+              setHomeHubVisible(true);
               setReady("Onboarding complete");
             } catch (error) {
               importServerConfig({
@@ -4670,6 +4795,7 @@ export default function AppShell() {
                 cwd: server.cwd,
               });
               setRoute("servers");
+              setHomeHubVisible(false);
               const message = error instanceof Error ? error.message : String(error);
               setStatus({
                 text: `Onboarding complete. Could not save server automatically: ${message}`,
@@ -4730,6 +4856,13 @@ export default function AppShell() {
           void runWithStatus("Tutorial complete", async () => {
             await finishTutorial();
           });
+        }}
+      />
+
+      <LaunchIntro
+        visible={showLaunchIntro}
+        onDone={() => {
+          setShowLaunchIntro(false);
         }}
       />
     </SafeAreaView>
