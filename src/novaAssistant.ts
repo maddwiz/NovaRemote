@@ -34,6 +34,20 @@ export type NovaAssistantRuntimeContext = {
   focusedServerName: string | null;
   focusedSession: string | null;
   activeProfileName: string | null;
+  files: {
+    currentPath: string;
+    includeHidden: boolean;
+    selectedFilePath: string | null;
+    selectedContentPreview: string;
+    entries: Array<{ name: string; path: string; isDir: boolean }>;
+  };
+  team: {
+    loggedIn: boolean;
+    teamName: string | null;
+    role: string | null;
+    cloudDashboardUrl: string | null;
+    auditPendingCount: number;
+  };
   servers: NovaAssistantServerContext[];
   settings: {
     glassesEnabled: boolean;
@@ -64,6 +78,10 @@ export type NovaAssistantAction =
     }
   | { type: "set_draft"; serverRef?: string; sessionRef?: string; text: string }
   | { type: "stop_session"; serverRef?: string; sessionRef?: string }
+  | { type: "list_files"; serverRef?: string; path?: string; includeHidden?: boolean }
+  | { type: "open_file"; serverRef?: string; path?: string }
+  | { type: "tail_file"; serverRef?: string; path?: string; lines?: number }
+  | { type: "save_file"; serverRef?: string; path: string; content: string }
   | { type: "create_agent"; serverRef?: string; name: string; goal?: string }
   | {
       type: "update_agent";
@@ -75,6 +93,11 @@ export type NovaAssistantAction =
     }
   | { type: "approve_agents"; serverRef?: string }
   | { type: "deny_agents"; serverRef?: string }
+  | { type: "team_refresh" }
+  | { type: "team_open_dashboard" }
+  | { type: "team_sync_audit" }
+  | { type: "team_request_audit_export"; format: "json" | "csv"; rangeHours?: number }
+  | { type: "team_refresh_audit_exports" }
   | {
       type: "set_preference";
       key:
@@ -244,6 +267,47 @@ function normalizeAction(input: unknown): NovaAssistantAction | null {
     };
   }
 
+  if (type === "list_files") {
+    const includeHidden = coerceBoolean(raw.includeHidden);
+    return {
+      type: "list_files",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      path: trimText(raw.path) || undefined,
+      includeHidden: includeHidden === null ? undefined : includeHidden,
+    };
+  }
+
+  if (type === "open_file") {
+    return {
+      type: "open_file",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      path: trimText(raw.path || raw.filePath) || undefined,
+    };
+  }
+
+  if (type === "tail_file") {
+    const lines = coerceNumber(raw.lines);
+    return {
+      type: "tail_file",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      path: trimText(raw.path || raw.filePath) || undefined,
+      lines: lines === null ? undefined : Math.max(1, Math.round(lines)),
+    };
+  }
+
+  if (type === "save_file") {
+    const path = trimText(raw.path || raw.filePath);
+    if (!path) {
+      return null;
+    }
+    return {
+      type: "save_file",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      path,
+      content: typeof raw.content === "string" ? raw.content : "",
+    };
+  }
+
   if (type === "create_agent") {
     const name = trimText(raw.name || raw.agentName);
     if (!name) {
@@ -290,6 +354,35 @@ function normalizeAction(input: unknown): NovaAssistantAction | null {
       type: "deny_agents",
       serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
     };
+  }
+
+  if (type === "team_refresh") {
+    return { type: "team_refresh" };
+  }
+
+  if (type === "team_open_dashboard") {
+    return { type: "team_open_dashboard" };
+  }
+
+  if (type === "team_sync_audit") {
+    return { type: "team_sync_audit" };
+  }
+
+  if (type === "team_request_audit_export") {
+    const format = trimText(raw.format).toLowerCase();
+    if (format !== "json" && format !== "csv") {
+      return null;
+    }
+    const rangeHours = coerceNumber(raw.rangeHours);
+    return {
+      type: "team_request_audit_export",
+      format,
+      rangeHours: rangeHours === null ? undefined : Math.max(1, Math.round(rangeHours)),
+    };
+  }
+
+  if (type === "team_refresh_audit_exports") {
+    return { type: "team_refresh_audit_exports" };
   }
 
   if (type === "set_preference") {
@@ -396,6 +489,8 @@ function serializeContext(context: NovaAssistantRuntimeContext): string {
       focusedServerName: context.focusedServerName,
       focusedSession: context.focusedSession,
       activeProfileName: context.activeProfileName,
+      files: context.files,
+      team: context.team,
       settings: context.settings,
       servers: context.servers.map((server) => ({
         id: server.id,
@@ -444,10 +539,19 @@ export function buildNovaAssistantPrompt(args: {
     '- {"type":"send_command","serverRef":"...","sessionRef":"...","command":"...","mode":"ai|shell","createIfMissing":true,"createKind":"ai|shell"}',
     '- {"type":"set_draft","serverRef":"...","sessionRef":"...","text":"..."}',
     '- {"type":"stop_session","serverRef":"...","sessionRef":"..."}',
+    '- {"type":"list_files","serverRef":"optional","path":"optional","includeHidden":true|false}',
+    '- {"type":"open_file","serverRef":"optional","path":"optional"}',
+    '- {"type":"tail_file","serverRef":"optional","path":"optional","lines":200}',
+    '- {"type":"save_file","serverRef":"optional","path":"/path/to/file","content":"full file content"}',
     '- {"type":"create_agent","serverRef":"...","name":"...","goal":"optional"}',
     '- {"type":"update_agent","serverRef":"...","name":"...","status":"idle|monitoring|executing|waiting_approval","goal":"optional","queuedCommand":"optional"}',
     '- {"type":"approve_agents","serverRef":"..."}',
     '- {"type":"deny_agents","serverRef":"..."}',
+    '- {"type":"team_refresh"}',
+    '- {"type":"team_open_dashboard"}',
+    '- {"type":"team_sync_audit"}',
+    '- {"type":"team_request_audit_export","format":"json|csv","rangeHours":168}',
+    '- {"type":"team_refresh_audit_exports"}',
     '- {"type":"set_preference","key":"glasses.enabled|glasses.voiceAutoSend|glasses.voiceLoop|glasses.wakePhraseEnabled|glasses.minimalMode|glasses.textScale|start.aiEngine|start.kind","value":true|false|number|"auto"|"server"|"external"|"ai"|"shell"}',
     '- {"type":"set_pool_paused","paused":true|false}',
     "",

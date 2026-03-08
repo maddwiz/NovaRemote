@@ -230,6 +230,7 @@ export function useFilesBrowser({ activeServer, connected }: UseFilesBrowserArgs
     includeHidden,
     setIncludeHidden,
     entries,
+    setEntries,
     selectedFilePath,
     selectedEntry,
     selectedContent,

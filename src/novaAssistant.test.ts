@@ -15,6 +15,23 @@ const context: NovaAssistantRuntimeContext = {
   focusedServerName: "DGX Spark",
   focusedSession: "build-main",
   activeProfileName: "OpenAI",
+  files: {
+    currentPath: "/workspace/app",
+    includeHidden: false,
+    selectedFilePath: "/workspace/app/package.json",
+    selectedContentPreview: "{\"name\":\"nova\"}",
+    entries: [
+      { name: "src", path: "/workspace/app/src", isDir: true },
+      { name: "package.json", path: "/workspace/app/package.json", isDir: false },
+    ],
+  },
+  team: {
+    loggedIn: true,
+    teamName: "Nova Team",
+    role: "admin",
+    cloudDashboardUrl: "https://nova.example/dashboard",
+    auditPendingCount: 2,
+  },
   settings: {
     glassesEnabled: false,
     glassesVoiceAutoSend: false,
@@ -70,6 +87,37 @@ describe("novaAssistant", () => {
     });
   });
 
+  it("parses file and team actions", () => {
+    const plan = parseNovaAssistantPlan(
+      JSON.stringify({
+        reply: "Working through the file and team tasks.",
+        actions: [
+          { type: "list_files", path: "/workspace/app", includeHidden: true },
+          { type: "open_file", path: "/workspace/app/package.json" },
+          { type: "tail_file", path: "/workspace/app/logs/app.log", lines: 120 },
+          { type: "save_file", path: "/workspace/app/.env", content: "A=1" },
+          { type: "team_refresh" },
+          { type: "team_open_dashboard" },
+          { type: "team_sync_audit" },
+          { type: "team_request_audit_export", format: "csv", rangeHours: 48 },
+          { type: "team_refresh_audit_exports" },
+        ],
+      })
+    );
+
+    expect(plan.actions).toEqual([
+      { type: "list_files", path: "/workspace/app", includeHidden: true, serverRef: undefined },
+      { type: "open_file", path: "/workspace/app/package.json", serverRef: undefined },
+      { type: "tail_file", path: "/workspace/app/logs/app.log", lines: 120, serverRef: undefined },
+      { type: "save_file", path: "/workspace/app/.env", content: "A=1", serverRef: undefined },
+      { type: "team_refresh" },
+      { type: "team_open_dashboard" },
+      { type: "team_sync_audit" },
+      { type: "team_request_audit_export", format: "csv", rangeHours: 48 },
+      { type: "team_refresh_audit_exports" },
+    ]);
+  });
+
   it("falls back to plain reply when the model does not return json", () => {
     const plan = parseNovaAssistantPlan("I can do that, but I need you to pick a server first.");
     expect(plan.actions).toEqual([]);
@@ -106,7 +154,11 @@ describe("novaAssistant", () => {
 
     expect(prompt).toContain('"route": "terminals"');
     expect(prompt).toContain('"name": "DGX Spark"');
+    expect(prompt).toContain('"currentPath": "/workspace/app"');
+    expect(prompt).toContain('"teamName": "Nova Team"');
     expect(prompt).toContain('"type":"send_command"');
+    expect(prompt).toContain('"type":"save_file"');
+    expect(prompt).toContain('"type":"team_request_audit_export"');
   });
 
   it("exposes helper parse fallback for malformed objects", () => {

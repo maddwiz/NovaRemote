@@ -111,6 +111,7 @@ import {
   AiEnginePreference,
   FleetRunResult,
   ProcessSignal,
+  RemoteFileEntry,
   RecordingChunk,
   RouteTab,
   ServerProfile,
@@ -1519,6 +1520,7 @@ export default function AppShell() {
     includeHidden,
     setIncludeHidden,
     entries: fileEntries,
+    setEntries: setFileEntries,
     selectedFilePath,
     selectedContent,
     setSelectedFilePath,
@@ -2651,6 +2653,24 @@ export default function AppShell() {
       focusedServerName: activeServer?.name || null,
       focusedSession,
       activeProfileName: activeProfile?.name || null,
+      files: {
+        currentPath: currentPath || activeServer?.defaultCwd || "",
+        includeHidden,
+        selectedFilePath,
+        selectedContentPreview: selectedContent.slice(0, 1200),
+        entries: fileEntries.slice(0, 30).map((entry) => ({
+          name: entry.name,
+          path: entry.path,
+          isDir: entry.is_dir,
+        })),
+      },
+      team: {
+        loggedIn: Boolean(teamIdentity),
+        teamName: teamIdentity?.teamName || null,
+        role: teamIdentity?.role || null,
+        cloudDashboardUrl: cloudDashboardUrl || null,
+        auditPendingCount: pendingAuditEvents,
+      },
       servers: brokeredServers.map((server) => {
         const connection = poolConnections.get(server.id);
         const sessionNames = Array.from(new Set([...(connection?.openSessions || []), ...(connection?.allSessions || [])]));
@@ -2687,7 +2707,11 @@ export default function AppShell() {
   }, [
     activeProfile?.name,
     activeServer?.name,
+    activeServer?.defaultCwd,
     brokeredServers,
+    cloudDashboardUrl,
+    currentPath,
+    fileEntries,
     focusedServerId,
     focusedSession,
     glassesMode.enabled,
@@ -2696,17 +2720,55 @@ export default function AppShell() {
     glassesMode.voiceAutoSend,
     glassesMode.voiceLoop,
     glassesMode.wakePhraseEnabled,
+    includeHidden,
+    pendingAuditEvents,
     poolConnections,
     poolLifecyclePaused,
     route,
+    selectedContent,
+    selectedFilePath,
     startAiEngine,
     startKind,
+    teamIdentity,
   ]);
 
   const executeNovaAssistantActions = useCallback(
     async (actions: NovaAssistantAction[], context: NovaAssistantRuntimeContext): Promise<NovaAssistantExecutionResult[]> => {
       const results: NovaAssistantExecutionResult[] = [];
       const lastCreatedSessionByServerId = new Map<string, string>();
+      let assistantFileServerId = context.focusedServerId;
+      let assistantFilePath = context.files.currentPath;
+      let assistantFileIncludeHidden = context.files.includeHidden;
+      let assistantSelectedFilePath = context.files.selectedFilePath;
+
+      const resolveServerProfileOrThrow = (serverId: string): ServerProfile => {
+        const profile = brokeredServers.find((entry) => entry.id === serverId);
+        if (!profile) {
+          throw new Error("Could not load the target server profile.");
+        }
+        return profile;
+      };
+
+      const getActiveDirectoryForServer = (serverId: string): string => {
+        if (assistantFileServerId === serverId) {
+          return assistantFilePath;
+        }
+        return resolveServerProfileOrThrow(serverId).defaultCwd || "";
+      };
+
+      const getSelectedFileForServer = (serverId: string): string => {
+        if (assistantFileServerId === serverId && assistantSelectedFilePath) {
+          return assistantSelectedFilePath;
+        }
+        return "";
+      };
+
+      const setFilesSurfaceTarget = (serverId: string) => {
+        focusServer(serverId);
+        setHomeHubVisible(false);
+        setRoute("files");
+        assistantFileServerId = serverId;
+      };
 
       for (const action of actions) {
         try {
@@ -2763,10 +2825,72 @@ export default function AppShell() {
             continue;
           }
 
+          if (action.type === "team_refresh") {
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await refreshTeamContext();
+            results.push({ action: action.type, ok: true, detail: "Refreshed team context" });
+            continue;
+          }
+
+          if (action.type === "team_open_dashboard") {
+            if (!cloudDashboardUrl) {
+              throw new Error("No team cloud dashboard is configured.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await Linking.openURL(cloudDashboardUrl);
+            results.push({ action: action.type, ok: true, detail: "Opened the team dashboard" });
+            continue;
+          }
+
+          if (action.type === "team_sync_audit") {
+            if (!teamIdentity) {
+              throw new Error("Sign into a team account first.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await syncAuditNow();
+            results.push({ action: action.type, ok: true, detail: "Synced the audit log" });
+            continue;
+          }
+
+          if (action.type === "team_request_audit_export") {
+            if (!teamIdentity) {
+              throw new Error("Sign into a team account first.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await requestCloudAuditExport(action.format, action.rangeHours || 168);
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: `Requested a ${action.format.toUpperCase()} audit export`,
+            });
+            continue;
+          }
+
+          if (action.type === "team_refresh_audit_exports") {
+            if (!teamIdentity) {
+              throw new Error("Sign into a team account first.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await refreshCloudAuditExports(20);
+            results.push({ action: action.type, ok: true, detail: "Refreshed cloud audit exports" });
+            continue;
+          }
+
           const server = resolveAssistantServer(context, action.serverRef);
           if (!server) {
             throw new Error("Could not resolve the target server.");
           }
+          const serverProfile = resolveServerProfileOrThrow(server.id);
 
           const resolveSessionOrThrow = (sessionRef?: string | null) => {
             const resolved = resolveAssistantSession(
@@ -2852,6 +2976,109 @@ export default function AppShell() {
             continue;
           }
 
+          if (action.type === "list_files") {
+            const nextIncludeHidden = action.includeHidden ?? assistantFileIncludeHidden;
+            const targetPath = (action.path || getActiveDirectoryForServer(server.id)).trim();
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            const query = new URLSearchParams();
+            if (targetPath) {
+              query.set("path", targetPath);
+            }
+            if (nextIncludeHidden) {
+              query.set("hidden", "true");
+            }
+            const suffix = query.toString() ? `?${query.toString()}` : "";
+            const data = await apiRequest<{ path: string; entries: RemoteFileEntry[] }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/list${suffix}`
+            );
+            assistantFileIncludeHidden = nextIncludeHidden;
+            assistantFilePath = data.path;
+            assistantSelectedFilePath = null;
+            setIncludeHidden(nextIncludeHidden);
+            setCurrentPath(data.path);
+            setFileEntries(data.entries || []);
+            setSelectedFilePath(null);
+            setSelectedContent("");
+            results.push({ action: action.type, ok: true, detail: `Listed files for ${server.name} at ${data.path}` });
+            continue;
+          }
+
+          if (action.type === "open_file") {
+            const targetPath = (action.path || getSelectedFileForServer(server.id)).trim();
+            if (!targetPath) {
+              throw new Error(`Pick a file path on ${server.name} first.`);
+            }
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            const data = await apiRequest<{ path: string; content: string }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/read?path=${encodeURIComponent(targetPath)}`
+            );
+            assistantSelectedFilePath = data.path;
+            setSelectedFilePath(data.path);
+            setSelectedContent(data.content || "");
+            results.push({ action: action.type, ok: true, detail: `Opened ${data.path} on ${server.name}` });
+            continue;
+          }
+
+          if (action.type === "tail_file") {
+            const targetPath = (action.path || getSelectedFileForServer(server.id)).trim();
+            if (!targetPath) {
+              throw new Error(`Pick a file path on ${server.name} first.`);
+            }
+            const lines = Math.max(1, Math.min(action.lines || Number.parseInt(tailLines, 10) || 200, 5000));
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            const data = await apiRequest<{ path: string; content: string; lines: number }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/tail?path=${encodeURIComponent(targetPath)}&lines=${lines}`
+            );
+            assistantSelectedFilePath = data.path;
+            setSelectedFilePath(data.path);
+            setSelectedContent(data.content || "");
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: `Loaded the last ${lines} lines from ${data.path} on ${server.name}`,
+            });
+            continue;
+          }
+
+          if (action.type === "save_file") {
+            const targetPath = action.path.trim();
+            if (!targetPath) {
+              throw new Error("A file path is required.");
+            }
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            assertServerWritable(server.id, "Write file");
+            const savedContent = typeof action.content === "string" ? action.content : "";
+            await apiRequest<{ ok?: boolean; path?: string; bytes?: number }>(serverProfile.baseUrl, serverProfile.token, "/files/write", {
+              method: "POST",
+              body: JSON.stringify({
+                path: targetPath,
+                content: savedContent,
+              }),
+            });
+            assistantSelectedFilePath = targetPath;
+            setSelectedFilePath(targetPath);
+            setSelectedContent(savedContent);
+            recordAuditEvent({
+              action: "file_written",
+              serverId: server.id,
+              serverName: server.name,
+              session: "",
+              detail: `path=${targetPath}`,
+            });
+            results.push({ action: action.type, ok: true, detail: `Saved ${targetPath} on ${server.name}` });
+            continue;
+          }
+
           if (action.type === "create_agent") {
             await createAgentForServer(server.id, action.name);
             if (action.goal) {
@@ -2907,16 +3134,25 @@ export default function AppShell() {
     },
     [
       approveReadyAgentsForServer,
+      assertServerWritable,
       connectAllServers,
+      cloudDashboardUrl,
       createAgentForServer,
       createSessionForServer,
       denyAllPendingAgentsForServer,
       disconnectAllServers,
       focusServer,
+      brokeredServers,
       markActivity,
       queueAgentCommandForServer,
+      recordAuditEvent,
+      refreshCloudAuditExports,
+      refreshTeamContext,
+      requestCloudAuditExport,
       setAgentGoalForServer,
       setAgentStatusForServer,
+      setCurrentPath,
+      setFileEntries,
       setFocusedSession,
       setGlassesEnabled,
       setGlassesMinimalMode,
@@ -2925,11 +3161,17 @@ export default function AppShell() {
       setGlassesVoiceLoop,
       setGlassesWakePhraseEnabled,
       setHomeHubVisible,
+      setIncludeHidden,
       setRoute,
+      setSelectedContent,
+      setSelectedFilePath,
       setServerSessionDraft,
       setStartAiEngine,
       setStartKind,
       sendServerSessionCommand,
+      syncAuditNow,
+      tailLines,
+      teamIdentity,
       stopServerSession,
     ]
   );
