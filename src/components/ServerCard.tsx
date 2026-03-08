@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Modal, Pressable, Text, View } from "react-native";
 
 import { canDeleteServerProfile, canEditServerProfile, isTeamManagedServer } from "../teamServers";
 import { styles } from "../theme/styles";
@@ -19,6 +19,7 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare,
   const teamManaged = isTeamManagedServer(server);
   const canEdit = canEditServerProfile(server);
   const canDelete = canDeleteServerProfile(server);
+  const [showMoreActions, setShowMoreActions] = React.useState<boolean>(false);
   const sshTarget = server.sshHost
     ? `${server.sshUser ? `${server.sshUser}@` : ""}${server.sshHost}${server.sshPort ? `:${server.sshPort}` : ""}`
     : null;
@@ -48,43 +49,96 @@ export function ServerCard({ server, isActive, onUse, onEdit, onDelete, onShare,
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Edit server ${server.name}`}
-          style={[styles.actionButton, !canEdit ? styles.buttonDisabled : null]}
-          onPress={() => onEdit(server)}
-          disabled={!canEdit}
-        >
-          <Text style={styles.actionButtonText}>{canEdit ? "Edit" : "Managed"}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Share server ${server.name}`}
-          accessibilityHint="Shares server config without token."
+          accessibilityLabel={`Open more actions for server ${server.name}`}
           style={styles.actionButton}
-          onPress={() => onShare(server)}
+          onPress={() => setShowMoreActions(true)}
         >
-          <Text style={styles.actionButtonText}>Share</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open SSH fallback for ${server.name}`}
-          accessibilityHint="Opens this server in an installed SSH app using ssh URL scheme."
-          style={[styles.actionButton, !server.sshHost ? styles.buttonDisabled : null]}
-          onPress={() => onOpenSsh(server)}
-          disabled={!server.sshHost}
-        >
-          <Text style={styles.actionButtonText}>Open SSH</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Delete server ${server.name}`}
-          accessibilityHint="Removes this server profile from the app."
-          style={[styles.actionDangerButton, !canDelete ? styles.buttonDisabled : null]}
-          onPress={() => onDelete(server.id)}
-          disabled={!canDelete}
-        >
-          <Text style={styles.actionDangerText}>{canDelete ? "Delete" : "Managed"}</Text>
+          <Text style={styles.actionButtonText}>More</Text>
         </Pressable>
       </View>
+
+      <Modal visible={showMoreActions} transparent animationType="fade" onRequestClose={() => setShowMoreActions(false)}>
+        <Pressable style={styles.overlayBackdrop} onPress={() => setShowMoreActions(false)}>
+          <Pressable
+            style={styles.overlayCard}
+            onPress={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <Text style={styles.panelLabel}>Server Actions</Text>
+            <Text style={styles.serverSubtitle}>{server.name}</Text>
+            <View style={styles.actionsWrap}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Edit server ${server.name}`}
+                style={[styles.actionButton, !canEdit ? styles.buttonDisabled : null]}
+                onPress={() => {
+                  if (!canEdit) {
+                    return;
+                  }
+                  setShowMoreActions(false);
+                  onEdit(server);
+                }}
+                disabled={!canEdit}
+              >
+                <Text style={styles.actionButtonText}>{canEdit ? "Edit" : "Managed"}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Share server ${server.name}`}
+                accessibilityHint="Shares server config without token."
+                style={styles.actionButton}
+                onPress={() => {
+                  setShowMoreActions(false);
+                  onShare(server);
+                }}
+              >
+                <Text style={styles.actionButtonText}>Share</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Open SSH fallback for ${server.name}`}
+                accessibilityHint="Opens this server in an installed SSH app using ssh URL scheme."
+                style={[styles.actionButton, !server.sshHost ? styles.buttonDisabled : null]}
+                onPress={() => {
+                  if (!server.sshHost) {
+                    return;
+                  }
+                  setShowMoreActions(false);
+                  onOpenSsh(server);
+                }}
+                disabled={!server.sshHost}
+              >
+                <Text style={styles.actionButtonText}>Open SSH</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={`Delete server ${server.name}`}
+                accessibilityHint="Removes this server profile from the app."
+                style={[styles.actionDangerButton, !canDelete ? styles.buttonDisabled : null]}
+                onPress={() => {
+                  if (!canDelete) {
+                    return;
+                  }
+                  setShowMoreActions(false);
+                  onDelete(server.id);
+                }}
+                disabled={!canDelete}
+              >
+                <Text style={styles.actionDangerText}>{canDelete ? "Delete" : "Managed"}</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close server actions"
+                style={styles.buttonGhost}
+                onPress={() => setShowMoreActions(false)}
+              >
+                <Text style={styles.buttonGhostText}>Close</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }

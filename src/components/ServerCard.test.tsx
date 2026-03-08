@@ -64,6 +64,10 @@ describe("ServerCard", () => {
     }
 
     const root = (renderer as unknown as TestRenderer.ReactTestRenderer).root;
+    act(() => {
+      root.findByProps({ accessibilityLabel: "Open more actions for server Local" }).props.onPress();
+    });
+
     const editButton = root.findByProps({ accessibilityLabel: "Edit server Local" });
     const deleteButton = root.findByProps({ accessibilityLabel: "Delete server Local" });
     expect(editButton.props.disabled).toBe(false);
@@ -110,6 +114,10 @@ describe("ServerCard", () => {
     }
 
     const root = (renderer as unknown as TestRenderer.ReactTestRenderer).root;
+    act(() => {
+      root.findByProps({ accessibilityLabel: "Open more actions for server Team Host" }).props.onPress();
+    });
+
     const editButton = root.findByProps({ accessibilityLabel: "Edit server Team Host" });
     const deleteButton = root.findByProps({ accessibilityLabel: "Delete server Team Host" });
     expect(editButton.props.disabled).toBe(true);
