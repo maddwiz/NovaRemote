@@ -2020,48 +2020,16 @@ export function TerminalsScreen() {
 
   const openTerminalsTitle = showAllServerTerminals ? "Open Terminals (All Servers)" : "Open Terminals";
   const quickStartPanel = (
-    <View style={styles.panel}>
-      <Text style={styles.panelLabel}>Command Deck</Text>
-      <View style={styles.serverPoolSummaryMetrics}>
-        <Text style={styles.serverPoolSummaryText}>{`Connected ${connectedServerCount}/${servers.length}`}</Text>
-        <Text style={styles.serverPoolSummaryText}>{`Live streams ${totalActiveStreams}`}</Text>
-        <Text style={styles.serverPoolSummaryText}>{`Unread ${unreadServers.size}`}</Text>
-      </View>
-      <Text style={styles.serverSubtitle}>
+    <View style={[styles.panel, styles.workspaceHero]}>
+      <Text style={styles.workspaceHeroTitle}>Terminal Workspace</Text>
+      <Text style={styles.workspaceHeroSubtitle}>
         {poolLifecyclePaused
-          ? "Pool paused. Resume to restore live streams."
+          ? "Connection pool paused"
           : disconnectedServerCount > 0
-            ? `${disconnectedServerCount} server(s) disconnected`
-            : "All configured servers are connected"}
+            ? `${connectedServerCount}/${servers.length} online`
+            : "All servers online"}
       </Text>
-      <View style={styles.actionsWrap}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={poolLifecyclePaused ? "Resume connection pool" : "Pause connection pool"}
-          style={[styles.actionButton, servers.length === 0 ? styles.buttonDisabled : null]}
-          disabled={servers.length === 0}
-          onPress={poolLifecyclePaused ? onConnectAllServers : onDisconnectAllServers}
-        >
-          <Text style={styles.actionButtonText}>{poolLifecyclePaused ? "Resume Pool" : "Pause Pool"}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Refresh sessions for all connected servers"
-          style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
-          disabled={connectedServerCount === 0}
-          onPress={onRefreshAllServers}
-        >
-          <Text style={styles.actionButtonText}>Refresh All</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Reconnect all connected servers"
-          style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
-          disabled={connectedServerCount === 0}
-          onPress={onReconnectAllServers}
-        >
-          <Text style={styles.actionButtonText}>Reconnect</Text>
-        </Pressable>
+      <View style={styles.workspaceHeroActions}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Start a new shell terminal now"
@@ -2086,7 +2054,7 @@ export function TerminalsScreen() {
           style={styles.actionButton}
           onPress={() => setShowControlCenter(true)}
         >
-          <Text style={styles.actionButtonText}>Control Center</Text>
+          <Text style={styles.actionButtonText}>Actions</Text>
         </Pressable>
       </View>
       <View style={styles.serverPoolSummaryModes}>
@@ -2109,14 +2077,9 @@ export function TerminalsScreen() {
           onPress={() => setShowAllServerTerminals(true)}
           disabled={connectedServerCount < 2}
         >
-          <Text style={[styles.chipText, showAllServerTerminals ? styles.chipTextActive : null]}>All Servers</Text>
+          <Text style={[styles.chipText, showAllServerTerminals ? styles.chipTextActive : null]}>All</Text>
         </Pressable>
       </View>
-      <Text style={styles.emptyText}>
-        {showAllServerTerminals
-          ? "Showing pooled sessions from every connected server."
-          : "Showing only sessions from the focused server."}
-      </Text>
     </View>
   );
 

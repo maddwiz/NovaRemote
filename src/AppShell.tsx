@@ -3513,8 +3513,6 @@ export default function AppShell() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="light" />
-      <View pointerEvents="none" style={styles.bgBlobTop} />
-      <View pointerEvents="none" style={styles.bgBlobBottom} />
 
       <KeyboardAvoidingView
         style={styles.flex}
