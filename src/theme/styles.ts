@@ -116,11 +116,6 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
-  tabRowCompactContent: {
-    flexDirection: "row",
-    gap: 8,
-    paddingRight: 4,
-  },
   tabButton: {
     borderRadius: 12,
     borderWidth: 1,
@@ -146,6 +141,82 @@ export const styles = StyleSheet.create({
   },
   tabButtonTextOn: {
     color: "#ffe7f8",
+  },
+  navCompactRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  navMenuButton: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#4a3d84",
+    backgroundColor: "rgba(21, 14, 44, 0.94)",
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    minWidth: 86,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  navMenuButtonText: {
+    color: "#a9d7ff",
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.2,
+  },
+  navCompactTitle: {
+    color: "#e4d8ff",
+    fontSize: 14,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  navDrawerRoot: {
+    flex: 1,
+    flexDirection: "row",
+  },
+  navDrawerBackdrop: {
+    flex: 1,
+    backgroundColor: "rgba(3, 2, 10, 0.72)",
+  },
+  navDrawerPanel: {
+    width: "78%",
+    maxWidth: 320,
+    borderRightWidth: 1,
+    borderColor: "#392d70",
+    backgroundColor: "rgba(10, 6, 27, 0.98)",
+    paddingHorizontal: 14,
+    paddingVertical: 18,
+    gap: 12,
+  },
+  navDrawerTitle: {
+    color: "#9ad4ff",
+    fontSize: 12,
+    textTransform: "uppercase",
+    letterSpacing: 1,
+    fontWeight: "700",
+  },
+  navDrawerList: {
+    gap: 8,
+  },
+  navDrawerItem: {
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: "#47377e",
+    backgroundColor: "rgba(24, 16, 49, 0.95)",
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  navDrawerItemActive: {
+    borderColor: "#ff56b2",
+    backgroundColor: "rgba(255, 86, 178, 0.18)",
+  },
+  navDrawerItemText: {
+    color: "#aad6ff",
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  navDrawerItemTextActive: {
+    color: "#ffe0f5",
   },
   panel: {
     borderRadius: 16,

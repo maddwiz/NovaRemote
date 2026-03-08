@@ -1,5 +1,5 @@
-import React from "react";
-import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import React, { useMemo, useState } from "react";
+import { Modal, Pressable, Text, View, useWindowDimensions } from "react-native";
 
 import { styles } from "../theme/styles";
 import { RouteTab } from "../types";
@@ -11,7 +11,8 @@ type TabBarProps = {
 
 export function TabBar({ route, onChange }: TabBarProps) {
   const { width } = useWindowDimensions();
-  const compact = width < 520;
+  const compact = width < 680;
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const tabs: Array<{ key: RouteTab; label: string; accessibilityLabel: string }> = [
     { key: "terminals", label: "Terminals", accessibilityLabel: "Open terminals tab" },
     { key: "servers", label: "Servers", accessibilityLabel: "Open servers tab" },
@@ -21,13 +22,17 @@ export function TabBar({ route, onChange }: TabBarProps) {
     { key: "team", label: "Team", accessibilityLabel: "Open team tab" },
     { key: "vr", label: "VR", accessibilityLabel: "Open VR command center tab" },
   ];
+  const activeTabLabel = useMemo(
+    () => tabs.find((tab) => tab.key === route)?.label || "Navigation",
+    [route, tabs]
+  );
 
   const tabButtons = tabs.map((tab) => (
     <Pressable
       key={tab.key}
       style={[
         styles.tabButton,
-        compact ? styles.tabButtonCompact : styles.flexButton,
+        styles.flexButton,
         route === tab.key ? styles.tabButtonOn : null,
       ]}
       onPress={() => onChange(tab.key)}
@@ -42,9 +47,53 @@ export function TabBar({ route, onChange }: TabBarProps) {
 
   if (compact) {
     return (
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRowCompactContent}>
-        {tabButtons}
-      </ScrollView>
+      <>
+        <View style={styles.navCompactRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open navigation menu"
+            style={styles.navMenuButton}
+            onPress={() => setDrawerOpen(true)}
+          >
+            <Text style={styles.navMenuButtonText}>Menu</Text>
+          </Pressable>
+          <Text style={styles.navCompactTitle} numberOfLines={1}>
+            {activeTabLabel}
+          </Text>
+        </View>
+
+        <Modal visible={drawerOpen} transparent animationType="fade" onRequestClose={() => setDrawerOpen(false)}>
+          <View style={styles.navDrawerRoot}>
+            <View style={styles.navDrawerPanel}>
+              <Text style={styles.navDrawerTitle}>Navigate</Text>
+              <View style={styles.navDrawerList}>
+                {tabs.map((tab) => (
+                  <Pressable
+                    key={`drawer-${tab.key}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={tab.accessibilityLabel}
+                    style={[styles.navDrawerItem, route === tab.key ? styles.navDrawerItemActive : null]}
+                    onPress={() => {
+                      setDrawerOpen(false);
+                      onChange(tab.key);
+                    }}
+                  >
+                    <Text style={[styles.navDrawerItemText, route === tab.key ? styles.navDrawerItemTextActive : null]}>
+                      {tab.label}
+                    </Text>
+                  </Pressable>
+                ))}
+              </View>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close navigation menu"
+              style={styles.navDrawerBackdrop}
+              onPress={() => setDrawerOpen(false)}
+            />
+          </View>
+        </Modal>
+      </>
     );
   }
 
