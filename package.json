@@ -5,7 +5,7 @@
   "scripts": {
     "start": "expo start",
     "android": "expo run:android",
-    "ios": "expo run:ios",
+    "ios": "node ./scripts/ensure-ios-info-plist.mjs && expo run:ios",
     "web": "expo start --web",
     "web:export": "expo export --platform web",
     "desktop:web": "expo start --web --clear",
@@ -24,7 +24,7 @@
     "fix:ios:path-spaces": "node scripts/fix-ios-space-paths.mjs",
     "pods:install:ios": "cd ios && pod install",
     "prebuild:ios": "expo prebuild --platform ios --clean --no-install && npm run fix:ios:path-spaces && npm run pods:install:ios && npm run fix:ios:path-spaces",
-    "ios:run": "npm run fix:ios:path-spaces && expo run:ios",
+    "ios:run": "node ./scripts/ensure-ios-info-plist.mjs && npm run fix:ios:path-spaces && expo run:ios",
     "ios:sim": "open -a Simulator && npm run ios:run",
     "companion:install:linux": "bash ./scripts/companion-install-linux.sh",
     "companion:install:windows": "powershell -ExecutionPolicy Bypass -File ./scripts/companion-install-windows.ps1",
