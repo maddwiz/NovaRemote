@@ -9,6 +9,7 @@ import { styles } from "../theme/styles";
 import { VrLayoutPreset } from "../vr/contracts";
 import { useVrLiveRuntime } from "../vr/useVrLiveRuntime";
 import { buildVrPanelId } from "../vr/useVrWorkspace";
+import { deriveVoicePresence } from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 const VR_PRESETS: VrLayoutPreset[] = ["arc", "grid", "stacked", "cockpit", "custom"];
@@ -259,15 +260,8 @@ export function VrCommandCenterScreen() {
     if (!workspace || !focusedServerId || !workspace.serverIds.includes(focusedServerId)) {
       return;
     }
-    const nextRemoteParticipants = Array.from(
-      new Set(
-        Object.values(sessionPresence)
-          .flat()
-          .filter((collaborator) => !collaborator.isSelf)
-          .map((collaborator) => collaborator.id.trim().toLowerCase())
-          .filter(Boolean)
-      )
-    ).sort();
+    const presence = deriveVoicePresence(sessionPresence);
+    const nextRemoteParticipants = presence.remoteParticipantIds;
     const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
       .map((participantId) => participantId.trim().toLowerCase())
       .filter((participantId) => participantId && participantId !== "local-user")
@@ -275,10 +269,14 @@ export function VrCommandCenterScreen() {
     const hasSameParticipants =
       nextRemoteParticipants.length === existingRemoteParticipants.length &&
       nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
-    if (hasSameParticipants) {
+    const hasSameSpeaker = (joinedChannel.activeSpeakerId || null) === presence.activeRemoteSpeakerId;
+    if (hasSameParticipants && hasSameSpeaker) {
       return;
     }
-    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, { preserveLocalParticipant: true });
+    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, {
+      preserveLocalParticipant: true,
+      activeSpeakerId: presence.activeRemoteSpeakerId,
+    });
   }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels]);
 
   const agentTargetServerIds = useMemo(() => {

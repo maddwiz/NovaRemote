@@ -303,6 +303,7 @@ describe("VrCommandCenterScreen", () => {
   });
 
   it("syncs joined workspace channel participants from focused server collaboration presence", async () => {
+    const nowMs = Date.now();
     const runtime = makeRuntime();
     const syncChannelParticipants = vi.fn();
     const workspaces: SharedWorkspace[] = [
@@ -354,7 +355,7 @@ describe("VrCommandCenterScreen", () => {
               role: "editor",
               readOnly: false,
               isSelf: false,
-              lastSeenAt: 1,
+              lastSeenAt: nowMs,
             },
             {
               id: "local-user",
@@ -362,7 +363,7 @@ describe("VrCommandCenterScreen", () => {
               role: "owner",
               readOnly: false,
               isSelf: true,
-              lastSeenAt: 1,
+              lastSeenAt: nowMs,
             },
           ],
         },
@@ -375,6 +376,7 @@ describe("VrCommandCenterScreen", () => {
 
     expect(syncChannelParticipants).toHaveBeenCalledWith("voice-1", ["remote-a"], {
       preserveLocalParticipant: true,
+      activeSpeakerId: "remote-a",
     });
 
     await act(async () => {

@@ -28,6 +28,7 @@ import {
 import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { GlassesBrand } from "../types";
+import { deriveVoicePresence } from "../voicePresence";
 import { getWorkspacePermissions } from "../workspacePermissions";
 
 type BrandProfile = {
@@ -345,11 +346,18 @@ export function GlassesModeScreen() {
     if (!joinedChannel) {
       return;
     }
-    const nextSpeakerId = voiceRecording ? "local-user" : null;
-    if ((joinedChannel.activeSpeakerId || null) === nextSpeakerId) {
+    const currentSpeakerId = (joinedChannel.activeSpeakerId || "").trim().toLowerCase();
+    if (voiceRecording) {
+      if (currentSpeakerId === "local-user") {
+        return;
+      }
+      setActiveSpeaker(joinedChannel.id, "local-user");
       return;
     }
-    setActiveSpeaker(joinedChannel.id, nextSpeakerId);
+    if (currentSpeakerId !== "local-user") {
+      return;
+    }
+    setActiveSpeaker(joinedChannel.id, null);
   }, [setActiveSpeaker, voiceChannels, voiceRecording]);
 
   useEffect(() => {
@@ -364,15 +372,8 @@ export function GlassesModeScreen() {
     if (!workspace || !focusedServerId || !workspace.serverIds.includes(focusedServerId)) {
       return;
     }
-    const nextRemoteParticipants = Array.from(
-      new Set(
-        Object.values(sessionPresence)
-          .flat()
-          .filter((collaborator) => !collaborator.isSelf)
-          .map((collaborator) => collaborator.id.trim().toLowerCase())
-          .filter(Boolean)
-      )
-    ).sort();
+    const presence = deriveVoicePresence(sessionPresence);
+    const nextRemoteParticipants = presence.remoteParticipantIds;
     const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
       .map((participantId) => participantId.trim().toLowerCase())
       .filter((participantId) => participantId && participantId !== "local-user")
@@ -380,11 +381,16 @@ export function GlassesModeScreen() {
     const hasSameParticipants =
       nextRemoteParticipants.length === existingRemoteParticipants.length &&
       nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
-    if (hasSameParticipants) {
+    const nextActiveSpeakerId = voiceRecording ? "local-user" : presence.activeRemoteSpeakerId;
+    const hasSameSpeaker = (joinedChannel.activeSpeakerId || null) === nextActiveSpeakerId;
+    if (hasSameParticipants && hasSameSpeaker) {
       return;
     }
-    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, { preserveLocalParticipant: true });
-  }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels]);
+    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, {
+      preserveLocalParticipant: true,
+      activeSpeakerId: nextActiveSpeakerId,
+    });
+  }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels, voiceRecording]);
 
   const loopTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const silenceSinceRef = useRef<number | null>(null);

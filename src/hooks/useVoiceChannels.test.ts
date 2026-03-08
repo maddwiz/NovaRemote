@@ -366,4 +366,60 @@ describe("useVoiceChannels", () => {
       renderer?.unmount();
     });
   });
+
+  it("supports explicit active speaker overrides during participant sync", async () => {
+    let latest: UseVoiceChannelsResult | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVoiceChannels();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    let channelId = "";
+    await act(async () => {
+      const created = current().createChannel({ workspaceId: "workspace-a", name: "Incident" });
+      channelId = created?.id || "";
+      current().joinChannel(channelId);
+      current().setChannelParticipantActive(channelId, "engineer-2", true);
+      current().setActiveSpeaker(channelId, "engineer-2");
+    });
+
+    await act(async () => {
+      current().syncChannelParticipants(channelId, ["engineer-3", "engineer-4"], {
+        preserveLocalParticipant: true,
+        activeSpeakerId: "engineer-4",
+      });
+    });
+
+    const withExplicitSpeaker = current().channels.find((channel) => channel.id === channelId);
+    expect(withExplicitSpeaker?.activeSpeakerId).toBe("engineer-4");
+    expect(withExplicitSpeaker?.activeParticipantIds).toContain("engineer-4");
+
+    await act(async () => {
+      current().syncChannelParticipants(channelId, ["engineer-3"], {
+        preserveLocalParticipant: true,
+        activeSpeakerId: "engineer-4",
+      });
+    });
+
+    const afterMissingSpeaker = current().channels.find((channel) => channel.id === channelId);
+    expect(afterMissingSpeaker?.activeSpeakerId).toBeNull();
+    expect(afterMissingSpeaker?.activeParticipantIds).toContain("engineer-3");
+    expect(afterMissingSpeaker?.activeParticipantIds).not.toContain("engineer-4");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

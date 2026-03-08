@@ -23,7 +23,7 @@ export type UseVoiceChannelsResult = {
   syncChannelParticipants: (
     channelId: string,
     participantIds: string[],
-    options?: { preserveLocalParticipant?: boolean }
+    options?: { preserveLocalParticipant?: boolean; activeSpeakerId?: string | null }
   ) => void;
 };
 
@@ -356,12 +356,19 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
     (
       channelId: string,
       participantIds: string[],
-      options: { preserveLocalParticipant?: boolean } = {}
+      options: { preserveLocalParticipant?: boolean; activeSpeakerId?: string | null } = {}
     ) => {
       const normalizedParticipants = Array.from(
         new Set(participantIds.map((value) => normalizeParticipantId(value)).filter(Boolean))
       ).sort();
       const preserveLocalParticipant = options.preserveLocalParticipant !== false;
+      const hasExplicitSpeaker = Object.prototype.hasOwnProperty.call(options, "activeSpeakerId");
+      const requestedSpeakerId =
+        hasExplicitSpeaker && typeof options.activeSpeakerId === "string"
+          ? normalizeParticipantId(options.activeSpeakerId)
+          : hasExplicitSpeaker
+            ? null
+            : undefined;
       setChannels((previous) =>
         sortChannels(
           previous.map((channel) => {
@@ -379,9 +386,14 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
               nextParticipants.length !== currentParticipants.length ||
               nextParticipants.some((value, index) => value !== currentParticipants[index]);
 
-            const activeSpeakerStillPresent =
-              !channel.activeSpeakerId || nextParticipantsSet.has(normalizeParticipantId(channel.activeSpeakerId));
-            const nextActiveSpeakerId = activeSpeakerStillPresent ? channel.activeSpeakerId || null : null;
+            const nextActiveSpeakerId =
+              requestedSpeakerId !== undefined
+                ? requestedSpeakerId && nextParticipantsSet.has(requestedSpeakerId)
+                  ? requestedSpeakerId
+                  : null
+                : !channel.activeSpeakerId || nextParticipantsSet.has(normalizeParticipantId(channel.activeSpeakerId))
+                  ? channel.activeSpeakerId || null
+                  : null;
             const activeSpeakerChanged = nextActiveSpeakerId !== (channel.activeSpeakerId || null);
 
             if (!participantsChanged && !activeSpeakerChanged) {

@@ -496,6 +496,7 @@ describe("GlassesModeScreen", () => {
   });
 
   it("syncs joined workspace channel participants from focused server collaboration presence", async () => {
+    const nowMs = Date.now();
     const syncChannelParticipants = vi.fn();
     useVoiceChannelsMock.mockReturnValue({
       channels: [
@@ -559,7 +560,7 @@ describe("GlassesModeScreen", () => {
                     role: "editor",
                     readOnly: false,
                     isSelf: false,
-                    lastSeenAt: 1,
+                    lastSeenAt: nowMs,
                   },
                   {
                     id: "local-user",
@@ -567,7 +568,7 @@ describe("GlassesModeScreen", () => {
                     role: "owner",
                     readOnly: false,
                     isSelf: true,
-                    lastSeenAt: 1,
+                    lastSeenAt: nowMs,
                   },
                 ],
               },
@@ -583,6 +584,7 @@ describe("GlassesModeScreen", () => {
 
     expect(syncChannelParticipants).toHaveBeenCalledWith("voice-1", ["remote-a"], {
       preserveLocalParticipant: true,
+      activeSpeakerId: "remote-a",
     });
 
     await act(async () => {
