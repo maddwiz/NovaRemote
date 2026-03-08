@@ -21,6 +21,7 @@
         "ITSAppUsesNonExemptEncryption": false,
         "NSFaceIDUsageDescription": "NovaRemote uses Face ID to protect your saved server credentials.",
         "NSMicrophoneUsageDescription": "NovaRemote uses the microphone for voice commands and glasses mode hands-free control.",
+        "NSSpeechRecognitionUsageDescription": "NovaRemote uses speech recognition to transcribe hands-free commands into Nova actions.",
         "NSCameraUsageDescription": "NovaRemote uses the camera to scan QR codes for quick server setup."
       }
     },
@@ -50,6 +51,13 @@
         "expo-camera",
         {
           "cameraPermission": "NovaRemote uses the camera to scan QR codes for quick server setup."
+        }
+      ],
+      [
+        "expo-speech-recognition",
+        {
+          "microphonePermission": "NovaRemote uses the microphone for voice commands and glasses mode hands-free control.",
+          "speechRecognitionPermission": "NovaRemote uses speech recognition to transcribe hands-free commands into Nova actions."
         }
       ],
       "expo-asset"

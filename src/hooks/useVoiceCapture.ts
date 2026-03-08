@@ -9,6 +9,11 @@ import {
   type RecordingOptions,
 } from "expo-audio";
 import { useCallback, useEffect, useState } from "react";
+import { Platform } from "react-native";
+import type {
+  ExpoSpeechRecognitionErrorEvent,
+  ExpoSpeechRecognitionResultEvent,
+} from "expo-speech-recognition";
 
 import { normalizeBaseUrl } from "../api/client";
 import { ServerProfile } from "../types";
@@ -17,6 +22,7 @@ const BASE_TRANSCRIBE_ENDPOINTS = ["/voice/transcribe", "/speech/transcribe", "/
 const VAD_TRANSCRIBE_ENDPOINTS = ["/voice/transcribe-vad", "/speech/transcribe-vad", "/ai/transcribe-vad", "/llm/transcribe-vad"];
 const TRANSCRIBE_AUDIO_MIME = "audio/m4a";
 const TRANSCRIBE_AUDIO_FORMAT = "m4a-aac";
+const NATIVE_TRANSCRIBE_TIMEOUT_MS = 30000;
 
 const VOICE_RECORDING_OPTIONS: RecordingOptions = {
   ...RecordingPresets.HIGH_QUALITY,
@@ -37,9 +43,48 @@ type VoiceTranscribeOptions = {
 
 type VoicePermissionStatus = "granted" | "denied" | "undetermined" | null;
 
+type SpeechRecognitionModule = {
+  isRecognitionAvailable: () => boolean;
+  getStateAsync: () => Promise<"inactive" | "starting" | "recognizing" | "stopping">;
+  requestPermissionsAsync: () => Promise<{ granted: boolean }>;
+  addListener: (
+    eventName: "result" | "error" | "end",
+    listener: (event?: any) => void
+  ) => { remove: () => void };
+  start: (options: Record<string, unknown>) => void;
+  abort: () => void;
+};
+
+let speechRecognitionModuleOverride: SpeechRecognitionModule | null = null;
+
 function devVoiceLog(...args: Array<unknown>) {
   if (__DEV__) {
     console.log("[Voice]", ...args);
+  }
+}
+
+function getSpeechRecognitionModule(): SpeechRecognitionModule {
+  if (speechRecognitionModuleOverride) {
+    return speechRecognitionModuleOverride;
+  }
+  try {
+    // Lazy require keeps the app from crashing on old binaries that do not yet
+    // include the native speech module.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const speechPackage = require("expo-speech-recognition") as {
+      ExpoSpeechRecognitionModule?: SpeechRecognitionModule;
+    };
+    const module = speechPackage.ExpoSpeechRecognitionModule;
+    if (!module) {
+      throw new Error("expo-speech-recognition is unavailable.");
+    }
+    return module;
+  } catch (error) {
+    throw new Error(
+      error instanceof Error
+        ? `Native speech recognition is unavailable in this build: ${error.message}`
+        : "Native speech recognition is unavailable in this build."
+    );
   }
 }
 
@@ -71,6 +116,127 @@ function readTranscript(payload: unknown): string {
     }
   }
   return "";
+}
+
+function readSpeechRecognitionTranscript(event: ExpoSpeechRecognitionResultEvent | null | undefined): string {
+  if (!event?.results?.length) {
+    return "";
+  }
+  return event.results
+    .map((item) => item?.transcript || "")
+    .filter((item) => item.trim().length > 0)
+    .join("\n")
+    .trim();
+}
+
+async function transcribeWithNativeSpeech(uri: string): Promise<string> {
+  if (!uri.trim()) {
+    throw new Error("Audio capture failed before native speech transcription started.");
+  }
+  const speechRecognitionModule = getSpeechRecognitionModule();
+  if (!speechRecognitionModule.isRecognitionAvailable()) {
+    throw new Error("Native speech recognition is unavailable on this device.");
+  }
+
+  try {
+    const state = await speechRecognitionModule.getStateAsync();
+    if (state !== "inactive") {
+      speechRecognitionModule.abort();
+    }
+  } catch {
+    // best effort
+  }
+
+  const permission = await speechRecognitionModule.requestPermissionsAsync();
+  if (!permission.granted) {
+    throw new Error("Speech recognition permission is required for voice transcription.");
+  }
+
+  return await new Promise<string>((resolve, reject) => {
+    let finished = false;
+    let latestTranscript = "";
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
+
+    const cleanup = () => {
+      resultSubscription.remove();
+      errorSubscription.remove();
+      endSubscription.remove();
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
+
+    const settle = (kind: "resolve" | "reject", value: string | Error) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      cleanup();
+      if (kind === "resolve") {
+        resolve(value as string);
+      } else {
+        reject(value instanceof Error ? value : new Error(String(value)));
+      }
+    };
+
+    const resultSubscription = speechRecognitionModule.addListener("result", (event) => {
+      const transcript = readSpeechRecognitionTranscript(event);
+      if (!transcript) {
+        return;
+      }
+      latestTranscript = transcript;
+      devVoiceLog("stopAndTranscribe:nativeResult", {
+        isFinal: event.isFinal,
+        transcriptPreview: transcript.slice(0, 160),
+      });
+      if (event.isFinal) {
+        settle("resolve", transcript);
+      }
+    });
+
+    const errorSubscription = speechRecognitionModule.addListener("error", (event: ExpoSpeechRecognitionErrorEvent) => {
+      devVoiceLog("stopAndTranscribe:nativeError", {
+        code: event.error,
+        message: event.message,
+      });
+      settle("reject", new Error(event.message || `Native speech recognition failed: ${event.error}`));
+    });
+
+    const endSubscription = speechRecognitionModule.addListener("end", () => {
+      if (latestTranscript.trim()) {
+        settle("resolve", latestTranscript.trim());
+        return;
+      }
+      settle("reject", new Error("Native speech recognition returned no transcript."));
+    });
+
+    timeoutId = setTimeout(() => {
+      try {
+        speechRecognitionModule.abort();
+      } catch {
+        // best effort
+      }
+      settle("reject", new Error("Native speech recognition timed out."));
+    }, NATIVE_TRANSCRIBE_TIMEOUT_MS);
+
+    try {
+      devVoiceLog("stopAndTranscribe:tryNativeFallback", { uri, platform: Platform.OS });
+      speechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
+        maxAlternatives: 1,
+        continuous: false,
+        requiresOnDeviceRecognition: false,
+        addsPunctuation: true,
+        audioSource: {
+          uri,
+        },
+      });
+    } catch (error) {
+      settle("reject", error instanceof Error ? error : new Error(String(error)));
+    }
+  });
 }
 
 async function stopAndCleanupRecording(recorder: AudioRecorder | null): Promise<void> {
@@ -218,105 +384,118 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       if (!uri) {
         throw new Error("Audio capture failed. Please try again.");
       }
-      if (!activeServer || !connected) {
-        throw new Error("Connect to a server before using voice transcription.");
-      }
-
-      const baseUrl = normalizeBaseUrl(activeServer.baseUrl);
       let lastHttpError: string | null = null;
 
-      const endpointOrder = options.vadEnabled
-        ? [...VAD_TRANSCRIBE_ENDPOINTS, ...BASE_TRANSCRIBE_ENDPOINTS]
-        : BASE_TRANSCRIBE_ENDPOINTS;
+      if (activeServer && connected) {
+        const baseUrl = normalizeBaseUrl(activeServer.baseUrl);
 
-      for (const endpoint of endpointOrder) {
-        const form = new FormData();
-        form.append("file", {
-          uri,
-          type: TRANSCRIBE_AUDIO_MIME,
-          name: "voice-input.m4a",
-        } as unknown as Blob);
-        form.append("audio_mime_type", TRANSCRIBE_AUDIO_MIME);
-        form.append("audio_format", TRANSCRIBE_AUDIO_FORMAT);
-        const wakePhrase = String(options.wakePhrase || "").trim();
-        if (wakePhrase) {
-          form.append("wake_phrase", wakePhrase);
-        }
-        if (typeof options.requireWakePhrase === "boolean") {
-          form.append("require_wake_phrase", options.requireWakePhrase ? "true" : "false");
-        }
-        if (options.vadEnabled) {
-          form.append("vad", "true");
-          const vadSilenceMs = Number.isFinite(options.vadSilenceMs) ? Math.max(250, Math.min(Number(options.vadSilenceMs), 5000)) : 900;
-          form.append("vad_silence_ms", String(vadSilenceMs));
-        }
+        const endpointOrder = options.vadEnabled
+          ? [...VAD_TRANSCRIBE_ENDPOINTS, ...BASE_TRANSCRIBE_ENDPOINTS]
+          : BASE_TRANSCRIBE_ENDPOINTS;
 
-        try {
-          devVoiceLog("stopAndTranscribe:tryEndpoint", { endpoint, baseUrl, wakePhrase: Boolean(wakePhrase) });
-          const response = await fetch(`${baseUrl}${endpoint}`, {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${activeServer.token}`,
-            },
-            body: form,
-          });
-
-          if (!response.ok) {
-            if (response.status === 404 || response.status === 405 || response.status === 501) {
-              devVoiceLog("stopAndTranscribe:endpointUnavailable", { endpoint, status: response.status });
-              continue;
-            }
-            if (response.status === 415) {
-              let detail = "";
-              try {
-                detail = (await response.text()).trim();
-              } catch {
-                detail = "";
-              }
-              lastHttpError = detail
-                ? `HTTP 415 from ${endpoint}: ${detail}`
-                : `HTTP 415 from ${endpoint}. Server rejected ${TRANSCRIBE_AUDIO_MIME}; expected format mismatch.`;
-              devVoiceLog("stopAndTranscribe:unsupportedFormat", { endpoint, detail: lastHttpError });
-              continue;
-            }
-            lastHttpError = `HTTP ${response.status} from ${endpoint}`;
-            devVoiceLog("stopAndTranscribe:httpError", { endpoint, status: response.status });
-            continue;
+        for (const endpoint of endpointOrder) {
+          const form = new FormData();
+          form.append("file", {
+            uri,
+            type: TRANSCRIBE_AUDIO_MIME,
+            name: "voice-input.m4a",
+          } as unknown as Blob);
+          form.append("audio_mime_type", TRANSCRIBE_AUDIO_MIME);
+          form.append("audio_format", TRANSCRIBE_AUDIO_FORMAT);
+          const wakePhrase = String(options.wakePhrase || "").trim();
+          if (wakePhrase) {
+            form.append("wake_phrase", wakePhrase);
+          }
+          if (typeof options.requireWakePhrase === "boolean") {
+            form.append("require_wake_phrase", options.requireWakePhrase ? "true" : "false");
+          }
+          if (options.vadEnabled) {
+            form.append("vad", "true");
+            const vadSilenceMs = Number.isFinite(options.vadSilenceMs) ? Math.max(250, Math.min(Number(options.vadSilenceMs), 5000)) : 900;
+            form.append("vad_silence_ms", String(vadSilenceMs));
           }
 
-          let parsed: unknown = null;
           try {
-            parsed = await response.json();
-          } catch {
-            try {
-              parsed = await response.text();
-            } catch {
-              parsed = null;
+            devVoiceLog("stopAndTranscribe:tryEndpoint", { endpoint, baseUrl, wakePhrase: Boolean(wakePhrase) });
+            const response = await fetch(`${baseUrl}${endpoint}`, {
+              method: "POST",
+              headers: {
+                Authorization: `Bearer ${activeServer.token}`,
+              },
+              body: form,
+            });
+
+            if (!response.ok) {
+              if (response.status === 404 || response.status === 405 || response.status === 501) {
+                devVoiceLog("stopAndTranscribe:endpointUnavailable", { endpoint, status: response.status });
+                continue;
+              }
+              if (response.status === 415) {
+                let detail = "";
+                try {
+                  detail = (await response.text()).trim();
+                } catch {
+                  detail = "";
+                }
+                lastHttpError = detail
+                  ? `HTTP 415 from ${endpoint}: ${detail}`
+                  : `HTTP 415 from ${endpoint}. Server rejected ${TRANSCRIBE_AUDIO_MIME}; expected format mismatch.`;
+                devVoiceLog("stopAndTranscribe:unsupportedFormat", { endpoint, detail: lastHttpError });
+                continue;
+              }
+              lastHttpError = `HTTP ${response.status} from ${endpoint}`;
+              devVoiceLog("stopAndTranscribe:httpError", { endpoint, status: response.status });
+              continue;
             }
-          }
 
-          const transcript = readTranscript(parsed);
-          if (!transcript) {
-            devVoiceLog("stopAndTranscribe:emptyTranscript", { endpoint });
-            continue;
-          }
+            let parsed: unknown = null;
+            try {
+              parsed = await response.json();
+            } catch {
+              try {
+                parsed = await response.text();
+              } catch {
+                parsed = null;
+              }
+            }
 
-          setLastTranscript(transcript);
-          devVoiceLog("stopAndTranscribe:success", {
-            endpoint,
-            transcriptPreview: transcript.slice(0, 160),
-          });
-          return transcript;
-        } catch (error) {
-          lastHttpError = error instanceof Error ? error.message : String(error);
-          devVoiceLog("stopAndTranscribe:networkError", { endpoint, error: lastHttpError });
+            const transcript = readTranscript(parsed);
+            if (!transcript) {
+              devVoiceLog("stopAndTranscribe:emptyTranscript", { endpoint });
+              continue;
+            }
+
+            setLastTranscript(transcript);
+            devVoiceLog("stopAndTranscribe:success", {
+              endpoint,
+              transcriptPreview: transcript.slice(0, 160),
+            });
+            return transcript;
+          } catch (error) {
+            lastHttpError = error instanceof Error ? error.message : String(error);
+            devVoiceLog("stopAndTranscribe:networkError", { endpoint, error: lastHttpError });
+          }
         }
+      } else {
+        lastHttpError = "No connected server transcription path is available.";
       }
 
-      throw new Error(
-        lastHttpError ||
-          `No transcription endpoint found. Add one of: /voice/transcribe-vad, /voice/transcribe, /speech/transcribe, /ai/transcribe, /llm/transcribe. Expected upload format: ${TRANSCRIBE_AUDIO_MIME}.`
-      );
+      try {
+        const transcript = await transcribeWithNativeSpeech(uri);
+        setLastTranscript(transcript);
+        devVoiceLog("stopAndTranscribe:nativeSuccess", {
+          transcriptPreview: transcript.slice(0, 160),
+        });
+        return transcript;
+      } catch (nativeError) {
+        const nativeMessage = nativeError instanceof Error ? nativeError.message : String(nativeError);
+        devVoiceLog("stopAndTranscribe:nativeFallbackFailed", nativeMessage);
+        throw new Error(
+          lastHttpError
+            ? `${lastHttpError} Native fallback failed: ${nativeMessage}`
+            : nativeMessage
+        );
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setLastError(message);
@@ -369,3 +548,12 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     setLastTranscript,
   };
 }
+
+export const voiceCaptureTestUtils = {
+  readTranscript,
+  readSpeechRecognitionTranscript,
+  transcribeWithNativeSpeech,
+  setSpeechRecognitionModuleOverride(module: SpeechRecognitionModule | null) {
+    speechRecognitionModuleOverride = module;
+  },
+};
