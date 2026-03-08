@@ -30,6 +30,34 @@ type ApproveReadyApprovalsOptions = {
   nextStatus?: NovaAgentStatus;
 };
 
+type RunMonitoringCycleOptions = {
+  intervalMs?: number;
+  defaultSession?: string | null;
+  autoApproveCapabilities?: string[];
+  nowMs?: number;
+};
+
+type MonitoringCycleResult = {
+  requested: string[];
+  approved: string[];
+  skipped: string[];
+};
+
+const DEFAULT_MONITORING_INTERVAL_MS = 60_000;
+const DEFAULT_AUTO_APPROVE_CAPABILITIES = ["auto-approve", "autonomous", "self-approve"];
+
+function supportsAutoApprove(capabilities: string[], autoApproveCapabilities: Set<string>): boolean {
+  return capabilities.some((capability) => autoApproveCapabilities.has(capability.trim().toLowerCase()));
+}
+
+function parseTimestampMs(value: string | null | undefined): number | null {
+  if (!value) {
+    return null;
+  }
+  const parsed = Date.parse(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaultSession }: UseNovaAgentRuntimeArgs) {
   const {
     agents,
@@ -306,6 +334,91 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
     return denied;
   }, [agents, denyAgentApproval]);
 
+  const runMonitoringCycle = useCallback(
+    (options: RunMonitoringCycleOptions = {}): MonitoringCycleResult => {
+      const requested: string[] = [];
+      const approved: string[] = [];
+      const skipped: string[] = [];
+      const defaultSession = options.defaultSession?.trim() || resolveDefaultSession?.()?.trim() || "";
+      const intervalMs = Math.max(1_000, Math.floor(options.intervalMs || DEFAULT_MONITORING_INTERVAL_MS));
+      const nowMs = options.nowMs ?? Date.now();
+      const autoApproveCapabilities = new Set(
+        (options.autoApproveCapabilities?.length ? options.autoApproveCapabilities : DEFAULT_AUTO_APPROVE_CAPABILITIES).map((value) =>
+          value.trim().toLowerCase()
+        )
+      );
+
+      agents.forEach((agent) => {
+        if (agent.status !== "monitoring") {
+          return;
+        }
+        const goal = agent.currentGoal.trim();
+        if (!goal) {
+          skipped.push(agent.agentId);
+          return;
+        }
+
+        const canAutoApprove = supportsAutoApprove(agent.capabilities, autoApproveCapabilities);
+        const lastActionMs = parseTimestampMs(agent.lastActionAt || agent.updatedAt);
+        const cooldownElapsed = lastActionMs === null || nowMs - lastActionMs >= intervalMs;
+
+        if (agent.pendingApproval) {
+          if (!canAutoApprove) {
+            skipped.push(agent.agentId);
+            return;
+          }
+          const pendingCommand = agent.pendingApproval.command?.trim() || goal;
+          const pendingSession = agent.pendingApproval.session?.trim() || defaultSession;
+          if (!pendingCommand || !pendingSession) {
+            skipped.push(agent.agentId);
+            return;
+          }
+          const didApprove = approveAgentApproval(agent.agentId, {
+            commandOverride: pendingCommand,
+            sessionOverride: pendingSession,
+            nextStatus: "monitoring",
+          });
+          if (didApprove) {
+            approved.push(agent.agentId);
+          } else {
+            skipped.push(agent.agentId);
+          }
+          return;
+        }
+
+        if (!cooldownElapsed || !defaultSession) {
+          skipped.push(agent.agentId);
+          return;
+        }
+
+        const didRequest = requestAgentApproval(agent.agentId, {
+          summary: `Monitoring cycle queued for ${defaultSession}`,
+          command: goal,
+          session: defaultSession,
+        });
+        if (!didRequest) {
+          skipped.push(agent.agentId);
+          return;
+        }
+        requested.push(agent.agentId);
+        if (!canAutoApprove) {
+          return;
+        }
+        const didApprove = approveAgentApproval(agent.agentId, {
+          commandOverride: goal,
+          sessionOverride: defaultSession,
+          nextStatus: "monitoring",
+        });
+        if (didApprove) {
+          approved.push(agent.agentId);
+        }
+      });
+
+      return { requested, approved, skipped };
+    },
+    [agents, approveAgentApproval, requestAgentApproval, resolveDefaultSession]
+  );
+
   const clearAgentMemory = useCallback(
     (agentId: string) => {
       const agent = agentById.get(agentId);
@@ -337,6 +450,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
       denyAgentApproval,
       approveReadyApprovals,
       denyAllPendingApprovals,
+      runMonitoringCycle,
       clearAgentMemory,
     }),
     [
@@ -356,6 +470,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
       removeRuntimeAgent,
       requestAgentApproval,
       approveReadyApprovals,
+      runMonitoringCycle,
       setRuntimeAgentCapabilities,
       setRuntimeAgentGoal,
       setRuntimeAgentStatus,

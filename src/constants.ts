@@ -70,6 +70,7 @@ export const TEAM_AUDIT_QUEUE_LIMIT = 10000;
 export const TEAM_AUDIT_SYNC_INTERVAL_MS = 60 * 1000;
 export const NOVA_CLOUD_DEFAULT_URL = "https://api.novaremote.dev";
 export const COLLAB_POLL_INTERVAL_MS = 7000;
+export const NOVA_AGENT_MONITORING_INTERVAL_MS = 60 * 1000;
 export const HISTORY_MAX_ITEMS = 50;
 export const FREE_SERVER_LIMIT = 1;
 export const FREE_SESSION_LIMIT = 2;

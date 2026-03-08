@@ -389,4 +389,232 @@ describe("useNovaAgentRuntime", () => {
       renderer?.unmount();
     });
   });
+
+  it("runs monitoring cycles and queues approvals when cooldown elapsed", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => null,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Loop Agent", ["watch"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run monitor");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().setRuntimeAgentStatus(agentId, "monitoring");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(current().agents.find((agent) => agent.agentId === agentId)?.status).toBe("monitoring");
+
+    const baseUpdatedAt = current().agents.find((agent) => agent.agentId === agentId)?.updatedAt || "";
+    const nowMs = Date.parse(baseUpdatedAt) + 61_000;
+
+    let cycleResult: { requested: string[]; approved: string[]; skipped: string[] } = {
+      requested: [],
+      approved: [],
+      skipped: [],
+    };
+    await act(async () => {
+      cycleResult = current().runMonitoringCycle({
+        defaultSession: "main",
+        intervalMs: 60_000,
+        nowMs,
+      });
+    });
+
+    expect(cycleResult.requested).toEqual([agentId]);
+    expect(cycleResult.approved).toEqual([]);
+    expect(current().agents.find((agent) => agent.agentId === agentId)?.status).toBe("waiting_approval");
+    expect(onDispatchCommand).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("auto-approves monitoring cycles for autonomous agents", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => null,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Auto Agent", ["autonomous"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run monitor");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().setRuntimeAgentStatus(agentId, "monitoring");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(current().agents.find((agent) => agent.agentId === agentId)?.status).toBe("monitoring");
+
+    const baseUpdatedAt = current().agents.find((agent) => agent.agentId === agentId)?.updatedAt || "";
+    const nowMs = Date.parse(baseUpdatedAt) + 61_000;
+
+    let cycleResult: { requested: string[]; approved: string[]; skipped: string[] } = {
+      requested: [],
+      approved: [],
+      skipped: [],
+    };
+    await act(async () => {
+      cycleResult = current().runMonitoringCycle({
+        defaultSession: "main",
+        intervalMs: 60_000,
+        nowMs,
+      });
+    });
+
+    const agent = current().agents.find((entry) => entry.agentId === agentId);
+    expect(cycleResult.requested).toContain(agentId);
+    expect(cycleResult.approved).toContain(agentId);
+    expect(agent?.status).toBe("monitoring");
+    expect(agent?.pendingApproval).toBeNull();
+    expect(onDispatchCommand).toHaveBeenCalledWith("main", "npm run monitor");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("does not queue monitoring cycles before cooldown elapses", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => null,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Cooldown Agent", ["watch"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run monitor");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().setRuntimeAgentStatus(agentId, "monitoring");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(current().agents.find((agent) => agent.agentId === agentId)?.status).toBe("monitoring");
+
+    const baseUpdatedAt = current().agents.find((agent) => agent.agentId === agentId)?.updatedAt || "";
+    const nowMs = Date.parse(baseUpdatedAt) + 10_000;
+
+    let cycleResult: { requested: string[]; approved: string[]; skipped: string[] } = {
+      requested: [],
+      approved: [],
+      skipped: [],
+    };
+    await act(async () => {
+      cycleResult = current().runMonitoringCycle({
+        defaultSession: "main",
+        intervalMs: 60_000,
+        nowMs,
+      });
+    });
+
+    expect(cycleResult.requested).toEqual([]);
+    expect(cycleResult.approved).toEqual([]);
+    expect(cycleResult.skipped).toContain(agentId);
+    expect(current().agents.find((agent) => agent.agentId === agentId)?.status).toBe("monitoring");
+    expect(onDispatchCommand).toHaveBeenCalledTimes(0);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });

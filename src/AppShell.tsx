@@ -32,6 +32,7 @@ import { BRAND_LOGO } from "./branding";
 import {
   DEFAULT_CWD,
   DEFAULT_FLEET_WAIT_MS,
+  NOVA_AGENT_MONITORING_INTERVAL_MS,
   DEFAULT_SPECTATE_TTL_SECONDS,
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
@@ -2268,11 +2269,52 @@ export default function AppShell() {
     requestAgentApproval: requestFocusedServerAgentApproval,
     approveReadyApprovals: approveReadyAgentsForFocusedServer,
     denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer,
+    runMonitoringCycle: runFocusedServerMonitoringCycle,
   } = useNovaAgentRuntime({
     serverId: agentRuntimeServerId,
     onDispatchCommand: dispatchFocusedServerAgentCommand,
     resolveDefaultSession: resolveFocusedServerAgentSession,
   });
+  const hasFocusedMonitoringAgents = useMemo(
+    () => focusedServerAgents.some((agent) => agent.status === "monitoring"),
+    [focusedServerAgents]
+  );
+
+  useEffect(() => {
+    if (!connected || !agentRuntimeServerId || !hasFocusedMonitoringAgents) {
+      return;
+    }
+
+    const runCycle = () => {
+      try {
+        const cycle = runFocusedServerMonitoringCycle({
+          intervalMs: NOVA_AGENT_MONITORING_INTERVAL_MS,
+        });
+        if (cycle.requested.length === 0 && cycle.approved.length === 0) {
+          return;
+        }
+        const serverName = poolConnections.get(agentRuntimeServerId)?.server.name || "server";
+        setStatus({
+          text: `${serverName}: monitoring cycle queued ${cycle.requested.length}, dispatched ${cycle.approved.length}.`,
+          error: false,
+        });
+      } catch (error) {
+        setError(error);
+      }
+    };
+
+    runCycle();
+    const intervalId = setInterval(runCycle, 5000);
+    return () => clearInterval(intervalId);
+  }, [
+    agentRuntimeServerId,
+    connected,
+    hasFocusedMonitoringAgents,
+    poolConnections,
+    runFocusedServerMonitoringCycle,
+    setError,
+    setStatus,
+  ]);
 
   const executeFocusedAgentServerAction = useCallback(
     (action: AgentServerAction): string[] => {
