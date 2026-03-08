@@ -71,7 +71,7 @@ export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNa
       { key: "terminals", title: "Terminals", subtitle: "Live sessions" },
       { key: "servers", title: "Servers", subtitle: "Connections" },
       { key: "files", title: "Files", subtitle: "Browser + editor" },
-      { key: "llms", title: "AI", subtitle: "Model profiles" },
+      { key: "llms", title: "Nova", subtitle: "Assistant + providers" },
       { key: "team", title: "Team", subtitle: "Policies + audit" },
       { key: "vr", title: "VR", subtitle: "Command center" },
       { key: "snippets", title: "Snippets", subtitle: "Macros + runbooks" },
@@ -121,11 +121,11 @@ export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNa
 
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Open AI profiles"
+          accessibilityLabel="Open Nova assistant and provider settings"
           style={styles.homeHubNavCardTall}
           onPress={() => onOpenRoute("llms")}
         >
-          <Text style={styles.homeHubNavTitle}>AI</Text>
+          <Text style={styles.homeHubNavTitle}>Nova</Text>
           <Text style={styles.homeHubNavSubtitle}>Prompt engines</Text>
         </Pressable>
       </View>
@@ -163,4 +163,3 @@ export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNa
     </View>
   );
 }
-

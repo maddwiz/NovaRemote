@@ -170,8 +170,10 @@ export function LlmsScreen({
   return (
     <>
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>LLM Profiles</Text>
-        <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, or native Ollama.</Text>
+        <Text style={styles.panelLabel}>AI Providers</Text>
+        <Text style={styles.serverSubtitle}>
+          Nova uses the active provider here for phone-side conversation, planning, and app control. Configure OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, or Ollama.
+        </Text>
         {loading ? <Text style={styles.emptyText}>Loading provider profiles...</Text> : null}
 
         <View style={styles.actionsWrap}>

@@ -44,7 +44,7 @@ function routeTitle(route: RouteTab): string {
     servers: "Servers",
     snippets: "Snippets",
     files: "Files",
-    llms: "AI",
+    llms: "Nova",
     team: "Team",
     glasses: "Glasses",
     vr: "VR",
@@ -109,7 +109,7 @@ export function PageSlideMenu({
             { key: "terminals" as RouteTab, label: "Terminals" },
             { key: "servers" as RouteTab, label: "Servers" },
             { key: "files" as RouteTab, label: "Files" },
-            { key: "llms" as RouteTab, label: "AI" },
+            { key: "llms" as RouteTab, label: "Nova" },
             { key: "team" as RouteTab, label: "Team" },
             { key: "vr" as RouteTab, label: "VR" },
           ].map((entry) => (

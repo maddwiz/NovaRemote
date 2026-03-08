@@ -1,0 +1,590 @@
+import { normalizeForMatch } from "./spatialVoiceRoutingCore";
+import { AiEnginePreference, NovaAgentStatus, RouteTab, TerminalSendMode } from "./types";
+
+export type NovaAssistantRole = "user" | "assistant";
+
+export type NovaAssistantMessage = {
+  id: string;
+  role: NovaAssistantRole;
+  content: string;
+  createdAt: string;
+};
+
+export type NovaAssistantSessionContext = {
+  session: string;
+  mode: TerminalSendMode;
+  localAi: boolean;
+  live: boolean;
+};
+
+export type NovaAssistantServerContext = {
+  id: string;
+  name: string;
+  connected: boolean;
+  vmHost?: string;
+  vmType?: string;
+  vmName?: string;
+  vmId?: string;
+  sessions: NovaAssistantSessionContext[];
+};
+
+export type NovaAssistantRuntimeContext = {
+  route: RouteTab;
+  focusedServerId: string | null;
+  focusedServerName: string | null;
+  focusedSession: string | null;
+  activeProfileName: string | null;
+  servers: NovaAssistantServerContext[];
+  settings: {
+    glassesEnabled: boolean;
+    glassesVoiceAutoSend: boolean;
+    glassesVoiceLoop: boolean;
+    glassesWakePhraseEnabled: boolean;
+    glassesMinimalMode: boolean;
+    glassesTextScale: number;
+    startAiEngine: AiEnginePreference;
+    startKind: TerminalSendMode;
+    poolPaused: boolean;
+  };
+};
+
+export type NovaAssistantAction =
+  | { type: "navigate"; route: RouteTab }
+  | { type: "focus_server"; serverRef?: string }
+  | { type: "focus_session"; serverRef?: string; sessionRef?: string }
+  | { type: "create_session"; serverRef?: string; kind: "ai" | "shell"; prompt?: string }
+  | {
+      type: "send_command";
+      serverRef?: string;
+      sessionRef?: string;
+      command: string;
+      mode?: TerminalSendMode;
+      createIfMissing?: boolean;
+      createKind?: "ai" | "shell";
+    }
+  | { type: "set_draft"; serverRef?: string; sessionRef?: string; text: string }
+  | { type: "stop_session"; serverRef?: string; sessionRef?: string }
+  | { type: "create_agent"; serverRef?: string; name: string; goal?: string }
+  | {
+      type: "update_agent";
+      serverRef?: string;
+      name: string;
+      status?: NovaAgentStatus;
+      goal?: string;
+      queuedCommand?: string;
+    }
+  | { type: "approve_agents"; serverRef?: string }
+  | { type: "deny_agents"; serverRef?: string }
+  | {
+      type: "set_preference";
+      key:
+        | "glasses.enabled"
+        | "glasses.voiceAutoSend"
+        | "glasses.voiceLoop"
+        | "glasses.wakePhraseEnabled"
+        | "glasses.minimalMode"
+        | "glasses.textScale"
+        | "start.aiEngine"
+        | "start.kind";
+      value: boolean | number | string;
+    }
+  | { type: "set_pool_paused"; paused: boolean };
+
+export type NovaAssistantPlan = {
+  reply: string;
+  actions: NovaAssistantAction[];
+};
+
+export type NovaAssistantExecutionResult = {
+  action: NovaAssistantAction["type"];
+  ok: boolean;
+  detail: string;
+};
+
+type NovaAssistantPreferenceKey = Extract<NovaAssistantAction, { type: "set_preference" }>["key"];
+
+const ALLOWED_ROUTES: RouteTab[] = ["terminals", "servers", "snippets", "files", "llms", "team", "glasses", "vr"];
+const ALLOWED_AGENT_STATUSES: NovaAgentStatus[] = ["idle", "monitoring", "executing", "waiting_approval"];
+const ALLOWED_PREFERENCE_KEYS = new Set<NovaAssistantPreferenceKey>([
+  "glasses.enabled",
+  "glasses.voiceAutoSend",
+  "glasses.voiceLoop",
+  "glasses.wakePhraseEnabled",
+  "glasses.minimalMode",
+  "glasses.textScale",
+  "start.aiEngine",
+  "start.kind",
+] as const);
+
+function trimText(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function coerceBoolean(value: unknown): boolean | null {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (["true", "on", "yes", "enable", "enabled"].includes(normalized)) {
+      return true;
+    }
+    if (["false", "off", "no", "disable", "disabled"].includes(normalized)) {
+      return false;
+    }
+  }
+  return null;
+}
+
+function coerceNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseFloat(value.trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+}
+
+function coerceRoute(value: unknown): RouteTab | null {
+  const normalized = trimText(value).toLowerCase() as RouteTab;
+  return ALLOWED_ROUTES.includes(normalized) ? normalized : null;
+}
+
+function coerceMode(value: unknown): TerminalSendMode | null {
+  const normalized = trimText(value).toLowerCase();
+  return normalized === "ai" || normalized === "shell" ? normalized : null;
+}
+
+function coerceAgentStatus(value: unknown): NovaAgentStatus | null {
+  const normalized = trimText(value).toLowerCase() as NovaAgentStatus;
+  return ALLOWED_AGENT_STATUSES.includes(normalized) ? normalized : null;
+}
+
+function normalizeAction(input: unknown): NovaAssistantAction | null {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return null;
+  }
+  const raw = input as Record<string, unknown>;
+  const type = trimText(raw.type).toLowerCase();
+
+  if (type === "navigate") {
+    const route = coerceRoute(raw.route);
+    return route ? { type: "navigate", route } : null;
+  }
+
+  if (type === "focus_server") {
+    return {
+      type: "focus_server",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+    };
+  }
+
+  if (type === "focus_session") {
+    return {
+      type: "focus_session",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      sessionRef: trimText(raw.sessionRef || raw.session || raw.sessionName) || undefined,
+    };
+  }
+
+  if (type === "create_session") {
+    const kind = coerceMode(raw.kind || raw.sessionKind);
+    if (kind !== "ai" && kind !== "shell") {
+      return null;
+    }
+    return {
+      type: "create_session",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      kind,
+      prompt: trimText(raw.prompt) || undefined,
+    };
+  }
+
+  if (type === "send_command") {
+    const command = trimText(raw.command);
+    if (!command) {
+      return null;
+    }
+    const mode = coerceMode(raw.mode);
+    const createKind = coerceMode(raw.createKind || raw.sessionKind);
+    const createIfMissing = coerceBoolean(raw.createIfMissing);
+    return {
+      type: "send_command",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      sessionRef: trimText(raw.sessionRef || raw.session || raw.sessionName) || undefined,
+      command,
+      mode: mode || undefined,
+      createIfMissing: createIfMissing === true,
+      createKind: createKind === "ai" || createKind === "shell" ? createKind : undefined,
+    };
+  }
+
+  if (type === "set_draft") {
+    const text = trimText(raw.text || raw.draft);
+    if (!text) {
+      return null;
+    }
+    return {
+      type: "set_draft",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      sessionRef: trimText(raw.sessionRef || raw.session || raw.sessionName) || undefined,
+      text,
+    };
+  }
+
+  if (type === "stop_session") {
+    return {
+      type: "stop_session",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      sessionRef: trimText(raw.sessionRef || raw.session || raw.sessionName) || undefined,
+    };
+  }
+
+  if (type === "create_agent") {
+    const name = trimText(raw.name || raw.agentName);
+    if (!name) {
+      return null;
+    }
+    return {
+      type: "create_agent",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      name,
+      goal: trimText(raw.goal) || undefined,
+    };
+  }
+
+  if (type === "update_agent") {
+    const name = trimText(raw.name || raw.agentName);
+    if (!name) {
+      return null;
+    }
+    const status = coerceAgentStatus(raw.status);
+    const goal = trimText(raw.goal) || undefined;
+    const queuedCommand = trimText(raw.queuedCommand || raw.command) || undefined;
+    if (!status && !goal && !queuedCommand) {
+      return null;
+    }
+    return {
+      type: "update_agent",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      name,
+      status: status || undefined,
+      goal,
+      queuedCommand,
+    };
+  }
+
+  if (type === "approve_agents") {
+    return {
+      type: "approve_agents",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+    };
+  }
+
+  if (type === "deny_agents") {
+    return {
+      type: "deny_agents",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+    };
+  }
+
+  if (type === "set_preference") {
+    const key = trimText(raw.key) as NovaAssistantPreferenceKey;
+    if (!ALLOWED_PREFERENCE_KEYS.has(key)) {
+      return null;
+    }
+    let value = raw.value as boolean | number | string;
+    if (key === "glasses.textScale") {
+      const numeric = coerceNumber(raw.value);
+      if (numeric === null) {
+        return null;
+      }
+      value = numeric;
+    }
+    if (
+      key === "glasses.enabled" ||
+      key === "glasses.voiceAutoSend" ||
+      key === "glasses.voiceLoop" ||
+      key === "glasses.wakePhraseEnabled" ||
+      key === "glasses.minimalMode"
+    ) {
+      const booleanValue = coerceBoolean(raw.value);
+      if (booleanValue === null) {
+        return null;
+      }
+      value = booleanValue;
+    }
+    if (key === "start.aiEngine") {
+      const engine = trimText(raw.value).toLowerCase();
+      if (engine !== "auto" && engine !== "server" && engine !== "external") {
+        return null;
+      }
+      value = engine;
+    }
+    if (key === "start.kind") {
+      const kind = coerceMode(raw.value);
+      if (!kind) {
+        return null;
+      }
+      value = kind;
+    }
+    return {
+      type: "set_preference",
+      key,
+      value,
+    };
+  }
+
+  if (type === "set_pool_paused") {
+    const paused = coerceBoolean(raw.paused);
+    return paused === null ? null : { type: "set_pool_paused", paused };
+  }
+
+  return null;
+}
+
+function extractJsonObject(raw: string): Record<string, unknown> | null {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    return null;
+  }
+
+  const codeFenceMatch = trimmed.match(/```(?:json)?\s*([\s\S]+?)\s*```/i);
+  const candidate = codeFenceMatch?.[1]?.trim() || trimmed;
+
+  const direct = tryParseObject(candidate);
+  if (direct) {
+    return direct;
+  }
+
+  const firstBrace = candidate.indexOf("{");
+  const lastBrace = candidate.lastIndexOf("}");
+  if (firstBrace >= 0 && lastBrace > firstBrace) {
+    return tryParseObject(candidate.slice(firstBrace, lastBrace + 1));
+  }
+  return null;
+}
+
+function tryParseObject(raw: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+function serializeHistory(messages: NovaAssistantMessage[]): string {
+  return messages
+    .slice(-10)
+    .map((message) => `${message.role === "user" ? "User" : "Nova"}: ${message.content.trim().slice(0, 1200)}`)
+    .join("\n");
+}
+
+function serializeContext(context: NovaAssistantRuntimeContext): string {
+  return JSON.stringify(
+    {
+      route: context.route,
+      focusedServerId: context.focusedServerId,
+      focusedServerName: context.focusedServerName,
+      focusedSession: context.focusedSession,
+      activeProfileName: context.activeProfileName,
+      settings: context.settings,
+      servers: context.servers.map((server) => ({
+        id: server.id,
+        name: server.name,
+        connected: server.connected,
+        vmHost: server.vmHost,
+        vmType: server.vmType,
+        vmName: server.vmName,
+        vmId: server.vmId,
+        sessions: server.sessions.slice(0, 8).map((session) => ({
+          session: session.session,
+          mode: session.mode,
+          localAi: session.localAi,
+          live: session.live,
+        })),
+      })),
+    },
+    null,
+    2
+  );
+}
+
+export function buildNovaAssistantPrompt(args: {
+  history: NovaAssistantMessage[];
+  context: NovaAssistantRuntimeContext;
+  input: string;
+}): string {
+  return [
+    "You are Nova, the conversational control layer for the NovaRemote app.",
+    "Have a normal conversation with the user, but when an app action is appropriate, return structured actions.",
+    "You must respond with exactly one JSON object and no markdown.",
+    'Shape: {"reply":"natural language reply","actions":[...]}',
+    "Rules:",
+    "- The reply should read like a normal assistant response.",
+    "- Use actions only when you are confident enough to act.",
+    "- If information is missing or ambiguous, ask a clarifying question in reply and return an empty actions array.",
+    "- Prefer using server IDs or exact server names from context.",
+    '- You may use placeholders "$focused_server", "$focused_session", and "$last_session".',
+    "- Do not invent servers, sessions, routes, or settings keys.",
+    "- Dangerous shell commands may require confirmation in-app; still propose the action if the user explicitly asked for it.",
+    "Allowed actions:",
+    '- {"type":"navigate","route":"terminals|servers|files|snippets|llms|team|glasses|vr"}',
+    '- {"type":"focus_server","serverRef":"name|id|$focused_server"}',
+    '- {"type":"focus_session","serverRef":"...","sessionRef":"session|$focused_session|$last_session"}',
+    '- {"type":"create_session","serverRef":"...","kind":"ai|shell","prompt":"optional"}',
+    '- {"type":"send_command","serverRef":"...","sessionRef":"...","command":"...","mode":"ai|shell","createIfMissing":true,"createKind":"ai|shell"}',
+    '- {"type":"set_draft","serverRef":"...","sessionRef":"...","text":"..."}',
+    '- {"type":"stop_session","serverRef":"...","sessionRef":"..."}',
+    '- {"type":"create_agent","serverRef":"...","name":"...","goal":"optional"}',
+    '- {"type":"update_agent","serverRef":"...","name":"...","status":"idle|monitoring|executing|waiting_approval","goal":"optional","queuedCommand":"optional"}',
+    '- {"type":"approve_agents","serverRef":"..."}',
+    '- {"type":"deny_agents","serverRef":"..."}',
+    '- {"type":"set_preference","key":"glasses.enabled|glasses.voiceAutoSend|glasses.voiceLoop|glasses.wakePhraseEnabled|glasses.minimalMode|glasses.textScale|start.aiEngine|start.kind","value":true|false|number|"auto"|"server"|"external"|"ai"|"shell"}',
+    '- {"type":"set_pool_paused","paused":true|false}',
+    "",
+    "Current app context:",
+    serializeContext(args.context),
+    "",
+    "Recent conversation:",
+    serializeHistory(args.history) || "(none)",
+    "",
+    `Latest user message: ${args.input.trim()}`,
+  ].join("\n");
+}
+
+export function parseNovaAssistantPlan(raw: string): NovaAssistantPlan {
+  const parsed = extractJsonObject(raw);
+  if (!parsed) {
+    return {
+      reply: raw.trim() || "I did not receive a usable response from the model.",
+      actions: [],
+    };
+  }
+  const reply = trimText(parsed.reply || parsed.message || parsed.text) || "Done.";
+  const actions = Array.isArray(parsed.actions) ? parsed.actions.map(normalizeAction).filter((entry): entry is NovaAssistantAction => Boolean(entry)) : [];
+  return { reply, actions };
+}
+
+export function resolveAssistantServer(
+  context: NovaAssistantRuntimeContext,
+  rawRef?: string | null
+): NovaAssistantServerContext | null {
+  const reference = trimText(rawRef);
+  if (!reference || reference === "$focused_server" || reference === "focused" || reference === "current server") {
+    return context.servers.find((server) => server.id === context.focusedServerId) || context.servers[0] || null;
+  }
+
+  const normalized = normalizeForMatch(reference);
+  const direct = context.servers.find((server) => {
+    return (
+      normalizeForMatch(server.id) === normalized ||
+      normalizeForMatch(server.name) === normalized ||
+      normalizeForMatch(server.vmHost || "") === normalized ||
+      normalizeForMatch(server.vmName || "") === normalized ||
+      normalizeForMatch(server.vmId || "") === normalized
+    );
+  });
+  if (direct) {
+    return direct;
+  }
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  let winner: NovaAssistantServerContext | null = null;
+  let winnerScore = 0;
+  context.servers.forEach((server) => {
+    const values = [
+      normalizeForMatch(server.id),
+      normalizeForMatch(server.name),
+      normalizeForMatch(server.vmHost || ""),
+      normalizeForMatch(server.vmType || ""),
+      normalizeForMatch(server.vmName || ""),
+      normalizeForMatch(server.vmId || ""),
+    ];
+    let score = 0;
+    tokens.forEach((token) => {
+      values.forEach((value, index) => {
+        if (!value.includes(token)) {
+          return;
+        }
+        score += index <= 1 ? 3 : 2;
+      });
+    });
+    if (score > winnerScore) {
+      winner = server;
+      winnerScore = score;
+    }
+  });
+  return winnerScore > 0 ? winner : null;
+}
+
+export function resolveAssistantSession(
+  context: NovaAssistantRuntimeContext,
+  server: NovaAssistantServerContext,
+  rawRef?: string | null,
+  lastCreatedSession?: string | null
+): NovaAssistantSessionContext | null {
+  const reference = trimText(rawRef);
+  if (!reference || reference === "$focused_session" || reference === "focused" || reference === "current session") {
+    if (server.id === context.focusedServerId && context.focusedSession) {
+      return server.sessions.find((session) => session.session === context.focusedSession) || null;
+    }
+    return server.sessions[0] || null;
+  }
+  if (reference === "$last_session" && lastCreatedSession) {
+    return server.sessions.find((session) => session.session === lastCreatedSession) || null;
+  }
+
+  const normalized = normalizeForMatch(reference);
+  const direct = server.sessions.find((session) => normalizeForMatch(session.session) === normalized);
+  if (direct) {
+    return direct;
+  }
+
+  const tokens = normalized.split(" ").filter(Boolean);
+  if (tokens.length === 0) {
+    return null;
+  }
+
+  let winner: NovaAssistantSessionContext | null = null;
+  let winnerScore = 0;
+  server.sessions.forEach((session) => {
+    const name = normalizeForMatch(session.session);
+    let score = 0;
+    tokens.forEach((token) => {
+      if (name.includes(token)) {
+        score += 3;
+      }
+    });
+    if (score > winnerScore) {
+      winner = session;
+      winnerScore = score;
+    }
+  });
+  return winnerScore > 0 ? winner : null;
+}
+
+export function formatNovaAssistantExecutionSummary(results: NovaAssistantExecutionResult[]): string {
+  if (results.length === 0) {
+    return "";
+  }
+  const lines = results.map((result) => `${result.ok ? "OK" : "Failed"}: ${result.detail}`);
+  return `\n\nExecution\n${lines.join("\n")}`;
+}
+
+export const novaAssistantTestUtils = {
+  normalizeAction,
+  extractJsonObject,
+};
