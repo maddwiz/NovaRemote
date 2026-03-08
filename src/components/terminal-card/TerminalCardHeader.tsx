@@ -138,6 +138,44 @@ export function TerminalCardHeader({
       disabled: false,
     },
   ];
+  if (aiAvailable) {
+    moreActions.unshift({
+      key: "mode-ai",
+      label: "Mode: AI",
+      onPress: () => onSetMode("ai"),
+      disabled: !aiAvailable,
+    });
+  }
+  if (shellAvailable) {
+    moreActions.unshift({
+      key: "mode-shell",
+      label: "Mode: Shell",
+      onPress: () => onSetMode("shell"),
+      disabled: !shellAvailable,
+    });
+  }
+  if (mode === "ai") {
+    moreActions.unshift(
+      {
+        key: "engine-auto",
+        label: "AI Engine: Auto",
+        onPress: () => onSetAiEngine("auto"),
+        disabled: aiEngine === "auto",
+      },
+      {
+        key: "engine-server",
+        label: "AI Engine: Server",
+        onPress: () => onSetAiEngine("server"),
+        disabled: !canUseServerAi || aiEngine === "server",
+      },
+      {
+        key: "engine-external",
+        label: "AI Engine: External",
+        onPress: () => onSetAiEngine("external"),
+        disabled: !canUseExternalAi || aiEngine === "external",
+      }
+    );
+  }
 
   return (
     <View style={styles.terminalHeader}>
@@ -166,53 +204,6 @@ export function TerminalCardHeader({
           />
         </View>
       </View>
-
-      <View style={styles.modeRow}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Set ${session} mode to AI`}
-          style={[styles.modeButton, mode === "ai" ? styles.modeButtonOn : null, !aiAvailable ? styles.buttonDisabled : null]}
-          onPress={() => onSetMode("ai")}
-          disabled={!aiAvailable}
-        >
-          <Text style={[styles.modeButtonText, mode === "ai" ? styles.modeButtonTextOn : null]}>AI</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Set ${session} mode to shell`}
-          style={[styles.modeButton, mode === "shell" ? styles.modeButtonOn : null, !shellAvailable ? styles.buttonDisabled : null]}
-          onPress={() => onSetMode("shell")}
-          disabled={!shellAvailable}
-        >
-          <Text style={[styles.modeButtonText, mode === "shell" ? styles.modeButtonTextOn : null]}>Shell</Text>
-        </Pressable>
-      </View>
-
-      {mode === "ai" ? (
-        <View style={styles.modeRow}>
-          <Pressable accessibilityRole="button" accessibilityLabel={`Set ${session} AI engine to auto`} style={[styles.modeButton, aiEngine === "auto" ? styles.modeButtonOn : null]} onPress={() => onSetAiEngine("auto")}>
-            <Text style={[styles.modeButtonText, aiEngine === "auto" ? styles.modeButtonTextOn : null]}>AI Auto</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Set ${session} AI engine to server`}
-            style={[styles.modeButton, aiEngine === "server" ? styles.modeButtonOn : null, !canUseServerAi ? styles.buttonDisabled : null]}
-            onPress={() => onSetAiEngine("server")}
-            disabled={!canUseServerAi}
-          >
-            <Text style={[styles.modeButtonText, aiEngine === "server" ? styles.modeButtonTextOn : null]}>Server</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Set ${session} AI engine to external`}
-            style={[styles.modeButton, aiEngine === "external" ? styles.modeButtonOn : null, !canUseExternalAi ? styles.buttonDisabled : null]}
-            onPress={() => onSetAiEngine("external")}
-            disabled={!canUseExternalAi}
-          >
-            <Text style={[styles.modeButtonText, aiEngine === "external" ? styles.modeButtonTextOn : null]}>External</Text>
-          </Pressable>
-        </View>
-      ) : null}
 
       <View style={styles.actionsWrap}>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${session} in fullscreen`} style={styles.actionButton} onPress={onFullscreen}>

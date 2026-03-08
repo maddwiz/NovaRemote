@@ -1,7 +1,9 @@
 import React, { useMemo, useRef } from "react";
 import {
   NativeSyntheticEvent,
+  Pressable,
   StyleProp,
+  Text,
   TextInputKeyPressEventData,
   TextStyle,
   ScrollView,
@@ -355,6 +357,7 @@ export function TerminalCard({
           ? "POLL"
           : "OFF";
   const activeCollaborators = useMemo(() => collaborators.filter((entry) => !entry.isSelf), [collaborators]);
+  const [showAdvanced, setShowAdvanced] = React.useState<boolean>(false);
 
   const onDraftKeyPress = (event: NativeSyntheticEvent<TextInputKeyPressEventData>) => {
     const native = event.nativeEvent as KeyPressEventWithModifiers;
@@ -446,14 +449,6 @@ export function TerminalCard({
         <AnsiText text={output || "Waiting for output..."} style={[styles.terminalText, terminalTextStyle]} />
       </ScrollView>
 
-      <TerminalCardCollaboration
-        collaborationAvailable={collaborationAvailable}
-        collaborators={collaborators}
-        readOnly={readOnly}
-        onRefreshPresence={onRefreshPresence}
-        onSetReadOnly={onSetReadOnly}
-      />
-
       <TextInput
         style={[styles.input, styles.multilineInput]}
         value={draft}
@@ -478,58 +473,99 @@ export function TerminalCard({
         onAction={(action) => handleDraftAction(action as TextEditingAction)}
       />
 
-      {mode === "shell" ? (
-        <TerminalCardShellAssist
-          session={session}
-          autocomplete={autocomplete}
-          suggestionsBusy={suggestionsBusy}
-          suggestions={suggestions}
-          errorHint={errorHint}
-          triageBusy={triageBusy}
-          triageExplanation={triageExplanation}
-          triageFixes={triageFixes}
-          onDraftChange={onDraftChange}
-          onAdaptDraftForBackend={onAdaptDraftForBackend}
-          onRequestSuggestions={onRequestSuggestions}
-          onUseSuggestion={onUseSuggestion}
-          onExplainError={onExplainError}
-          onSuggestErrorFixes={onSuggestErrorFixes}
-        />
+      <View style={styles.actionsWrap}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Send command in ${session}`}
+          style={[styles.buttonPrimary, isSending || readOnly ? styles.buttonDisabled : null]}
+          onPress={onSend}
+          disabled={isSending || readOnly}
+        >
+          <Text style={styles.buttonPrimaryText}>{isSending ? "Sending..." : "Send"}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Clear draft for ${session}`}
+          style={[styles.buttonGhost, readOnly || !draft.trim() ? styles.buttonDisabled : null]}
+          onPress={onClear}
+          disabled={readOnly || !draft.trim()}
+        >
+          <Text style={styles.buttonGhostText}>Clear</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={showAdvanced ? `Hide advanced controls for ${session}` : `Show advanced controls for ${session}`}
+          style={styles.actionButton}
+          onPress={() => setShowAdvanced((prev) => !prev)}
+        >
+          <Text style={styles.actionButtonText}>{showAdvanced ? "Hide Advanced" : "Advanced"}</Text>
+        </Pressable>
+      </View>
+
+      {showAdvanced ? (
+        <>
+          <TerminalCardCollaboration
+            collaborationAvailable={collaborationAvailable}
+            collaborators={collaborators}
+            readOnly={readOnly}
+            onRefreshPresence={onRefreshPresence}
+            onSetReadOnly={onSetReadOnly}
+          />
+
+          {mode === "shell" ? (
+            <TerminalCardShellAssist
+              session={session}
+              autocomplete={autocomplete}
+              suggestionsBusy={suggestionsBusy}
+              suggestions={suggestions}
+              errorHint={errorHint}
+              triageBusy={triageBusy}
+              triageExplanation={triageExplanation}
+              triageFixes={triageFixes}
+              onDraftChange={onDraftChange}
+              onAdaptDraftForBackend={onAdaptDraftForBackend}
+              onRequestSuggestions={onRequestSuggestions}
+              onUseSuggestion={onUseSuggestion}
+              onExplainError={onExplainError}
+              onSuggestErrorFixes={onSuggestErrorFixes}
+            />
+          ) : null}
+
+          <TerminalCardWatch
+            session={session}
+            watchEnabled={watchEnabled}
+            watchPattern={watchPattern}
+            watchAlerts={watchAlerts}
+            onToggleWatch={onToggleWatch}
+            onWatchPatternChange={onWatchPatternChange}
+            onClearWatchAlerts={onClearWatchAlerts}
+          />
+
+          <TerminalCardQueue
+            session={session}
+            queuedItems={queuedItems}
+            onFlushQueue={onFlushQueue}
+            onRemoveQueuedCommand={onRemoveQueuedCommand}
+          />
+
+          <TerminalCardFooter
+            recordingChunks={recordingChunks}
+            recordingDurationMs={recordingDurationMs}
+            historyCount={historyCount}
+            sessionAlias={sessionAlias}
+            tags={tags}
+            isSending={isSending}
+            readOnly={readOnly}
+            onDeleteRecording={onDeleteRecording}
+            onHistoryPrev={onHistoryPrev}
+            onHistoryNext={onHistoryNext}
+            onSessionAliasChange={onSessionAliasChange}
+            onTagsChange={onTagsChange}
+            onSend={onSend}
+            onClear={onClear}
+          />
+        </>
       ) : null}
-
-      <TerminalCardWatch
-        session={session}
-        watchEnabled={watchEnabled}
-        watchPattern={watchPattern}
-        watchAlerts={watchAlerts}
-        onToggleWatch={onToggleWatch}
-        onWatchPatternChange={onWatchPatternChange}
-        onClearWatchAlerts={onClearWatchAlerts}
-      />
-
-      <TerminalCardQueue
-        session={session}
-        queuedItems={queuedItems}
-        onFlushQueue={onFlushQueue}
-        onRemoveQueuedCommand={onRemoveQueuedCommand}
-      />
-
-      <TerminalCardFooter
-        recordingChunks={recordingChunks}
-        recordingDurationMs={recordingDurationMs}
-        historyCount={historyCount}
-        sessionAlias={sessionAlias}
-        tags={tags}
-        isSending={isSending}
-        readOnly={readOnly}
-        onDeleteRecording={onDeleteRecording}
-        onHistoryPrev={onHistoryPrev}
-        onHistoryNext={onHistoryNext}
-        onSessionAliasChange={onSessionAliasChange}
-        onTagsChange={onTagsChange}
-        onSend={onSend}
-        onClear={onClear}
-      />
     </View>
   );
 }
