@@ -7,6 +7,7 @@ import { LlmProfile } from "../types";
 const LLM_EXPORT_PREFIX = "novaremote.llm.aes.v1.";
 const LLM_EXPORT_PREFIX_LEGACY = "novaremote.llm.enc.v1.";
 const LLM_EXPORT_PBKDF2_ITERATIONS = 120000;
+const DEV_LOCAL_OLLAMA_PROFILE_ID = "dev-local-ollama";
 
 let cryptoJsCache: any | null = null;
 
@@ -216,6 +217,19 @@ function normalizeImportedProfile(profile: LlmProfile): LlmProfile {
   };
 }
 
+function buildDevLocalOllamaProfile(): LlmProfile {
+  return {
+    id: DEV_LOCAL_OLLAMA_PROFILE_ID,
+    name: "Nova Local (Ollama)",
+    kind: "ollama",
+    baseUrl: "http://localhost:11434",
+    apiKey: "",
+    model: "llama3.2:3b",
+    systemPrompt:
+      "You are Nova running on a local Ollama model for development testing. Keep responses concise and action-oriented.",
+  };
+}
+
 export function useLlmProfiles() {
   const [profiles, setProfiles] = useState<LlmProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
@@ -242,6 +256,15 @@ export function useLlmProfiles() {
         } catch {
           parsedProfiles = [];
         }
+      }
+
+      if (__DEV__ && parsedProfiles.length === 0) {
+        const seededProfile = buildDevLocalOllamaProfile();
+        parsedProfiles = [seededProfile];
+        await Promise.all([
+          SecureStore.setItemAsync(STORAGE_LLM_PROFILES, JSON.stringify(parsedProfiles)),
+          SecureStore.setItemAsync(STORAGE_ACTIVE_LLM_PROFILE_ID, seededProfile.id),
+        ]);
       }
 
       const active = parsedProfiles.find((profile) => profile.id === rawActive)?.id || parsedProfiles[0]?.id || null;
