@@ -13,6 +13,7 @@ import {
   Share,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -618,6 +619,8 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
 const SIMPLE_UI_MODE_STORAGE_KEY = "novaremote.simple_ui_mode";
 
 export default function AppShell() {
+  const { width } = useWindowDimensions();
+  const compactNav = width < 680;
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [simpleMode, setSimpleMode] = useState<boolean>(true);
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -3499,6 +3502,23 @@ export default function AppShell() {
     runFleetCommand,
   });
 
+  const handleTabChange = useCallback(
+    (next: RouteTab) => {
+      markActivity();
+      void Haptics.selectionAsync();
+      if (next === "snippets" && !isPro) {
+        setPaywallVisible(true);
+        return;
+      }
+      if (next === "files" && !capabilities.files) {
+        setStatus({ text: "Active server does not support file APIs.", error: true });
+        return;
+      }
+      setRoute(next);
+    },
+    [capabilities.files, isPro, markActivity]
+  );
+
   if (lockLoading || onboardingLoading || tutorialLoading || safetyLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
@@ -3559,24 +3579,12 @@ export default function AppShell() {
             </View>
           ) : null}
 
-          {route !== "glasses" ? (
+          {route !== "glasses" && !compactNav ? (
             <TabBar
               route={route}
               simpleMode={simpleMode}
               onToggleSimpleMode={toggleSimpleMode}
-              onChange={(next) => {
-                markActivity();
-                void Haptics.selectionAsync();
-                if (next === "snippets" && !isPro) {
-                  setPaywallVisible(true);
-                  return;
-                }
-                if (next === "files" && !capabilities.files) {
-                  setStatus({ text: "Active server does not support file APIs.", error: true });
-                  return;
-                }
-                setRoute(next);
-              }}
+              onChange={handleTabChange}
             />
           ) : null}
 
@@ -4349,6 +4357,17 @@ export default function AppShell() {
             />
           ) : null}
         </ScrollView>
+        {route !== "glasses" && compactNav ? (
+          <View style={styles.bottomNavDock}>
+            <TabBar
+              route={route}
+              simpleMode={simpleMode}
+              onToggleSimpleMode={toggleSimpleMode}
+              onChange={handleTabChange}
+              compactBottomNav
+            />
+          </View>
+        ) : null}
       </KeyboardAvoidingView>
 
       <FullscreenTerminal

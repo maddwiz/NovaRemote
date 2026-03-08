@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Modal, Pressable, Text, View } from "react-native";
 
 import { styles } from "../../theme/styles";
 import { AiEnginePreference, TerminalSendMode } from "../../types";
@@ -81,6 +81,64 @@ export function TerminalCardHeader({
   onAutoName,
   onHide,
 }: TerminalCardHeaderProps) {
+  const [showMoreActions, setShowMoreActions] = React.useState<boolean>(false);
+  const moreActions = [
+    {
+      key: "open-mac",
+      label: "Open on Mac",
+      onPress: onOpenOnMac,
+      disabled: !canOpenOnMac,
+    },
+    {
+      key: "sync",
+      label: "Sync",
+      onPress: onSync,
+      disabled: !canSync,
+    },
+    {
+      key: "share",
+      label: "Share Live",
+      onPress: onShareLive,
+      disabled: !canShareLive,
+    },
+    {
+      key: "export",
+      label: "Export",
+      onPress: onExport,
+      disabled: false,
+    },
+    {
+      key: "pin",
+      label: pinned ? "Unpin" : "Pin",
+      onPress: onTogglePin,
+      disabled: false,
+    },
+    {
+      key: "record",
+      label: recordingActive ? "Stop Rec" : "Record",
+      onPress: onToggleRecording,
+      disabled: false,
+    },
+    {
+      key: "playback",
+      label: "Playback",
+      onPress: onOpenPlayback,
+      disabled: recordingChunks === 0,
+    },
+    {
+      key: "auto-name",
+      label: "Auto Name",
+      onPress: onAutoName,
+      disabled: false,
+    },
+    {
+      key: "hide",
+      label: "Hide",
+      onPress: onHide,
+      disabled: false,
+    },
+  ];
+
   return (
     <View style={styles.terminalHeader}>
       <View style={styles.terminalNameRow}>
@@ -157,41 +215,8 @@ export function TerminalCardHeader({
       ) : null}
 
       <View style={styles.actionsWrap}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Open ${session} on Mac`} style={[styles.actionButton, !canOpenOnMac ? styles.buttonDisabled : null]} onPress={onOpenOnMac} disabled={!canOpenOnMac}>
-          <Text style={styles.actionButtonText}>Open on Mac</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Sync output for ${session}`} style={[styles.actionButton, !canSync ? styles.buttonDisabled : null]} onPress={onSync} disabled={!canSync}>
-          <Text style={styles.actionButtonText}>Sync</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Create live spectator link for ${session}`}
-          style={[styles.actionButton, !canShareLive ? styles.buttonDisabled : null]}
-          onPress={onShareLive}
-          disabled={!canShareLive}
-        >
-          <Text style={styles.actionButtonText}>Share Live</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Export ${session} log`} style={styles.actionButton} onPress={onExport}>
-          <Text style={styles.actionButtonText}>Export</Text>
-        </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel={`Open ${session} in fullscreen`} style={styles.actionButton} onPress={onFullscreen}>
           <Text style={styles.actionButtonText}>Fullscreen</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={pinned ? `Unpin ${session}` : `Pin ${session}`} style={[styles.actionButton, pinned ? styles.modeButtonOn : null]} onPress={onTogglePin}>
-          <Text style={styles.actionButtonText}>{pinned ? "Unpin" : "Pin"}</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={recordingActive ? `Stop recording ${session}` : `Start recording ${session}`} style={[styles.actionButton, recordingActive ? styles.livePillOff : null]} onPress={onToggleRecording}>
-          <Text style={styles.actionButtonText}>{recordingActive ? "Stop Rec" : "Record"}</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={`Open playback for ${session}`}
-          style={[styles.actionButton, recordingChunks === 0 ? styles.buttonDisabled : null]}
-          onPress={onOpenPlayback}
-          disabled={recordingChunks === 0}
-        >
-          <Text style={styles.actionButtonText}>Playback</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
@@ -202,13 +227,62 @@ export function TerminalCardHeader({
         >
           <Text style={styles.actionDangerText}>Stop</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Auto name ${session}`} style={styles.actionButton} onPress={onAutoName}>
-          <Text style={styles.actionButtonText}>Auto Name</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Hide ${session}`} style={styles.actionButton} onPress={onHide}>
-          <Text style={styles.actionButtonText}>Hide</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open more actions for ${session}`}
+          style={styles.actionButton}
+          onPress={() => setShowMoreActions(true)}
+        >
+          <Text style={styles.actionButtonText}>More</Text>
         </Pressable>
       </View>
+
+      <Modal
+        visible={showMoreActions}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowMoreActions(false)}
+      >
+        <Pressable style={styles.overlayBackdrop} onPress={() => setShowMoreActions(false)}>
+          <Pressable
+            style={styles.overlayCard}
+            onPress={(event) => {
+              event.stopPropagation();
+            }}
+          >
+            <Text style={styles.panelLabel}>Session Actions</Text>
+            <Text style={styles.serverSubtitle}>{sessionAlias.trim() || session}</Text>
+            <View style={styles.actionsWrap}>
+              {moreActions.map((entry) => (
+                <Pressable
+                  key={entry.key}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${entry.label} for ${session}`}
+                  style={[styles.actionButton, entry.disabled ? styles.buttonDisabled : null]}
+                  onPress={() => {
+                    if (entry.disabled) {
+                      return;
+                    }
+                    setShowMoreActions(false);
+                    entry.onPress();
+                  }}
+                  disabled={entry.disabled}
+                >
+                  <Text style={styles.actionButtonText}>{entry.label}</Text>
+                </Pressable>
+              ))}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Close session actions"
+                style={styles.buttonGhost}
+                onPress={() => setShowMoreActions(false)}
+              >
+                <Text style={styles.buttonGhostText}>Close</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
