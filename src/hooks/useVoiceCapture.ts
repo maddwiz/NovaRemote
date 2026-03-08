@@ -1,14 +1,12 @@
 import {
-  getRecordingPermissionsAsync,
   RecordingPresets,
-  requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
   type AudioRecorder,
-  type PermissionResponse,
   type RecordingOptions,
 } from "expo-audio";
+import { Camera } from "expo-camera";
 import { useCallback, useEffect, useState } from "react";
 
 import { normalizeBaseUrl } from "../api/client";
@@ -37,10 +35,6 @@ type VoiceTranscribeOptions = {
 };
 
 type VoicePermissionStatus = "granted" | "denied" | "undetermined" | null;
-
-function toPermissionStatus(permission: PermissionResponse): VoicePermissionStatus {
-  return permission.granted ? "granted" : (permission.status as VoicePermissionStatus);
-}
 
 function readTranscript(payload: unknown): string {
   if (typeof payload === "string") {
@@ -111,8 +105,8 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
   }, []);
 
   const requestCapturePermission = useCallback(async () => {
-    const next = await requestRecordingPermissionsAsync();
-    const status = toPermissionStatus(next);
+    const next = await Camera.requestMicrophonePermissionsAsync();
+    const status = next.granted ? "granted" : (next.status as VoicePermissionStatus);
     setPermissionStatus(status);
     return next.granted;
   }, []);
@@ -121,11 +115,12 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     let mounted = true;
     async function loadPermission() {
       try {
-        const current = await getRecordingPermissionsAsync();
+        const current = await Camera.getMicrophonePermissionsAsync();
         if (!mounted) {
           return;
         }
-        setPermissionStatus(toPermissionStatus(current));
+        const status = current.granted ? "granted" : (current.status as VoicePermissionStatus);
+        setPermissionStatus(status);
       } catch {
         if (mounted) {
           setPermissionStatus(null);
