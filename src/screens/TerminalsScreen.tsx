@@ -432,53 +432,60 @@ export function TerminalsScreen() {
     if (typeof setActiveSpeaker !== "function") {
       return;
     }
-    const joinedChannel = voiceChannels.find((channel) => channel.joined);
-    if (!joinedChannel) {
+    const joinedChannels = voiceChannels.filter((channel) => channel.joined);
+    if (joinedChannels.length === 0) {
       return;
     }
-    const currentSpeakerId = (joinedChannel.activeSpeakerId || "").trim().toLowerCase();
-    if (voiceRecording) {
-      if (currentSpeakerId === "local-user") {
+    joinedChannels.forEach((joinedChannel) => {
+      const currentSpeakerId = (joinedChannel.activeSpeakerId || "").trim().toLowerCase();
+      if (voiceRecording) {
+        if (currentSpeakerId === "local-user") {
+          return;
+        }
+        setActiveSpeaker(joinedChannel.id, "local-user");
         return;
       }
-      setActiveSpeaker(joinedChannel.id, "local-user");
-      return;
-    }
-    if (currentSpeakerId !== "local-user") {
-      return;
-    }
-    setActiveSpeaker(joinedChannel.id, null);
+      if (currentSpeakerId !== "local-user") {
+        return;
+      }
+      setActiveSpeaker(joinedChannel.id, null);
+    });
   }, [setActiveSpeaker, voiceChannels, voiceRecording]);
 
   useEffect(() => {
     if (typeof syncChannelParticipants !== "function") {
       return;
     }
-    const joinedChannel = voiceChannels.find((channel) => channel.joined);
-    if (!joinedChannel) {
+    const joinedChannels = voiceChannels.filter((channel) => channel.joined);
+    if (joinedChannels.length === 0) {
       return;
     }
-    const workspace = sharedWorkspaces.find((entry) => entry.id === joinedChannel.workspaceId);
-    if (!workspace || !focusedServerId || !workspace.serverIds.includes(focusedServerId)) {
+    if (!focusedServerId) {
       return;
     }
     const presence = deriveVoicePresence(sessionPresence);
     const nextRemoteParticipants = presence.remoteParticipantIds;
-    const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
-      .map((participantId) => participantId.trim().toLowerCase())
-      .filter((participantId) => participantId && participantId !== "local-user")
-      .sort();
-    const hasSameParticipants =
-      nextRemoteParticipants.length === existingRemoteParticipants.length &&
-      nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
     const nextActiveSpeakerId = voiceRecording ? "local-user" : presence.activeRemoteSpeakerId;
-    const hasSameSpeaker = (joinedChannel.activeSpeakerId || null) === nextActiveSpeakerId;
-    if (hasSameParticipants && hasSameSpeaker) {
-      return;
-    }
-    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, {
-      preserveLocalParticipant: true,
-      activeSpeakerId: nextActiveSpeakerId,
+    joinedChannels.forEach((joinedChannel) => {
+      const workspace = sharedWorkspaces.find((entry) => entry.id === joinedChannel.workspaceId);
+      if (!workspace || !workspace.serverIds.includes(focusedServerId)) {
+        return;
+      }
+      const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
+        .map((participantId) => participantId.trim().toLowerCase())
+        .filter((participantId) => participantId && participantId !== "local-user")
+        .sort();
+      const hasSameParticipants =
+        nextRemoteParticipants.length === existingRemoteParticipants.length &&
+        nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
+      const hasSameSpeaker = (joinedChannel.activeSpeakerId || null) === nextActiveSpeakerId;
+      if (hasSameParticipants && hasSameSpeaker) {
+        return;
+      }
+      syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, {
+        preserveLocalParticipant: true,
+        activeSpeakerId: nextActiveSpeakerId,
+      });
     });
   }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels, voiceRecording]);
 

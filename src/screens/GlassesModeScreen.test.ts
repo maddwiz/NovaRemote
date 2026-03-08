@@ -511,6 +511,17 @@ describe("GlassesModeScreen", () => {
           createdAt: "2026-01-01T00:00:00.000Z",
           updatedAt: "2026-01-01T00:00:00.000Z",
         },
+        {
+          id: "voice-2",
+          workspaceId: "workspace-1",
+          name: "release",
+          joined: true,
+          muted: false,
+          activeParticipantIds: ["local-user", "stale-user"],
+          activeSpeakerId: "stale-user",
+          createdAt: "2026-01-01T00:00:00.000Z",
+          updatedAt: "2026-01-01T00:00:00.000Z",
+        },
       ],
       loading: false,
       createChannel: vi.fn(),
@@ -586,6 +597,11 @@ describe("GlassesModeScreen", () => {
       preserveLocalParticipant: true,
       activeSpeakerId: "remote-a",
     });
+    expect(syncChannelParticipants).toHaveBeenCalledWith("voice-2", ["remote-a"], {
+      preserveLocalParticipant: true,
+      activeSpeakerId: "remote-a",
+    });
+    expect(syncChannelParticipants).toHaveBeenCalledTimes(2);
 
     await act(async () => {
       screen.unmount();

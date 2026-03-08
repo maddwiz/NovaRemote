@@ -252,30 +252,35 @@ export function VrCommandCenterScreen() {
     if (typeof syncChannelParticipants !== "function") {
       return;
     }
-    const joinedChannel = voiceChannels.find((channel) => channel.joined);
-    if (!joinedChannel) {
+    const joinedChannels = voiceChannels.filter((channel) => channel.joined);
+    if (joinedChannels.length === 0) {
       return;
     }
-    const workspace = sharedWorkspaces.find((entry) => entry.id === joinedChannel.workspaceId);
-    if (!workspace || !focusedServerId || !workspace.serverIds.includes(focusedServerId)) {
+    if (!focusedServerId) {
       return;
     }
     const presence = deriveVoicePresence(sessionPresence);
     const nextRemoteParticipants = presence.remoteParticipantIds;
-    const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
-      .map((participantId) => participantId.trim().toLowerCase())
-      .filter((participantId) => participantId && participantId !== "local-user")
-      .sort();
-    const hasSameParticipants =
-      nextRemoteParticipants.length === existingRemoteParticipants.length &&
-      nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
-    const hasSameSpeaker = (joinedChannel.activeSpeakerId || null) === presence.activeRemoteSpeakerId;
-    if (hasSameParticipants && hasSameSpeaker) {
-      return;
-    }
-    syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, {
-      preserveLocalParticipant: true,
-      activeSpeakerId: presence.activeRemoteSpeakerId,
+    joinedChannels.forEach((joinedChannel) => {
+      const workspace = sharedWorkspaces.find((entry) => entry.id === joinedChannel.workspaceId);
+      if (!workspace || !workspace.serverIds.includes(focusedServerId)) {
+        return;
+      }
+      const existingRemoteParticipants = (joinedChannel.activeParticipantIds || [])
+        .map((participantId) => participantId.trim().toLowerCase())
+        .filter((participantId) => participantId && participantId !== "local-user")
+        .sort();
+      const hasSameParticipants =
+        nextRemoteParticipants.length === existingRemoteParticipants.length &&
+        nextRemoteParticipants.every((value, index) => value === existingRemoteParticipants[index]);
+      const hasSameSpeaker = (joinedChannel.activeSpeakerId || null) === presence.activeRemoteSpeakerId;
+      if (hasSameParticipants && hasSameSpeaker) {
+        return;
+      }
+      syncChannelParticipants(joinedChannel.id, nextRemoteParticipants, {
+        preserveLocalParticipant: true,
+        activeSpeakerId: presence.activeRemoteSpeakerId,
+      });
     });
   }, [focusedServerId, sessionPresence, sharedWorkspaces, syncChannelParticipants, voiceChannels]);
 
