@@ -4618,18 +4618,35 @@ export default function AppShell() {
           setReady("Server connection looks good");
         }}
         onComplete={(server, biometric) => {
-          void runWithStatus("Completing onboarding", async () => {
-            await addServerDirect({
-              name: server.name,
-              baseUrl: server.url,
-              token: server.token,
-              defaultCwd: server.cwd,
-              terminalBackend: DEFAULT_TERMINAL_BACKEND,
-            });
+          void (async () => {
+            setStatus({ text: "Completing onboarding", error: false });
             await setRequireBiometric(biometric);
             await completeOnboarding();
-            setRoute("terminals");
-          });
+            try {
+              await addServerDirect({
+                name: server.name,
+                baseUrl: server.url,
+                token: server.token,
+                defaultCwd: server.cwd,
+                terminalBackend: DEFAULT_TERMINAL_BACKEND,
+              });
+              setRoute("terminals");
+              setReady("Onboarding complete");
+            } catch (error) {
+              importServerConfig({
+                name: server.name,
+                url: server.url,
+                token: server.token,
+                cwd: server.cwd,
+              });
+              setRoute("servers");
+              const message = error instanceof Error ? error.message : String(error);
+              setStatus({
+                text: `Onboarding complete. Could not save server automatically: ${message}`,
+                error: true,
+              });
+            }
+          })();
         }}
       />
 
