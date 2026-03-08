@@ -1626,6 +1626,11 @@ export const styles = StyleSheet.create({
   novaFloatingButtonWrap: {
     position: "absolute",
   },
+  novaFloatingButtonRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
   novaFloatingButton: {
     width: 68,
     height: 68,
@@ -1640,6 +1645,28 @@ export const styles = StyleSheet.create({
     shadowRadius: 14,
     shadowOffset: { width: 0, height: 6 },
     elevation: 12,
+  },
+  novaFloatingMicButton: {
+    minWidth: 56,
+    height: 56,
+    borderRadius: 28,
+    borderWidth: 1,
+    borderColor: "rgba(77, 214, 255, 0.6)",
+    backgroundColor: "rgba(12, 19, 38, 0.96)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    shadowColor: "#19cfff",
+    shadowOpacity: 0.18,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 10,
+  },
+  novaFloatingMicButtonText: {
+    color: "#eefbff",
+    fontSize: 12,
+    fontWeight: "800",
+    textAlign: "center",
   },
   novaFloatingButtonActive: {
     borderColor: "rgba(255, 101, 200, 0.82)",
@@ -1818,6 +1845,7 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     minWidth: 88,
+    minHeight: 44,
     alignItems: "center",
     justifyContent: "center",
   },

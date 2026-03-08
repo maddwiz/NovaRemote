@@ -301,6 +301,7 @@ export function NovaAssistantOverlay({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={voiceRecording ? "Stop Nova voice input" : "Start Nova voice input"}
+                  hitSlop={10}
                   style={[
                     styles.novaComposerButton,
                     voiceRecording ? styles.novaComposerButtonRecording : null,
@@ -345,36 +346,58 @@ export function NovaAssistantOverlay({
         ]}
         {...buttonPanResponder.panHandlers}
       >
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Open Nova assistant"
-          accessibilityHint="Tap to open Nova. Press and hold to talk."
-          delayLongPress={240}
-          style={[
-            styles.novaFloatingButton,
-            open ? styles.novaFloatingButtonActive : null,
-            voiceRecording ? styles.novaFloatingButtonRecording : null,
-          ]}
-          onLongPress={() => {
-            skipTapAfterHoldRef.current = true;
-            onVoiceHoldStart();
-          }}
-          onPressOut={() => {
-            if (!skipTapAfterHoldRef.current) {
-              return;
-            }
-            onVoiceHoldEnd();
-          }}
-          onPress={() => {
-            if (skipTapAfterHoldRef.current) {
-              skipTapAfterHoldRef.current = false;
-              return;
-            }
-            setOpen((current) => !current);
-          }}
-        >
-          <Text style={styles.novaFloatingButtonText}>{voiceRecording ? "Listening" : "Nova"}</Text>
-        </Pressable>
+        <View style={styles.novaFloatingButtonRow}>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={voiceRecording ? "Stop Nova voice input" : "Start Nova voice input"}
+            accessibilityHint="Tap to toggle voice input. Press and hold the Nova button for push-to-talk."
+            hitSlop={10}
+            style={[
+              styles.novaFloatingMicButton,
+              voiceRecording ? styles.novaFloatingButtonRecording : null,
+              voiceBusy ? styles.buttonDisabled : null,
+            ]}
+            disabled={voiceBusy}
+            onPress={() => {
+              setOpen(true);
+              onVoiceToggle();
+            }}
+          >
+            <Text style={styles.novaFloatingMicButtonText}>{voiceRecording ? "Stop" : voiceBusy ? "..." : "Mic"}</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Open Nova assistant"
+            accessibilityHint="Tap to open Nova. Press and hold to talk."
+            delayLongPress={240}
+            hitSlop={8}
+            style={[
+              styles.novaFloatingButton,
+              open ? styles.novaFloatingButtonActive : null,
+              voiceRecording ? styles.novaFloatingButtonRecording : null,
+            ]}
+            onLongPress={() => {
+              skipTapAfterHoldRef.current = true;
+              setOpen(true);
+              onVoiceHoldStart();
+            }}
+            onPressOut={() => {
+              if (!skipTapAfterHoldRef.current) {
+                return;
+              }
+              onVoiceHoldEnd();
+            }}
+            onPress={() => {
+              if (skipTapAfterHoldRef.current) {
+                skipTapAfterHoldRef.current = false;
+                return;
+              }
+              setOpen((current) => !current);
+            }}
+          >
+            <Text style={styles.novaFloatingButtonText}>{voiceRecording ? "Listening" : "Nova"}</Text>
+          </Pressable>
+        </View>
       </View>
     </View>
   );

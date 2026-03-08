@@ -363,6 +363,12 @@ function devNovaLog(...args: Array<unknown>) {
   }
 }
 
+function devVoiceUiLog(...args: Array<unknown>) {
+  if (__DEV__) {
+    console.log("[VoiceUI]", ...args);
+  }
+}
+
 function makeFleetSessionName(): string {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const suffix = Math.random().toString(36).slice(2, 6);
@@ -3753,8 +3759,10 @@ export default function AppShell() {
   const startNovaVoiceCapture = useCallback(() => {
     clearNovaVoiceLoopRestart();
     setNovaVoiceModeActive(true);
+    devVoiceUiLog("startNovaVoiceCapture");
     void startVoiceCapture().catch((error) => {
       setNovaVoiceModeActive(false);
+      devVoiceUiLog("startNovaVoiceCapture:error", error instanceof Error ? error.message : String(error));
       setStatus({
         text: error instanceof Error ? error.message : String(error),
         error: true,
@@ -3763,6 +3771,10 @@ export default function AppShell() {
   }, [clearNovaVoiceLoopRestart, setStatus, startVoiceCapture]);
 
   const toggleNovaVoiceCapture = useCallback(() => {
+    devVoiceUiLog("toggleNovaVoiceCapture", {
+      voiceRecording,
+      novaHandsFreeEnabled,
+    });
     if (voiceRecording) {
       if (!novaHandsFreeEnabled) {
         setNovaVoiceModeActive(false);
