@@ -36,9 +36,15 @@ export const styles = StyleSheet.create({
   },
   container: {
     paddingHorizontal: 14,
-    paddingBottom: 140,
+    paddingBottom: 28,
     paddingTop: 8,
     gap: 12,
+  },
+  containerGrow: {
+    flexGrow: 1,
+  },
+  containerWithBottomDock: {
+    paddingBottom: 150,
   },
   panelHeader: {
     borderRadius: 20,
@@ -52,6 +58,56 @@ export const styles = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 8 },
     elevation: 8,
+  },
+  appTopBar: {
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: "#332a64",
+    backgroundColor: "rgba(11, 6, 28, 0.96)",
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+  },
+  appTopBarLogo: {
+    width: 46,
+    height: 46,
+    borderRadius: 11,
+    borderWidth: 1,
+    borderColor: "#3b2f71",
+  },
+  appTopBarMeta: {
+    flex: 1,
+    gap: 1,
+  },
+  appTopBarMetaCompact: {
+    alignItems: "flex-end",
+    gap: 6,
+    maxWidth: "45%",
+  },
+  appTopBarTitle: {
+    color: "#f6edff",
+    fontSize: 18,
+    fontWeight: "800",
+    letterSpacing: 0.3,
+  },
+  appTopBarSubtitle: {
+    color: "#89d0ff",
+    fontSize: 11,
+    fontWeight: "700",
+  },
+  appTopBarRoutePill: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "#4e4187",
+    backgroundColor: "rgba(25, 16, 54, 0.94)",
+    color: "#9fd4ff",
+    fontSize: 10,
+    fontWeight: "800",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    overflow: "hidden",
   },
   brandLogo: {
     width: "100%",
@@ -187,17 +243,17 @@ export const styles = StyleSheet.create({
     position: "absolute",
     left: 14,
     right: 14,
-    bottom: 8,
+    bottom: 10,
     zIndex: 50,
   },
   bottomQuickNav: {
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
     borderColor: "#3a2d71",
-    backgroundColor: "rgba(8, 5, 25, 0.98)",
+    backgroundColor: "rgba(8, 5, 25, 0.985)",
     padding: 8,
   },
   bottomQuickNavButton: {
@@ -1147,6 +1203,16 @@ export const styles = StyleSheet.create({
     borderColor: "#3a2d71",
     backgroundColor: "rgba(11, 8, 30, 0.98)",
     padding: 14,
+    gap: 10,
+  },
+  controlCenterCard: {
+    maxHeight: "86%",
+  },
+  controlCenterScroll: {
+    maxHeight: 560,
+  },
+  controlCenterScrollContent: {
+    paddingBottom: 12,
     gap: 10,
   },
   centeredWrap: {

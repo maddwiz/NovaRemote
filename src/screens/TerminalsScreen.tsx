@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { Alert, NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
+import { Alert, Modal, NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
 
 import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
@@ -369,6 +369,7 @@ export function TerminalsScreen() {
   const [activeTabSession, setActiveTabSession] = useState<string | null>(null);
   const [showAllServerTerminals, setShowAllServerTerminals] = useState(false);
   const [showAdvancedControls, setShowAdvancedControls] = useState<boolean>(() => allSessions.length === 0);
+  const [showControlCenter, setShowControlCenter] = useState<boolean>(false);
   const [showAdvancedSessionSetup, setShowAdvancedSessionSetup] = useState<boolean>(() => allSessions.length === 0);
   const [showAdvancedOps, setShowAdvancedOps] = useState<boolean>(false);
   const [showAdvancedAppearance, setShowAdvancedAppearance] = useState<boolean>(false);
@@ -2009,20 +2010,58 @@ export function TerminalsScreen() {
   const topPanelChildren = React.Children.toArray(
     (topPanels as React.ReactElement<{ children?: React.ReactNode }>).props.children
   );
-  const primaryPanels = topPanelChildren.slice(0, 2);
-  const advancedPanels = topPanelChildren.slice(2);
-  const connectionPanel = advancedPanels[0];
-  const collabAiPanels = [advancedPanels[1], advancedPanels[2]].filter(Boolean);
-  const appearancePanels = [advancedPanels[3], advancedPanels[5], advancedPanels[8]].filter(Boolean);
-  const opsPanels = [advancedPanels[4], advancedPanels[6], advancedPanels[7], advancedPanels[11]].filter(Boolean);
-  const sessionSetupPanels = [advancedPanels[9], advancedPanels[10], advancedPanels[12]].filter(Boolean);
+  const primaryPanels = topPanelChildren.slice(0, 1);
+  const advancedPanels = topPanelChildren.slice(1);
+  const connectionPanels = [advancedPanels[0], advancedPanels[1]].filter(Boolean);
+  const collabAiPanels = [advancedPanels[2], advancedPanels[3]].filter(Boolean);
+  const appearancePanels = [advancedPanels[4], advancedPanels[6], advancedPanels[9]].filter(Boolean);
+  const opsPanels = [advancedPanels[5], advancedPanels[7], advancedPanels[8], advancedPanels[12]].filter(Boolean);
+  const sessionSetupPanels = [advancedPanels[10], advancedPanels[11], advancedPanels[13]].filter(Boolean);
 
   const openTerminalsTitle = showAllServerTerminals ? "Open Terminals (All Servers)" : "Open Terminals";
   const quickStartPanel = (
     <View style={styles.panel}>
-      <Text style={styles.panelLabel}>Quick Start</Text>
-      <Text style={styles.serverSubtitle}>Pick one action to get running fast.</Text>
+      <Text style={styles.panelLabel}>Command Deck</Text>
+      <View style={styles.serverPoolSummaryMetrics}>
+        <Text style={styles.serverPoolSummaryText}>{`Connected ${connectedServerCount}/${servers.length}`}</Text>
+        <Text style={styles.serverPoolSummaryText}>{`Live streams ${totalActiveStreams}`}</Text>
+        <Text style={styles.serverPoolSummaryText}>{`Unread ${unreadServers.size}`}</Text>
+      </View>
+      <Text style={styles.serverSubtitle}>
+        {poolLifecyclePaused
+          ? "Pool paused. Resume to restore live streams."
+          : disconnectedServerCount > 0
+            ? `${disconnectedServerCount} server(s) disconnected`
+            : "All configured servers are connected"}
+      </Text>
       <View style={styles.actionsWrap}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={poolLifecyclePaused ? "Resume connection pool" : "Pause connection pool"}
+          style={[styles.actionButton, servers.length === 0 ? styles.buttonDisabled : null]}
+          disabled={servers.length === 0}
+          onPress={poolLifecyclePaused ? onConnectAllServers : onDisconnectAllServers}
+        >
+          <Text style={styles.actionButtonText}>{poolLifecyclePaused ? "Resume Pool" : "Pause Pool"}</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh sessions for all connected servers"
+          style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
+          disabled={connectedServerCount === 0}
+          onPress={onRefreshAllServers}
+        >
+          <Text style={styles.actionButtonText}>Refresh All</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Reconnect all connected servers"
+          style={[styles.actionButton, connectedServerCount === 0 ? styles.buttonDisabled : null]}
+          disabled={connectedServerCount === 0}
+          onPress={onReconnectAllServers}
+        >
+          <Text style={styles.actionButtonText}>Reconnect</Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Start a new shell terminal now"
@@ -2043,17 +2082,154 @@ export function TerminalsScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={showAdvancedControls ? "Hide expert controls" : "Show expert controls"}
+          accessibilityLabel="Open control center"
           style={styles.actionButton}
-          onPress={() => setShowAdvancedControls((prev) => !prev)}
+          onPress={() => setShowControlCenter(true)}
         >
-          <Text style={styles.actionButtonText}>{showAdvancedControls ? "Hide Expert" : "Show Expert"}</Text>
+          <Text style={styles.actionButtonText}>Control Center</Text>
+        </Pressable>
+      </View>
+      <View style={styles.serverPoolSummaryModes}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show terminals for focused server"
+          style={[styles.chip, !showAllServerTerminals ? styles.chipActive : null]}
+          onPress={() => setShowAllServerTerminals(false)}
+        >
+          <Text style={[styles.chipText, !showAllServerTerminals ? styles.chipTextActive : null]}>Focused</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Show terminals for all servers"
+          style={[
+            styles.chip,
+            showAllServerTerminals ? styles.chipActive : null,
+            connectedServerCount < 2 ? styles.buttonDisabled : null,
+          ]}
+          onPress={() => setShowAllServerTerminals(true)}
+          disabled={connectedServerCount < 2}
+        >
+          <Text style={[styles.chipText, showAllServerTerminals ? styles.chipTextActive : null]}>All Servers</Text>
         </Pressable>
       </View>
       <Text style={styles.emptyText}>
-        1) Choose server. 2) Tap New Shell or New AI. 3) Open Expert controls only when needed.
+        {showAllServerTerminals
+          ? "Showing pooled sessions from every connected server."
+          : "Showing only sessions from the focused server."}
       </Text>
     </View>
+  );
+
+  const controlCenterModal = (
+    <Modal
+      visible={showControlCenter}
+      transparent
+      animationType="fade"
+      onRequestClose={() => setShowControlCenter(false)}
+    >
+      <Pressable style={styles.overlayBackdrop} onPress={() => setShowControlCenter(false)}>
+        <Pressable
+          style={[styles.overlayCard, styles.controlCenterCard]}
+          onPress={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
+            <Text style={styles.panelLabel}>Control Center</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close control center"
+              style={styles.buttonGhost}
+              onPress={() => setShowControlCenter(false)}
+            >
+              <Text style={styles.buttonGhostText}>Close</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.serverSubtitle}>
+            All advanced settings stay here so daily terminal work stays clean.
+          </Text>
+          <ScrollView
+            style={styles.controlCenterScroll}
+            contentContainerStyle={styles.controlCenterScrollContent}
+            showsVerticalScrollIndicator
+          >
+            {connectionPanels}
+
+            <View style={styles.panel}>
+              <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
+                <Text style={styles.panelLabel}>Session Setup</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showAdvancedSessionSetup ? "Hide session setup controls" : "Show session setup controls"}
+                  style={styles.actionButton}
+                  onPress={() => setShowAdvancedSessionSetup((prev) => !prev)}
+                >
+                  <Text style={styles.actionButtonText}>{showAdvancedSessionSetup ? "Hide" : "Show"}</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.serverSubtitle}>
+                Active server actions, session creation, and available session management.
+              </Text>
+            </View>
+            {showAdvancedSessionSetup ? sessionSetupPanels : null}
+
+            <View style={styles.panel}>
+              <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
+                <Text style={styles.panelLabel}>Ops & Fleet</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showAdvancedOps ? "Hide operations and fleet controls" : "Show operations and fleet controls"}
+                  style={styles.actionButton}
+                  onPress={() => setShowAdvancedOps((prev) => !prev)}
+                >
+                  <Text style={styles.actionButtonText}>{showAdvancedOps ? "Hide" : "Show"}</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.serverSubtitle}>
+                Shell wait, resource dashboard, process manager, and fleet execution.
+              </Text>
+            </View>
+            {showAdvancedOps ? opsPanels : null}
+
+            <View style={styles.panel}>
+              <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
+                <Text style={styles.panelLabel}>Appearance & Devices</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showAdvancedAppearance ? "Hide appearance and device controls" : "Show appearance and device controls"}
+                  style={styles.actionButton}
+                  onPress={() => setShowAdvancedAppearance((prev) => !prev)}
+                >
+                  <Text style={styles.actionButtonText}>{showAdvancedAppearance ? "Hide" : "Show"}</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.serverSubtitle}>
+                Layout mode, terminal theme, and glasses or VR controls.
+              </Text>
+            </View>
+            {showAdvancedAppearance ? appearancePanels : null}
+
+            <View style={styles.panel}>
+              <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
+                <Text style={styles.panelLabel}>Collaboration & AI</Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={showAdvancedCollaboration ? "Hide collaboration and AI controls" : "Show collaboration and AI controls"}
+                  style={styles.actionButton}
+                  onPress={() => setShowAdvancedCollaboration((prev) => !prev)}
+                >
+                  <Text style={styles.actionButtonText}>{showAdvancedCollaboration ? "Hide" : "Show"}</Text>
+                </Pressable>
+              </View>
+              <Text style={styles.serverSubtitle}>
+                Agent tools and shared workspace voice channels.
+              </Text>
+            </View>
+            {showAdvancedCollaboration ? collabAiPanels : null}
+          </ScrollView>
+        </Pressable>
+      </Pressable>
+    </Modal>
   );
 
   const processKillModal = (
@@ -2088,12 +2264,13 @@ export function TerminalsScreen() {
             <Text style={styles.buttonPrimaryText}>Upgrade to Pro</Text>
           </Pressable>
         </View>
-        {topPanels}
+        {primaryPanels}
         {quickStartPanel}
         <View style={styles.panel}>
           <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
           {renderOpenTerminals()}
         </View>
+        {controlCenterModal}
         {processKillModal}
       </>
     );
@@ -2104,7 +2281,7 @@ export function TerminalsScreen() {
       <>
         <View style={styles.splitRow}>
           <View style={styles.splitLeft}>
-            {topPanels}
+            {primaryPanels}
             {quickStartPanel}
           </View>
           <View style={styles.splitRight}>
@@ -2114,6 +2291,7 @@ export function TerminalsScreen() {
             </View>
           </View>
         </View>
+        {controlCenterModal}
         {processKillModal}
       </>
     );
@@ -2127,111 +2305,7 @@ export function TerminalsScreen() {
         <Text style={styles.panelLabel}>{openTerminalsTitle}</Text>
         {renderOpenTerminals()}
       </View>
-      <View style={styles.panel}>
-        <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
-          <Text style={styles.panelLabel}>Advanced Controls</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={showAdvancedControls ? "Hide advanced controls" : "Show advanced controls"}
-            style={styles.actionButton}
-            onPress={() =>
-              setShowAdvancedControls((prev) => {
-                const next = !prev;
-                if (next) {
-                  if (allSessions.length === 0) {
-                    setShowAdvancedSessionSetup(true);
-                  }
-                }
-                return next;
-              })
-            }
-          >
-            <Text style={styles.actionButtonText}>{showAdvancedControls ? "Hide" : "Show"}</Text>
-          </Pressable>
-        </View>
-        <Text style={styles.serverSubtitle}>
-          {showAdvancedControls
-            ? "Advanced sections are visible below."
-            : "Reveal fleet execute, process manager, theme, glasses, collaboration, and deeper session controls."}
-        </Text>
-      </View>
-      {showAdvancedControls ? (
-        <>
-          {connectionPanel}
-
-          <View style={styles.panel}>
-            <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
-              <Text style={styles.panelLabel}>Session Setup</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={showAdvancedSessionSetup ? "Hide session setup controls" : "Show session setup controls"}
-                style={styles.actionButton}
-                onPress={() => setShowAdvancedSessionSetup((prev) => !prev)}
-              >
-                <Text style={styles.actionButtonText}>{showAdvancedSessionSetup ? "Hide" : "Show"}</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.serverSubtitle}>
-              Active server actions, session creation, and available session management.
-            </Text>
-          </View>
-          {showAdvancedSessionSetup ? sessionSetupPanels : null}
-
-          <View style={styles.panel}>
-            <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
-              <Text style={styles.panelLabel}>Ops & Fleet</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={showAdvancedOps ? "Hide operations and fleet controls" : "Show operations and fleet controls"}
-                style={styles.actionButton}
-                onPress={() => setShowAdvancedOps((prev) => !prev)}
-              >
-                <Text style={styles.actionButtonText}>{showAdvancedOps ? "Hide" : "Show"}</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.serverSubtitle}>
-              Shell wait, resource dashboard, process manager, and fleet execution.
-            </Text>
-          </View>
-          {showAdvancedOps ? opsPanels : null}
-
-          <View style={styles.panel}>
-            <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
-              <Text style={styles.panelLabel}>Appearance & Devices</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={showAdvancedAppearance ? "Hide appearance and device controls" : "Show appearance and device controls"}
-                style={styles.actionButton}
-                onPress={() => setShowAdvancedAppearance((prev) => !prev)}
-              >
-                <Text style={styles.actionButtonText}>{showAdvancedAppearance ? "Hide" : "Show"}</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.serverSubtitle}>
-              Layout mode, terminal theme, and glasses or VR controls.
-            </Text>
-          </View>
-          {showAdvancedAppearance ? appearancePanels : null}
-
-          <View style={styles.panel}>
-            <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
-              <Text style={styles.panelLabel}>Collaboration & AI</Text>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={showAdvancedCollaboration ? "Hide collaboration and AI controls" : "Show collaboration and AI controls"}
-                style={styles.actionButton}
-                onPress={() => setShowAdvancedCollaboration((prev) => !prev)}
-              >
-                <Text style={styles.actionButtonText}>{showAdvancedCollaboration ? "Hide" : "Show"}</Text>
-              </Pressable>
-            </View>
-            <Text style={styles.serverSubtitle}>
-              Agent tools and shared workspace voice channels.
-            </Text>
-          </View>
-          {showAdvancedCollaboration ? collabAiPanels : null}
-        </>
-      ) : null}
+      {controlCenterModal}
       {processKillModal}
     </>
   );

@@ -13,7 +13,6 @@ import {
   Share,
   ScrollView,
   Text,
-  useWindowDimensions,
   View,
 } from "react-native";
 
@@ -619,8 +618,6 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
 const SIMPLE_UI_MODE_STORAGE_KEY = "novaremote.simple_ui_mode";
 
 export default function AppShell() {
-  const { width } = useWindowDimensions();
-  const compactNav = width < 680;
   const [route, setRoute] = useState<RouteTab>("terminals");
   const [simpleMode, setSimpleMode] = useState<boolean>(true);
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -709,16 +706,6 @@ export default function AppShell() {
       return next;
     });
   }, []);
-
-  useEffect(() => {
-    if (!simpleMode) {
-      return;
-    }
-    if (route === "terminals" || route === "servers") {
-      return;
-    }
-    setRoute("terminals");
-  }, [route, simpleMode]);
 
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
   const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
@@ -3518,6 +3505,17 @@ export default function AppShell() {
     },
     [capabilities.files, isPro, markActivity]
   );
+  const routeLabel: Record<RouteTab, string> = {
+    terminals: "Terminals",
+    servers: "Servers",
+    snippets: "Snippets",
+    files: "Files",
+    llms: "AI",
+    team: "Team",
+    glasses: "Glasses",
+    vr: "VR",
+  };
+  const activeRouteLabel = routeLabel[route] || "NovaRemote";
 
   if (lockLoading || onboardingLoading || tutorialLoading || safetyLoading) {
     return (
@@ -3552,40 +3550,34 @@ export default function AppShell() {
       >
         <ScrollView
           style={styles.flex}
-          contentContainerStyle={styles.container}
+          contentContainerStyle={[
+            styles.container,
+            styles.containerGrow,
+            route !== "glasses" ? styles.containerWithBottomDock : null,
+          ]}
           showsVerticalScrollIndicator
           alwaysBounceVertical
           scrollEnabled
           nestedScrollEnabled
-          directionalLockEnabled
-          canCancelContentTouches
           contentInsetAdjustmentBehavior="automatic"
-          keyboardShouldPersistTaps="always"
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           refreshControl={
             route === "terminals" ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#27d9ff" /> : undefined
           }
         >
           {route !== "glasses" ? (
-            <View style={styles.panelHeader}>
-              <Image source={BRAND_LOGO} style={styles.brandLogo} resizeMode="cover" />
-              <View style={styles.headerTextBlock}>
-                <Text style={styles.title}>NovaRemote</Text>
-                <Text style={styles.subtitle}>Universal AI + Terminal Remote Control</Text>
+            <View style={styles.appTopBar}>
+              <Image source={BRAND_LOGO} style={styles.appTopBarLogo} resizeMode="cover" />
+              <View style={styles.appTopBarMeta}>
+                <Text style={styles.appTopBarTitle}>NovaRemote</Text>
+                <Text style={styles.appTopBarSubtitle}>{`${activeRouteLabel} • ${activeServerName}`}</Text>
               </View>
-              <View style={styles.headerRowWrap}>
-                <Text style={styles.serverBadge}>{activeServerName}</Text>
+              <View style={styles.appTopBarMetaCompact}>
+                <Text style={styles.appTopBarRoutePill}>{activeRouteLabel}</Text>
                 <StatusPill status={status} />
               </View>
             </View>
-          ) : null}
-
-          {route !== "glasses" && !compactNav ? (
-            <TabBar
-              route={route}
-              simpleMode={simpleMode}
-              onToggleSimpleMode={toggleSimpleMode}
-              onChange={handleTabChange}
-            />
           ) : null}
 
           {route === "servers" ? (
@@ -4357,7 +4349,7 @@ export default function AppShell() {
             />
           ) : null}
         </ScrollView>
-        {route !== "glasses" && compactNav ? (
+        {route !== "glasses" ? (
           <View style={styles.bottomNavDock}>
             <TabBar
               route={route}
