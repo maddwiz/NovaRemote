@@ -404,6 +404,7 @@ function normalizeOptions(options?: LlmSendOptions) {
     customTools,
     toolContext: asStringRecord(options?.toolContext),
     maxToolRounds: Math.max(1, Math.min(Math.round(options?.maxToolRounds || 3), 5)),
+    responseFormat: options?.responseFormat === "json" ? "json" : "text",
   };
 }
 
@@ -756,6 +757,7 @@ export function useLlmClient() {
           prompt: enrichedPrompt,
           system: profile.systemPrompt || undefined,
           stream: false,
+          format: normalizedOptions.responseFormat === "json" ? "json" : undefined,
         };
 
         const response = await fetch(`${baseUrl}/api/generate`, {
@@ -775,6 +777,7 @@ export function useLlmClient() {
                 ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
                 { role: "user", content: enrichedPrompt },
               ],
+              format: normalizedOptions.responseFormat === "json" ? "json" : undefined,
             }),
           });
 

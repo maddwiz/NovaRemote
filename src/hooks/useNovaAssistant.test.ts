@@ -221,7 +221,7 @@ describe("useNovaAssistant", () => {
     });
 
     expect(sendPromptDetailed).toHaveBeenCalledTimes(1);
-    expect(sendPromptDetailed.mock.calls[0]?.[2]).toBeUndefined();
+    expect(sendPromptDetailed.mock.calls[0]?.[2]).toEqual({ responseFormat: "json" });
     expect(executeActions).toHaveBeenCalledWith(
       [{ type: "team_request_audit_export", format: "csv", rangeHours: 24 }],
       context

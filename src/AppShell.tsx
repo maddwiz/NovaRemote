@@ -3084,6 +3084,59 @@ export default function AppShell() {
             continue;
           }
 
+          if (action.type === "create_folder") {
+            const requestedPath = action.path.trim();
+            if (!requestedPath) {
+              throw new Error("A folder path is required.");
+            }
+            const baseDirectory = getActiveDirectoryForServer(server.id).trim();
+            const targetPath =
+              requestedPath.startsWith("/") || !baseDirectory
+                ? requestedPath
+                : `${baseDirectory.replace(/\/+$/, "")}/${requestedPath.replace(/^\/+/, "")}`;
+            let session = resolveAssistantSession(
+              context,
+              server,
+              "$focused_session",
+              lastCreatedSessionByServerId.get(server.id) || null
+            );
+            if (!session || session.mode !== "shell") {
+              const created = await createSessionForServer(server.id, "shell");
+              lastCreatedSessionByServerId.set(server.id, created);
+              session = {
+                session: created,
+                mode: "shell",
+                localAi: false,
+                live: false,
+              };
+            }
+            await sendServerSessionCommand(server.id, session.session, `mkdir -p -- ${shellQuote(targetPath)}`, "shell");
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            setFocusedSession(session.session);
+
+            if (capabilities.files) {
+              const parent = targetPath.replace(/\/+$/, "").replace(/\/[^/]+$/, "") || "/";
+              try {
+                const data = await apiRequest<{ path: string; entries: RemoteFileEntry[] }>(
+                  serverProfile.baseUrl,
+                  serverProfile.token,
+                  `/files/list?path=${encodeURIComponent(parent)}${assistantFileIncludeHidden ? "&hidden=true" : ""}`
+                );
+                setFilesSurfaceTarget(server.id);
+                assistantFilePath = data.path;
+                setCurrentPath(data.path);
+                setFileEntries(data.entries || []);
+              } catch {
+                // Folder creation still succeeded even if the file index refresh failed.
+              }
+            }
+
+            results.push({ action: action.type, ok: true, detail: `Created folder ${targetPath} on ${server.name}` });
+            continue;
+          }
+
           if (action.type === "save_file") {
             const targetPath = action.path.trim();
             if (!targetPath) {

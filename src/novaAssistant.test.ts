@@ -114,6 +114,7 @@ describe("novaAssistant", () => {
           { type: "list_files", path: "/workspace/app", includeHidden: true },
           { type: "open_file", path: "/workspace/app/package.json" },
           { type: "tail_file", path: "/workspace/app/logs/app.log", lines: 120 },
+          { type: "create_folder", path: "/workspace/app/logs/archive" },
           { type: "save_file", path: "/workspace/app/.env", content: "A=1" },
           { type: "refresh_processes", serverRef: "dgx" },
           { type: "kill_process", serverRef: "dgx", pid: 321, signal: "TERM" },
@@ -131,6 +132,7 @@ describe("novaAssistant", () => {
       { type: "list_files", path: "/workspace/app", includeHidden: true, serverRef: undefined },
       { type: "open_file", path: "/workspace/app/package.json", serverRef: undefined },
       { type: "tail_file", path: "/workspace/app/logs/app.log", lines: 120, serverRef: undefined },
+      { type: "create_folder", path: "/workspace/app/logs/archive", serverRef: undefined },
       { type: "save_file", path: "/workspace/app/.env", content: "A=1", serverRef: undefined },
       { type: "refresh_processes", serverRef: "dgx" },
       { type: "kill_process", serverRef: "dgx", pid: 321, signal: "TERM" },
@@ -183,6 +185,7 @@ describe("novaAssistant", () => {
     expect(prompt).toContain('"teamName": "Nova Team"');
     expect(prompt).toContain('"pid": 321');
     expect(prompt).toContain('"type":"send_command"');
+    expect(prompt).toContain('"type":"create_folder"');
     expect(prompt).toContain('"type":"save_file"');
     expect(prompt).toContain('"type":"kill_process"');
     expect(prompt).toContain('"type":"team_request_audit_export"');
@@ -207,6 +210,7 @@ describe("novaAssistant", () => {
           reply: "I’ll open the file and queue the export.",
           actions: [
             { type: "open_file", path: "/workspace/app/package.json" },
+            { type: "create_folder", path: "/workspace/app/tmp" },
             { type: "open_server_link", serverRef: "dgx", target: "grafana" },
             { type: "team_request_audit_export", format: "csv", rangeHours: 24 },
           ],
@@ -219,6 +223,7 @@ describe("novaAssistant", () => {
       reply: "I’ll open the file and queue the export.",
       actions: [
         { type: "open_file", path: "/workspace/app/package.json", serverRef: undefined },
+        { type: "create_folder", path: "/workspace/app/tmp", serverRef: undefined },
         { type: "open_server_link", serverRef: "dgx", target: "grafana" },
         { type: "team_request_audit_export", format: "csv", rangeHours: 24 },
       ],

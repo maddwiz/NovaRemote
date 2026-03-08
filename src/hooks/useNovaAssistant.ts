@@ -53,6 +53,19 @@ function supportsNativeNovaTools(profile: LlmProfile | null): boolean {
   return profile?.kind === "openai_compatible" || profile?.kind === "azure_openai";
 }
 
+function cleanFallbackReply(value: string): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return "Done.";
+  }
+  const withoutFence = trimmed.replace(/```(?:json)?/gi, "").replace(/```/g, "").trim();
+  const firstJsonBrace = withoutFence.indexOf("{");
+  if (firstJsonBrace === 0) {
+    return "Done.";
+  }
+  return withoutFence;
+}
+
 export function useNovaAssistant({ activeProfile, sendPromptDetailed, buildContext, executeActions }: UseNovaAssistantArgs) {
   const [messages, setMessages] = useState<NovaAssistantMessage[]>(() => [buildGreeting()]);
   const [draft, setDraft] = useState<string>("");
@@ -113,9 +126,9 @@ export function useNovaAssistant({ activeProfile, sendPromptDetailed, buildConte
             context,
             input: trimmed,
           });
-          const response = await sendPromptDetailed(activeProfile, prompt);
+          const response = await sendPromptDetailed(activeProfile, prompt, { responseFormat: "json" });
           const plan = parseNovaAssistantPlan(response.text);
-          reply = plan.reply.trim() || "Done.";
+          reply = cleanFallbackReply(plan.reply);
           actions = plan.actions;
         }
 

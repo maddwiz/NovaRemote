@@ -104,6 +104,7 @@ export type NovaAssistantAction =
   | { type: "list_files"; serverRef?: string; path?: string; includeHidden?: boolean }
   | { type: "open_file"; serverRef?: string; path?: string }
   | { type: "tail_file"; serverRef?: string; path?: string; lines?: number }
+  | { type: "create_folder"; serverRef?: string; path: string }
   | { type: "save_file"; serverRef?: string; path: string; content: string }
   | { type: "refresh_processes"; serverRef?: string }
   | { type: "kill_process"; serverRef?: string; pid: number; signal?: ProcessSignal }
@@ -338,6 +339,18 @@ function normalizeAction(input: unknown): NovaAssistantAction | null {
       serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
       path,
       content: typeof raw.content === "string" ? raw.content : "",
+    };
+  }
+
+  if (type === "create_folder") {
+    const path = trimText(raw.path || raw.folderPath || raw.directoryPath || raw.name);
+    if (!path) {
+      return null;
+    }
+    return {
+      type: "create_folder",
+      serverRef: trimText(raw.serverRef || raw.server || raw.serverName || raw.serverId) || undefined,
+      path,
     };
   }
 
@@ -612,6 +625,7 @@ export function buildNovaAssistantPrompt(args: {
     '- {"type":"list_files","serverRef":"optional","path":"optional","includeHidden":true|false}',
     '- {"type":"open_file","serverRef":"optional","path":"optional"}',
     '- {"type":"tail_file","serverRef":"optional","path":"optional","lines":200}',
+    '- {"type":"create_folder","serverRef":"optional","path":"/path/to/folder"}',
     '- {"type":"save_file","serverRef":"optional","path":"/path/to/file","content":"full file content"}',
     '- {"type":"refresh_processes","serverRef":"optional"}',
     '- {"type":"kill_process","serverRef":"optional","pid":1234,"signal":"TERM|KILL|INT"}',
@@ -652,7 +666,7 @@ export function buildNovaAssistantToolPrompt(args: {
     '- You may use placeholders "$focused_server", "$focused_session", and "$last_session".',
     "- Do not invent servers, sessions, routes, links, or settings keys.",
     "- Dangerous shell commands may require confirmation in-app; it is still valid to request those actions when the user explicitly asks for them.",
-    "Available action types for the tool: navigate, focus_server, focus_session, create_session, send_command, set_draft, stop_session, list_files, open_file, tail_file, save_file, refresh_processes, kill_process, open_server_link, create_agent, update_agent, approve_agents, deny_agents, team_refresh, team_open_dashboard, team_sync_audit, team_request_audit_export, team_refresh_audit_exports, set_preference, set_pool_paused.",
+    "Available action types for the tool: navigate, focus_server, focus_session, create_session, send_command, set_draft, stop_session, list_files, open_file, tail_file, create_folder, save_file, refresh_processes, kill_process, open_server_link, create_agent, update_agent, approve_agents, deny_agents, team_refresh, team_open_dashboard, team_sync_audit, team_request_audit_export, team_refresh_audit_exports, set_preference, set_pool_paused.",
     "",
     "Current app context:",
     serializeContext(args.context),
@@ -695,6 +709,7 @@ export function buildNovaAssistantPlanningTool(): LlmToolDefinition {
                   "list_files",
                   "open_file",
                   "tail_file",
+                  "create_folder",
                   "save_file",
                   "refresh_processes",
                   "kill_process",

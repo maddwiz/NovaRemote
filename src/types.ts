@@ -522,6 +522,7 @@ export type LlmSendOptions = {
   customTools?: LlmToolDefinition[];
   toolContext?: Record<string, string>;
   maxToolRounds?: number;
+  responseFormat?: "text" | "json";
 };
 
 export type LlmSendResult = {
