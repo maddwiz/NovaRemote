@@ -175,7 +175,7 @@ export function ServersScreen({
   onBackToTerminals,
 }: ServersScreenProps) {
   const vmTypes: VmType[] = ["proxmox", "vmware", "hyper-v", "docker", "lxc", "qemu", "virtualbox", "cloud"];
-  const [showAdvancedServerOptions, setShowAdvancedServerOptions] = useState<boolean>(() => !simpleMode);
+  const [showServerControlCenter, setShowServerControlCenter] = useState<boolean>(false);
   const [showQrScanner, setShowQrScanner] = useState<boolean>(false);
   const [qrError, setQrError] = useState<string>("");
   const { parseQrPayload } = useQrSetup();
@@ -212,11 +212,6 @@ export function ServersScreen({
     setWorkspaceServerIds([seedId]);
   }, [activeServerId, servers, workspaceServerIds.length]);
 
-  useEffect(() => {
-    if (simpleMode) {
-      setShowAdvancedServerOptions(false);
-    }
-  }, [simpleMode]);
   const groupedServers = useMemo(
     () => groupServersByVmHost(servers, { standalonePosition: "first" }),
     [servers]
@@ -359,7 +354,7 @@ export function ServersScreen({
         })}
       </View>
 
-      {!simpleMode || showAdvancedServerOptions ? (
+      {showServerControlCenter ? (
       <View style={styles.serverCard}>
         <Text style={styles.panelLabel}>Team Workspaces (Preview)</Text>
         <Text style={styles.serverSubtitle}>
@@ -609,26 +604,24 @@ export function ServersScreen({
         onChangeText={onSetServerCwd}
       />
       {qrError ? <Text style={styles.emptyText}>{qrError}</Text> : null}
-      {simpleMode ? (
-        <View style={styles.serverCard}>
-          <View style={styles.rowInlineSpace}>
-            <Text style={styles.panelLabel}>Server Advanced Options</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={showAdvancedServerOptions ? "Hide server advanced options" : "Show server advanced options"}
-              style={styles.actionButton}
-              onPress={() => setShowAdvancedServerOptions((prev) => !prev)}
-            >
-              <Text style={styles.actionButtonText}>{showAdvancedServerOptions ? "Hide" : "Show"}</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.serverSubtitle}>
-            SSH fallback, VM metadata, backend hints, integrations, safety toggles, and growth settings.
-          </Text>
+      <View style={styles.serverCard}>
+        <View style={styles.rowInlineSpace}>
+          <Text style={styles.panelLabel}>Server Control Center</Text>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={showServerControlCenter ? "Hide server control center" : "Open server control center"}
+            style={styles.actionButton}
+            onPress={() => setShowServerControlCenter((prev) => !prev)}
+          >
+            <Text style={styles.actionButtonText}>{showServerControlCenter ? "Close" : "Open"}</Text>
+          </Pressable>
         </View>
-      ) : null}
+        <Text style={styles.serverSubtitle}>
+          SSH fallback, VM metadata, backend hints, integrations, workspace collaboration, security toggles, and growth tools.
+        </Text>
+      </View>
 
-      {!simpleMode || showAdvancedServerOptions ? (
+      {showServerControlCenter ? (
       <>
       <View style={styles.serverCard}>
         <Text style={styles.panelLabel}>Direct SSH Fallback (Optional)</Text>
