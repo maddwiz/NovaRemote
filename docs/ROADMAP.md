@@ -1,6 +1,6 @@
 # NovaRemote Product Roadmap
 
-Updated: 2026-03-07
+Updated: 2026-03-08
 
 ## Milestones
 
@@ -13,8 +13,8 @@ Updated: 2026-03-07
 | v1.5 | VM Grouping + Fleet Scoping | VM metadata model, server grouping by VM host/type, VM-aware fleet target helpers | Complete |
 | v1.6 | Team MVP (Enterprise Foundation) | Team auth, token broker, team server governance, audit log + exports, team screen, tier-aware paywall, enforced safety/fleet/session policies | Complete (app-side) |
 | v2.0 | Enterprise Readiness | SSO/OIDC/SAML lifecycle, fleet approval governance, compliance export workflows, cloud/dashboard scaffolding and bootstrap verification | In progress (production rollout/hardening pending) |
-| v2.0+ | NovaAdapt + NovaSpine | Agent runtime integration, context snapshots, approvals, voice controls for agent lifecycle | In progress |
-| v2.1 | Team Collaboration | Presence-aware collaboration and voice channels across team workspaces | In progress |
+| v2.0+ | NovaAdapt + NovaSpine | Agent runtime integration, context snapshots, approvals, voice controls, autonomous monitoring workflows with multi-step sequencing | Complete (in-app orchestration) |
+| v2.1 | Team Collaboration | Presence-aware collaboration and voice channels across team workspaces with dedicated voice backplane transport/reconciliation | Complete (in-app) |
 
 ## Notes
 

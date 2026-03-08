@@ -3,6 +3,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { styles } from "../theme/styles";
 import { SharedWorkspace, VoiceChannel } from "../types";
+import { VoiceBackplaneStatus } from "../hooks/useVoicePresenceBackplane";
 import {
   resolveVoiceParticipantLabel,
   summarizeVoiceParticipants,
@@ -20,6 +21,8 @@ type WorkspaceVoiceChannelsPanelProps = {
   onLeaveChannel: (channelId: string) => void;
   onToggleMute: (channelId: string) => void;
   participantDirectory?: Record<string, VoiceParticipantDirectoryEntry>;
+  backplaneStatus?: VoiceBackplaneStatus;
+  backplaneError?: string | null;
   onOpenServers: () => void;
 };
 
@@ -33,6 +36,8 @@ export function WorkspaceVoiceChannelsPanel({
   onLeaveChannel,
   onToggleMute,
   participantDirectory = {},
+  backplaneStatus = "disabled",
+  backplaneError = null,
   onOpenServers,
 }: WorkspaceVoiceChannelsPanelProps) {
   const [newChannelNamesByWorkspace, setNewChannelNamesByWorkspace] = useState<Record<string, string>>({});
@@ -72,6 +77,9 @@ export function WorkspaceVoiceChannelsPanel({
       <Text style={styles.panelLabel}>Workspace Voice Channels (Preview)</Text>
       <Text style={styles.serverSubtitle}>
         {loading ? "Loading channel state..." : "Join or mute workspace channels without leaving terminals."}
+      </Text>
+      <Text style={styles.emptyText}>
+        {`Voice backplane: ${backplaneStatus}${backplaneError ? ` (${backplaneError})` : ""}`}
       </Text>
       {workspaces.length === 0 ? <Text style={styles.emptyText}>No workspaces yet. Create one from the Servers tab.</Text> : null}
       {workspaces.map((workspace) => {

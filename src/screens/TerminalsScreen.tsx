@@ -351,6 +351,8 @@ export function TerminalsScreen() {
   const {
     channels: voiceChannels,
     loading: voiceChannelsLoading,
+    backplaneStatus: voiceBackplaneStatus,
+    backplaneLastError: voiceBackplaneLastError,
     createChannel,
     deleteChannel,
     joinChannel,
@@ -1306,6 +1308,8 @@ export function TerminalsScreen() {
         onLeaveChannel={leaveChannel}
         onToggleMute={toggleMute}
         participantDirectory={voiceParticipantDirectory}
+        backplaneStatus={voiceBackplaneStatus}
+        backplaneError={voiceBackplaneLastError}
         onOpenServers={onOpenServers}
       />
 

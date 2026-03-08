@@ -1,0 +1,30 @@
+name: Contract Sync
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  verify-contract-sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      CI: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify contract sync
+        run: npm run contracts:verify-sync
+

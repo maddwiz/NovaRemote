@@ -1,6 +1,6 @@
 # NovaRemote Handoff Status
 
-Updated: 2026-03-07
+Updated: 2026-03-08
 
 ## v1.2 Connection Pool + Switcher
 
@@ -136,6 +136,7 @@ Updated: 2026-03-07
 - [x] Monitoring/autonomous cycles now fall back to each agent's latest known routed session from NovaMemory when no current default session is available, reducing stalled monitoring loops after focus/surface changes
 - [x] NovaAdapt panel now includes manual "Run Monitoring" cycle control with immediate queued/dispatched feedback for monitoring agents
 - [x] Added NovaAdapt panel regression coverage for manual monitoring controls (`src/components/NovaAgentPanel.test.tsx`)
+- [x] Monitoring orchestration now supports autonomous multi-step workflow goals (`&&`, `;`, newline, `then`) with sequential step dispatch and automatic completion transitions to `idle`
 - [~] Enterprise IAM expansion:
   - [x] SSO (`SAML`/`OIDC`) app-side token-exchange + TeamScreen SSO login mode
   - [x] Team SSO provider lifecycle (`GET/PATCH /v1/team/sso/providers`) wired in app (`useTeamAuth`, TeamScreen toggles + editable display/issuer/auth/token/client/callback fields) + cloud contract/scaffold
@@ -167,7 +168,7 @@ Updated: 2026-03-07
   - [x] inactivity timeout / session auto-disconnect policies
 - [~] Separate NovaRemote Cloud backend + web admin dashboard rollout
 - [~] Separate NovaRemote Cloud backend + web admin dashboard now have executable bootstrap + OpenAPI contract sync scaffolding (`cloud:bootstrap-repos`, `cloud:sync-contracts`) plus temp-dir bootstrap verification (`cloud:verify-bootstrap`), interactive dashboard scaffold wiring (built-in password/SSO sign-in helpers, invite-code redemption, refresh/logout session lifecycle, server fleet create/edit/delete, member role + server assignment management, invite lifecycle, policy editing, approvals, SSO toggles, audit event viewing/filtering, export request/history/delete lifecycle), file-backed local state persistence in the API scaffold, stricter refresh-token validation in scaffold auth routes, endpoint-level permission guards derived from team role in the scaffold API, server-derived member usage snapshots from audit history, and deployment templates (`Dockerfile`, `render.yaml`, scaffold CI workflows); production rollout/hardening remains pending
-- [~] NovaSpine context orchestration is implemented in-app; monitoring-goal auto-queue lifecycle groundwork is now shipped, while full autonomous agent lifecycle orchestration remains roadmap work
+- [x] NovaSpine context orchestration + autonomous lifecycle routing are implemented in-app, including monitoring auto-queue, auto-approve, memory session fallback, and multi-step autonomous workflow sequencing
 - [x] Terminals workspace voice channels now sync remote collaborator participant presence from focused-server collaboration sessions, preserving local participation and pruning stale remote speakers
 - [x] Glasses and VR workspace voice channels now sync remote collaborator participant presence from focused-server collaboration sessions, preserving local participation and pruning stale remote speakers
 - [x] Cross-surface voice presence now derives remote active speaker state from collaborator `lastSeenAt` snapshots and syncs speaker + participant updates through shared channel state (Terminals + Glasses + VR)
@@ -175,7 +176,7 @@ Updated: 2026-03-07
 - [x] Workspace channel UIs now resolve participant/speaker IDs to human labels (name/role) via merged collaboration + workspace-member directories across Terminals panel, Glasses HUD channels, and VR channel controls
 - [x] Channel UIs now surface live participant summaries (online + speaker + participant list) across Terminals, Glasses, and VR collaboration controls for faster multi-user situational awareness
 - [x] Presence-aware collaboration voice channels are implemented in-app across Terminals + Glasses + VR (participant/speaker identity mapping, joined-channel multi-workspace sync, live summaries)
-- [~] Dedicated production-grade multi-user voice transport/presence backplane rollout remains roadmap work
+- [x] Dedicated voice presence backplane transport is now implemented in-app (`useVoicePresenceBackplane`) with reconnect, heartbeat, auth/sync payloads, remote participant/speaker reconciliation, and regression coverage (`useVoicePresenceBackplane.test.ts`, `useVoiceChannels.test.ts`)
 
 ## Notes
 

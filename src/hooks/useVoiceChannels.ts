@@ -3,15 +3,39 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { makeId, STORAGE_VOICE_CHANNELS } from "../constants";
 import { VoiceChannel } from "../types";
+import { VoiceBackplaneStatus, useVoicePresenceBackplane } from "./useVoicePresenceBackplane";
 
 type CreateVoiceChannelInput = {
   workspaceId: string;
   name: string;
 };
 
+type UseVoiceChannelsBackplaneOptions = {
+  enabled?: boolean;
+  endpoint?: string | null;
+  token?: string | null;
+  participantId?: string | null;
+  socketFactory?: (endpoint: string) => {
+    readyState: number;
+    onopen: ((event: unknown) => void) | null;
+    onmessage: ((event: { data?: unknown }) => void) | null;
+    onerror: ((event: unknown) => void) | null;
+    onclose: ((event: unknown) => void) | null;
+    send: (data: string) => void;
+    close: () => void;
+  };
+};
+
+type UseVoiceChannelsArgs = {
+  backplane?: UseVoiceChannelsBackplaneOptions;
+};
+
 export type UseVoiceChannelsResult = {
   channels: VoiceChannel[];
   loading: boolean;
+  backplaneStatus: VoiceBackplaneStatus;
+  backplaneLastError: string | null;
+  backplaneConnectedAt: string | null;
   createChannel: (input: CreateVoiceChannelInput) => VoiceChannel | null;
   deleteChannel: (channelId: string) => void;
   pruneWorkspaceChannels: (workspaceIds: string[]) => void;
@@ -135,7 +159,9 @@ function joinWorkspaceChannel(
   );
 }
 
-export function useVoiceChannels(): UseVoiceChannelsResult {
+export function useVoiceChannels(args: UseVoiceChannelsArgs = {}): UseVoiceChannelsResult {
+  const backplaneOptions = args.backplane;
+  const localVoiceParticipantId = normalizeParticipantId(backplaneOptions?.participantId || LOCAL_VOICE_PARTICIPANT_ID) || LOCAL_VOICE_PARTICIPANT_ID;
   const [channels, setChannels] = useState<VoiceChannel[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const channelsRef = useRef<VoiceChannel[]>([]);
@@ -252,8 +278,8 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
   }, []);
 
   const joinChannel = useCallback((channelId: string) => {
-    setChannels((previous) => joinWorkspaceChannel(previous, channelId));
-  }, []);
+    setChannels((previous) => joinWorkspaceChannel(previous, channelId, localVoiceParticipantId));
+  }, [localVoiceParticipantId]);
 
   const leaveChannel = useCallback((channelId: string) => {
     const now = new Date().toISOString();
@@ -265,9 +291,9 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
                 ...channel,
                 joined: false,
                 activeSpeakerId:
-                  channel.activeSpeakerId === LOCAL_VOICE_PARTICIPANT_ID ? null : channel.activeSpeakerId || null,
+                  channel.activeSpeakerId === localVoiceParticipantId ? null : channel.activeSpeakerId || null,
                 activeParticipantIds: (channel.activeParticipantIds || []).filter(
-                  (participantId) => participantId !== LOCAL_VOICE_PARTICIPANT_ID
+                  (participantId) => participantId !== localVoiceParticipantId
                 ),
                 updatedAt: now,
               }
@@ -275,7 +301,7 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
         )
       )
     );
-  }, []);
+  }, [localVoiceParticipantId]);
 
   const toggleMute = useCallback((channelId: string) => {
     const now = new Date().toISOString();
@@ -377,8 +403,8 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
             }
 
             const nextParticipantsSet = new Set(normalizedParticipants);
-            if (preserveLocalParticipant && (channel.activeParticipantIds || []).includes(LOCAL_VOICE_PARTICIPANT_ID)) {
-              nextParticipantsSet.add(LOCAL_VOICE_PARTICIPANT_ID);
+            if (preserveLocalParticipant && (channel.activeParticipantIds || []).includes(localVoiceParticipantId)) {
+              nextParticipantsSet.add(localVoiceParticipantId);
             }
             const nextParticipants = Array.from(nextParticipantsSet).sort();
             const currentParticipants = Array.from(new Set(channel.activeParticipantIds || [])).sort();
@@ -410,13 +436,50 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
         )
       );
     },
-    []
+    [localVoiceParticipantId]
   );
+
+  const handleBackplanePresence = useCallback(
+    (payload: { channelId: string; participantIds: string[]; activeSpeakerId: string | null }) => {
+      syncChannelParticipants(payload.channelId, payload.participantIds, {
+        preserveLocalParticipant: true,
+        activeSpeakerId: payload.activeSpeakerId,
+      });
+    },
+    [syncChannelParticipants]
+  );
+
+  const joinedChannelsSnapshot = useMemo(
+    () =>
+      channels
+        .filter((channel) => channel.joined)
+        .map((channel) => ({
+          channelId: channel.id,
+          workspaceId: channel.workspaceId,
+          activeParticipantIds: channel.activeParticipantIds || [],
+          activeSpeakerId: channel.activeSpeakerId || null,
+          muted: channel.muted,
+        })),
+    [channels]
+  );
+
+  const backplane = useVoicePresenceBackplane({
+    enabled: backplaneOptions?.enabled !== false,
+    endpoint: backplaneOptions?.endpoint || process.env.EXPO_PUBLIC_NOVA_VOICE_BACKPLANE_URL || null,
+    token: backplaneOptions?.token || null,
+    participantId: localVoiceParticipantId,
+    joinedChannels: joinedChannelsSnapshot,
+    onRemotePresence: handleBackplanePresence,
+    socketFactory: backplaneOptions?.socketFactory,
+  });
 
   return useMemo(
     () => ({
       channels,
       loading,
+      backplaneStatus: backplane.status,
+      backplaneLastError: backplane.lastError,
+      backplaneConnectedAt: backplane.connectedAt,
       createChannel,
       deleteChannel,
       pruneWorkspaceChannels,
@@ -431,6 +494,9 @@ export function useVoiceChannels(): UseVoiceChannelsResult {
       channels,
       createChannel,
       deleteChannel,
+      backplane.connectedAt,
+      backplane.lastError,
+      backplane.status,
       pruneWorkspaceChannels,
       joinChannel,
       leaveChannel,

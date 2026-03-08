@@ -35,6 +35,9 @@ jobs:
       - name: Unit tests
         run: npm run test
 
+      - name: Verify contract sync
+        run: npm run contracts:verify-sync
+
       - name: Verify cloud scaffold bootstrap
         run: npm run cloud:verify-bootstrap
 

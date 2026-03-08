@@ -21,6 +21,7 @@ type ApproveAgentOptions = {
   commandOverride?: string;
   sessionOverride?: string;
   nextStatus?: NovaAgentStatus;
+  preserveGoal?: boolean;
 };
 
 type ApproveReadyApprovalsOptions = {
@@ -45,6 +46,7 @@ type MonitoringCycleResult = {
 
 const DEFAULT_MONITORING_INTERVAL_MS = 60_000;
 const DEFAULT_AUTO_APPROVE_CAPABILITIES = ["auto-approve", "autonomous", "self-approve"];
+const DEFAULT_AUTONOMOUS_WORKFLOW_CAPABILITIES = ["autonomous-plan", "goal-sequence", "workflow", "multi-step"];
 
 function supportsAutoApprove(capabilities: string[], autoApproveCapabilities: Set<string>): boolean {
   return capabilities.some((capability) => autoApproveCapabilities.has(capability.trim().toLowerCase()));
@@ -56,6 +58,36 @@ function parseTimestampMs(value: string | null | undefined): number | null {
   }
   const parsed = Date.parse(value);
   return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeCommandKey(command: string): string {
+  return command
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+function parseGoalWorkflowCommands(goal: string): string[] {
+  const trimmed = goal.trim();
+  if (!trimmed) {
+    return [];
+  }
+  const bySeparator = trimmed
+    .split(/\s*(?:&&|;|\n)\s*/g)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  if (bySeparator.length > 1) {
+    return bySeparator;
+  }
+  return trimmed
+    .split(/\s+\bthen\b\s+/gi)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+}
+
+function supportsAutonomousWorkflow(capabilities: string[]): boolean {
+  const normalized = new Set(capabilities.map((capability) => capability.trim().toLowerCase()));
+  return DEFAULT_AUTONOMOUS_WORKFLOW_CAPABILITIES.some((capability) => normalized.has(capability));
 }
 
 export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaultSession }: UseNovaAgentRuntimeArgs) {
@@ -105,6 +137,28 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
       }
     });
     return new Map(Array.from(map.entries()).map(([agentId, value]) => [agentId, value.session]));
+  }, [memoryEntries]);
+
+  const dispatchedCommandKeysByAgentId = useMemo(() => {
+    const map = new Map<string, Set<string>>();
+    memoryEntries.forEach((entry) => {
+      if (entry.kind !== "command_dispatched") {
+        return;
+      }
+      const agentId = entry.agentId?.trim() || "";
+      const command = entry.command?.trim() || "";
+      if (!agentId || !command) {
+        return;
+      }
+      const key = normalizeCommandKey(command);
+      if (!key) {
+        return;
+      }
+      const set = map.get(agentId) || new Set<string>();
+      set.add(key);
+      map.set(agentId, set);
+    });
+    return map;
   }, [memoryEntries]);
 
   const addRuntimeAgent = useCallback(
@@ -261,7 +315,9 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
         return false;
       }
 
-      setAgentGoal(agentId, command);
+      if (!options?.preserveGoal) {
+        setAgentGoal(agentId, command);
+      }
       onDispatchCommand(session, command);
       resolveApproval(agentId, true, { nextStatus: options?.nextStatus || "executing" });
 
@@ -375,6 +431,26 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
           skipped.push(agent.agentId);
           return;
         }
+        const workflowCommands = supportsAutonomousWorkflow(agent.capabilities) ? parseGoalWorkflowCommands(goal) : [];
+        const dispatchedWorkflowCommands = dispatchedCommandKeysByAgentId.get(agent.agentId) || new Set<string>();
+        const hasWorkflow = workflowCommands.length > 1;
+        const workflowNextIndex = hasWorkflow
+          ? workflowCommands.findIndex((command) => !dispatchedWorkflowCommands.has(normalizeCommandKey(command)))
+          : -1;
+        const nextWorkflowCommand = hasWorkflow && workflowNextIndex >= 0 ? workflowCommands[workflowNextIndex] : goal;
+        if (hasWorkflow && workflowNextIndex === -1) {
+          setAgentStatus(agent.agentId, "idle");
+          addEntry({
+            memoryContextId: agent.memoryContextId,
+            agentId: agent.agentId,
+            kind: "note",
+            summary: `${agent.name} autonomous workflow completed`,
+            command: goal,
+            session: agentDefaultSession || undefined,
+          });
+          skipped.push(agent.agentId);
+          return;
+        }
 
         const canAutoApprove = supportsAutoApprove(agent.capabilities, autoApproveCapabilities);
         const lastActionMs = parseTimestampMs(agent.lastActionAt || agent.updatedAt);
@@ -385,7 +461,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
             skipped.push(agent.agentId);
             return;
           }
-          const pendingCommand = agent.pendingApproval.command?.trim() || goal;
+          const pendingCommand = agent.pendingApproval.command?.trim() || nextWorkflowCommand;
           const pendingSession = agent.pendingApproval.session?.trim() || agentDefaultSession;
           if (!pendingCommand || !pendingSession) {
             skipped.push(agent.agentId);
@@ -395,6 +471,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
             commandOverride: pendingCommand,
             sessionOverride: pendingSession,
             nextStatus: "monitoring",
+            preserveGoal: hasWorkflow,
           });
           if (didApprove) {
             approved.push(agent.agentId);
@@ -410,8 +487,11 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
         }
 
         const didRequest = requestAgentApproval(agent.agentId, {
-          summary: `Monitoring cycle queued for ${agentDefaultSession}`,
-          command: goal,
+          summary:
+            hasWorkflow && workflowNextIndex >= 0
+              ? `Monitoring workflow step ${workflowNextIndex + 1}/${workflowCommands.length} queued for ${agentDefaultSession}`
+              : `Monitoring cycle queued for ${agentDefaultSession}`,
+          command: nextWorkflowCommand,
           session: agentDefaultSession,
         });
         if (!didRequest) {
@@ -423,9 +503,10 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
           return;
         }
         const didApprove = approveAgentApproval(agent.agentId, {
-          commandOverride: goal,
+          commandOverride: nextWorkflowCommand,
           sessionOverride: agentDefaultSession,
           nextStatus: "monitoring",
+          preserveGoal: hasWorkflow,
         });
         if (didApprove) {
           approved.push(agent.agentId);
@@ -434,7 +515,7 @@ export function useNovaAgentRuntime({ serverId, onDispatchCommand, resolveDefaul
 
       return { requested, approved, skipped };
     },
-    [agents, approveAgentApproval, latestSessionByAgentId, requestAgentApproval, resolveDefaultSession]
+    [addEntry, agents, approveAgentApproval, dispatchedCommandKeysByAgentId, latestSessionByAgentId, requestAgentApproval, resolveDefaultSession, setAgentStatus]
   );
 
   const clearAgentMemory = useCallback(

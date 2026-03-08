@@ -705,6 +705,83 @@ describe("useNovaAgentRuntime", () => {
     });
   });
 
+  it("executes autonomous workflow goals step-by-step and preserves the full goal", async () => {
+    const onDispatchCommand = vi.fn();
+    let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useNovaAgentRuntime({
+        serverId: "dgx",
+        onDispatchCommand,
+        resolveDefaultSession: () => "main",
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    let agentId = "";
+    await act(async () => {
+      const created = current().addRuntimeAgent("Workflow Agent", ["autonomous", "autonomous-plan"]);
+      agentId = created?.agentId || "";
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+    await act(async () => {
+      current().setRuntimeAgentGoal(agentId, "npm run lint && npm run test && npm run deploy");
+      current().setRuntimeAgentStatus(agentId, "monitoring");
+    });
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    const base = current().agents.find((agent) => agent.agentId === agentId);
+    const baseMs = Date.parse(base?.updatedAt || new Date().toISOString());
+
+    await act(async () => {
+      current().runMonitoringCycle({ intervalMs: 60_000, nowMs: baseMs + 61_000, defaultSession: "main" });
+    });
+    await act(async () => {
+      current().runMonitoringCycle({ intervalMs: 60_000, nowMs: baseMs + 122_000, defaultSession: "main" });
+    });
+    await act(async () => {
+      current().runMonitoringCycle({ intervalMs: 60_000, nowMs: baseMs + 183_000, defaultSession: "main" });
+    });
+
+    expect(onDispatchCommand).toHaveBeenNthCalledWith(1, "main", "npm run lint");
+    expect(onDispatchCommand).toHaveBeenNthCalledWith(2, "main", "npm run test");
+    expect(onDispatchCommand).toHaveBeenNthCalledWith(3, "main", "npm run deploy");
+
+    const duringWorkflow = current().agents.find((agent) => agent.agentId === agentId);
+    expect(duringWorkflow?.currentGoal).toBe("npm run lint && npm run test && npm run deploy");
+    expect(duringWorkflow?.status).toBe("monitoring");
+
+    await act(async () => {
+      current().runMonitoringCycle({ intervalMs: 60_000, nowMs: baseMs + 244_000, defaultSession: "main" });
+    });
+
+    const completed = current().agents.find((agent) => agent.agentId === agentId);
+    expect(completed?.status).toBe("idle");
+    expect(current().memoryEntries.some((entry) => entry.summary.includes("autonomous workflow completed"))).toBe(true);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("does not queue monitoring cycles before cooldown elapses", async () => {
     const onDispatchCommand = vi.fn();
     let latest: ReturnType<typeof useNovaAgentRuntime> | null = null;

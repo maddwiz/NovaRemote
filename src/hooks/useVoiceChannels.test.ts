@@ -56,6 +56,39 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+class MockBackplaneSocket {
+  static instances: MockBackplaneSocket[] = [];
+
+  readyState = 0;
+  onopen: ((event: unknown) => void) | null = null;
+  onmessage: ((event: { data?: unknown }) => void) | null = null;
+  onerror: ((event: unknown) => void) | null = null;
+  onclose: ((event: unknown) => void) | null = null;
+  sent: string[] = [];
+
+  constructor(readonly endpoint: string) {
+    MockBackplaneSocket.instances.push(this);
+  }
+
+  open() {
+    this.readyState = 1;
+    this.onopen?.({});
+  }
+
+  emitMessage(payload: unknown) {
+    this.onmessage?.({ data: JSON.stringify(payload) });
+  }
+
+  send(payload: string) {
+    this.sent.push(payload);
+  }
+
+  close() {
+    this.readyState = 3;
+    this.onclose?.({});
+  }
+}
+
 describe("voice channel helpers", () => {
   it("normalizes names and channels", () => {
     expect(voiceChannelsTestUtils.normalizeChannelName("  Team   Alpha ")).toBe("Team Alpha");
@@ -417,6 +450,74 @@ describe("useVoiceChannels", () => {
     expect(afterMissingSpeaker?.activeSpeakerId).toBeNull();
     expect(afterMissingSpeaker?.activeParticipantIds).toContain("engineer-3");
     expect(afterMissingSpeaker?.activeParticipantIds).not.toContain("engineer-4");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("syncs joined channels through voice backplane and applies remote presence updates", async () => {
+    MockBackplaneSocket.instances = [];
+    let latest: UseVoiceChannelsResult | null = null;
+    const socketFactory = (endpoint: string) => new MockBackplaneSocket(endpoint);
+    const current = () => {
+      if (!latest) {
+        throw new Error("Hook not ready");
+      }
+      return latest;
+    };
+
+    function Harness() {
+      latest = useVoiceChannels({
+        backplane: {
+          endpoint: "wss://voice.example/backplane",
+          token: "token-123",
+          participantId: "engineer-local",
+          socketFactory,
+        },
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    expect(MockBackplaneSocket.instances.length).toBeGreaterThan(0);
+    const socket = MockBackplaneSocket.instances[MockBackplaneSocket.instances.length - 1];
+    expect(socket?.endpoint).toBe("wss://voice.example/backplane");
+
+    let channelId = "";
+    await act(async () => {
+      const created = current().createChannel({ workspaceId: "workspace-a", name: "Incident" });
+      channelId = created?.id || "";
+      current().joinChannel(channelId);
+    });
+
+    await act(async () => {
+      socket?.open();
+    });
+
+    expect(current().backplaneStatus).toBe("connected");
+    expect(socket?.sent.some((payload) => payload.includes("\"type\":\"auth\""))).toBe(true);
+    expect(socket?.sent.some((payload) => payload.includes(`"channelId":"${channelId}"`))).toBe(true);
+    expect(socket?.sent.some((payload) => payload.includes("\"participantId\":\"engineer-local\""))).toBe(true);
+
+    await act(async () => {
+      socket?.emitMessage({
+        type: "presence_sync",
+        channelId,
+        participantIds: ["operator-1", "operator-2"],
+        activeSpeakerId: "operator-2",
+      });
+    });
+
+    const synced = current().channels.find((channel) => channel.id === channelId);
+    expect(synced?.activeParticipantIds).toContain("operator-1");
+    expect(synced?.activeParticipantIds).toContain("operator-2");
+    expect(synced?.activeParticipantIds).toContain("engineer-local");
+    expect(synced?.activeSpeakerId).toBe("operator-2");
 
     await act(async () => {
       renderer?.unmount();
