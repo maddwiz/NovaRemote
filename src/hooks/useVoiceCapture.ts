@@ -1,12 +1,13 @@
 import {
   RecordingPresets,
+  getRecordingPermissionsAsync,
+  requestRecordingPermissionsAsync,
   setAudioModeAsync,
   useAudioRecorder,
   useAudioRecorderState,
   type AudioRecorder,
   type RecordingOptions,
 } from "expo-audio";
-import { Camera } from "expo-camera";
 import { useCallback, useEffect, useState } from "react";
 
 import { normalizeBaseUrl } from "../api/client";
@@ -35,6 +36,12 @@ type VoiceTranscribeOptions = {
 };
 
 type VoicePermissionStatus = "granted" | "denied" | "undetermined" | null;
+
+function devVoiceLog(...args: Array<unknown>) {
+  if (__DEV__) {
+    console.log("[Voice]", ...args);
+  }
+}
 
 function readTranscript(payload: unknown): string {
   if (typeof payload === "string") {
@@ -105,9 +112,10 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
   }, []);
 
   const requestCapturePermission = useCallback(async () => {
-    const next = await Camera.requestMicrophonePermissionsAsync();
+    const next = await requestRecordingPermissionsAsync();
     const status = next.granted ? "granted" : (next.status as VoicePermissionStatus);
     setPermissionStatus(status);
+    devVoiceLog("requestCapturePermission", { status, granted: next.granted, canAskAgain: next.canAskAgain });
     return next.granted;
   }, []);
 
@@ -115,12 +123,13 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     let mounted = true;
     async function loadPermission() {
       try {
-        const current = await Camera.getMicrophonePermissionsAsync();
+        const current = await getRecordingPermissionsAsync();
         if (!mounted) {
           return;
         }
         const status = current.granted ? "granted" : (current.status as VoicePermissionStatus);
         setPermissionStatus(status);
+        devVoiceLog("loadPermission", { status, granted: current.granted, canAskAgain: current.canAskAgain });
       } catch {
         if (mounted) {
           setPermissionStatus(null);
@@ -156,6 +165,11 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     setLastError(null);
     setLastTranscript("");
     setMeteringDb(null);
+    devVoiceLog("startCapture:begin", {
+      permissionStatus,
+      hasServer: Boolean(activeServer),
+      connected,
+    });
 
     await setAudioModeAsync({
       allowsRecording: true,
@@ -169,11 +183,13 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       await recorder.prepareToRecordAsync(VOICE_RECORDING_OPTIONS);
       recorder.record();
       setRecording(true);
+      devVoiceLog("startCapture:recording", { uri: recorder.uri || recorder.getStatus().url || null });
     } catch (error) {
       await resetAudioMode();
+      devVoiceLog("startCapture:error", error instanceof Error ? error.message : String(error));
       throw error;
     }
-  }, [busy, recorder, recording, requestCapturePermission, resetAudioMode]);
+  }, [activeServer, busy, connected, permissionStatus, recorder, recording, requestCapturePermission, resetAudioMode]);
 
   const stopAndTranscribe = useCallback(async (options: VoiceTranscribeOptions = {}): Promise<string> => {
     if (!recording && !recorderState.isRecording) {
@@ -193,6 +209,12 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       await resetAudioMode();
 
       const uri = recorder.uri || recorder.getStatus().url;
+      devVoiceLog("stopAndTranscribe:stopped", {
+        uri,
+        activeServer: activeServer?.name || null,
+        connected,
+        vadEnabled: options.vadEnabled === true,
+      });
       if (!uri) {
         throw new Error("Audio capture failed. Please try again.");
       }
@@ -230,6 +252,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         }
 
         try {
+          devVoiceLog("stopAndTranscribe:tryEndpoint", { endpoint, baseUrl, wakePhrase: Boolean(wakePhrase) });
           const response = await fetch(`${baseUrl}${endpoint}`, {
             method: "POST",
             headers: {
@@ -240,6 +263,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
 
           if (!response.ok) {
             if (response.status === 404 || response.status === 405 || response.status === 501) {
+              devVoiceLog("stopAndTranscribe:endpointUnavailable", { endpoint, status: response.status });
               continue;
             }
             if (response.status === 415) {
@@ -252,9 +276,11 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
               lastHttpError = detail
                 ? `HTTP 415 from ${endpoint}: ${detail}`
                 : `HTTP 415 from ${endpoint}. Server rejected ${TRANSCRIBE_AUDIO_MIME}; expected format mismatch.`;
+              devVoiceLog("stopAndTranscribe:unsupportedFormat", { endpoint, detail: lastHttpError });
               continue;
             }
             lastHttpError = `HTTP ${response.status} from ${endpoint}`;
+            devVoiceLog("stopAndTranscribe:httpError", { endpoint, status: response.status });
             continue;
           }
 
@@ -271,13 +297,19 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
 
           const transcript = readTranscript(parsed);
           if (!transcript) {
+            devVoiceLog("stopAndTranscribe:emptyTranscript", { endpoint });
             continue;
           }
 
           setLastTranscript(transcript);
+          devVoiceLog("stopAndTranscribe:success", {
+            endpoint,
+            transcriptPreview: transcript.slice(0, 160),
+          });
           return transcript;
         } catch (error) {
           lastHttpError = error instanceof Error ? error.message : String(error);
+          devVoiceLog("stopAndTranscribe:networkError", { endpoint, error: lastHttpError });
         }
       }
 
@@ -288,6 +320,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       setLastError(message);
+      devVoiceLog("stopAndTranscribe:error", message);
       throw error;
     } finally {
       await resetAudioMode();
