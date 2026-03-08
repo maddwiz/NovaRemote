@@ -3484,8 +3484,8 @@ export default function AppShell() {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar style="light" />
-      <View style={styles.bgBlobTop} />
-      <View style={styles.bgBlobBottom} />
+      <View pointerEvents="none" style={styles.bgBlobTop} />
+      <View pointerEvents="none" style={styles.bgBlobBottom} />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -3494,7 +3494,7 @@ export default function AppShell() {
       >
         <ScrollView
           contentContainerStyle={styles.container}
-          keyboardShouldPersistTaps="handled"
+          keyboardShouldPersistTaps="always"
           refreshControl={
             route === "terminals" ? <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#27d9ff" /> : undefined
           }

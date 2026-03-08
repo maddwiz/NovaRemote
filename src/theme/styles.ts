@@ -116,15 +116,23 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 8,
   },
+  tabRowCompactContent: {
+    flexDirection: "row",
+    gap: 8,
+    paddingRight: 4,
+  },
   tabButton: {
-    flex: 1,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: "#4a3d84",
     backgroundColor: "rgba(21, 14, 44, 0.94)",
     alignItems: "center",
     justifyContent: "center",
+    paddingHorizontal: 12,
     paddingVertical: 10,
+  },
+  tabButtonCompact: {
+    minWidth: 88,
   },
   tabButtonOn: {
     borderColor: "#ff8ad2",
@@ -134,6 +142,7 @@ export const styles = StyleSheet.create({
     color: "#a9d7ff",
     fontSize: 13,
     fontWeight: "700",
+    textAlign: "center",
   },
   tabButtonTextOn: {
     color: "#ffe7f8",
@@ -162,6 +171,7 @@ export const styles = StyleSheet.create({
   serverSubtitle: {
     color: "#a7cfff",
     fontSize: 12,
+    flexShrink: 1,
   },
   serverListWrap: {
     gap: 8,
@@ -226,6 +236,10 @@ export const styles = StyleSheet.create({
     gap: 8,
     alignItems: "center",
     justifyContent: "space-between",
+  },
+  rowInlineSpaceWrap: {
+    flexWrap: "wrap",
+    alignItems: "flex-start",
   },
   switchLabel: {
     color: "#a6cfff",
@@ -456,11 +470,31 @@ export const styles = StyleSheet.create({
     paddingVertical: 8,
     gap: 8,
   },
+  serverPoolSummaryMetrics: {
+    flexDirection: "row",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+  },
   serverPoolSummaryRow: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
+    flexWrap: "wrap",
+  },
+  serverPoolSummaryStack: {
+    gap: 8,
+  },
+  serverPoolSummaryActions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  serverPoolSummaryModes: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
   },
   serverPoolSummaryText: {
     color: "#9fcfff",

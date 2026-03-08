@@ -1,5 +1,5 @@
 import React from "react";
-import { Pressable, Text, View } from "react-native";
+import { Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
 
 import { styles } from "../theme/styles";
 import { RouteTab } from "../types";
@@ -10,64 +10,47 @@ type TabBarProps = {
 };
 
 export function TabBar({ route, onChange }: TabBarProps) {
+  const { width } = useWindowDimensions();
+  const compact = width < 520;
+  const tabs: Array<{ key: RouteTab; label: string; accessibilityLabel: string }> = [
+    { key: "terminals", label: "Terminals", accessibilityLabel: "Open terminals tab" },
+    { key: "servers", label: "Servers", accessibilityLabel: "Open servers tab" },
+    { key: "snippets", label: "Snippets", accessibilityLabel: "Open snippets tab" },
+    { key: "files", label: "Files", accessibilityLabel: "Open files tab" },
+    { key: "llms", label: "LLMs", accessibilityLabel: "Open LLM profiles tab" },
+    { key: "team", label: "Team", accessibilityLabel: "Open team tab" },
+    { key: "vr", label: "VR", accessibilityLabel: "Open VR command center tab" },
+  ];
+
+  const tabButtons = tabs.map((tab) => (
+    <Pressable
+      key={tab.key}
+      style={[
+        styles.tabButton,
+        compact ? styles.tabButtonCompact : styles.flexButton,
+        route === tab.key ? styles.tabButtonOn : null,
+      ]}
+      onPress={() => onChange(tab.key)}
+      accessibilityRole="button"
+      accessibilityLabel={tab.accessibilityLabel}
+    >
+      <Text numberOfLines={1} style={[styles.tabButtonText, route === tab.key ? styles.tabButtonTextOn : null]}>
+        {tab.label}
+      </Text>
+    </Pressable>
+  ));
+
+  if (compact) {
+    return (
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabRowCompactContent}>
+        {tabButtons}
+      </ScrollView>
+    );
+  }
+
   return (
     <View style={styles.tabRow}>
-      <Pressable
-        style={[styles.tabButton, route === "terminals" ? styles.tabButtonOn : null]}
-        onPress={() => onChange("terminals")}
-        accessibilityRole="button"
-        accessibilityLabel="Open terminals tab"
-      >
-        <Text style={[styles.tabButtonText, route === "terminals" ? styles.tabButtonTextOn : null]}>Terminals</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.tabButton, route === "servers" ? styles.tabButtonOn : null]}
-        onPress={() => onChange("servers")}
-        accessibilityRole="button"
-        accessibilityLabel="Open servers tab"
-      >
-        <Text style={[styles.tabButtonText, route === "servers" ? styles.tabButtonTextOn : null]}>Servers</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.tabButton, route === "snippets" ? styles.tabButtonOn : null]}
-        onPress={() => onChange("snippets")}
-        accessibilityRole="button"
-        accessibilityLabel="Open snippets tab"
-      >
-        <Text style={[styles.tabButtonText, route === "snippets" ? styles.tabButtonTextOn : null]}>Snippets</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.tabButton, route === "files" ? styles.tabButtonOn : null]}
-        onPress={() => onChange("files")}
-        accessibilityRole="button"
-        accessibilityLabel="Open files tab"
-      >
-        <Text style={[styles.tabButtonText, route === "files" ? styles.tabButtonTextOn : null]}>Files</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.tabButton, route === "llms" ? styles.tabButtonOn : null]}
-        onPress={() => onChange("llms")}
-        accessibilityRole="button"
-        accessibilityLabel="Open LLM profiles tab"
-      >
-        <Text style={[styles.tabButtonText, route === "llms" ? styles.tabButtonTextOn : null]}>LLMs</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.tabButton, route === "team" ? styles.tabButtonOn : null]}
-        onPress={() => onChange("team")}
-        accessibilityRole="button"
-        accessibilityLabel="Open team tab"
-      >
-        <Text style={[styles.tabButtonText, route === "team" ? styles.tabButtonTextOn : null]}>Team</Text>
-      </Pressable>
-      <Pressable
-        style={[styles.tabButton, route === "vr" ? styles.tabButtonOn : null]}
-        onPress={() => onChange("vr")}
-        accessibilityRole="button"
-        accessibilityLabel="Open VR command center tab"
-      >
-        <Text style={[styles.tabButtonText, route === "vr" ? styles.tabButtonTextOn : null]}>VR</Text>
-      </Pressable>
+      {tabButtons}
     </View>
   );
 }

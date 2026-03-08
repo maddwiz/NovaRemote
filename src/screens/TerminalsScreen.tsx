@@ -1202,12 +1202,12 @@ export function TerminalsScreen() {
       />
 
       <View style={styles.serverPoolSummary}>
-        <View style={styles.serverPoolSummaryRow}>
+        <View style={styles.serverPoolSummaryMetrics}>
           <Text style={styles.serverPoolSummaryText}>{`Connected ${connectedServerCount}/${servers.length}`}</Text>
           <Text style={styles.serverPoolSummaryText}>{`Live streams ${totalActiveStreams}`}</Text>
           <Text style={styles.serverPoolSummaryText}>{`Unread ${unreadServers.size}`}</Text>
         </View>
-        <View style={styles.serverPoolSummaryRow}>
+        <View style={styles.serverPoolSummaryStack}>
           <Text style={styles.serverSubtitle}>
             {poolLifecyclePaused
               ? "Pool paused. Streams are stopped until resumed."
@@ -1215,7 +1215,7 @@ export function TerminalsScreen() {
                 ? `${disconnectedServerCount} server(s) disconnected`
                 : "All configured servers are connected"}
           </Text>
-          <View style={styles.modeRow}>
+          <View style={styles.serverPoolSummaryActions}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel={poolLifecyclePaused ? "Resume connection pool" : "Pause connection pool"}
@@ -1245,8 +1245,8 @@ export function TerminalsScreen() {
             </Pressable>
           </View>
         </View>
-        <View style={styles.serverPoolSummaryRow}>
-          <View style={styles.modeRow}>
+        <View style={styles.serverPoolSummaryStack}>
+          <View style={styles.serverPoolSummaryModes}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Show terminals for focused server"
@@ -1273,7 +1273,7 @@ export function TerminalsScreen() {
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Connection Health</Text>
-        <View style={styles.rowInlineSpace}>
+        <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
           <Text style={styles.serverSubtitle}>{`Streams ${health.activeStreams}/${health.openSessions}`}</Text>
           <Pressable accessibilityRole="button"
             accessibilityLabel="Recheck server capabilities"
