@@ -5,6 +5,7 @@ import {
   buildNovaAssistantPlanningTool,
   buildNovaAssistantToolPrompt,
   extractNovaAssistantToolPlan,
+  normalizeNovaAssistantActions,
   novaAssistantTestUtils,
   parseNovaAssistantPlan,
   resolveAssistantServer,
@@ -236,5 +237,97 @@ describe("novaAssistant", () => {
       type: "navigate",
       route: "llms",
     });
+  });
+
+  it("normalizes non-delegated folder requests into concrete create_folder actions", () => {
+    expect(
+      normalizeNovaAssistantActions(
+        [
+          {
+            type: "send_command",
+            serverRef: "dgx",
+            sessionRef: "codex-ui",
+            command: "create folder novadez",
+            mode: "ai",
+          },
+        ],
+        "Create a folder on my desktop named novadez."
+      )
+    ).toEqual([{ type: "create_folder", serverRef: "dgx", path: "~/Desktop/novadez" }]);
+  });
+
+  it("preserves delegated Codex send_command actions", () => {
+    expect(
+      normalizeNovaAssistantActions(
+        [
+          {
+            type: "send_command",
+            serverRef: "dgx",
+            sessionRef: "codex-ui",
+            command: "create folder Deznova",
+            mode: "ai",
+          },
+        ],
+        "Tell Codex to create folder Deznova."
+      )
+    ).toEqual([
+      {
+        type: "send_command",
+        serverRef: "dgx",
+        sessionRef: "codex-ui",
+        command: "create folder Deznova",
+        mode: "ai",
+      },
+    ]);
+  });
+
+  it("rewrites shell folder commands into concrete folder actions when not explicitly delegated", () => {
+    expect(
+      normalizeNovaAssistantActions(
+        [
+          {
+            type: "send_command",
+            serverRef: "dgx",
+            sessionRef: "codex-ui",
+            command: "mkdir -p ~/Desktop/test-shell",
+            mode: "ai",
+          },
+        ],
+        "Run mkdir -p ~/Desktop/test-shell"
+      )
+    ).toEqual([
+      {
+        type: "create_folder",
+        serverRef: "dgx",
+        path: "~/Desktop/test-shell",
+      },
+    ]);
+  });
+
+  it("forces shell mode for non-folder shell commands when not explicitly delegated", () => {
+    expect(
+      normalizeNovaAssistantActions(
+        [
+          {
+            type: "send_command",
+            serverRef: "dgx",
+            sessionRef: "codex-ui",
+            command: "git status",
+            mode: "ai",
+          },
+        ],
+        "Run git status"
+      )
+    ).toEqual([
+      {
+        type: "send_command",
+        serverRef: "dgx",
+        sessionRef: undefined,
+        command: "git status",
+        mode: "shell",
+        createIfMissing: true,
+        createKind: "shell",
+      },
+    ]);
   });
 });

@@ -336,6 +336,27 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
+}
+
+function summarizeSessionDelta(after: string, before: string): string {
+  const delta = (after.startsWith(before) ? after.slice(before.length) : after).trim();
+  if (!delta) {
+    return "";
+  }
+  return stripAnsi(delta)
+    .replace(/\[LLM Prompt\][\s\S]*?(?=\[LLM Reply\]|\[LLM Prompt\]|$)/g, "")
+    .replace(/\[LLM Reply\]\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
+}
+
 function devNovaLog(...args: Array<unknown>) {
   if (__DEV__) {
     console.log("[Nova]", ...args);
@@ -909,6 +930,11 @@ export default function AppShell() {
     allConnectedServers,
     totalActiveStreams,
   } = pool;
+  const poolConnectionsRef = useRef(poolConnections);
+
+  useEffect(() => {
+    poolConnectionsRef.current = poolConnections;
+  }, [poolConnections]);
 
   useEffect(() => {
     if (!activeServerId) {
@@ -2223,6 +2249,50 @@ export default function AppShell() {
     [poolConnections, sendTextToServerSession]
   );
 
+  const waitForSessionOutput = useCallback(
+    async ({
+      serverId,
+      session,
+      beforeTail,
+      maxWaitMs = 5000,
+      pollRemote = true,
+    }: {
+      serverId: string;
+      session: string;
+      beforeTail: string;
+      maxWaitMs?: number;
+      pollRemote?: boolean;
+    }): Promise<string> => {
+      const deadline = Date.now() + maxWaitMs;
+
+      while (Date.now() < deadline) {
+        const connection = poolConnectionsRef.current.get(serverId);
+        if (!connection) {
+          break;
+        }
+
+        if (pollRemote && !connection.localAiSessions.includes(session)) {
+          try {
+            await fetchPoolTail(serverId, session, false);
+          } catch {
+            // Best-effort polling only.
+          }
+        }
+
+        await wait(150);
+        const latestTail = poolConnectionsRef.current.get(serverId)?.tails[session] || "";
+        if (latestTail !== beforeTail && latestTail.trim()) {
+          return latestTail;
+        }
+
+        await wait(250);
+      }
+
+      return poolConnectionsRef.current.get(serverId)?.tails[session] || beforeTail;
+    },
+    [fetchPoolTail]
+  );
+
   const stopServerSession = useCallback(
     async (serverId: string, session: string) => {
       const targetConnection = poolConnections.get(serverId);
@@ -2822,6 +2892,22 @@ export default function AppShell() {
         return 0;
       };
 
+      const processListContainsPid = (payload: unknown, pid: number): boolean => {
+        if (Array.isArray(payload)) {
+          return payload.some((entry) => Number((entry as { pid?: unknown })?.pid) === pid);
+        }
+        if (payload && typeof payload === "object") {
+          const record = payload as { processes?: unknown[]; items?: unknown[] };
+          if (Array.isArray(record.processes)) {
+            return record.processes.some((entry) => Number((entry as { pid?: unknown })?.pid) === pid);
+          }
+          if (Array.isArray(record.items)) {
+            return record.items.some((entry) => Number((entry as { pid?: unknown })?.pid) === pid);
+          }
+        }
+        return false;
+      };
+
       const setFilesSurfaceTarget = (serverId: string) => {
         focusServer(serverId);
         setHomeHubVisible(false);
@@ -2993,15 +3079,20 @@ export default function AppShell() {
           }
 
           if (action.type === "send_command") {
+            const requestedMode = action.mode || "shell";
             let session = action.sessionRef
               ? resolveAssistantSession(context, server, action.sessionRef, lastCreatedSessionByServerId.get(server.id) || null)
               : null;
-            if (!session && action.createIfMissing) {
-              const created = await createSessionForServer(server.id, action.createKind || action.mode || "shell");
+            const shouldUseShellSession = requestedMode === "shell";
+            if (session && shouldUseShellSession && session.mode !== "shell") {
+              session = null;
+            }
+            if (!session && (action.createIfMissing || shouldUseShellSession)) {
+              const created = await createSessionForServer(server.id, action.createKind || requestedMode || "shell");
               lastCreatedSessionByServerId.set(server.id, created);
               session = {
                 session: created,
-                mode: action.mode || action.createKind || "shell",
+                mode: action.createKind || requestedMode || "shell",
                 localAi: false,
                 live: false,
               };
@@ -3009,12 +3100,29 @@ export default function AppShell() {
             if (!session) {
               throw new Error(`No session matched on ${server.name}.`);
             }
-            await sendServerSessionCommand(server.id, session.session, action.command, action.mode || session.mode);
+            const effectiveMode = requestedMode || session.mode;
+            const beforeTail = poolConnectionsRef.current.get(server.id)?.tails[session.session] || "";
+            await sendServerSessionCommand(server.id, session.session, action.command, effectiveMode);
             focusServer(server.id);
             setHomeHubVisible(false);
             setRoute("terminals");
             setFocusedSession(session.session);
-            results.push({ action: action.type, ok: true, detail: `Sent command to ${server.name} / ${session.session}` });
+            const observedTail = await waitForSessionOutput({
+              serverId: server.id,
+              session: session.session,
+              beforeTail,
+              pollRemote: effectiveMode === "shell",
+            });
+            const observation = summarizeSessionDelta(observedTail, beforeTail);
+            const detailPrefix =
+              effectiveMode === "ai"
+                ? `Delivered request to ${server.name} / ${session.session}`
+                : `Ran command in ${server.name} / ${session.session}`;
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: observation ? `${detailPrefix}; observed output: ${observation}` : `${detailPrefix}; waiting for additional output.`,
+            });
             continue;
           }
 
@@ -3132,16 +3240,32 @@ export default function AppShell() {
                 live: false,
               };
             }
+            const markerSeed = `${Date.now()}${Math.floor(Math.random() * 10000)}`;
+            const successMarker = `__NOVA_DIR_OK_${markerSeed}__`;
+            const failureMarker = `__NOVA_DIR_FAIL_${markerSeed}__`;
+            const quotedCommandPath = formatAssistantShellPath(target.commandPath, target.shellExpandable);
+            const beforeTail = poolConnectionsRef.current.get(server.id)?.tails[session.session] || "";
             await sendServerSessionCommand(
               server.id,
               session.session,
-              `mkdir -p -- ${formatAssistantShellPath(target.commandPath, target.shellExpandable)}`,
+              `mkdir -p -- ${quotedCommandPath} && if [ -d ${quotedCommandPath} ]; then printf '%s\\n' ${shellQuote(successMarker)}; else printf '%s\\n' ${shellQuote(
+                failureMarker
+              )}; fi`,
               "shell"
             );
             focusServer(server.id);
             setHomeHubVisible(false);
             setRoute("terminals");
             setFocusedSession(session.session);
+            const observedTail = await waitForSessionOutput({
+              serverId: server.id,
+              session: session.session,
+              beforeTail,
+              pollRemote: true,
+              maxWaitMs: 6000,
+            });
+            const verifiedByShell = observedTail.includes(successMarker) && !observedTail.includes(failureMarker);
+            let verified = verifiedByShell;
 
             if (capabilities.files && target.parentPath) {
               try {
@@ -3154,12 +3278,25 @@ export default function AppShell() {
                 assistantFilePath = data.path;
                 setCurrentPath(data.path);
                 setFileEntries(data.entries || []);
+                const normalizedTargetName = target.commandPath.replace(/\/+$/, "").split("/").pop();
+                if (
+                  normalizedTargetName &&
+                  data.entries.some((entry) => entry.is_dir && entry.name === normalizedTargetName)
+                ) {
+                  verified = true;
+                }
               } catch {
                 // Folder creation still succeeded even if the file index refresh failed.
               }
             }
 
-            results.push({ action: action.type, ok: true, detail: `Created folder ${target.displayPath} on ${server.name}` });
+            results.push({
+              action: action.type,
+              ok: verified,
+              detail: verified
+                ? `Created folder ${target.displayPath} on ${server.name} and verified it exists.`
+                : `Sent the folder creation command for ${target.displayPath} on ${server.name}, but could not verify the result yet.`,
+            });
             continue;
           }
 
@@ -3179,9 +3316,14 @@ export default function AppShell() {
                 content: savedContent,
               }),
             });
+            const verification = await apiRequest<{ path: string; content: string }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/read?path=${encodeURIComponent(targetPath)}`
+            );
             assistantSelectedFilePath = targetPath;
             setSelectedFilePath(targetPath);
-            setSelectedContent(savedContent);
+            setSelectedContent(verification.content || "");
             recordAuditEvent({
               action: "file_written",
               serverId: server.id,
@@ -3189,7 +3331,14 @@ export default function AppShell() {
               session: "",
               detail: `path=${targetPath}`,
             });
-            results.push({ action: action.type, ok: true, detail: `Saved ${targetPath} on ${server.name}` });
+            const verified = verification.content === savedContent;
+            results.push({
+              action: action.type,
+              ok: verified,
+              detail: verified
+                ? `Saved ${targetPath} on ${server.name} and verified the updated content.`
+                : `Saved ${targetPath} on ${server.name}, but the verification readback did not match.`,
+            });
             continue;
           }
 
@@ -3226,6 +3375,8 @@ export default function AppShell() {
                 signal: action.signal || "TERM",
               }),
             });
+            const verificationPayload = await apiRequest<unknown>(serverProfile.baseUrl, serverProfile.token, "/proc/list");
+            const stillRunning = processListContainsPid(verificationPayload, action.pid);
             if (server.id === focusedServerId) {
               await refreshProcesses();
             }
@@ -3238,8 +3389,10 @@ export default function AppShell() {
             });
             results.push({
               action: action.type,
-              ok: true,
-              detail: `Sent ${action.signal || "TERM"} to PID ${action.pid} on ${server.name}`,
+              ok: !stillRunning,
+              detail: stillRunning
+                ? `Sent ${action.signal || "TERM"} to PID ${action.pid} on ${server.name}, but it still appears in the process list.`
+                : `Sent ${action.signal || "TERM"} to PID ${action.pid} on ${server.name} and verified it exited.`,
             });
             continue;
           }

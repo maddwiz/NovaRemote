@@ -596,6 +596,149 @@ function serializeContext(context: NovaAssistantRuntimeContext): string {
   );
 }
 
+function trimActionPath(value: string): string {
+  return value.trim().replace(/^["']+|["']+$/g, "").replace(/[.]+$/g, "").trim();
+}
+
+function normalizeFolderLocation(location: string): string | null {
+  const normalized = normalizeForMatch(location);
+  if (normalized.includes("desktop")) {
+    return "~/Desktop";
+  }
+  if (normalized.includes("documents")) {
+    return "~/Documents";
+  }
+  if (normalized.includes("downloads")) {
+    return "~/Downloads";
+  }
+  if (normalized === "home" || normalized.includes("home directory") || normalized.includes("home folder")) {
+    return "~";
+  }
+  return null;
+}
+
+function extractFolderPathFromInstruction(input: string): string | null {
+  const cleaned = input.replace(/\s+/g, " ").trim();
+  if (!cleaned) {
+    return null;
+  }
+
+  const shellMatch = cleaned.match(/^(?:mkdir)(?:\s+-p)?\s+(.+)$/i);
+  if (shellMatch?.[1]) {
+    return trimActionPath(shellMatch[1]);
+  }
+
+  const locationFirst = cleaned.match(
+    /(?:create|make|new)\s+(?:a\s+)?(?:folder|directory)(?:\s+(?:on|in)\s+(my\s+desktop|the\s+desktop|desktop|my\s+documents|the\s+documents|documents|my\s+downloads|the\s+downloads|downloads|my\s+home(?:\s+(?:directory|folder))?|the\s+home(?:\s+(?:directory|folder))?|home(?:\s+(?:directory|folder))?))?(?:\s+(?:named|called)\s+|\s+)(.+)$/i
+  );
+  if (locationFirst?.[2]) {
+    const locationPrefix = normalizeFolderLocation(locationFirst[1] || "");
+    const tail = trimActionPath(locationFirst[2]);
+    if (locationPrefix && tail && !tail.startsWith("/") && !tail.startsWith("~")) {
+      return `${locationPrefix}/${tail.replace(/^\/+/, "")}`;
+    }
+    return tail || locationPrefix;
+  }
+
+  const namedLocation = cleaned.match(
+    /(?:create|make|new)\s+(?:a\s+)?(?:folder|directory)\s+(?:named|called)\s+(.+?)\s+(?:on|in)\s+(my\s+desktop|the\s+desktop|desktop|my\s+documents|the\s+documents|documents|my\s+downloads|the\s+downloads|downloads|my\s+home(?:\s+(?:directory|folder))?|the\s+home(?:\s+(?:directory|folder))?|home(?:\s+(?:directory|folder))?)$/i
+  );
+  if (namedLocation?.[1]) {
+    const locationPrefix = normalizeFolderLocation(namedLocation[2] || "");
+    const tail = trimActionPath(namedLocation[1]);
+    if (locationPrefix && tail) {
+      return `${locationPrefix}/${tail.replace(/^\/+/, "")}`;
+    }
+  }
+
+  const genericNamed = cleaned.match(/(?:create|make|new)\s+(?:a\s+)?(?:folder|directory)(?:\s+(?:named|called)\s+|\s+)(.+)$/i);
+  if (genericNamed?.[1]) {
+    return trimActionPath(genericNamed[1]);
+  }
+
+  return null;
+}
+
+function looksLikeShellCommand(command: string): boolean {
+  const trimmed = command.trim();
+  if (!trimmed) {
+    return false;
+  }
+  if (/[;&|]|&&/.test(trimmed)) {
+    return true;
+  }
+  return /^(?:mkdir|cd|ls|cat|touch|mv|cp|rm|git|npm|pnpm|yarn|node|python|python3|pip|pip3|cargo|go|swift|xcodebuild|open|pwd|echo|test|find|grep|sed|chmod|chown|kill|ps|tail|head|curl|wget|bash|sh|zsh)\b/i.test(
+    trimmed
+  );
+}
+
+function hasExplicitDelegationIntent(input: string): boolean {
+  const normalized = normalizeForMatch(input);
+  if (!normalized) {
+    return false;
+  }
+  return (
+    /(?:tell|ask|have|relay|message|send)\s+(?:codex|nova|assistant)\b/.test(normalized) ||
+    /(?:tell|ask|have|relay|message|send).+\b(?:codex|nova|assistant)\b/.test(normalized) ||
+    /\b(?:via|using|through)\s+codex\b/.test(normalized)
+  );
+}
+
+function isSimpleLeafPath(path: string): boolean {
+  const trimmed = trimActionPath(path);
+  return Boolean(trimmed) && !trimmed.includes("/") && !trimmed.startsWith("~") && !trimmed.startsWith("$");
+}
+
+export function normalizeNovaAssistantActions(actions: NovaAssistantAction[], input: string): NovaAssistantAction[] {
+  if (actions.length === 0) {
+    return actions;
+  }
+
+  const delegated = hasExplicitDelegationIntent(input);
+  const inputFolderPath = extractFolderPathFromInstruction(input);
+
+  return actions.map((action) => {
+    if (action.type === "create_folder") {
+      if (inputFolderPath && isSimpleLeafPath(action.path)) {
+        return {
+          ...action,
+          path: inputFolderPath,
+        };
+      }
+      return action;
+    }
+
+    if (action.type !== "send_command") {
+      return action;
+    }
+
+    if (!delegated) {
+      const commandFolderPath = extractFolderPathFromInstruction(action.command);
+      const folderPath =
+        inputFolderPath && (!commandFolderPath || isSimpleLeafPath(commandFolderPath)) ? inputFolderPath : commandFolderPath || inputFolderPath;
+      if (folderPath) {
+        return {
+          type: "create_folder",
+          serverRef: action.serverRef,
+          path: folderPath,
+        };
+      }
+
+      if (looksLikeShellCommand(action.command)) {
+        return {
+          ...action,
+          mode: "shell",
+          createIfMissing: action.createIfMissing ?? true,
+          createKind: "shell",
+          sessionRef: action.mode === "ai" ? undefined : action.sessionRef,
+        };
+      }
+    }
+
+    return action;
+  });
+}
+
 export function buildNovaAssistantPrompt(args: {
   history: NovaAssistantMessage[];
   context: NovaAssistantRuntimeContext;
@@ -932,4 +1075,7 @@ export function formatNovaAssistantExecutionSummary(results: NovaAssistantExecut
 export const novaAssistantTestUtils = {
   normalizeAction,
   extractJsonObject,
+  extractFolderPathFromInstruction,
+  hasExplicitDelegationIntent,
+  looksLikeShellCommand,
 };

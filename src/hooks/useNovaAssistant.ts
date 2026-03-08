@@ -8,6 +8,7 @@ import {
   buildNovaAssistantToolPrompt,
   extractNovaAssistantToolPlan,
   formatNovaAssistantExecutionSummary,
+  normalizeNovaAssistantActions,
   NovaAssistantAction,
   NovaAssistantExecutionResult,
   NovaAssistantMessage,
@@ -119,7 +120,7 @@ export function useNovaAssistant({ activeProfile, sendPromptDetailed, buildConte
           });
           const toolPlan = extractNovaAssistantToolPlan(response.toolCalls);
           reply = response.text.trim() || toolPlan?.reply.trim() || "Done.";
-          actions = toolPlan?.actions || [];
+          actions = normalizeNovaAssistantActions(toolPlan?.actions || [], trimmed);
         } else {
           const prompt = buildNovaAssistantPrompt({
             history: nextHistory,
@@ -129,7 +130,7 @@ export function useNovaAssistant({ activeProfile, sendPromptDetailed, buildConte
           const response = await sendPromptDetailed(activeProfile, prompt, { responseFormat: "json" });
           const plan = parseNovaAssistantPlan(response.text);
           reply = cleanFallbackReply(plan.reply);
-          actions = plan.actions;
+          actions = normalizeNovaAssistantActions(plan.actions, trimmed);
         }
 
         const results =

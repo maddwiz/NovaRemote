@@ -232,4 +232,54 @@ describe("useNovaAssistant", () => {
       renderer?.unmount();
     });
   });
+
+  it("normalizes folder requests before executing fallback planner actions", async () => {
+    const sendPromptDetailed = vi.fn<
+      (profile: LlmProfile, prompt: string, options?: unknown) => Promise<LlmSendResult>
+    >(async () => ({
+      text: JSON.stringify({
+        reply: "I’ll create that folder.",
+        actions: [{ type: "send_command", serverRef: "dgx", sessionRef: "build-main", command: "create folder novadez", mode: "ai" }],
+      }),
+      toolCalls: [],
+      usedVision: false,
+      usedTools: false,
+    }));
+    const executeActions = vi.fn(async (actions) =>
+      actions.map((action: { type: string }) => ({
+        action: action.type,
+        ok: true,
+        detail: `Executed ${action.type}`,
+      }))
+    );
+
+    let latest: ReturnType<typeof useNovaAssistant> | null = null;
+
+    function Harness() {
+      latest = useNovaAssistant({
+        activeProfile: makeProfile("anthropic"),
+        sendPromptDetailed,
+        buildContext: () => context,
+        executeActions,
+      });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await act(async () => {
+      const ok = await latest!.submit("Create a folder on my desktop named novadez.");
+      expect(ok).toBe(true);
+    });
+
+    expect(executeActions).toHaveBeenCalledWith([{ type: "create_folder", serverRef: "dgx", path: "~/Desktop/novadez" }], context);
+    expect(latest!.messages.at(-1)?.content).toContain("Executed create_folder");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
