@@ -335,6 +335,12 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function devNovaLog(...args: Array<unknown>) {
+  if (__DEV__) {
+    console.log("[Nova]", ...args);
+  }
+}
+
 function makeFleetSessionName(): string {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const suffix = Math.random().toString(36).slice(2, 6);
@@ -2082,6 +2088,17 @@ export default function AppShell() {
       }
 
       const routeToExternal = mode === "ai" && (localSession || !targetConnection.capabilities.codex);
+      devNovaLog("sendTextToServerSession", {
+        serverId,
+        session,
+        mode,
+        clearDraft,
+        localSession,
+        routeToExternal,
+        connected: targetConnection.connected,
+        hasCodex: targetConnection.capabilities.codex,
+        commandPreview: trimmed.slice(0, 160),
+      });
       if (routeToExternal) {
         const sent = await sendViaExternalLlmToServer(serverId, session, trimmed);
         if (sent) {
@@ -2112,6 +2129,12 @@ export default function AppShell() {
       }
 
       await sendPoolCommand(serverId, session, trimmed, mode, false);
+      devNovaLog("sendTextToServerSession:sent", {
+        serverId,
+        session,
+        mode,
+        commandPreview: trimmed.slice(0, 160),
+      });
       if (focusedTarget) {
         await addCommand(session, trimmed);
       }
@@ -2806,6 +2829,7 @@ export default function AppShell() {
       };
 
       for (const action of actions) {
+        devNovaLog("executeNovaAssistantAction", action);
         try {
           if (action.type === "navigate") {
             setHomeHubVisible(false);
