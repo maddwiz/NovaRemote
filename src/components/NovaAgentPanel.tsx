@@ -273,6 +273,7 @@ export function NovaAgentPanel({
     denyAgentApproval,
     approveReadyApprovals,
     denyAllPendingApprovals,
+    runMonitoringCycle,
     clearAgentMemory,
     spineContexts,
     findSpineContextByAgentId,
@@ -289,10 +290,15 @@ export function NovaAgentPanel({
   const [goalDrafts, setGoalDrafts] = useState<Record<string, string>>({});
   const [capabilityDrafts, setCapabilityDrafts] = useState<Record<string, string>>({});
   const [sessionByAgent, setSessionByAgent] = useState<Record<string, string>>({});
+  const [monitoringCycleStatus, setMonitoringCycleStatus] = useState<string>("");
 
   const canAddAgent = isPro || agents.length < 1;
   const pendingAgents = useMemo(
     () => agents.filter((agent) => agent.pendingApproval !== null),
+    [agents]
+  );
+  const monitoringAgents = useMemo(
+    () => agents.filter((agent) => agent.status === "monitoring"),
     [agents]
   );
 
@@ -336,6 +342,15 @@ export function NovaAgentPanel({
 
   const denyAllPending = () => {
     denyAllPendingApprovals();
+  };
+
+  const runMonitoringNow = () => {
+    const cycle = runMonitoringCycle({ defaultSession: defaultSession || undefined });
+    if (cycle.requested.length === 0 && cycle.approved.length === 0) {
+      setMonitoringCycleStatus("No monitoring updates queued.");
+      return;
+    }
+    setMonitoringCycleStatus(`Queued ${cycle.requested.length} • dispatched ${cycle.approved.length}`);
   };
 
   if (!serverId) {
@@ -384,6 +399,15 @@ export function NovaAgentPanel({
         <Text style={styles.serverSubtitle}>{`Pending approvals: ${pendingAgents.length} • NovaSpine ${pendingSpineApprovals}`}</Text>
         <Pressable
           accessibilityRole="button"
+          accessibilityLabel="Run monitoring cycle now"
+          style={[styles.actionButton, monitoringAgents.length === 0 ? styles.buttonDisabled : null]}
+          disabled={monitoringAgents.length === 0}
+          onPress={runMonitoringNow}
+        >
+          <Text style={styles.actionButtonText}>Run Monitoring</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
           accessibilityLabel="Approve pending agents with ready command and session routes"
           style={[styles.actionButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
           disabled={pendingAgents.length === 0}
@@ -401,6 +425,7 @@ export function NovaAgentPanel({
           <Text style={styles.actionDangerText}>Deny All</Text>
         </Pressable>
       </View>
+      {monitoringCycleStatus ? <Text style={styles.emptyText}>{monitoringCycleStatus}</Text> : null}
 
       {loading || memoryLoading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
       {!loading && !memoryLoading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
