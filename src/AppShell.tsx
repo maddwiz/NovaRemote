@@ -87,6 +87,7 @@ import {
   shouldAttemptFleetShellRun,
 } from "./fleetTerminalBasePath";
 import { findApprovedFleetApproval, findPendingFleetApproval } from "./fleetApproval";
+import { formatAssistantShellPath, resolveAssistantFolderTarget } from "./assistantPath";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
@@ -3114,10 +3115,7 @@ export default function AppShell() {
               throw new Error("A folder path is required.");
             }
             const baseDirectory = getActiveDirectoryForServer(server.id).trim();
-            const targetPath =
-              requestedPath.startsWith("/") || !baseDirectory
-                ? requestedPath
-                : `${baseDirectory.replace(/\/+$/, "")}/${requestedPath.replace(/^\/+/, "")}`;
+            const target = resolveAssistantFolderTarget(requestedPath, baseDirectory);
             let session = resolveAssistantSession(
               context,
               server,
@@ -3134,19 +3132,23 @@ export default function AppShell() {
                 live: false,
               };
             }
-            await sendServerSessionCommand(server.id, session.session, `mkdir -p -- ${shellQuote(targetPath)}`, "shell");
+            await sendServerSessionCommand(
+              server.id,
+              session.session,
+              `mkdir -p -- ${formatAssistantShellPath(target.commandPath, target.shellExpandable)}`,
+              "shell"
+            );
             focusServer(server.id);
             setHomeHubVisible(false);
             setRoute("terminals");
             setFocusedSession(session.session);
 
-            if (capabilities.files) {
-              const parent = targetPath.replace(/\/+$/, "").replace(/\/[^/]+$/, "") || "/";
+            if (capabilities.files && target.parentPath) {
               try {
                 const data = await apiRequest<{ path: string; entries: RemoteFileEntry[] }>(
                   serverProfile.baseUrl,
                   serverProfile.token,
-                  `/files/list?path=${encodeURIComponent(parent)}${assistantFileIncludeHidden ? "&hidden=true" : ""}`
+                  `/files/list?path=${encodeURIComponent(target.parentPath)}${assistantFileIncludeHidden ? "&hidden=true" : ""}`
                 );
                 setFilesSurfaceTarget(server.id);
                 assistantFilePath = data.path;
@@ -3157,7 +3159,7 @@ export default function AppShell() {
               }
             }
 
-            results.push({ action: action.type, ok: true, detail: `Created folder ${targetPath} on ${server.name}` });
+            results.push({ action: action.type, ok: true, detail: `Created folder ${target.displayPath} on ${server.name}` });
             continue;
           }
 
