@@ -341,30 +341,6 @@ export function PageSlideMenu({
               </Text>
             </View>
 
-            <View style={styles.pageMenuTopActions}>
-              {activeSection ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel="Back to menu sections"
-                  style={styles.pageMenuBackButton}
-                  onPress={() => setActiveSectionId(null)}
-                >
-                  <Text style={styles.pageMenuBackText}>Back</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Return to home hub"
-                style={styles.pageMenuHomeButton}
-                onPress={() => {
-                  onClose();
-                  onGoHome();
-                }}
-              >
-                <Text style={styles.pageMenuHomeText}>Home</Text>
-              </Pressable>
-            </View>
-
             {activeSection ? (
               <View style={styles.pageMenuSectionWrap}>
                 <Text style={styles.pageMenuSectionTitle}>{activeSection.title}</Text>
@@ -388,6 +364,29 @@ export function PageSlideMenu({
               </View>
             )}
           </ScrollView>
+          <View style={styles.pageMenuFooterActions}>
+            {activeSection ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to menu sections"
+                style={styles.pageMenuBackButton}
+                onPress={() => setActiveSectionId(null)}
+              >
+                <Text style={styles.pageMenuBackText}>Back</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Return to home hub"
+              style={[styles.pageMenuHomeButton, styles.pageMenuHomeButtonFooter]}
+              onPress={() => {
+                onClose();
+                onGoHome();
+              }}
+            >
+              <Text style={styles.pageMenuHomeText}>Home</Text>
+            </Pressable>
+          </View>
         </Animated.View>
       </View>
     </Modal>

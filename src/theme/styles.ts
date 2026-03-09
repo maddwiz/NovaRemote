@@ -1582,11 +1582,11 @@ export const styles = StyleSheet.create({
     width: 208,
     alignItems: "center",
     justifyContent: "center",
-    gap: 10,
+    gap: 2,
   },
   homeHubHeroVisualCompact: {
     width: "100%",
-    minHeight: 184,
+    minHeight: 176,
   },
   homeHubAsideColumn: {
     flex: 0.86,
@@ -1746,28 +1746,11 @@ export const styles = StyleSheet.create({
   homeHubToneSlate: {
     backgroundColor: "rgba(34, 41, 70, 0.76)",
   },
-  homeHubHalo: {
-    position: "absolute",
-    width: 162,
-    height: 162,
-    borderRadius: 81,
-    backgroundColor: "rgba(41, 210, 255, 0.18)",
-  },
-  homeHubRing: {
-    position: "absolute",
-    width: 182,
-    height: 182,
-    borderRadius: 91,
-    borderWidth: 1,
-    borderColor: "rgba(157, 124, 255, 0.58)",
-  },
   homeHubPlasmaWrap: {
-    width: 150,
-    height: 150,
-    borderRadius: 75,
-    overflow: "hidden",
-    borderWidth: 1,
-    borderColor: "rgba(107, 216, 255, 0.7)",
+    width: 208,
+    height: 208,
+    alignItems: "center",
+    justifyContent: "center",
   },
   homeHubLogo: {
     width: "100%",
@@ -1778,6 +1761,7 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     letterSpacing: 0.3,
+    marginTop: -6,
   },
   pageMenuRoot: {
     flex: 1,
@@ -1805,7 +1789,7 @@ export const styles = StyleSheet.create({
   },
   pageMenuScrollContent: {
     paddingHorizontal: 18,
-    paddingBottom: 28,
+    paddingBottom: 18,
     gap: 16,
   },
   pageMenuHeroCard: {
@@ -1841,13 +1825,6 @@ export const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: "500",
   },
-  pageMenuTopActions: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginTop: -2,
-    marginBottom: 2,
-  },
   pageMenuHomeButton: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1860,6 +1837,11 @@ export const styles = StyleSheet.create({
     color: "#fff0fb",
     fontSize: 14,
     fontWeight: "800",
+  },
+  pageMenuHomeButtonFooter: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
   },
   pageMenuSectionList: {
     gap: 12,
@@ -1917,6 +1899,16 @@ export const styles = StyleSheet.create({
   },
   pageMenuSectionBody: {
     gap: 12,
+  },
+  pageMenuFooterActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderColor: "rgba(255, 121, 206, 0.12)",
+    backgroundColor: "rgba(16, 12, 27, 0.72)",
   },
   pageMenuActionGroup: {
     gap: 12,

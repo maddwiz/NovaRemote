@@ -75,11 +75,10 @@ export function LaunchIntro({ visible, onDone }: LaunchIntroProps) {
           },
         ]}
       >
-        <Image source={BRAND_LOGO} style={styles.launchIntroLogo} resizeMode="cover" />
+        <Image source={BRAND_LOGO} style={styles.launchIntroLogo} resizeMode="contain" />
       </Animated.View>
       <Animated.Text style={[styles.launchIntroWordmark, { opacity }]}>NovaRemote</Animated.Text>
       <Text style={styles.launchIntroTagline}>Universal AI + Terminal Remote Control</Text>
     </View>
   );
 }
-

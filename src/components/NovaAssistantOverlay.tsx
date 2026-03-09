@@ -362,7 +362,7 @@ export function NovaAssistantOverlay({
           }}
         >
           <View style={styles.novaFloatingButtonImageWrap}>
-            <Image source={BRAND_LOGO} style={styles.novaFloatingButtonImage} resizeMode="cover" />
+            <Image source={BRAND_LOGO} style={styles.novaFloatingButtonImage} resizeMode="contain" />
           </View>
         </Pressable>
       </View>

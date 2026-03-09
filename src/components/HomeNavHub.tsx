@@ -116,10 +116,8 @@ export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNa
                 compact ? styles.homeHubHeroVisualCompact : null,
               ]}
             >
-              <View style={styles.homeHubHalo} />
-              <View style={styles.homeHubRing} />
               <View style={styles.homeHubPlasmaWrap}>
-                <Image source={BRAND_LOGO} style={styles.homeHubLogo} resizeMode="cover" />
+                <Image source={BRAND_LOGO} style={styles.homeHubLogo} resizeMode="contain" />
               </View>
               <Text style={styles.homeHubWordmark}>NovaRemote</Text>
             </View>

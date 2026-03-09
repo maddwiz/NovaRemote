@@ -4651,7 +4651,7 @@ export default function AppShell() {
                       setPageMenuVisible(false);
                     }}
                   >
-                    <Image source={BRAND_LOGO} style={styles.shellHeaderLogo} resizeMode="cover" />
+                    <Image source={BRAND_LOGO} style={styles.shellHeaderLogo} resizeMode="contain" />
                     <View style={styles.flex}>
                       <Text style={styles.shellHeaderBrandTitle}>{activeRouteLabel}</Text>
                       <Text numberOfLines={1} style={styles.shellHeaderBrandMeta}>
