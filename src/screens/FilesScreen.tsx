@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
 
 import { AnsiText } from "../components/AnsiText";
+import { PageHeroCard } from "../components/PageHeroCard";
 import { styles } from "../theme/styles";
 import { RemoteFileEntry } from "../types";
 
@@ -70,9 +71,24 @@ export function FilesScreen({
   const [editorMode, setEditorMode] = useState<boolean>(false);
 
   const effectiveSession = useMemo(() => targetSession || openSessions[0] || "", [openSessions, targetSession]);
+  const heroStats = useMemo(
+    () => [
+      { label: "Directory", value: entries.length ? `${entries.length} items` : connected ? "Empty" : "Offline" },
+      { label: "Editor", value: canWrite ? "Writable" : "Read only" },
+      { label: "Terminal Link", value: effectiveSession || "None" },
+    ],
+    [canWrite, connected, effectiveSession, entries.length]
+  );
 
   return (
     <>
+      <PageHeroCard
+        eyebrow="Remote Files"
+        title="Browse, preview, and hand off paths without leaving the command surface."
+        summary={`Use the same visual deck to inspect ${currentPath || "the current path"}, tail files, and move paths straight into an active terminal.`}
+        tone="cyan"
+        stats={heroStats}
+      />
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Remote Files</Text>
         {busy ? <Text style={styles.emptyText}>{busyLabel || "Working..."}</Text> : null}

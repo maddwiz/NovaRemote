@@ -5,6 +5,7 @@ import { Alert, Modal, NativeSyntheticEvent, Pressable, ScrollView, Switch, Text
 import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";
 import { AnsiText } from "../components/AnsiText";
+import { PageHeroCard } from "../components/PageHeroCard";
 import { ServerSwitcherRail } from "../components/ServerSwitcherRail";
 import { TerminalCard } from "../components/TerminalCard";
 import { ProcessKillConfirmModal } from "../components/ProcessKillConfirmModal";
@@ -415,6 +416,14 @@ export function TerminalsScreen() {
   const vmHostTargetGroups = useMemo(() => buildVmHostTargetGroups(servers), [servers]);
   const vmHostVmTypeTargetGroups = useMemo(() => buildVmHostVmTypeTargetGroups(servers), [servers]);
   const disconnectedServerCount = Math.max(0, servers.length - connectedServerCount);
+  const heroStats = useMemo(
+    () => [
+      { label: "Focused", value: activeServer?.name || "No server" },
+      { label: "Open", value: `${openTerminalEntries.length}` },
+      { label: "Streams", value: `${totalActiveStreams}` },
+    ],
+    [activeServer?.name, openTerminalEntries.length, totalActiveStreams]
+  );
   const voiceParticipantDirectory = useMemo(
     () => buildVoiceParticipantDirectory(sessionPresence, sharedWorkspaces.flatMap((workspace) => workspace.members)),
     [sessionPresence, sharedWorkspaces]
@@ -2220,6 +2229,13 @@ export function TerminalsScreen() {
   if (wantsSplit && !splitEnabled) {
     return (
       <>
+        <PageHeroCard
+          eyebrow="Terminal Deck"
+          title="Stay inside live sessions without fighting a wall of controls."
+          summary="The focused server, pooled streams, and quick-start actions stay in view while deeper controls remain in the control center."
+          tone="pink"
+          stats={heroStats}
+        />
         <View style={styles.panel}>
           <Text style={styles.panelLabel}>iPad Split View</Text>
           <Text style={styles.serverSubtitle}>Split layout is a Pro feature.</Text>
@@ -2242,6 +2258,13 @@ export function TerminalsScreen() {
   if (wantsSplit && splitEnabled) {
     return (
       <>
+        <PageHeroCard
+          eyebrow="Terminal Deck"
+          title="Stay inside live sessions without fighting a wall of controls."
+          summary="The focused server, pooled streams, and quick-start actions stay in view while deeper controls remain in the control center."
+          tone="pink"
+          stats={heroStats}
+        />
         <View style={styles.splitRow}>
           <View style={styles.splitLeft}>
             {primaryPanels}
@@ -2262,6 +2285,13 @@ export function TerminalsScreen() {
 
   return (
     <>
+      <PageHeroCard
+        eyebrow="Terminal Deck"
+        title="Stay inside live sessions without fighting a wall of controls."
+        summary="The focused server, pooled streams, and quick-start actions stay in view while deeper controls remain in the control center."
+        tone="pink"
+        stats={heroStats}
+      />
       {primaryPanels}
       {quickStartPanel}
       <View style={styles.panel}>

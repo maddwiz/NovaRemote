@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { PageHeroCard } from "../components/PageHeroCard";
 import { styles } from "../theme/styles";
 import { LlmProfile, LlmProviderKind, LlmSendOptions } from "../types";
 
@@ -166,9 +167,24 @@ export function LlmsScreen({
     () => profiles.find((profile) => profile.id === activeProfileId) || profiles[0] || null,
     [activeProfileId, profiles]
   );
+  const heroStats = useMemo(
+    () => [
+      { label: "Active", value: activeProfile?.name || "None" },
+      { label: "Profiles", value: `${profiles.length}` },
+      { label: "Transfer", value: transferStatus ? "Ready" : "Idle" },
+    ],
+    [activeProfile?.name, profiles.length, transferStatus]
+  );
 
   return (
     <>
+      <PageHeroCard
+        eyebrow="Nova Runtime"
+        title="Choose the phone-side model stack that powers Nova."
+        summary="Provider profiles, tool planning, encrypted transfer, and model testing now sit inside the same atmospheric deck language as home."
+        tone="pink"
+        stats={heroStats}
+      />
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>AI Providers</Text>
         <Text style={styles.serverSubtitle}>
