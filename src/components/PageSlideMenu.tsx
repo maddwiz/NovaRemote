@@ -339,29 +339,30 @@ export function PageSlideMenu({
               <Text style={styles.pageMenuLead}>
                 {activeSection ? activeSection.description : routeDescription(route)}
               </Text>
-              <View style={styles.pageMenuHeroActions}>
-                {activeSection ? (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel="Back to menu sections"
-                    style={styles.pageMenuBackButton}
-                    onPress={() => setActiveSectionId(null)}
-                  >
-                    <Text style={styles.pageMenuBackText}>Back</Text>
-                  </Pressable>
-                ) : null}
+            </View>
+
+            <View style={styles.pageMenuTopActions}>
+              {activeSection ? (
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel="Return to home hub"
-                  style={styles.pageMenuHomeButton}
-                  onPress={() => {
-                    onClose();
-                    onGoHome();
-                  }}
+                  accessibilityLabel="Back to menu sections"
+                  style={styles.pageMenuBackButton}
+                  onPress={() => setActiveSectionId(null)}
                 >
-                  <Text style={styles.pageMenuHomeText}>Home</Text>
+                  <Text style={styles.pageMenuBackText}>Back</Text>
                 </Pressable>
-              </View>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Return to home hub"
+                style={styles.pageMenuHomeButton}
+                onPress={() => {
+                  onClose();
+                  onGoHome();
+                }}
+              >
+                <Text style={styles.pageMenuHomeText}>Home</Text>
+              </Pressable>
             </View>
 
             {activeSection ? (
