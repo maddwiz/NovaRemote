@@ -2000,16 +2000,13 @@ export const styles = StyleSheet.create({
   },
   novaFloatingButtonWrap: {
     position: "absolute",
-  },
-  novaFloatingButtonRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    width: 56,
+    height: 56,
   },
   novaFloatingButton: {
-    width: 68,
-    height: 68,
-    borderRadius: 34,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     borderWidth: 1,
     borderColor: "rgba(77, 214, 255, 0.74)",
     backgroundColor: "rgba(10, 16, 34, 0.94)",
@@ -2021,27 +2018,18 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 12,
   },
-  novaFloatingMicButton: {
-    minWidth: 56,
-    height: 56,
-    borderRadius: 28,
+  novaFloatingButtonImageWrap: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    overflow: "hidden",
     borderWidth: 1,
-    borderColor: "rgba(77, 214, 255, 0.6)",
-    backgroundColor: "rgba(12, 19, 38, 0.96)",
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    shadowColor: "#19cfff",
-    shadowOpacity: 0.18,
-    shadowRadius: 10,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 10,
+    borderColor: "rgba(108, 220, 255, 0.62)",
+    backgroundColor: "rgba(8, 14, 26, 0.86)",
   },
-  novaFloatingMicButtonText: {
-    color: "#eefbff",
-    fontSize: 12,
-    fontWeight: "800",
-    textAlign: "center",
+  novaFloatingButtonImage: {
+    width: "100%",
+    height: "100%",
   },
   novaFloatingButtonActive: {
     borderColor: "rgba(255, 101, 200, 0.82)",
@@ -2049,13 +2037,6 @@ export const styles = StyleSheet.create({
   novaFloatingButtonRecording: {
     backgroundColor: "rgba(72, 18, 52, 0.96)",
     borderColor: "rgba(255, 101, 200, 0.88)",
-  },
-  novaFloatingButtonText: {
-    color: "#eefbff",
-    fontSize: 13,
-    fontWeight: "800",
-    textAlign: "center",
-    paddingHorizontal: 6,
   },
   novaOverlayPanel: {
     position: "absolute",

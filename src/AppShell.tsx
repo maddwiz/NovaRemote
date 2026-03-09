@@ -3770,21 +3770,6 @@ export default function AppShell() {
     });
   }, [clearNovaVoiceLoopRestart, setStatus, startVoiceCapture]);
 
-  const toggleNovaVoiceCapture = useCallback(() => {
-    devVoiceUiLog("toggleNovaVoiceCapture", {
-      voiceRecording,
-      novaHandsFreeEnabled,
-    });
-    if (voiceRecording) {
-      if (!novaHandsFreeEnabled) {
-        setNovaVoiceModeActive(false);
-      }
-      void stopVoiceCaptureIntoNova();
-      return;
-    }
-    startNovaVoiceCapture();
-  }, [novaHandsFreeEnabled, startNovaVoiceCapture, stopVoiceCaptureIntoNova, voiceRecording]);
-
   useEffect(() => {
     if (novaHandsFreeEnabled || !voiceRecording) {
       return;
@@ -5505,7 +5490,6 @@ export default function AppShell() {
               void stopVoiceCaptureIntoNova();
             }
           }}
-          onVoiceToggle={toggleNovaVoiceCapture}
         />
       </KeyboardAvoidingView>
 
