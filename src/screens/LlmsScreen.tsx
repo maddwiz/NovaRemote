@@ -180,8 +180,8 @@ export function LlmsScreen({
     <>
       <PageHeroCard
         eyebrow="Nova Runtime"
-        title="Choose the phone-side model stack that powers Nova."
-        summary="Provider profiles, tool planning, encrypted transfer, and model testing now sit inside the same atmospheric deck language as home."
+        title="Configure providers, routing, testing, and transfer."
+        summary="Choose the active phone-side model for Nova, test prompts, and manage encrypted profile import or export."
         tone="pink"
         stats={heroStats}
       />

@@ -556,8 +556,8 @@ export function VrCommandCenterScreen() {
     <>
       <PageHeroCard
         eyebrow="Spatial Command"
-        title="Coordinate panels, voice routing, and agents through the same modern control surface."
-        summary="VR layout presets, panel pools, voice dispatch, and NovaAdapt controls now start with the same deck language as the home page."
+        title="Coordinate panels, presets, voice, and agents."
+        summary="Control workspace layout, route commands by voice, and manage panel or NovaAdapt actions."
         tone="pink"
         stats={heroStats}
       />

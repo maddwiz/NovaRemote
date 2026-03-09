@@ -859,8 +859,8 @@ export function TeamScreen({
     <>
     <PageHeroCard
       eyebrow="Team Surface"
-      title="Identity, approvals, audit, and seats stay readable instead of buried."
-      summary="Team login, roles, server access, SSO, audit exports, and policy controls now sit under the same calmer deck treatment as the home surface."
+      title="Login, roles, approvals, audit, and policy."
+      summary="Manage team access, SSO, server assignment, fleet approvals, and audit exports."
       tone="slate"
       stats={heroStats}
     />

@@ -66,8 +66,8 @@ export function SnippetsScreen({
     <>
       <PageHeroCard
         eyebrow="Snippet Library"
-        title="Save repeatable shell and AI actions in one cleaner launch deck."
-        summary="Keep reusable commands, scoped prompts, and sync bundles in the same card language as the home surface."
+        title="Save, scope, sync, and run reusable actions."
+        summary="Store shell commands and AI prompts, then insert or run them against the current session."
         tone="violet"
         stats={heroStats}
       />

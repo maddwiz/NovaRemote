@@ -291,8 +291,8 @@ export function ServersScreen({
     <>
     <PageHeroCard
       eyebrow="Target Registry"
-      title="Connect laptops, workstations, VMs, and real servers through one control surface."
-      summary="Profiles, SSH fallback, integrations, workspace controls, and security settings now live under the same visual system as the home deck."
+      title="Manage profiles, SSH fallback, integrations, and security."
+      summary="Set up connection targets, machine metadata, workspace access, backend hints, and connection defaults."
       tone="slate"
       stats={heroStats}
     />

@@ -2231,8 +2231,8 @@ export function TerminalsScreen() {
       <>
         <PageHeroCard
           eyebrow="Terminal Deck"
-          title="Stay inside live sessions without fighting a wall of controls."
-          summary="The focused server, pooled streams, and quick-start actions stay in view while deeper controls remain in the control center."
+          title="Launch sessions, monitor streams, and control the pool."
+          summary="Start shell or AI sessions fast, watch live output, and keep deeper controls in the control center."
           tone="pink"
           stats={heroStats}
         />
@@ -2260,8 +2260,8 @@ export function TerminalsScreen() {
       <>
         <PageHeroCard
           eyebrow="Terminal Deck"
-          title="Stay inside live sessions without fighting a wall of controls."
-          summary="The focused server, pooled streams, and quick-start actions stay in view while deeper controls remain in the control center."
+          title="Launch sessions, monitor streams, and control the pool."
+          summary="Start shell or AI sessions fast, watch live output, and keep deeper controls in the control center."
           tone="pink"
           stats={heroStats}
         />
@@ -2287,8 +2287,8 @@ export function TerminalsScreen() {
     <>
       <PageHeroCard
         eyebrow="Terminal Deck"
-        title="Stay inside live sessions without fighting a wall of controls."
-        summary="The focused server, pooled streams, and quick-start actions stay in view while deeper controls remain in the control center."
+        title="Launch sessions, monitor streams, and control the pool."
+        summary="Start shell or AI sessions fast, watch live output, and keep deeper controls in the control center."
         tone="pink"
         stats={heroStats}
       />

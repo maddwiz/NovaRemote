@@ -84,8 +84,8 @@ export function FilesScreen({
     <>
       <PageHeroCard
         eyebrow="Remote Files"
-        title="Browse, preview, and hand off paths without leaving the command surface."
-        summary={`Use the same visual deck to inspect ${currentPath || "the current path"}, tail files, and move paths straight into an active terminal.`}
+        title="Browse, preview, edit, and hand off paths."
+        summary={`Inspect ${currentPath || "the current path"}, tail files, and move selected paths straight into an active terminal session.`}
         tone="cyan"
         stats={heroStats}
       />

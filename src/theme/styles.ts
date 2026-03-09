@@ -405,7 +405,7 @@ export const styles = StyleSheet.create({
     gap: 8,
   },
   screenHeroCard: {
-    minHeight: 188,
+    minHeight: 168,
     borderRadius: 30,
     borderWidth: 1,
     borderColor: "rgba(137, 153, 224, 0.16)",
@@ -449,15 +449,15 @@ export const styles = StyleSheet.create({
   },
   screenHeroTitle: {
     color: "#f2f8ff",
-    fontSize: 31,
-    lineHeight: 35,
+    fontSize: 26,
+    lineHeight: 30,
     fontWeight: "800",
     maxWidth: "88%",
   },
   screenHeroSummary: {
     color: "#b8cae8",
-    fontSize: 14,
-    lineHeight: 21,
+    fontSize: 13,
+    lineHeight: 19,
     fontWeight: "500",
     maxWidth: "92%",
   },
