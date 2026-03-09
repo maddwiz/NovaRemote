@@ -4584,6 +4584,12 @@ export default function AppShell() {
   if (lockLoading || onboardingLoading || tutorialLoading || safetyLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
+        <View pointerEvents="none" style={styles.shellBackdrop}>
+          <View style={styles.shellBackdropRibbon} />
+          <View style={styles.shellBackdropRibbonGlow} />
+          <View style={styles.shellBackdropTopGlow} />
+          <View style={styles.shellBackdropOrb} />
+        </View>
         <StatusBar style="light" />
       </SafeAreaView>
     );
@@ -4603,6 +4609,12 @@ export default function AppShell() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View pointerEvents="none" style={styles.shellBackdrop}>
+        <View style={styles.shellBackdropRibbon} />
+        <View style={styles.shellBackdropRibbonGlow} />
+        <View style={styles.shellBackdropTopGlow} />
+        <View style={styles.shellBackdropOrb} />
+      </View>
       <StatusBar style="light" />
 
       <KeyboardAvoidingView
