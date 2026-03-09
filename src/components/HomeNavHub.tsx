@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useRef } from "react";
-import { Animated, Image, Pressable, Text, View, useWindowDimensions } from "react-native";
+import React, { useMemo } from "react";
+import { Image, Pressable, Text, View, useWindowDimensions } from "react-native";
 
 import { BRAND_LOGO } from "../branding";
 import { styles } from "../theme/styles";
@@ -39,76 +39,8 @@ function toneStyle(tone: HomeNavItem["tone"]) {
 }
 
 export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNavHubProps) {
-  const orbit = useRef(new Animated.Value(0)).current;
-  const pulse = useRef(new Animated.Value(0)).current;
-  const float = useRef(new Animated.Value(0)).current;
   const { width } = useWindowDimensions();
   const compact = width < 760;
-
-  useEffect(() => {
-    const orbitLoop = Animated.loop(
-      Animated.timing(orbit, {
-        toValue: 1,
-        duration: 18_000,
-        useNativeDriver: true,
-      })
-    );
-    const pulseLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(pulse, {
-          toValue: 1,
-          duration: 2_200,
-          useNativeDriver: true,
-        }),
-        Animated.timing(pulse, {
-          toValue: 0,
-          duration: 2_200,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-    const floatLoop = Animated.loop(
-      Animated.sequence([
-        Animated.timing(float, {
-          toValue: 1,
-          duration: 4_400,
-          useNativeDriver: true,
-        }),
-        Animated.timing(float, {
-          toValue: 0,
-          duration: 4_400,
-          useNativeDriver: true,
-        }),
-      ])
-    );
-
-    orbitLoop.start();
-    pulseLoop.start();
-    floatLoop.start();
-
-    return () => {
-      orbitLoop.stop();
-      pulseLoop.stop();
-      floatLoop.stop();
-    };
-  }, [float, orbit, pulse]);
-
-  const ringRotate = orbit.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "360deg"],
-  });
-  const logoRotate = orbit.interpolate({
-    inputRange: [0, 1],
-    outputRange: ["0deg", "-360deg"],
-  });
-  const haloScale = pulse.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0.96, 1.08],
-  });
-  const floatTranslate = float.interpolate({
-    inputRange: [0, 1],
-    outputRange: [0, -10],
-  });
 
   const activityCards = useMemo<HomeNavItem[]>(
     () => [
@@ -178,20 +110,19 @@ export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNa
               </View>
             </View>
 
-            <Animated.View
+            <View
               style={[
                 styles.homeHubHeroVisual,
                 compact ? styles.homeHubHeroVisualCompact : null,
-                { transform: [{ translateY: floatTranslate }] },
               ]}
             >
-              <Animated.View style={[styles.homeHubHalo, { transform: [{ scale: haloScale }] }]} />
-              <Animated.View style={[styles.homeHubRing, { transform: [{ rotate: ringRotate }] }]} />
-              <Animated.View style={[styles.homeHubPlasmaWrap, { transform: [{ rotate: logoRotate }] }]}>
+              <View style={styles.homeHubHalo} />
+              <View style={styles.homeHubRing} />
+              <View style={styles.homeHubPlasmaWrap}>
                 <Image source={BRAND_LOGO} style={styles.homeHubLogo} resizeMode="cover" />
-              </Animated.View>
+              </View>
               <Text style={styles.homeHubWordmark}>NovaRemote</Text>
-            </Animated.View>
+            </View>
           </View>
         </Pressable>
 

@@ -3,6 +3,7 @@ import {
   Animated,
   Modal,
   Pressable,
+  ScrollView,
   Switch,
   Text,
   View,
@@ -50,6 +51,20 @@ function routeTitle(route: RouteTab): string {
     vr: "VR",
   };
   return titles[route];
+}
+
+function routeDescription(route: RouteTab): string {
+  const descriptions: Record<RouteTab, string> = {
+    terminals: "Launch sessions, manage the pool, and move fast without opening utility clutter.",
+    servers: "Tune connection security, switch targets, and control your remote machine lane.",
+    snippets: "Keep reusable flows and quick actions close without crowding the main screen.",
+    files: "Browse remote code, tail output, and adjust file visibility from one focused surface.",
+    llms: "Configure Nova, providers, and assistant behavior from a calmer control panel.",
+    team: "Manage shared access, policy, and audit controls without leaving the current route.",
+    glasses: "Adjust the wearable command surface and voice-first controls.",
+    vr: "Shape the spatial command center and immersive execution surfaces.",
+  };
+  return descriptions[route];
 }
 
 export function PageSlideMenu({
@@ -312,51 +327,66 @@ export function PageSlideMenu({
       <View style={styles.pageMenuRoot}>
         <Pressable style={styles.pageMenuBackdrop} onPress={onClose} />
         <Animated.View style={[styles.pageMenuPanel, { transform: [{ translateX }] }]}>
-          <View style={styles.pageMenuHeader}>
-            <Text style={styles.pageMenuTitle}>{routeTitle(route)}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Return to home hub"
-              style={styles.pageMenuHomeButton}
-              onPress={() => {
-                onClose();
-                onGoHome();
-              }}
-            >
-              <Text style={styles.pageMenuHomeText}>Home</Text>
-            </Pressable>
-          </View>
-
-          {activeSection ? (
-            <View style={styles.pageMenuSectionWrap}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Back to menu sections"
-                style={styles.pageMenuBackButton}
-                onPress={() => setActiveSectionId(null)}
-              >
-                <Text style={styles.pageMenuBackText}>Back</Text>
-              </Pressable>
-              <Text style={styles.pageMenuSectionTitle}>{activeSection.title}</Text>
-              <Text style={styles.pageMenuSectionDescription}>{activeSection.description}</Text>
-              <View style={styles.pageMenuSectionBody}>{activeSection.render()}</View>
-            </View>
-          ) : (
-            <View style={styles.pageMenuSectionList}>
-              {sections.map((section) => (
+          <ScrollView
+            style={styles.pageMenuScroll}
+            contentContainerStyle={styles.pageMenuScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.pageMenuHeroCard}>
+              <Text style={styles.pageMenuEyebrow}>Control surface</Text>
+              <Text style={styles.pageMenuTitle}>{routeTitle(route)}</Text>
+              <Text style={styles.pageMenuLead}>
+                {activeSection ? activeSection.description : routeDescription(route)}
+              </Text>
+              <View style={styles.pageMenuHeroActions}>
+                {activeSection ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Back to menu sections"
+                    style={styles.pageMenuBackButton}
+                    onPress={() => setActiveSectionId(null)}
+                  >
+                    <Text style={styles.pageMenuBackText}>Back</Text>
+                  </Pressable>
+                ) : null}
                 <Pressable
-                  key={section.id}
                   accessibilityRole="button"
-                  accessibilityLabel={`Open ${section.title}`}
-                  style={styles.pageMenuSectionCard}
-                  onPress={() => setActiveSectionId(section.id)}
+                  accessibilityLabel="Return to home hub"
+                  style={styles.pageMenuHomeButton}
+                  onPress={() => {
+                    onClose();
+                    onGoHome();
+                  }}
                 >
-                  <Text style={styles.pageMenuSectionCardTitle}>{section.title}</Text>
-                  <Text style={styles.pageMenuSectionCardDescription}>{section.description}</Text>
+                  <Text style={styles.pageMenuHomeText}>Home</Text>
                 </Pressable>
-              ))}
+              </View>
             </View>
-          )}
+
+            {activeSection ? (
+              <View style={styles.pageMenuSectionWrap}>
+                <Text style={styles.pageMenuSectionTitle}>{activeSection.title}</Text>
+                <Text style={styles.pageMenuSectionDescription}>{activeSection.description}</Text>
+                <View style={styles.pageMenuSectionBody}>{activeSection.render()}</View>
+              </View>
+            ) : (
+              <View style={styles.pageMenuSectionList}>
+                {sections.map((section) => (
+                  <Pressable
+                    key={section.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${section.title}`}
+                    style={styles.pageMenuSectionCard}
+                    onPress={() => setActiveSectionId(section.id)}
+                  >
+                    <Text style={styles.pageMenuSectionCardTitle}>{section.title}</Text>
+                    <Text style={styles.pageMenuSectionCardDescription}>{section.description}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+          </ScrollView>
         </Animated.View>
       </View>
     </Modal>
