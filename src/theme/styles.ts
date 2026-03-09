@@ -1369,8 +1369,11 @@ export const styles = StyleSheet.create({
   },
   homeHubRoot: {
     flexGrow: 1,
-    gap: 18,
+    gap: 16,
     paddingVertical: 8,
+  },
+  homeHubHeaderSimple: {
+    gap: 4,
   },
   homeHubHeaderRow: {
     flexDirection: "row",
@@ -1440,8 +1443,7 @@ export const styles = StyleSheet.create({
     flexDirection: "column",
   },
   homeHubHeroCard: {
-    flex: 1.5,
-    minHeight: 278,
+    minHeight: 336,
     borderRadius: 30,
     borderWidth: 1,
     borderColor: "rgba(137, 153, 224, 0.16)",
@@ -1454,7 +1456,7 @@ export const styles = StyleSheet.create({
     elevation: 12,
   },
   homeHubHeroCardCompact: {
-    minHeight: 360,
+    minHeight: 324,
   },
   homeHubHeroGlowA: {
     position: "absolute",
@@ -1487,6 +1489,14 @@ export const styles = StyleSheet.create({
   },
   homeHubHeroContentCompact: {
     flexDirection: "column",
+  },
+  homeHubBrandBlock: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "flex-start",
+    paddingHorizontal: 24,
+    paddingTop: 18,
+    paddingBottom: 22,
   },
   homeHubHeroCopy: {
     flex: 1,
@@ -1747,8 +1757,8 @@ export const styles = StyleSheet.create({
     backgroundColor: "rgba(34, 41, 70, 0.76)",
   },
   homeHubPlasmaWrap: {
-    width: 208,
-    height: 208,
+    width: 200,
+    height: 200,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1761,7 +1771,23 @@ export const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "800",
     letterSpacing: 0.3,
-    marginTop: -6,
+    marginTop: -2,
+  },
+  homeHubSummary: {
+    color: "#bfd0eb",
+    fontSize: 15,
+    lineHeight: 22,
+    fontWeight: "500",
+    textAlign: "center",
+    maxWidth: 320,
+    marginTop: 10,
+  },
+  homeHubFocusedServer: {
+    color: "#97add3",
+    fontSize: 12,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    marginTop: 12,
   },
   pageMenuRoot: {
     flex: 1,
@@ -1789,7 +1815,7 @@ export const styles = StyleSheet.create({
   },
   pageMenuScrollContent: {
     paddingHorizontal: 18,
-    paddingBottom: 18,
+    paddingBottom: 26,
     gap: 16,
   },
   pageMenuHeroCard: {
@@ -1825,6 +1851,11 @@ export const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: "500",
   },
+  pageMenuTopActions: {
+    alignItems: "flex-end",
+    marginTop: -2,
+    marginBottom: 2,
+  },
   pageMenuHomeButton: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1838,10 +1869,9 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
-  pageMenuHomeButtonFooter: {
-    flex: 1,
+  pageMenuHomeButtonStandalone: {
+    minWidth: 112,
     alignItems: "center",
-    justifyContent: "center",
   },
   pageMenuSectionList: {
     gap: 12,
@@ -1899,16 +1929,6 @@ export const styles = StyleSheet.create({
   },
   pageMenuSectionBody: {
     gap: 12,
-  },
-  pageMenuFooterActions: {
-    flexDirection: "row",
-    gap: 10,
-    paddingHorizontal: 18,
-    paddingTop: 10,
-    paddingBottom: 18,
-    borderTopWidth: 1,
-    borderColor: "rgba(255, 121, 206, 0.12)",
-    backgroundColor: "rgba(16, 12, 27, 0.72)",
   },
   pageMenuActionGroup: {
     gap: 12,
