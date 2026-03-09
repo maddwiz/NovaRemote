@@ -19,7 +19,8 @@ type HomeNavItem = {
   tone: "cyan" | "violet" | "pink" | "slate";
 };
 
-const ICON_STROKE = "#ff93e6";
+const ICON_STROKE = "#6fe4ff";
+const ICON_SIZE = 30;
 
 const ROUTES: HomeNavItem[] = [
   { key: "terminals", title: "Terminals", subtitle: "Sessions and live output", tone: "pink" },
@@ -47,7 +48,7 @@ function toneStyle(tone: HomeNavItem["tone"]) {
 function HomeHubRouteIcon({ route }: { route: RouteTab }) {
   const commonProps = {
     stroke: ICON_STROKE,
-    strokeWidth: 1.9,
+    strokeWidth: 2.1,
     strokeLinecap: "round" as const,
     strokeLinejoin: "round" as const,
     fill: "none" as const,
@@ -56,7 +57,7 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
   switch (route) {
     case "terminals":
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Rect x={4.5} y={5.5} width={15} height={13} rx={3.2} {...commonProps} />
           <Path d="M8 10l2.6 2.4L8 14.8" {...commonProps} />
           <Line x1={12.8} y1={14.8} x2={16.2} y2={14.8} {...commonProps} />
@@ -64,7 +65,7 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
       );
     case "servers":
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Rect x={5} y={5.5} width={14} height={5.2} rx={2.2} {...commonProps} />
           <Rect x={5} y={13.3} width={14} height={5.2} rx={2.2} {...commonProps} />
           <Circle cx={8} cy={8.1} r={0.9} fill={ICON_STROKE} />
@@ -75,7 +76,7 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
       );
     case "files":
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Path d="M8 4.8h5.6l4.4 4.4v9.5a2.4 2.4 0 0 1-2.4 2.4H8a2.4 2.4 0 0 1-2.4-2.4V7.2A2.4 2.4 0 0 1 8 4.8Z" {...commonProps} />
           <Path d="M13.4 4.8v4.1h4.1" {...commonProps} />
           <Line x1={8.4} y1={13} x2={15.6} y2={13} {...commonProps} />
@@ -84,14 +85,14 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
       );
     case "llms":
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Circle cx={12} cy={12} r={2.4} {...commonProps} />
           <Path d="M12 4.8 13.4 8l3.3.6-2.4 2.3.6 3.4L12 12.8l-2.9 1.5.6-3.4-2.4-2.3 3.3-.6L12 4.8Z" {...commonProps} />
         </Svg>
       );
     case "snippets":
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Path d="M9.5 7.2 6.6 12l2.9 4.8" {...commonProps} />
           <Path d="M14.5 7.2 17.4 12l-2.9 4.8" {...commonProps} />
           <Line x1={11.2} y1={18} x2={12.9} y2={6} {...commonProps} />
@@ -99,7 +100,7 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
       );
     case "team":
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Circle cx={9} cy={10} r={2.4} {...commonProps} />
           <Circle cx={15.5} cy={9.2} r={2} {...commonProps} />
           <Path d="M5.5 17.6c.7-2 2.4-3 5-3s4.3 1 5 3" {...commonProps} />
@@ -108,7 +109,7 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
       );
     case "vr":
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Rect x={4.6} y={8.1} width={14.8} height={7.8} rx={3.2} {...commonProps} />
           <Path d="M9 8.3v7.4" {...commonProps} />
           <Path d="M15 8.3v7.4" {...commonProps} />
@@ -118,7 +119,7 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
       );
     default:
       return (
-        <Svg width={24} height={24} viewBox="0 0 24 24">
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Ellipse cx={12} cy={12} rx={7} ry={4.2} {...commonProps} />
           <Circle cx={12} cy={12} r={1.5} fill={ICON_STROKE} />
         </Svg>
