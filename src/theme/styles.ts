@@ -1815,7 +1815,7 @@ export const styles = StyleSheet.create({
   },
   pageMenuScrollContent: {
     paddingHorizontal: 18,
-    paddingBottom: 26,
+    paddingBottom: 18,
     gap: 16,
   },
   pageMenuHeroCard: {
@@ -1851,11 +1851,6 @@ export const styles = StyleSheet.create({
     lineHeight: 21,
     fontWeight: "500",
   },
-  pageMenuTopActions: {
-    alignItems: "flex-end",
-    marginTop: -2,
-    marginBottom: 2,
-  },
   pageMenuHomeButton: {
     borderRadius: 16,
     borderWidth: 1,
@@ -1869,9 +1864,10 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "800",
   },
-  pageMenuHomeButtonStandalone: {
-    minWidth: 112,
+  pageMenuHomeButtonFooter: {
+    flex: 1,
     alignItems: "center",
+    justifyContent: "center",
   },
   pageMenuSectionList: {
     gap: 12,
@@ -1929,6 +1925,16 @@ export const styles = StyleSheet.create({
   },
   pageMenuSectionBody: {
     gap: 12,
+  },
+  pageMenuFooterActions: {
+    flexDirection: "row",
+    gap: 10,
+    paddingHorizontal: 18,
+    paddingTop: 10,
+    paddingBottom: 18,
+    borderTopWidth: 1,
+    borderColor: "rgba(255, 121, 206, 0.12)",
+    backgroundColor: "rgba(16, 12, 27, 0.72)",
   },
   pageMenuActionGroup: {
     gap: 12,
