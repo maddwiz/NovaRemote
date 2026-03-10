@@ -155,21 +155,6 @@ export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNa
         <Text style={styles.homeHubStatus}>{heroStatus}</Text>
       </View>
 
-      <View style={[styles.homeHubHeroCard, compact ? styles.homeHubHeroCardCompact : null]}>
-        <View style={styles.homeHubHeroGlowA} />
-        <View style={styles.homeHubHeroGlowB} />
-        <View style={styles.homeHubBrandBlock}>
-          <View style={styles.homeHubPlasmaWrap}>
-            <Image source={BRAND_LOGO} style={styles.homeHubLogo} resizeMode="contain" />
-          </View>
-          <Text style={styles.homeHubWordmark}>NovaRemote</Text>
-          <Text style={styles.homeHubSummary}>
-            Remote AI, terminals, files, and multi-server control in one mobile command surface.
-          </Text>
-          <Text style={styles.homeHubFocusedServer}>Focused server: {activeServerName}</Text>
-        </View>
-      </View>
-
       <View style={styles.homeHubSectionHeader}>
         <Text style={styles.homeHubSectionTitle}>Launch Deck</Text>
         <Text style={styles.homeHubSectionMeta}>Core surfaces</Text>
@@ -196,6 +181,21 @@ export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNa
             <Text style={styles.homeHubLaunchSubtitle}>{item.subtitle}</Text>
           </Pressable>
         ))}
+      </View>
+
+      <View style={[styles.homeHubHeroCard, compact ? styles.homeHubHeroCardCompact : null]}>
+        <View style={styles.homeHubHeroGlowA} />
+        <View style={styles.homeHubHeroGlowB} />
+        <View style={styles.homeHubBrandBlock}>
+          <View style={styles.homeHubPlasmaWrap}>
+            <Image source={BRAND_LOGO} style={styles.homeHubLogo} resizeMode="contain" />
+          </View>
+          <Text style={styles.homeHubWordmark}>NovaRemote</Text>
+          <Text style={styles.homeHubSummary}>
+            Remote AI, terminals, files, and multi-server control in one mobile command surface.
+          </Text>
+          <Text style={styles.homeHubFocusedServer}>Focused server: {activeServerName}</Text>
+        </View>
       </View>
     </View>
   );
