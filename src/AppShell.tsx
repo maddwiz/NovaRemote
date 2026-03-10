@@ -725,10 +725,12 @@ export default function AppShell() {
   const voiceLoopRestartTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
   const novaVoiceLoopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaVoiceStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stopVoiceCaptureIntoNovaRef = useRef<() => Promise<boolean>>(async () => false);
   const novaVoiceSettingsLoadedRef = useRef<boolean>(false);
   const novaHandsFreeEnabledRef = useRef<boolean>(novaHandsFreeEnabled);
   const novaConversationModeEnabledRef = useRef<boolean>(novaConversationModeEnabled);
   const novaWakePhraseRef = useRef<string>(novaWakePhrase);
+  const novaVoiceModeActiveRef = useRef<boolean>(novaVoiceModeActive);
   const appOpenTrackedRef = useRef<boolean>(false);
   const crossServerWatchRulesRef = useRef<Record<string, Record<string, WatchRule>>>({});
   const lastActivityAtRef = useRef<number>(Date.now());
@@ -801,6 +803,10 @@ export default function AppShell() {
   useEffect(() => {
     novaWakePhraseRef.current = novaWakePhrase;
   }, [novaWakePhrase]);
+
+  useEffect(() => {
+    novaVoiceModeActiveRef.current = novaVoiceModeActive;
+  }, [novaVoiceModeActive]);
 
   const markActivity = useCallback(() => {
     lastActivityAtRef.current = Date.now();
@@ -1620,6 +1626,16 @@ export default function AppShell() {
     stopAndTranscribe: stopVoiceCaptureAndTranscribe,
     setLastTranscript: setVoiceTranscript,
   } = useVoiceCapture({ activeServer, connected });
+  const voiceRecordingRef = useRef<boolean>(voiceRecording);
+  const voiceBusyRef = useRef<boolean>(voiceBusy);
+
+  useEffect(() => {
+    voiceRecordingRef.current = voiceRecording;
+  }, [voiceRecording]);
+
+  useEffect(() => {
+    voiceBusyRef.current = voiceBusy;
+  }, [voiceBusy]);
 
   const remoteOpenSessions = useMemo(
     () => openSessions.filter((session) => !localAiSessions.includes(session)),
@@ -3806,13 +3822,13 @@ export default function AppShell() {
       clearNovaVoiceStopTimer();
       novaVoiceStopTimerRef.current = setTimeout(() => {
         novaVoiceStopTimerRef.current = null;
-        if (!voiceRecording && !novaVoiceModeActive) {
+        if (!voiceRecordingRef.current && !novaVoiceModeActiveRef.current) {
           return;
         }
-        void stopVoiceCaptureIntoNova();
+        void stopVoiceCaptureIntoNovaRef.current();
       }, Math.max(1200, Math.min(delayMs, 15000)));
     },
-    [clearNovaVoiceStopTimer, novaVoiceModeActive, voiceRecording]
+    [clearNovaVoiceStopTimer]
   );
 
   const scheduleNovaVoiceLoopRestart = useCallback(
@@ -3820,7 +3836,7 @@ export default function AppShell() {
       clearNovaVoiceLoopRestart();
       novaVoiceLoopTimerRef.current = setTimeout(() => {
         novaVoiceLoopTimerRef.current = null;
-        if (voiceBusy || voiceRecording) {
+        if (voiceBusyRef.current || voiceRecordingRef.current) {
           return;
         }
         setNovaVoiceModeActive(true);
@@ -3835,7 +3851,7 @@ export default function AppShell() {
           });
       }, Math.max(150, Math.min(delayMs, 15000)));
     },
-    [clearNovaVoiceLoopRestart, scheduleNovaVoiceStop, setStatus, startVoiceCapture, voiceBusy, voiceRecording]
+    [clearNovaVoiceLoopRestart, scheduleNovaVoiceStop, setStatus, startVoiceCapture]
   );
 
   const stopVoiceCaptureIntoNova = useCallback(async (): Promise<boolean> => {
@@ -3920,6 +3936,10 @@ export default function AppShell() {
     setStatus,
     stopVoiceCaptureAndTranscribe,
   ]);
+
+  useEffect(() => {
+    stopVoiceCaptureIntoNovaRef.current = stopVoiceCaptureIntoNova;
+  }, [stopVoiceCaptureIntoNova]);
 
   const startNovaVoiceCapture = useCallback(() => {
     if (voiceBusy || voiceRecording) {
