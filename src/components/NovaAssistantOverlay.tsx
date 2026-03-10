@@ -15,6 +15,8 @@ type NovaAssistantOverlayProps = {
   voiceRecording: boolean;
   voiceBusy: boolean;
   handsFreeEnabled: boolean;
+  wakePhrase: string;
+  openRequestToken: number;
   onSetDraft: (value: string) => void;
   onSend: () => void;
   onClearConversation: () => void;
@@ -66,6 +68,8 @@ export function NovaAssistantOverlay({
   voiceRecording,
   voiceBusy,
   handsFreeEnabled,
+  wakePhrase,
+  openRequestToken,
   onSetDraft,
   onSend,
   onClearConversation,
@@ -109,6 +113,13 @@ export function NovaAssistantOverlay({
       };
     });
   }, [height, width]);
+
+  useEffect(() => {
+    if (!openRequestToken) {
+      return;
+    }
+    setOpen(true);
+  }, [openRequestToken]);
 
   const buttonPanResponder = useMemo(
     () =>
@@ -241,7 +252,9 @@ export function NovaAssistantOverlay({
                   ? "Listening..."
                   : voiceBusy
                     ? "Transcribing..."
-                    : "Talk naturally. Hold the Nova orb to speak, or type to control the app and remote sessions."}
+                    : handsFreeEnabled
+                      ? `Say "${wakePhrase}" to wake Nova, or hold the orb to talk instantly.`
+                      : "Talk naturally. Hold the Nova orb to speak, or type to control the app and remote sessions."}
               </Text>
               {!canSend ? (
                 <Pressable

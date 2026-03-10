@@ -41,6 +41,7 @@ export const STORAGE_TEAM_IDENTITY = "novaremote.team.identity.v1";
 export const STORAGE_TOKEN_BROKER_CACHE = "novaremote.team.token_broker.v1";
 export const STORAGE_AUDIT_LOG_QUEUE = "novaremote.audit.queue.v1";
 export const STORAGE_AUDIT_DEVICE_ID = "novaremote.audit.device_id.v1";
+export const STORAGE_NOVA_VOICE_SETTINGS = "novaremote.nova.voice.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
