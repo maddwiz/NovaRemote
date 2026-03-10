@@ -738,6 +738,7 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     stopCapture,
     stopLiveRecognition,
     stopAndTranscribe,
+    prepareSpeechOutput: resetAudioMode,
     setLastTranscript,
   };
 }

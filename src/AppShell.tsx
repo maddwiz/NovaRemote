@@ -1741,6 +1741,7 @@ export default function AppShell() {
     stopCapture: stopVoiceCapture,
     stopLiveRecognition,
     stopAndTranscribe: stopVoiceCaptureAndTranscribe,
+    prepareSpeechOutput,
     setLastTranscript: setVoiceTranscript,
   } = useVoiceCapture({ activeServer, connected });
   const voiceRecordingRef = useRef<boolean>(voiceRecording);
@@ -4114,6 +4115,8 @@ export default function AppShell() {
       }
 
       try {
+        await prepareSpeechOutput();
+        await new Promise((resolve) => setTimeout(resolve, 180));
         speechModule.stop?.();
         await new Promise<void>((resolve) => {
           let settled = false;
@@ -4142,7 +4145,7 @@ export default function AppShell() {
 
       resumeConversation();
     },
-    [queueNovaListeningMode, resetNovaConversationIdleTimer, resolveDefaultNovaListeningMode]
+    [prepareSpeechOutput, queueNovaListeningMode, resetNovaConversationIdleTimer, resolveDefaultNovaListeningMode]
   );
 
   const novaAssistant = useNovaAssistant({
