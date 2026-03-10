@@ -12,11 +12,18 @@ type LaunchIntroProps = {
 export function LaunchIntro({ visible, onDone }: LaunchIntroProps) {
   const opacity = useRef(new Animated.Value(1)).current;
   const scale = useRef(new Animated.Value(1)).current;
+  const onDoneRef = useRef(onDone);
+
+  useEffect(() => {
+    onDoneRef.current = onDone;
+  }, [onDone]);
 
   useEffect(() => {
     if (!visible) {
       return;
     }
+
+    let completed = false;
 
     opacity.setValue(1);
     scale.setValue(1);
@@ -52,17 +59,27 @@ export function LaunchIntro({ visible, onDone }: LaunchIntroProps) {
       ]);
 
     const intro = Animated.sequence([pulse(), Animated.delay(260), pulse(), Animated.delay(260), pulse()]);
+    const complete = () => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      onDoneRef.current();
+    };
+    const fallbackTimeout = setTimeout(complete, 5600);
 
     intro.start(({ finished }) => {
       if (finished) {
-        onDone();
+        clearTimeout(fallbackTimeout);
+        complete();
       }
     });
 
     return () => {
+      clearTimeout(fallbackTimeout);
       intro.stop();
     };
-  }, [opacity, onDone, scale, visible]);
+  }, [opacity, scale, visible]);
 
   if (!visible) {
     return null;
