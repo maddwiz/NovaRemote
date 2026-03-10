@@ -4,7 +4,9 @@ import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
+  Alert,
   AppState,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -5689,10 +5691,32 @@ export default function AppShell() {
           onClose={() => setPageMenuVisible(false)}
           onGoHome={() => setHomeHubVisible(true)}
           onLogOff={() => {
-            void runWithStatus("Logging off", async () => {
-              setPageMenuVisible(false);
-              forceLock();
-            });
+            Alert.alert(
+              Platform.OS === "ios" ? "Log off?" : "Close NovaRemote?",
+              Platform.OS === "ios"
+                ? "iPhone apps cannot close themselves. Continue to log off and return to the lock screen?"
+                : "Are you sure you want to log off and close NovaRemote?",
+              [
+                {
+                  text: "Cancel",
+                  style: "cancel",
+                },
+                {
+                  text: Platform.OS === "ios" ? "Log Off" : "Close App",
+                  style: "destructive",
+                  onPress: () => {
+                    void runWithStatus(Platform.OS === "ios" ? "Logging off" : "Closing NovaRemote", async () => {
+                      setPageMenuVisible(false);
+                      if (Platform.OS === "android") {
+                        BackHandler.exitApp();
+                        return;
+                      }
+                      forceLock();
+                    });
+                  },
+                },
+              ]
+            );
           }}
           onNavigate={openRouteFromMenu}
           poolLifecyclePaused={poolLifecyclePaused}
