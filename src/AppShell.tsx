@@ -4801,7 +4801,7 @@ export default function AppShell() {
           <View style={styles.shellBackdropTopGlow} />
           <View style={styles.shellBackdropOrb} />
         </View>
-        <StatusBar style="light" />
+        <StatusBar style="light" hidden={showLaunchIntro} />
       </SafeAreaView>
     );
   }
@@ -4826,7 +4826,7 @@ export default function AppShell() {
         <View style={styles.shellBackdropTopGlow} />
         <View style={styles.shellBackdropOrb} />
       </View>
-      <StatusBar style="light" />
+      <StatusBar style="light" hidden={showLaunchIntro} />
 
       <KeyboardAvoidingView
         style={styles.flex}

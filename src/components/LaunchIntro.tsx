@@ -23,37 +23,35 @@ export function LaunchIntro({ visible, onDone }: LaunchIntroProps) {
 
     const pulse = () =>
       Animated.sequence([
-        Animated.parallel([
-          Animated.timing(scale, {
-            toValue: 1.08,
-            duration: 300,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-          Animated.timing(opacity, {
-            toValue: 0.88,
-            duration: 300,
-            easing: Easing.out(Easing.quad),
-            useNativeDriver: true,
-          }),
-        ]),
+        Animated.timing(scale, {
+          toValue: 1.055,
+          duration: 720,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
+        Animated.timing(opacity, {
+          toValue: 0.92,
+          duration: 720,
+          easing: Easing.inOut(Easing.sin),
+          useNativeDriver: true,
+        }),
         Animated.parallel([
           Animated.timing(scale, {
             toValue: 1,
-            duration: 260,
-            easing: Easing.inOut(Easing.quad),
+            duration: 760,
+            easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
           Animated.timing(opacity, {
             toValue: 1,
-            duration: 260,
-            easing: Easing.inOut(Easing.quad),
+            duration: 760,
+            easing: Easing.inOut(Easing.sin),
             useNativeDriver: true,
           }),
         ]),
       ]);
 
-    const intro = Animated.sequence([pulse(), Animated.delay(120), pulse(), Animated.delay(120), pulse()]);
+    const intro = Animated.sequence([pulse(), Animated.delay(260), pulse(), Animated.delay(260), pulse()]);
 
     intro.start(({ finished }) => {
       if (finished) {
@@ -72,17 +70,17 @@ export function LaunchIntro({ visible, onDone }: LaunchIntroProps) {
 
   return (
     <View style={styles.launchIntroBackdrop} pointerEvents="auto">
-      <Animated.View
+      <Animated.Image
+        source={BRAND_LOGO}
+        resizeMode="contain"
         style={[
-          styles.launchIntroOrb,
+          styles.launchIntroLogo,
           {
             opacity,
             transform: [{ scale }],
           },
         ]}
-      >
-        <Image source={BRAND_LOGO} style={styles.launchIntroLogo} resizeMode="contain" />
-      </Animated.View>
+      />
     </View>
   );
 }

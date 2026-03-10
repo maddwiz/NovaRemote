@@ -1387,20 +1387,9 @@ export const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  launchIntroOrb: {
+  launchIntroLogo: {
     width: 214,
     height: 214,
-    alignItems: "center",
-    justifyContent: "center",
-    shadowColor: "#31d6ff",
-    shadowOpacity: 0.34,
-    shadowRadius: 26,
-    shadowOffset: { width: 0, height: 0 },
-    elevation: 10,
-  },
-  launchIntroLogo: {
-    width: 196,
-    height: 196,
   },
   shellHeaderBar: {
     flexDirection: "row",
