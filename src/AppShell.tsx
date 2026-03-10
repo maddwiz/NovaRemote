@@ -39,6 +39,7 @@ import {
   DEFAULT_CWD,
   DEFAULT_FLEET_WAIT_MS,
   NOVA_VOICE_CAPTURE_MS,
+  NOVA_VOICE_CONVERSATION_IDLE_MS,
   NOVA_VOICE_VAD_SILENCE_MS,
   NOVA_AGENT_MONITORING_INTERVAL_MS,
   DEFAULT_SPECTATE_TTL_SECONDS,
@@ -172,6 +173,47 @@ function buildTeamServerSignature(servers: ServerProfile[]): string {
       }))
       .sort((a, b) => a.id.localeCompare(b.id))
   );
+}
+
+type SpeechOutputModule = {
+  speak: (text: string, options?: Record<string, unknown>) => void;
+  stop?: () => void;
+};
+
+let speechOutputModuleCache: SpeechOutputModule | null | undefined;
+
+function getSpeechOutputModule(): SpeechOutputModule | null {
+  if (speechOutputModuleCache !== undefined) {
+    return speechOutputModuleCache;
+  }
+  try {
+    // Lazy require keeps older dev-client builds from crashing if the module
+    // has not been compiled into the installed binary yet.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const speechModule = require("expo-speech") as SpeechOutputModule;
+    speechOutputModuleCache = speechModule;
+    return speechModule;
+  } catch {
+    speechOutputModuleCache = null;
+    return null;
+  }
+}
+
+function summarizeNovaReplyForSpeech(value: string): string {
+  const compact = value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) {
+    return "";
+  }
+  const firstSentence = compact.split(/(?<=[.!?])\s+/)[0]?.trim();
+  const spoken = firstSentence && firstSentence.length >= 8 ? firstSentence : compact;
+  if (spoken.length <= 220) {
+    return spoken;
+  }
+  return `${spoken.slice(0, 217).trimEnd()}...`;
 }
 
 function countMatches(output: string, searchTerm: string): number {
@@ -727,6 +769,7 @@ export default function AppShell() {
   const voiceLoopRestartTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
   const novaVoiceLoopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaVoiceStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const novaConversationIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startNovaVoiceCaptureRef = useRef<() => void>(() => undefined);
   const stopVoiceCaptureIntoNovaRef = useRef<() => Promise<boolean>>(async () => false);
   const novaVoiceSettingsLoadedRef = useRef<boolean>(false);
@@ -3636,13 +3679,6 @@ export default function AppShell() {
     ]
   );
 
-  const novaAssistant = useNovaAssistant({
-    activeProfile,
-    sendPromptDetailed,
-    buildContext: buildNovaAssistantContext,
-    executeActions: executeNovaAssistantActions,
-  });
-
   const sendControlToSession = useCallback(
     async (session: string, char: string) => {
       if (!char) {
@@ -3829,6 +3865,84 @@ export default function AppShell() {
     novaVoiceStopTimerRef.current = null;
   }, []);
 
+  const clearNovaConversationIdleTimer = useCallback(() => {
+    const timer = novaConversationIdleTimerRef.current;
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    novaConversationIdleTimerRef.current = null;
+  }, []);
+
+  const endNovaConversationSession = useCallback(
+    (reason: "idle" | "manual") => {
+      clearNovaConversationIdleTimer();
+      setNovaConversationModeEnabled(false);
+      if (reason === "idle") {
+        if (novaHandsFreeEnabledRef.current) {
+          setStatus({ text: `Listening for "${novaWakePhraseRef.current}"...`, error: false });
+        } else {
+          setStatus({ text: "Nova voice session ended.", error: false });
+        }
+      }
+      getSpeechOutputModule()?.stop?.();
+      if (liveVoiceRecognitionActiveRef.current) {
+        void stopLiveRecognition("abort");
+      }
+      if (voiceRecordingRef.current) {
+        void stopVoiceCapture();
+      }
+      setNovaVoiceModeActive(false);
+    },
+    [clearNovaConversationIdleTimer, setStatus, stopLiveRecognition, stopVoiceCapture]
+  );
+
+  const resetNovaConversationIdleTimer = useCallback(() => {
+    clearNovaConversationIdleTimer();
+    novaConversationIdleTimerRef.current = setTimeout(() => {
+      novaConversationIdleTimerRef.current = null;
+      endNovaConversationSession("idle");
+    }, NOVA_VOICE_CONVERSATION_IDLE_MS);
+  }, [clearNovaConversationIdleTimer, endNovaConversationSession]);
+
+  const speakNovaReply = useCallback(
+    async (reply: string) => {
+      if (!novaConversationModeEnabledRef.current) {
+        return;
+      }
+      const spoken = summarizeNovaReplyForSpeech(reply);
+      if (!spoken) {
+        return;
+      }
+      resetNovaConversationIdleTimer();
+      const speechModule = getSpeechOutputModule();
+      if (!speechModule) {
+        setStatus({ text: "Nova reply voice is unavailable in this build.", error: true });
+        return;
+      }
+      try {
+        speechModule.stop?.();
+        speechModule.speak(spoken, {
+          language: "en-US",
+          pitch: 1,
+          rate: 0.96,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        setStatus({ text: `Nova reply voice failed: ${message}`, error: true });
+      }
+    },
+    [resetNovaConversationIdleTimer, setStatus]
+  );
+
+  const novaAssistant = useNovaAssistant({
+    activeProfile,
+    sendPromptDetailed,
+    buildContext: buildNovaAssistantContext,
+    executeActions: executeNovaAssistantActions,
+    onAssistantReply: speakNovaReply,
+  });
+
   const scheduleNovaVoiceStop = useCallback(
     (delayMs: number = NOVA_VOICE_CAPTURE_MS) => {
       clearNovaVoiceStopTimer();
@@ -3877,6 +3991,11 @@ export default function AppShell() {
         return false;
       }
 
+      if (!conversationModeEnabled) {
+        setNovaConversationModeEnabled(true);
+      }
+      resetNovaConversationIdleTimer();
+
       const transcript = shouldRequireWakePhrase ? handsFreeWake.command : rawTranscript;
       requestNovaOverlayOpen();
 
@@ -3901,7 +4020,7 @@ export default function AppShell() {
       }
       return true;
     },
-    [novaAssistant, requestNovaOverlayOpen, scheduleNovaVoiceLoopRestart, setStatus]
+    [novaAssistant, requestNovaOverlayOpen, resetNovaConversationIdleTimer, scheduleNovaVoiceLoopRestart, setStatus]
   );
 
   const handleNovaVoiceNoSpeech = useCallback(() => {
@@ -4048,7 +4167,7 @@ export default function AppShell() {
   }, [startNovaVoiceCapture]);
 
   useEffect(() => {
-    if (novaHandsFreeEnabled || (!voiceRecording && !liveVoiceRecognitionActive)) {
+    if (novaHandsFreeEnabled || novaConversationModeEnabled || (!voiceRecording && !liveVoiceRecognitionActive)) {
       return;
     }
     clearNovaVoiceLoopRestart();
@@ -4056,7 +4175,14 @@ export default function AppShell() {
       return;
     }
     setNovaVoiceModeActive(false);
-  }, [clearNovaVoiceLoopRestart, liveVoiceRecognitionActive, novaHandsFreeEnabled, novaVoiceModeActive, voiceRecording]);
+  }, [
+    clearNovaVoiceLoopRestart,
+    liveVoiceRecognitionActive,
+    novaConversationModeEnabled,
+    novaHandsFreeEnabled,
+    novaVoiceModeActive,
+    voiceRecording,
+  ]);
 
   useEffect(() => {
     if (
@@ -4136,12 +4262,16 @@ export default function AppShell() {
       setAppStateStatus(state);
       if (state !== "active") {
         clearNovaVoiceLoopRestart();
+        clearNovaConversationIdleTimer();
         if (liveVoiceRecognitionActive && novaVoiceModeActive) {
           void stopLiveRecognition("abort");
         }
         if (voiceRecording && novaVoiceModeActive) {
           void stopVoiceCapture();
         }
+        const speechModule = getSpeechOutputModule();
+        speechModule?.stop?.();
+        setNovaConversationModeEnabled(false);
         setNovaVoiceModeActive(false);
         disconnectPoolAll();
         lock();
@@ -4157,6 +4287,7 @@ export default function AppShell() {
     };
   }, [
     clearNovaVoiceLoopRestart,
+    clearNovaConversationIdleTimer,
     connectPoolAll,
     disconnectPoolAll,
     liveVoiceRecognitionActive,
@@ -4252,15 +4383,18 @@ export default function AppShell() {
     }
     clearNovaVoiceLoopRestart();
     clearNovaVoiceStopTimer();
+    clearNovaConversationIdleTimer();
     if (liveVoiceRecognitionActive && novaVoiceModeActive) {
       void stopLiveRecognition("abort");
     }
     if (voiceRecording && novaVoiceModeActive) {
       void stopVoiceCapture();
     }
+    getSpeechOutputModule()?.stop?.();
     setNovaConversationModeEnabled(false);
     setNovaVoiceModeActive(false);
   }, [
+    clearNovaConversationIdleTimer,
     clearNovaVoiceLoopRestart,
     clearNovaVoiceStopTimer,
     liveVoiceRecognitionActive,
@@ -5881,27 +6015,15 @@ export default function AppShell() {
           }}
           onToggleVoiceMode={() => {
             if (novaConversationModeEnabled) {
-              setNovaConversationModeEnabled(false);
               clearNovaVoiceLoopRestart();
               clearNovaVoiceStopTimer();
-              if (liveVoiceRecognitionActive && novaVoiceModeActive) {
-                setStatus({ text: "Stopping Nova voice mode...", error: false });
-                void stopLiveRecognition("abort");
-                setNovaVoiceModeActive(false);
-                return;
-              }
-              if (voiceRecording && novaVoiceModeActive) {
-                setStatus({ text: "Stopping Nova voice mode...", error: false });
-                void stopVoiceCapture();
-                setNovaVoiceModeActive(false);
-                return;
-              }
-              setNovaVoiceModeActive(false);
+              endNovaConversationSession("manual");
               setStatus({ text: "Nova voice mode disabled.", error: false });
               return;
             }
             requestNovaOverlayOpen();
             setNovaConversationModeEnabled(true);
+            resetNovaConversationIdleTimer();
             setStatus({ text: "Nova voice mode enabled. Speak naturally.", error: false });
           }}
           onVoiceHoldStart={startNovaVoiceCapture}

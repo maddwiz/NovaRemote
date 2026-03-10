@@ -24,6 +24,7 @@ type UseNovaAssistantArgs = {
     actions: NovaAssistantAction[],
     context: NovaAssistantRuntimeContext
   ) => Promise<NovaAssistantExecutionResult[]>;
+  onAssistantReply?: (reply: string) => void | Promise<void>;
 };
 
 type SubmitOptions = {
@@ -67,7 +68,13 @@ function cleanFallbackReply(value: string): string {
   return withoutFence;
 }
 
-export function useNovaAssistant({ activeProfile, sendPromptDetailed, buildContext, executeActions }: UseNovaAssistantArgs) {
+export function useNovaAssistant({
+  activeProfile,
+  sendPromptDetailed,
+  buildContext,
+  executeActions,
+  onAssistantReply,
+}: UseNovaAssistantArgs) {
   const [messages, setMessages] = useState<NovaAssistantMessage[]>(() => [buildGreeting()]);
   const [draft, setDraft] = useState<string>("");
   const [busy, setBusy] = useState<boolean>(false);
@@ -137,17 +144,20 @@ export function useNovaAssistant({ activeProfile, sendPromptDetailed, buildConte
           actions.length > 0 ? await executeActions(actions, context) : ([] as NovaAssistantExecutionResult[]);
         const finalReply = `${reply}${formatNovaAssistantExecutionSummary(results)}`.trim();
         setMessages((prev) => [...prev, buildMessage("assistant", finalReply)]);
+        await onAssistantReply?.(finalReply);
         return true;
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         setLastError(message);
-        setMessages((prev) => [...prev, buildMessage("assistant", `I hit an error: ${message}`)]);
+        const errorReply = `I hit an error: ${message}`;
+        setMessages((prev) => [...prev, buildMessage("assistant", errorReply)]);
+        await onAssistantReply?.(errorReply);
         return false;
       } finally {
         setBusy(false);
       }
     },
-    [activeProfile, buildContext, executeActions, messages, sendPromptDetailed]
+    [activeProfile, buildContext, executeActions, messages, onAssistantReply, sendPromptDetailed]
   );
 
   const submitDraft = useCallback(async (): Promise<boolean> => {
