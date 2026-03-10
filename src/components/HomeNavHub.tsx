@@ -3,14 +3,12 @@ import { Image, Pressable, Text, View, useWindowDimensions } from "react-native"
 import Svg, { Circle, Ellipse, Line, Path, Rect } from "react-native-svg";
 
 import { BRAND_LOGO } from "../branding";
-import { summarizeStatusText } from "../statusSummary";
 import { styles } from "../theme/styles";
 import { RouteTab } from "../types";
 
 type HomeNavHubProps = {
   onOpenRoute: (route: RouteTab) => void;
   activeServerName: string;
-  statusText: string;
 };
 
 type HomeNavItem = {
@@ -143,16 +141,14 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
   }
 }
 
-export function HomeNavHub({ onOpenRoute, activeServerName, statusText }: HomeNavHubProps) {
+export function HomeNavHub({ onOpenRoute, activeServerName }: HomeNavHubProps) {
   const { width } = useWindowDimensions();
   const compact = width < 760;
-  const heroStatus = summarizeStatusText(statusText, 28);
 
   return (
     <View style={styles.homeHubRoot}>
       <View style={styles.homeHubHeaderSimple}>
         <Text style={styles.homeHubEyebrow}>Command Surface</Text>
-        <Text style={styles.homeHubStatus}>{heroStatus}</Text>
       </View>
 
       <View style={styles.homeHubSectionHeader}>

@@ -5333,7 +5333,6 @@ export default function AppShell() {
             <HomeNavHub
               onOpenRoute={openRouteFromHomeHub}
               activeServerName={activeServerName}
-              statusText={status.text}
             />
           ) : (
             <>
