@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { DEFAULT_NOVA_WAKE_PHRASE, normalizeNovaWakePhrase, resolveNovaWakeCommand } from "./novaVoice";
+import {
+  DEFAULT_NOVA_CONVERSATION_IDLE_MS,
+  DEFAULT_NOVA_WAKE_PHRASE,
+  MAX_NOVA_CONVERSATION_IDLE_MS,
+  MIN_NOVA_CONVERSATION_IDLE_MS,
+  normalizeNovaConversationIdleMs,
+  normalizeNovaWakePhrase,
+  resolveNovaWakeCommand,
+} from "./novaVoice";
 
 describe("normalizeNovaWakePhrase", () => {
   it("falls back to the default phrase", () => {
@@ -9,6 +17,17 @@ describe("normalizeNovaWakePhrase", () => {
 
   it("normalizes spacing and casing", () => {
     expect(normalizeNovaWakePhrase("  HeY   NoVa  ")).toBe("hey nova");
+  });
+});
+
+describe("normalizeNovaConversationIdleMs", () => {
+  it("falls back to the default timeout", () => {
+    expect(normalizeNovaConversationIdleMs("")).toBe(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
+  });
+
+  it("clamps values into the supported range", () => {
+    expect(normalizeNovaConversationIdleMs(1000)).toBe(MIN_NOVA_CONVERSATION_IDLE_MS);
+    expect(normalizeNovaConversationIdleMs(60000)).toBe(MAX_NOVA_CONVERSATION_IDLE_MS);
   });
 });
 

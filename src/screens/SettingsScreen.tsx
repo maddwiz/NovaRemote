@@ -9,11 +9,13 @@ import {
 import { styles } from "../theme/styles";
 
 type SettingsScreenProps = {
+  alwaysListeningEnabled: boolean;
   handsFreeEnabled: boolean;
   speakRepliesEnabled: boolean;
   wakePhrase: string;
   conversationIdleMs: number;
   speechOutputAvailable: boolean;
+  onSetAlwaysListeningEnabled: (value: boolean) => void;
   onSetHandsFreeEnabled: (value: boolean) => void;
   onSetSpeakRepliesEnabled: (value: boolean) => void;
   onSetWakePhrase: (value: string) => void;
@@ -21,11 +23,13 @@ type SettingsScreenProps = {
 };
 
 export function SettingsScreen({
+  alwaysListeningEnabled,
   handsFreeEnabled,
   speakRepliesEnabled,
   wakePhrase,
   conversationIdleMs,
   speechOutputAvailable,
+  onSetAlwaysListeningEnabled,
   onSetHandsFreeEnabled,
   onSetSpeakRepliesEnabled,
   onSetWakePhrase,
@@ -43,7 +47,7 @@ export function SettingsScreen({
         stats={[
           { label: "Wake", value: wakePhrase || "hey nova" },
           { label: "Idle", value: `${timeoutSeconds}s` },
-          { label: "Reply voice", value: speakRepliesEnabled ? "On" : "Off" },
+          { label: "Standby", value: alwaysListeningEnabled ? "On" : "Off" },
         ]}
       />
 
@@ -111,6 +115,15 @@ export function SettingsScreen({
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Voice Behavior</Text>
         <View style={styles.rowInlineSpace}>
+          <Text style={styles.switchLabel}>Always listen for wake phrase</Text>
+          <Switch
+            value={alwaysListeningEnabled}
+            onValueChange={onSetAlwaysListeningEnabled}
+            trackColor={{ false: "#4d5272", true: "#1586b3" }}
+            thumbColor={alwaysListeningEnabled ? "#ccf6ff" : "#d7def2"}
+          />
+        </View>
+        <View style={styles.rowInlineSpace}>
           <Text style={styles.switchLabel}>Hands-Free always-on mode</Text>
           <Switch
             value={handsFreeEnabled}
@@ -133,6 +146,11 @@ export function SettingsScreen({
           {speechOutputAvailable
             ? "Reply voice is available in this build."
             : "Reply voice needs an iOS rebuild that includes ExpoSpeech."}
+        </Text>
+        <Text style={styles.serverSubtitle}>
+          {alwaysListeningEnabled
+            ? `Wake phrase standby is on. Say "${wakePhrase || "hey nova"}" to start a conversation.`
+            : "Wake phrase standby is off. Use walkie mode or the Voice button to talk to Nova."}
         </Text>
       </View>
     </View>

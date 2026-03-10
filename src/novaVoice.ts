@@ -4,6 +4,7 @@ export const MIN_NOVA_CONVERSATION_IDLE_MS = 5 * 1000;
 export const MAX_NOVA_CONVERSATION_IDLE_MS = 30 * 1000;
 
 export type NovaVoiceSettings = {
+  alwaysListeningEnabled: boolean;
   handsFreeEnabled: boolean;
   wakePhrase: string;
   conversationIdleMs: number;

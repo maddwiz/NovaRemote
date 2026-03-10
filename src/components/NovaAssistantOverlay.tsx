@@ -14,6 +14,7 @@ type NovaAssistantOverlayProps = {
   canSend: boolean;
   voiceRecording: boolean;
   voiceBusy: boolean;
+  listeningActive: boolean;
   handsFreeEnabled: boolean;
   voiceModeEnabled: boolean;
   wakePhrase: string;
@@ -69,6 +70,7 @@ export function NovaAssistantOverlay({
   canSend,
   voiceRecording,
   voiceBusy,
+  listeningActive,
   handsFreeEnabled,
   voiceModeEnabled,
   wakePhrase,
@@ -377,7 +379,6 @@ export function NovaAssistantOverlay({
           style={[
             styles.novaFloatingButton,
             open ? styles.novaFloatingButtonActive : null,
-            voiceRecording ? styles.novaFloatingButtonRecording : null,
             voiceBusy ? styles.buttonDisabled : null,
           ]}
           disabled={voiceBusy}
@@ -401,6 +402,13 @@ export function NovaAssistantOverlay({
             setOpen(true);
           }}
         >
+          <View
+            pointerEvents="none"
+            style={[
+              styles.novaFloatingButtonIndicator,
+              listeningActive ? styles.novaFloatingButtonIndicatorActive : null,
+            ]}
+          />
           <View style={styles.novaFloatingButtonImageWrap}>
             <Image source={BRAND_LOGO} style={styles.novaFloatingButtonImage} resizeMode="contain" />
           </View>

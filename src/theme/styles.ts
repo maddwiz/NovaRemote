@@ -2223,6 +2223,25 @@ export const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 12,
   },
+  novaFloatingButtonIndicator: {
+    position: "absolute",
+    right: -2,
+    top: 8,
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: 1,
+    borderColor: "rgba(99, 114, 140, 0.58)",
+    backgroundColor: "rgba(27, 34, 47, 0.96)",
+  },
+  novaFloatingButtonIndicatorActive: {
+    borderColor: "rgba(115, 255, 181, 0.9)",
+    backgroundColor: "#2bdf7a",
+    shadowColor: "#2bdf7a",
+    shadowOpacity: 0.45,
+    shadowRadius: 8,
+    shadowOffset: { width: 0, height: 0 },
+  },
   novaFloatingButtonImageWrap: {
     width: 40,
     height: 40,
@@ -2238,10 +2257,6 @@ export const styles = StyleSheet.create({
   },
   novaFloatingButtonActive: {
     borderColor: "rgba(255, 101, 200, 0.82)",
-  },
-  novaFloatingButtonRecording: {
-    backgroundColor: "rgba(72, 18, 52, 0.96)",
-    borderColor: "rgba(255, 101, 200, 0.88)",
   },
   novaOverlayPanel: {
     position: "absolute",
