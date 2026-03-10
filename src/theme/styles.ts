@@ -1451,9 +1451,6 @@ export const styles = StyleSheet.create({
     gap: 16,
     paddingVertical: 8,
   },
-  homeHubHeaderSimple: {
-    gap: 4,
-  },
   homeHubHeaderRow: {
     flexDirection: "row",
     alignItems: "flex-start",
@@ -1462,13 +1459,6 @@ export const styles = StyleSheet.create({
   },
   homeHubHeaderRowCompact: {
     flexDirection: "column",
-  },
-  homeHubEyebrow: {
-    color: "#9aaee4",
-    fontSize: 11,
-    letterSpacing: 1.8,
-    textTransform: "uppercase",
-    fontWeight: "700",
   },
   homeHubStatus: {
     color: "#eef5ff",

@@ -147,10 +147,6 @@ export function HomeNavHub({ onOpenRoute, activeServerName }: HomeNavHubProps) {
 
   return (
     <View style={styles.homeHubRoot}>
-      <View style={styles.homeHubHeaderSimple}>
-        <Text style={styles.homeHubEyebrow}>Command Surface</Text>
-      </View>
-
       <View style={styles.homeHubSectionHeader}>
         <Text style={styles.homeHubSectionTitle}>Launch Deck</Text>
         <Text style={styles.homeHubSectionMeta}>Core surfaces</Text>
