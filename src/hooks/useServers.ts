@@ -23,6 +23,38 @@ type UseServersArgs = {
   enabled?: boolean;
 };
 
+function readEnvValue(name: string): string {
+  if (typeof process === "undefined") {
+    return "";
+  }
+  const raw = process.env[name];
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
+function buildDevSeedServer(): ServerProfile | null {
+  const baseUrl = normalizeBaseUrl(readEnvValue("EXPO_PUBLIC_DEV_SERVER_URL"));
+  const token = readEnvValue("EXPO_PUBLIC_DEV_SERVER_TOKEN");
+  if (!baseUrl || !token) {
+    return null;
+  }
+
+  return {
+    id: "dev-seeded-server",
+    name: readEnvValue("EXPO_PUBLIC_DEV_SERVER_NAME") || DEFAULT_SERVER_NAME,
+    baseUrl,
+    token,
+    defaultCwd: readEnvValue("EXPO_PUBLIC_DEV_SERVER_CWD") || DEFAULT_CWD,
+    source: "local",
+    terminalBackend: DEFAULT_TERMINAL_BACKEND,
+    sshHost: readEnvValue("EXPO_PUBLIC_DEV_SERVER_SSH_HOST") || undefined,
+    sshUser: readEnvValue("EXPO_PUBLIC_DEV_SERVER_SSH_USER") || undefined,
+    sshPort: sanitizeSshPort(readEnvValue("EXPO_PUBLIC_DEV_SERVER_SSH_PORT")),
+    portainerUrl: readEnvValue("EXPO_PUBLIC_DEV_SERVER_PORTAINER_URL") || undefined,
+    proxmoxUrl: readEnvValue("EXPO_PUBLIC_DEV_SERVER_PROXMOX_URL") || undefined,
+    grafanaUrl: readEnvValue("EXPO_PUBLIC_DEV_SERVER_GRAFANA_URL") || undefined,
+  };
+}
+
 function sanitizeSshPort(value: string | number | undefined): number | undefined {
   if (typeof value === "number") {
     if (!Number.isFinite(value)) {
@@ -447,6 +479,17 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
               : [];
           } catch {
             parsedServers = [];
+          }
+        }
+
+        if (__DEV__ && parsedServers.length === 0) {
+          const seededServer = buildDevSeedServer();
+          if (seededServer) {
+            parsedServers = [seededServer];
+            await Promise.all([
+              SecureStore.setItemAsync(STORAGE_SERVERS, JSON.stringify(parsedServers)),
+              SecureStore.setItemAsync(STORAGE_ACTIVE_SERVER_ID, seededServer.id),
+            ]);
           }
         }
 

@@ -11,6 +11,14 @@ const DEV_LOCAL_OLLAMA_PROFILE_ID = "dev-local-ollama";
 
 let cryptoJsCache: any | null = null;
 
+function readEnvValue(name: string): string {
+  if (typeof process === "undefined") {
+    return "";
+  }
+  const raw = process.env[name];
+  return typeof raw === "string" ? raw.trim() : "";
+}
+
 function getCryptoJs() {
   if (!cryptoJsCache) {
     // Lazy require keeps crypto-js out of the hot startup path.
@@ -220,11 +228,11 @@ function normalizeImportedProfile(profile: LlmProfile): LlmProfile {
 function buildDevLocalOllamaProfile(): LlmProfile {
   return {
     id: DEV_LOCAL_OLLAMA_PROFILE_ID,
-    name: "Nova Local (Ollama)",
+    name: readEnvValue("EXPO_PUBLIC_DEV_OLLAMA_NAME") || "Nova Local (Ollama)",
     kind: "ollama",
-    baseUrl: "http://localhost:11434",
+    baseUrl: readEnvValue("EXPO_PUBLIC_DEV_OLLAMA_URL") || "http://localhost:11434",
     apiKey: "",
-    model: "llama3.2:3b",
+    model: readEnvValue("EXPO_PUBLIC_DEV_OLLAMA_MODEL") || "llama3.2:3b",
     systemPrompt:
       "You are Nova running on a local Ollama model for development testing. Keep responses concise and action-oriented.",
   };
