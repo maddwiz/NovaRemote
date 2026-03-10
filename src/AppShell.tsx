@@ -6232,6 +6232,11 @@ export default function AppShell() {
           onSend={() => {
             void novaAssistant.submitDraft();
           }}
+          onClose={() => {
+            if (novaConversationModeEnabled && !novaHandsFreeEnabled) {
+              endNovaConversationSession("manual");
+            }
+          }}
           onClearConversation={novaAssistant.clearConversation}
           onOpenProviders={() => {
             setHomeHubVisible(false);

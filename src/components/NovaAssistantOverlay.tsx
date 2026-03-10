@@ -21,6 +21,7 @@ type NovaAssistantOverlayProps = {
   openRequestToken: number;
   onSetDraft: (value: string) => void;
   onSend: () => void;
+  onClose: () => void;
   onClearConversation: () => void;
   onOpenProviders: () => void;
   onSetHandsFreeEnabled: (value: boolean) => void;
@@ -77,6 +78,7 @@ export function NovaAssistantOverlay({
   openRequestToken,
   onSetDraft,
   onSend,
+  onClose,
   onClearConversation,
   onOpenProviders,
   onSetHandsFreeEnabled,
@@ -250,7 +252,10 @@ export function NovaAssistantOverlay({
                   accessibilityRole="button"
                   accessibilityLabel="Close Nova assistant"
                   style={styles.novaOverlayHeaderButton}
-                  onPress={() => setOpen(false)}
+                  onPress={() => {
+                    setOpen(false);
+                    onClose();
+                  }}
                 >
                   <Text style={styles.novaOverlayHeaderButtonText}>Close</Text>
                 </Pressable>
