@@ -192,7 +192,6 @@ export const styles = StyleSheet.create({
   },
   statusPill: {
     alignSelf: "flex-start",
-    maxWidth: "100%",
     borderWidth: 1,
     borderColor: "#24d8ff",
     backgroundColor: "rgba(36, 216, 255, 0.12)",
@@ -206,10 +205,8 @@ export const styles = StyleSheet.create({
   },
   statusText: {
     color: "#deffff",
-    fontSize: 11,
-    lineHeight: 14,
+    fontSize: 12,
     fontWeight: "700",
-    flexShrink: 1,
   },
   tabRow: {
     flexDirection: "row",
@@ -1446,7 +1443,7 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
   },
   shellHeaderStatusWrap: {
-    maxWidth: "27%",
+    maxWidth: "35%",
     alignItems: "flex-end",
   },
   homeHubRoot: {
