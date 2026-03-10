@@ -372,7 +372,7 @@ export function NovaAssistantOverlay({
           accessibilityRole="button"
           accessibilityLabel={voiceRecording ? "Stop Nova voice input" : "Open Nova assistant"}
           accessibilityHint="Tap to open Nova. Press and hold to talk."
-          delayLongPress={240}
+          delayLongPress={420}
           hitSlop={10}
           style={[
             styles.novaFloatingButton,
@@ -391,13 +391,14 @@ export function NovaAssistantOverlay({
               return;
             }
             onVoiceHoldEnd();
+            skipTapAfterHoldRef.current = false;
           }}
           onPress={() => {
             if (skipTapAfterHoldRef.current) {
               skipTapAfterHoldRef.current = false;
               return;
             }
-            setOpen((current) => !current);
+            setOpen(true);
           }}
         >
           <View style={styles.novaFloatingButtonImageWrap}>

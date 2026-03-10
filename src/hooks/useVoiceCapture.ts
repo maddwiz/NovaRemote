@@ -8,7 +8,7 @@ import {
   type AudioRecorder,
   type RecordingOptions,
 } from "expo-audio";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Platform } from "react-native";
 import type {
   ExpoSpeechRecognitionErrorEvent,
@@ -47,12 +47,22 @@ type SpeechRecognitionModule = {
   isRecognitionAvailable: () => boolean;
   getStateAsync: () => Promise<"inactive" | "starting" | "recognizing" | "stopping">;
   requestPermissionsAsync: () => Promise<{ granted: boolean }>;
+  requestMicrophonePermissionsAsync?: () => Promise<{ granted: boolean }>;
+  requestSpeechRecognizerPermissionsAsync?: () => Promise<{ granted: boolean }>;
   addListener: (
     eventName: "result" | "error" | "end",
     listener: (event?: any) => void
   ) => { remove: () => void };
   start: (options: Record<string, unknown>) => void;
+  stop?: () => void;
   abort: () => void;
+};
+
+type VoiceLiveRecognitionOptions = {
+  onTranscript: (transcript: string) => void | Promise<void>;
+  onNoSpeech?: () => void | Promise<void>;
+  onError?: (message: string) => void | Promise<void>;
+  contextualStrings?: string[];
 };
 
 let speechRecognitionModuleOverride: SpeechRecognitionModule | null = null;
@@ -227,7 +237,7 @@ async function transcribeWithNativeSpeech(uri: string): Promise<string> {
         interimResults: true,
         maxAlternatives: 1,
         continuous: false,
-        requiresOnDeviceRecognition: false,
+        requiresOnDeviceRecognition: Platform.OS === "ios",
         addsPunctuation: true,
         audioSource: {
           uri,
@@ -258,10 +268,27 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
 
   const [recording, setRecording] = useState<boolean>(false);
   const [busy, setBusy] = useState<boolean>(false);
+  const [liveRecognitionActive, setLiveRecognitionActive] = useState<boolean>(false);
   const [lastTranscript, setLastTranscript] = useState<string>("");
   const [lastError, setLastError] = useState<string | null>(null);
   const [meteringDb, setMeteringDb] = useState<number | null>(null);
   const [permissionStatus, setPermissionStatus] = useState<VoicePermissionStatus>(null);
+  const liveRecognitionRunRef = useRef<number>(0);
+  const liveRecognitionSubscriptionsRef = useRef<Array<{ remove: () => void }>>([]);
+
+  const clearLiveRecognitionSubscriptions = useCallback(() => {
+    if (!liveRecognitionSubscriptionsRef.current.length) {
+      return;
+    }
+    for (const subscription of liveRecognitionSubscriptionsRef.current) {
+      try {
+        subscription.remove();
+      } catch {
+        // best effort
+      }
+    }
+    liveRecognitionSubscriptionsRef.current = [];
+  }, []);
 
   const resetAudioMode = useCallback(async () => {
     try {
@@ -283,6 +310,24 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
     setPermissionStatus(status);
     devVoiceLog("requestCapturePermission", { status, granted: next.granted, canAskAgain: next.canAskAgain });
     return next.granted;
+  }, []);
+
+  const requestLiveRecognitionPermission = useCallback(async () => {
+    const speechRecognitionModule = getSpeechRecognitionModule();
+    if (Platform.OS === "ios") {
+      const microphonePermission = speechRecognitionModule.requestMicrophonePermissionsAsync
+        ? await speechRecognitionModule.requestMicrophonePermissionsAsync()
+        : await speechRecognitionModule.requestPermissionsAsync();
+      if (!microphonePermission.granted) {
+        throw new Error("Microphone permission is required for Nova voice.");
+      }
+      return true;
+    }
+    const permission = await speechRecognitionModule.requestPermissionsAsync();
+    if (!permission.granted) {
+      throw new Error("Speech recognition permission is required for Nova voice.");
+    }
+    return true;
   }, []);
 
   useEffect(() => {
@@ -307,6 +352,148 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       mounted = false;
     };
   }, []);
+
+  const stopLiveRecognition = useCallback(
+    async (mode: "stop" | "abort" = "stop") => {
+      try {
+        const speechRecognitionModule = getSpeechRecognitionModule();
+        if (mode === "abort") {
+          liveRecognitionRunRef.current += 1;
+          clearLiveRecognitionSubscriptions();
+          setLiveRecognitionActive(false);
+          speechRecognitionModule.abort();
+          return;
+        }
+        if (speechRecognitionModule.stop) {
+          speechRecognitionModule.stop();
+        } else {
+          liveRecognitionRunRef.current += 1;
+          clearLiveRecognitionSubscriptions();
+          setLiveRecognitionActive(false);
+          speechRecognitionModule.abort();
+        }
+      } catch {
+        // best effort
+      }
+    },
+    [clearLiveRecognitionSubscriptions]
+  );
+
+  const startLiveRecognition = useCallback(
+    async ({ onTranscript, onNoSpeech, onError, contextualStrings }: VoiceLiveRecognitionOptions) => {
+      const speechRecognitionModule = getSpeechRecognitionModule();
+      if (!speechRecognitionModule.isRecognitionAvailable()) {
+        throw new Error("Native speech recognition is unavailable on this device.");
+      }
+
+      await requestLiveRecognitionPermission();
+
+      clearLiveRecognitionSubscriptions();
+      try {
+        const state = await speechRecognitionModule.getStateAsync();
+        if (state !== "inactive") {
+          speechRecognitionModule.abort();
+        }
+      } catch {
+        // best effort
+      }
+
+      setLastError(null);
+      setLastTranscript("");
+      setBusy(false);
+      setLiveRecognitionActive(true);
+
+      const runId = liveRecognitionRunRef.current + 1;
+      liveRecognitionRunRef.current = runId;
+      let finished = false;
+      let latestTranscript = "";
+
+      const settle = (kind: "transcript" | "nospeech" | "error", value?: string) => {
+        if (finished || liveRecognitionRunRef.current !== runId) {
+          return;
+        }
+        finished = true;
+        setLiveRecognitionActive(false);
+        clearLiveRecognitionSubscriptions();
+
+        if (kind === "transcript") {
+          const transcript = String(value || "").trim();
+          if (!transcript) {
+            void Promise.resolve(onNoSpeech?.()).catch(() => undefined);
+            return;
+          }
+          setLastTranscript(transcript);
+          void Promise.resolve(onTranscript(transcript)).catch((error) => {
+            const message = error instanceof Error ? error.message : String(error);
+            setLastError(message);
+            void Promise.resolve(onError?.(message)).catch(() => undefined);
+          });
+          return;
+        }
+
+        if (kind === "nospeech") {
+          void Promise.resolve(onNoSpeech?.()).catch(() => undefined);
+          return;
+        }
+
+        const message = String(value || "Speech recognition failed.");
+        setLastError(message);
+        void Promise.resolve(onError?.(message)).catch(() => undefined);
+      };
+
+      liveRecognitionSubscriptionsRef.current = [
+        speechRecognitionModule.addListener("result", (event: ExpoSpeechRecognitionResultEvent) => {
+          const transcript = readSpeechRecognitionTranscript(event);
+          if (!transcript) {
+            return;
+          }
+          latestTranscript = transcript.trim();
+          setLastTranscript(latestTranscript);
+          devVoiceLog("liveRecognition:result", {
+            isFinal: event.isFinal,
+            transcriptPreview: latestTranscript.slice(0, 160),
+          });
+          if (event.isFinal) {
+            settle("transcript", latestTranscript);
+          }
+        }),
+        speechRecognitionModule.addListener("error", (event: ExpoSpeechRecognitionErrorEvent) => {
+          devVoiceLog("liveRecognition:error", {
+            code: event.error,
+            message: event.message,
+          });
+          settle("error", event.message || `Speech recognition failed: ${event.error}`);
+        }),
+        speechRecognitionModule.addListener("end", () => {
+          devVoiceLog("liveRecognition:end", {
+            transcriptPreview: latestTranscript.slice(0, 160),
+          });
+          if (latestTranscript.trim()) {
+            settle("transcript", latestTranscript.trim());
+            return;
+          }
+          settle("nospeech");
+        }),
+      ];
+
+      devVoiceLog("liveRecognition:start", {
+        platform: Platform.OS,
+        contextualStrings: contextualStrings?.slice(0, 8) || [],
+      });
+      speechRecognitionModule.start({
+        lang: "en-US",
+        interimResults: true,
+        maxAlternatives: 1,
+        continuous: false,
+        requiresOnDeviceRecognition: Platform.OS === "ios",
+        addsPunctuation: true,
+        iosTaskHint: "confirmation",
+        iosVoiceProcessingEnabled: true,
+        contextualStrings: contextualStrings?.length ? contextualStrings : undefined,
+      });
+    },
+    [clearLiveRecognitionSubscriptions, requestLiveRecognitionPermission]
+  );
 
   useEffect(() => {
     if (!recording) {
@@ -528,22 +715,28 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
 
   useEffect(() => {
     return () => {
+      liveRecognitionRunRef.current += 1;
+      clearLiveRecognitionSubscriptions();
       void stopAndCleanupRecording(recorder).finally(() => {
         void resetAudioMode();
       });
     };
-  }, [recorder, resetAudioMode]);
+  }, [clearLiveRecognitionSubscriptions, recorder, resetAudioMode]);
 
   return {
     recording,
     busy,
+    liveRecognitionActive,
     lastTranscript,
     lastError,
     meteringDb,
     permissionStatus,
     requestCapturePermission,
+    requestLiveRecognitionPermission,
     startCapture,
+    startLiveRecognition,
     stopCapture,
+    stopLiveRecognition,
     stopAndTranscribe,
     setLastTranscript,
   };

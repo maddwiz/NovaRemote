@@ -18,6 +18,12 @@ const speechModuleMock = vi.hoisted(() => ({
     canAskAgain: true,
     expires: "never",
   })),
+  requestMicrophonePermissionsAsync: vi.fn(async () => ({
+    granted: true,
+    status: "granted",
+    canAskAgain: true,
+    expires: "never",
+  })),
   addListener: vi.fn((eventName: SpeechEventName, listener: SpeechListener) => {
     speechListeners.get(eventName)?.add(listener);
     return {
@@ -27,6 +33,7 @@ const speechModuleMock = vi.hoisted(() => ({
     };
   }),
   start: vi.fn(),
+  stop: vi.fn(),
   abort: vi.fn(),
 }));
 
@@ -126,6 +133,7 @@ describe("voiceCaptureTestUtils", () => {
     expect(speechModuleMock.start).toHaveBeenCalledWith(
       expect.objectContaining({
         lang: "en-US",
+        requiresOnDeviceRecognition: true,
         audioSource: {
           uri: "file:///tmp/voice-input.m4a",
         },
