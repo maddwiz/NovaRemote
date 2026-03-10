@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
 import { Image, PanResponder, Pressable, ScrollView, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
 
 import { BRAND_LOGO } from "../branding";
@@ -207,6 +208,14 @@ export function NovaAssistantOverlay({
 
   const visibleMessages = messages.slice(-18);
 
+  const fireSelectionHaptic = () => {
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
+
+  const fireMediumHaptic = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+  };
+
   return (
     <View pointerEvents="box-none" style={styles.novaOverlayRoot}>
       {open ? (
@@ -225,7 +234,10 @@ export function NovaAssistantOverlay({
                   <Switch
                     accessibilityLabel={handsFreeEnabled ? "Disable Nova hands-free voice" : "Enable Nova hands-free voice"}
                     value={handsFreeEnabled}
-                    onValueChange={onSetHandsFreeEnabled}
+                    onValueChange={(value) => {
+                      fireSelectionHaptic();
+                      onSetHandsFreeEnabled(value);
+                    }}
                     thumbColor={handsFreeEnabled ? "#dff8ff" : "#d7dcec"}
                     trackColor={{
                       false: "rgba(58, 73, 109, 0.9)",
@@ -238,6 +250,7 @@ export function NovaAssistantOverlay({
                   accessibilityLabel={fullscreen ? "Exit Nova fullscreen" : "Open Nova fullscreen"}
                   style={styles.novaOverlayHeaderButton}
                   onPress={() => {
+                    fireSelectionHaptic();
                     if (fullscreen) {
                       setFullscreen(false);
                       return;
@@ -253,6 +266,7 @@ export function NovaAssistantOverlay({
                   accessibilityLabel="Close Nova assistant"
                   style={styles.novaOverlayHeaderButton}
                   onPress={() => {
+                    fireSelectionHaptic();
                     setOpen(false);
                     onClose();
                   }}
@@ -279,7 +293,10 @@ export function NovaAssistantOverlay({
                   accessibilityRole="button"
                   accessibilityLabel="Open AI provider settings"
                   style={styles.novaInlineButton}
-                  onPress={onOpenProviders}
+                  onPress={() => {
+                    fireSelectionHaptic();
+                    onOpenProviders();
+                  }}
                 >
                   <Text style={styles.novaInlineButtonText}>Providers</Text>
                 </Pressable>
@@ -288,7 +305,10 @@ export function NovaAssistantOverlay({
                   accessibilityRole="button"
                   accessibilityLabel="Clear Nova conversation"
                   style={styles.novaInlineButton}
-                  onPress={onClearConversation}
+                  onPress={() => {
+                    fireSelectionHaptic();
+                    onClearConversation();
+                  }}
                 >
                   <Text style={styles.novaInlineButtonText}>Clear</Text>
                 </Pressable>
@@ -337,7 +357,10 @@ export function NovaAssistantOverlay({
                     voiceBusy ? styles.buttonDisabled : null,
                   ]}
                   disabled={voiceBusy}
-                  onPress={onToggleVoiceMode}
+                  onPress={() => {
+                    fireSelectionHaptic();
+                    onToggleVoiceMode();
+                  }}
                 >
                   <Text style={styles.novaComposerButtonText}>{voiceModeEnabled ? "Voice On" : "Voice"}</Text>
                 </Pressable>
@@ -350,7 +373,10 @@ export function NovaAssistantOverlay({
                     busy || !draft.trim() || !canSend ? styles.buttonDisabled : null,
                   ]}
                   disabled={busy || !draft.trim() || !canSend}
-                  onPress={onSend}
+                  onPress={() => {
+                    fireMediumHaptic();
+                    onSend();
+                  }}
                 >
                   <Text style={styles.novaComposerButtonText}>{busy ? "Running" : "Send"}</Text>
                 </Pressable>
@@ -386,6 +412,7 @@ export function NovaAssistantOverlay({
           ]}
           disabled={voiceBusy}
           onLongPress={() => {
+            fireMediumHaptic();
             skipTapAfterHoldRef.current = true;
             setOpen(true);
             onVoiceHoldStart();
@@ -402,6 +429,7 @@ export function NovaAssistantOverlay({
               skipTapAfterHoldRef.current = false;
               return;
             }
+            fireSelectionHaptic();
             setOpen(true);
           }}
         >

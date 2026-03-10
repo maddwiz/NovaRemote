@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
 import {
   Animated,
   Modal,
@@ -96,6 +97,14 @@ export function PageSlideMenu({
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const translateX = useRef(new Animated.Value(-360)).current;
 
+  const fireSelectionHaptic = () => {
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
+
+  const fireMediumHaptic = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+  };
+
   useEffect(() => {
     if (visible) {
       setMounted(true);
@@ -141,6 +150,7 @@ export function PageSlideMenu({
               accessibilityLabel={`Open ${entry.label}`}
               style={styles.pageMenuActionButton}
               onPress={() => {
+                fireSelectionHaptic();
                 onClose();
                 onNavigate(entry.key);
               }}
@@ -165,6 +175,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Create a new shell session"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onCreateShell();
                 }}
@@ -176,6 +187,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Create a new AI session"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onCreateAi();
                 }}
@@ -196,6 +208,7 @@ export function PageSlideMenu({
                 accessibilityLabel={poolLifecyclePaused ? "Resume connection pool" : "Pause connection pool"}
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onTogglePoolLifecycle();
                 }}
@@ -207,6 +220,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Refresh all servers"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onRefreshAll();
                 }}
@@ -218,6 +232,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Reconnect all servers"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onReconnectAll();
                 }}
@@ -242,7 +257,10 @@ export function PageSlideMenu({
               <Text style={styles.pageMenuSwitchLabel}>{tokenMasked ? "Token hidden" : "Token visible"}</Text>
               <Switch
                 value={tokenMasked}
-                onValueChange={() => onToggleTokenMask()}
+                onValueChange={() => {
+                  fireSelectionHaptic();
+                  onToggleTokenMask();
+                }}
                 trackColor={{ false: "#4d5272", true: "#1586b3" }}
                 thumbColor={tokenMasked ? "#ccf6ff" : "#d7def2"}
               />
@@ -265,7 +283,10 @@ export function PageSlideMenu({
                 <Text style={styles.pageMenuSwitchLabel}>{includeHidden ? "Showing hidden files" : "Hidden files off"}</Text>
                 <Switch
                   value={includeHidden}
-                  onValueChange={onToggleIncludeHidden}
+                  onValueChange={(next) => {
+                    fireSelectionHaptic();
+                    onToggleIncludeHidden(next);
+                  }}
                   trackColor={{ false: "#4d5272", true: "#1586b3" }}
                   thumbColor={includeHidden ? "#ccf6ff" : "#d7def2"}
                 />
@@ -278,6 +299,7 @@ export function PageSlideMenu({
                       accessibilityLabel="Decrease tail lines"
                       style={styles.pageMenuStepperButton}
                       onPress={() => {
+                        fireSelectionHaptic();
                         const parsed = Math.max(10, Number.parseInt(tailLines, 10) || 200);
                         onSetTailLines(String(Math.max(10, parsed - 50)));
                       }}
@@ -289,6 +311,7 @@ export function PageSlideMenu({
                       accessibilityLabel="Increase tail lines"
                       style={styles.pageMenuStepperButton}
                       onPress={() => {
+                        fireSelectionHaptic();
                         const parsed = Math.max(10, Number.parseInt(tailLines, 10) || 200);
                         onSetTailLines(String(Math.min(1000, parsed + 50)));
                       }}
@@ -354,7 +377,10 @@ export function PageSlideMenu({
                   accessibilityRole="button"
                   accessibilityLabel="Back to menu sections"
                   style={styles.pageMenuBackButton}
-                  onPress={() => setActiveSectionId(null)}
+                  onPress={() => {
+                    fireSelectionHaptic();
+                    setActiveSectionId(null);
+                  }}
                 >
                   <Text style={styles.pageMenuBackText}>Back</Text>
                 </Pressable>
@@ -370,7 +396,10 @@ export function PageSlideMenu({
                     accessibilityRole="button"
                     accessibilityLabel={`Open ${section.title}`}
                     style={styles.pageMenuSectionCard}
-                    onPress={() => setActiveSectionId(section.id)}
+                    onPress={() => {
+                      fireSelectionHaptic();
+                      setActiveSectionId(section.id);
+                    }}
                   >
                     <Text style={styles.pageMenuSectionCardTitle}>{section.title}</Text>
                     <Text style={styles.pageMenuSectionCardDescription}>{section.description}</Text>
@@ -384,6 +413,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Open settings"
                 style={styles.pageMenuUtilityButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onOpenSettings();
                 }}
@@ -395,6 +425,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Log off and return to the lock screen"
                 style={styles.pageMenuUtilityButton}
                 onPress={() => {
+                  fireMediumHaptic();
                   onClose();
                   onLogOff();
                 }}
@@ -409,6 +440,7 @@ export function PageSlideMenu({
               accessibilityLabel="Return to home hub"
               style={[styles.pageMenuHomeButton, styles.pageMenuHomeButtonFooter]}
               onPress={() => {
+                fireSelectionHaptic();
                 onClose();
                 onGoHome();
               }}

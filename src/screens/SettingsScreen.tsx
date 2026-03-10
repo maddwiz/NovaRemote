@@ -1,4 +1,5 @@
 import React from "react";
+import * as Haptics from "expo-haptics";
 import { Pressable, Switch, Text, TextInput, View } from "react-native";
 
 import { PageHeroCard } from "../components/PageHeroCard";
@@ -38,6 +39,14 @@ export function SettingsScreen({
   onSetConversationIdleMs,
 }: SettingsScreenProps) {
   const timeoutSeconds = Math.round(conversationIdleMs / 1000);
+
+  const fireSelectionHaptic = () => {
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
+
+  const fireMediumHaptic = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+  };
 
   return (
     <View style={styles.serverListWrap}>
@@ -120,7 +129,10 @@ export function SettingsScreen({
           <Text style={styles.switchLabel}>Always listen for wake phrase</Text>
           <Switch
             value={alwaysListeningEnabled}
-            onValueChange={onSetAlwaysListeningEnabled}
+            onValueChange={(value) => {
+              fireSelectionHaptic();
+              onSetAlwaysListeningEnabled(value);
+            }}
             trackColor={{ false: "#4d5272", true: "#1586b3" }}
             thumbColor={alwaysListeningEnabled ? "#ccf6ff" : "#d7def2"}
           />
@@ -129,7 +141,10 @@ export function SettingsScreen({
           <Text style={styles.switchLabel}>Hands-Free always-on mode</Text>
           <Switch
             value={handsFreeEnabled}
-            onValueChange={onSetHandsFreeEnabled}
+            onValueChange={(value) => {
+              fireSelectionHaptic();
+              onSetHandsFreeEnabled(value);
+            }}
             trackColor={{ false: "#4d5272", true: "#1586b3" }}
             thumbColor={handsFreeEnabled ? "#ccf6ff" : "#d7def2"}
           />
@@ -138,7 +153,10 @@ export function SettingsScreen({
           <Text style={styles.switchLabel}>Speak Nova replies</Text>
           <Switch
             value={speakRepliesEnabled}
-            onValueChange={onSetSpeakRepliesEnabled}
+            onValueChange={(value) => {
+              fireSelectionHaptic();
+              onSetSpeakRepliesEnabled(value);
+            }}
             disabled={!speechOutputAvailable}
             trackColor={{ false: "#4d5272", true: "#1586b3" }}
             thumbColor={speakRepliesEnabled ? "#ccf6ff" : "#d7def2"}
@@ -162,7 +180,10 @@ export function SettingsScreen({
             !speechOutputAvailable ? styles.buttonDisabled : null,
           ]}
           disabled={!speechOutputAvailable}
-          onPress={onTestSpeakReplies}
+          onPress={() => {
+            fireMediumHaptic();
+            onTestSpeakReplies();
+          }}
         >
           <Text style={styles.pageMenuActionText}>Test Nova Voice</Text>
         </Pressable>

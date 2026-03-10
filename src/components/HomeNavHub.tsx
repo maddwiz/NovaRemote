@@ -1,4 +1,5 @@
 import React from "react";
+import * as Haptics from "expo-haptics";
 import { Image, Pressable, Text, View, useWindowDimensions } from "react-native";
 import Svg, { Circle, Ellipse, Line, Path, Rect } from "react-native-svg";
 
@@ -145,6 +146,10 @@ export function HomeNavHub({ onOpenRoute, activeServerName }: HomeNavHubProps) {
   const { width } = useWindowDimensions();
   const compact = width < 760;
 
+  const triggerSelection = () => {
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
+
   return (
     <View style={styles.homeHubRoot}>
       <View style={styles.homeHubSectionHeader}>
@@ -163,7 +168,10 @@ export function HomeNavHub({ onOpenRoute, activeServerName }: HomeNavHubProps) {
               compact ? styles.homeHubLaunchCardCompact : null,
               toneStyle(item.tone),
             ]}
-            onPress={() => onOpenRoute(item.key)}
+            onPress={() => {
+              triggerSelection();
+              onOpenRoute(item.key);
+            }}
           >
             <View style={styles.homeHubLaunchAccent}>
               <View style={styles.homeHubLaunchAccentGlow} />
