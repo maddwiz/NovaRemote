@@ -1,5 +1,5 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, Image, Text, View } from "react-native";
+import { Animated, Easing, Image, View } from "react-native";
 
 import { BRAND_LOGO } from "../branding";
 import { styles } from "../theme/styles";
@@ -10,44 +10,50 @@ type LaunchIntroProps = {
 };
 
 export function LaunchIntro({ visible, onDone }: LaunchIntroProps) {
-  const opacity = useRef(new Animated.Value(0)).current;
-  const scale = useRef(new Animated.Value(0.94)).current;
+  const opacity = useRef(new Animated.Value(1)).current;
+  const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
     if (!visible) {
       return;
     }
 
-    opacity.setValue(0);
-    scale.setValue(0.94);
+    opacity.setValue(1);
+    scale.setValue(1);
 
-    const intro = Animated.sequence([
-      Animated.parallel([
-        Animated.timing(opacity, {
-          toValue: 1,
-          duration: 700,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scale, {
-          toValue: 1.02,
-          duration: 700,
-          useNativeDriver: true,
-        }),
-      ]),
-      Animated.delay(360),
-      Animated.parallel([
-        Animated.timing(opacity, {
-          toValue: 0,
-          duration: 650,
-          useNativeDriver: true,
-        }),
-        Animated.timing(scale, {
-          toValue: 1.08,
-          duration: 650,
-          useNativeDriver: true,
-        }),
-      ]),
-    ]);
+    const pulse = () =>
+      Animated.sequence([
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1.08,
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 0.88,
+            duration: 300,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+        Animated.parallel([
+          Animated.timing(scale, {
+            toValue: 1,
+            duration: 260,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(opacity, {
+            toValue: 1,
+            duration: 260,
+            easing: Easing.inOut(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ]),
+      ]);
+
+    const intro = Animated.sequence([pulse(), Animated.delay(120), pulse(), Animated.delay(120), pulse()]);
 
     intro.start(({ finished }) => {
       if (finished) {
@@ -77,8 +83,6 @@ export function LaunchIntro({ visible, onDone }: LaunchIntroProps) {
       >
         <Image source={BRAND_LOGO} style={styles.launchIntroLogo} resizeMode="contain" />
       </Animated.View>
-      <Animated.Text style={[styles.launchIntroWordmark, { opacity }]}>NovaRemote</Animated.Text>
-      <Text style={styles.launchIntroTagline}>Universal AI + Terminal Remote Control</Text>
     </View>
   );
 }
