@@ -333,15 +333,13 @@ export function NovaAssistantOverlay({
                   accessibilityLabel={voiceModeEnabled ? "Stop Nova voice mode" : "Start Nova voice mode"}
                   style={[
                     styles.novaComposerButton,
-                    voiceModeEnabled || voiceRecording ? styles.novaComposerButtonVoiceActive : null,
+                    voiceModeEnabled ? styles.novaComposerButtonVoiceActive : null,
                     voiceBusy ? styles.buttonDisabled : null,
                   ]}
                   disabled={voiceBusy}
                   onPress={onToggleVoiceMode}
                 >
-                  <Text style={styles.novaComposerButtonText}>
-                    {voiceRecording ? "Listening" : voiceModeEnabled ? "Voice On" : "Voice"}
-                  </Text>
+                  <Text style={styles.novaComposerButtonText}>{voiceModeEnabled ? "Voice On" : "Voice"}</Text>
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
