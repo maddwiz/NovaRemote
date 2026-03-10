@@ -2282,6 +2282,23 @@ export const styles = StyleSheet.create({
     flexWrap: "wrap",
     justifyContent: "flex-end",
   },
+  novaOverlayToggleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: "rgba(101, 127, 188, 0.5)",
+    backgroundColor: "rgba(22, 31, 58, 0.78)",
+    paddingLeft: 10,
+    paddingRight: 6,
+    paddingVertical: 5,
+  },
+  novaOverlayToggleLabel: {
+    color: "#d9f5ff",
+    fontSize: 12,
+    fontWeight: "700",
+  },
   novaOverlayHeaderButton: {
     borderRadius: 999,
     borderWidth: 1,
@@ -2398,6 +2415,10 @@ export const styles = StyleSheet.create({
   novaComposerButtonPrimary: {
     borderColor: "rgba(54, 206, 255, 0.76)",
     backgroundColor: "rgba(16, 110, 143, 0.48)",
+  },
+  novaComposerButtonVoiceActive: {
+    borderColor: "rgba(54, 206, 255, 0.76)",
+    backgroundColor: "rgba(24, 86, 131, 0.5)",
   },
   novaComposerButtonRecording: {
     borderColor: "rgba(255, 112, 192, 0.82)",

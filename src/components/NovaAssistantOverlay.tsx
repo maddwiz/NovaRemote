@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { Image, PanResponder, Pressable, ScrollView, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { Image, PanResponder, Pressable, ScrollView, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
 
 import { BRAND_LOGO } from "../branding";
 import { NovaAssistantMessage } from "../novaAssistant";
@@ -15,6 +15,7 @@ type NovaAssistantOverlayProps = {
   voiceRecording: boolean;
   voiceBusy: boolean;
   handsFreeEnabled: boolean;
+  voiceModeEnabled: boolean;
   wakePhrase: string;
   openRequestToken: number;
   onSetDraft: (value: string) => void;
@@ -22,6 +23,7 @@ type NovaAssistantOverlayProps = {
   onClearConversation: () => void;
   onOpenProviders: () => void;
   onSetHandsFreeEnabled: (value: boolean) => void;
+  onToggleVoiceMode: () => void;
   onVoiceHoldStart: () => void;
   onVoiceHoldEnd: () => void;
 };
@@ -68,6 +70,7 @@ export function NovaAssistantOverlay({
   voiceRecording,
   voiceBusy,
   handsFreeEnabled,
+  voiceModeEnabled,
   wakePhrase,
   openRequestToken,
   onSetDraft,
@@ -75,6 +78,7 @@ export function NovaAssistantOverlay({
   onClearConversation,
   onOpenProviders,
   onSetHandsFreeEnabled,
+  onToggleVoiceMode,
   onVoiceHoldStart,
   onVoiceHoldEnd,
 }: NovaAssistantOverlayProps) {
@@ -212,14 +216,19 @@ export function NovaAssistantOverlay({
                 </Text>
               </View>
               <View style={styles.novaOverlayHeaderActions}>
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={handsFreeEnabled ? "Disable Nova hands-free voice" : "Enable Nova hands-free voice"}
-                  style={[styles.novaOverlayHeaderButton, handsFreeEnabled ? styles.novaOverlayHeaderButtonActive : null]}
-                  onPress={() => onSetHandsFreeEnabled(!handsFreeEnabled)}
-                >
-                  <Text style={styles.novaOverlayHeaderButtonText}>{handsFreeEnabled ? "Hands-Free On" : "Hands-Free"}</Text>
-                </Pressable>
+                <View style={styles.novaOverlayToggleWrap}>
+                  <Text style={styles.novaOverlayToggleLabel}>Hands-Free</Text>
+                  <Switch
+                    accessibilityLabel={handsFreeEnabled ? "Disable Nova hands-free voice" : "Enable Nova hands-free voice"}
+                    value={handsFreeEnabled}
+                    onValueChange={onSetHandsFreeEnabled}
+                    thumbColor={handsFreeEnabled ? "#dff8ff" : "#d7dcec"}
+                    trackColor={{
+                      false: "rgba(58, 73, 109, 0.9)",
+                      true: "rgba(41, 172, 217, 0.92)",
+                    }}
+                  />
+                </View>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={fullscreen ? "Exit Nova fullscreen" : "Open Nova fullscreen"}
@@ -252,7 +261,9 @@ export function NovaAssistantOverlay({
                   ? "Listening..."
                   : voiceBusy
                     ? "Transcribing..."
-                    : handsFreeEnabled
+                    : voiceModeEnabled
+                      ? "Voice mode stays live. Speak naturally and Nova will keep listening."
+                      : handsFreeEnabled
                       ? `Say "${wakePhrase}" to wake Nova, or hold the orb to talk instantly.`
                       : "Talk naturally. Hold the Nova orb to speak, or type to control the app and remote sessions."}
               </Text>
@@ -310,6 +321,21 @@ export function NovaAssistantOverlay({
                 multiline
               />
               <View style={styles.novaOverlayComposerActions}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={voiceModeEnabled ? "Stop Nova voice mode" : "Start Nova voice mode"}
+                  style={[
+                    styles.novaComposerButton,
+                    voiceModeEnabled || voiceRecording ? styles.novaComposerButtonVoiceActive : null,
+                    voiceBusy ? styles.buttonDisabled : null,
+                  ]}
+                  disabled={voiceBusy}
+                  onPress={onToggleVoiceMode}
+                >
+                  <Text style={styles.novaComposerButtonText}>
+                    {voiceRecording ? "Listening" : voiceModeEnabled ? "Voice On" : "Voice"}
+                  </Text>
+                </Pressable>
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Send Nova prompt"
