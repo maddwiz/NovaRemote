@@ -2025,17 +2025,15 @@ export const styles = StyleSheet.create({
     flexDirection: "row",
     gap: 10,
     paddingHorizontal: 18,
-    paddingTop: 8,
+    paddingTop: 10,
     paddingBottom: 18,
     borderTopWidth: 1,
     borderColor: "rgba(255, 121, 206, 0.12)",
     backgroundColor: "rgba(16, 12, 27, 0.72)",
   },
-  pageMenuSecondaryActions: {
-    paddingHorizontal: 18,
-    paddingTop: 6,
-    paddingBottom: 2,
-    backgroundColor: "rgba(16, 12, 27, 0.72)",
+  pageMenuLogOffInline: {
+    marginTop: -4,
+    paddingTop: 0,
   },
   pageMenuLogOffButton: {
     alignSelf: "flex-start",

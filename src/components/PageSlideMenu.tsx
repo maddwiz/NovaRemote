@@ -373,20 +373,20 @@ export function PageSlideMenu({
                 ))}
               </View>
             )}
+            <View style={styles.pageMenuLogOffInline}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Log off and return to the lock screen"
+                style={styles.pageMenuLogOffButton}
+                onPress={() => {
+                  onClose();
+                  onLogOff();
+                }}
+              >
+                <Text style={styles.pageMenuLogOffText}>Log Off</Text>
+              </Pressable>
+            </View>
           </ScrollView>
-          <View style={styles.pageMenuSecondaryActions}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Log off and return to the lock screen"
-              style={styles.pageMenuLogOffButton}
-              onPress={() => {
-                onClose();
-                onLogOff();
-              }}
-            >
-              <Text style={styles.pageMenuLogOffText}>Log Off</Text>
-            </Pressable>
-          </View>
           <View style={styles.pageMenuFooterActions}>
             <Pressable
               accessibilityRole="button"
