@@ -15,6 +15,7 @@ type SettingsScreenProps = {
   wakePhrase: string;
   conversationIdleMs: number;
   speechOutputAvailable: boolean;
+  onTestSpeakReplies: () => void;
   onSetAlwaysListeningEnabled: (value: boolean) => void;
   onSetHandsFreeEnabled: (value: boolean) => void;
   onSetSpeakRepliesEnabled: (value: boolean) => void;
@@ -29,6 +30,7 @@ export function SettingsScreen({
   wakePhrase,
   conversationIdleMs,
   speechOutputAvailable,
+  onTestSpeakReplies,
   onSetAlwaysListeningEnabled,
   onSetHandsFreeEnabled,
   onSetSpeakRepliesEnabled,
@@ -152,6 +154,18 @@ export function SettingsScreen({
             ? `Wake phrase standby is on. Say "${wakePhrase || "hey nova"}" to start a conversation.`
             : "Wake phrase standby is off. Use walkie mode or the Voice button to talk to Nova."}
         </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Test Nova voice output"
+          style={[
+            styles.pageMenuActionButton,
+            !speechOutputAvailable ? styles.buttonDisabled : null,
+          ]}
+          disabled={!speechOutputAvailable}
+          onPress={onTestSpeakReplies}
+        >
+          <Text style={styles.pageMenuActionText}>Test Nova Voice</Text>
+        </Pressable>
       </View>
     </View>
   );

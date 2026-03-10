@@ -4147,6 +4147,7 @@ export default function AppShell() {
 
       const speechModule = getSpeechOutputModule();
       if (!speechModule) {
+        devVoiceUiLog("novaSpeech:moduleUnavailable");
         resumeConversation();
         return;
       }
@@ -4155,6 +4156,7 @@ export default function AppShell() {
         await prepareSpeechOutput();
         await new Promise((resolve) => setTimeout(resolve, 180));
         speechModule.stop?.();
+        devVoiceUiLog("novaSpeech:start", { spokenPreview: spoken.slice(0, 160) });
         await new Promise<void>((resolve) => {
           let settled = false;
           const finish = () => {
@@ -4169,6 +4171,7 @@ export default function AppShell() {
             language: "en-US",
             pitch: 1,
             rate: 0.96,
+            volume: 1,
             onDone: finish,
             onStopped: finish,
             onError: finish,
@@ -4192,6 +4195,32 @@ export default function AppShell() {
     executeActions: executeNovaAssistantActions,
     onAssistantReply: handleNovaAssistantReply,
   });
+
+  const testNovaSpeechOutput = useCallback(() => {
+    const speechModule = getSpeechOutputModule();
+    if (!speechModule) {
+      setStatus({ text: "Nova voice unavailable in this build.", error: true });
+      return;
+    }
+
+    void (async () => {
+      try {
+        await prepareSpeechOutput();
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        speechModule.stop?.();
+        devVoiceUiLog("novaSpeech:testStart");
+        speechModule.speak("Nova voice is active.", {
+          language: "en-US",
+          pitch: 1,
+          rate: 0.96,
+          volume: 1,
+        });
+        setStatus({ text: "Testing Nova voice...", error: false });
+      } catch (error) {
+        setStatus({ text: error instanceof Error ? error.message : String(error), error: true });
+      }
+    })();
+  }, [prepareSpeechOutput, setStatus]);
 
   const scheduleNovaVoiceStop = useCallback(
     (delayMs: number = NOVA_VOICE_CAPTURE_MS) => {
@@ -5908,6 +5937,7 @@ export default function AppShell() {
               wakePhrase={novaWakePhrase}
               conversationIdleMs={novaConversationIdleMs}
               speechOutputAvailable={Boolean(getSpeechOutputModule())}
+              onTestSpeakReplies={testNovaSpeechOutput}
               onSetAlwaysListeningEnabled={applyNovaAlwaysListeningEnabled}
               onSetHandsFreeEnabled={applyNovaHandsFreeEnabled}
               onSetSpeakRepliesEnabled={setNovaSpeakRepliesEnabled}
