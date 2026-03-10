@@ -2,6 +2,7 @@ import React from "react";
 import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { STORAGE_ACTIVE_SERVER_ID, STORAGE_SERVERS } from "../constants";
 import { useServers } from "./useServers";
 
 const secureStoreMock = vi.hoisted(() => {
@@ -92,6 +93,50 @@ describe("useServers dev seeding", () => {
       defaultCwd: "/Users/desmondpottle/Desktop",
     });
     expect(latestOrThrow(latest).activeServerId).toBe("dev-seeded-server");
+    expect(onError).not.toHaveBeenCalled();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("upserts a dev server even when stored servers already exist", async () => {
+    vi.stubGlobal("__DEV__", true);
+    vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_URL", "http://10.0.0.71:8787");
+    vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_TOKEN", "seed-token");
+    vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_NAME", "Macbook");
+    secureStoreMock.storage.set(
+      STORAGE_SERVERS,
+      JSON.stringify([
+        {
+          id: "existing-server",
+          name: "Existing",
+          baseUrl: "http://192.168.0.10:8787",
+          token: "existing-token",
+          defaultCwd: "/tmp",
+          source: "local",
+          terminalBackend: "auto",
+        },
+      ])
+    );
+    secureStoreMock.storage.set(STORAGE_ACTIVE_SERVER_ID, "existing-server");
+
+    const onError = vi.fn();
+    let latest: UseServersHandle | null = null;
+    function Harness() {
+      latest = useServers({ onError, enabled: true });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await waitFor(() => !latestOrThrow(latest).loadingSettings, "merged seeded settings load");
+
+    expect(latestOrThrow(latest).servers).toHaveLength(2);
+    expect(latestOrThrow(latest).servers.map((server) => server.id)).toContain("dev-seeded-server");
+    expect(latestOrThrow(latest).activeServerId).toBe("existing-server");
     expect(onError).not.toHaveBeenCalled();
 
     await act(async () => {

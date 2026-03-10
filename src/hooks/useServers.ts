@@ -15,6 +15,7 @@ import {
   STORAGE_SERVERS,
   makeId,
 } from "../constants";
+import { getDevSeedServerConfig } from "../devSeed";
 import { canDeleteServerProfile, canEditServerProfile, normalizeServerProfile, normalizeTeamPermissionLevel } from "../teamServers";
 import { ServerProfile, VmType } from "../types";
 
@@ -23,36 +24,62 @@ type UseServersArgs = {
   enabled?: boolean;
 };
 
-function readEnvValue(name: string): string {
-  if (typeof process === "undefined") {
-    return "";
-  }
-  const raw = process.env[name];
-  return typeof raw === "string" ? raw.trim() : "";
-}
-
 function buildDevSeedServer(): ServerProfile | null {
-  const baseUrl = normalizeBaseUrl(readEnvValue("EXPO_PUBLIC_DEV_SERVER_URL"));
-  const token = readEnvValue("EXPO_PUBLIC_DEV_SERVER_TOKEN");
+  const config = getDevSeedServerConfig();
+  const baseUrl = normalizeBaseUrl(config?.baseUrl || "");
+  const token = config?.token?.trim() || "";
   if (!baseUrl || !token) {
     return null;
   }
 
   return {
     id: "dev-seeded-server",
-    name: readEnvValue("EXPO_PUBLIC_DEV_SERVER_NAME") || DEFAULT_SERVER_NAME,
+    name: config?.name?.trim() || DEFAULT_SERVER_NAME,
     baseUrl,
     token,
-    defaultCwd: readEnvValue("EXPO_PUBLIC_DEV_SERVER_CWD") || DEFAULT_CWD,
+    defaultCwd: config?.defaultCwd?.trim() || DEFAULT_CWD,
     source: "local",
     terminalBackend: DEFAULT_TERMINAL_BACKEND,
-    sshHost: readEnvValue("EXPO_PUBLIC_DEV_SERVER_SSH_HOST") || undefined,
-    sshUser: readEnvValue("EXPO_PUBLIC_DEV_SERVER_SSH_USER") || undefined,
-    sshPort: sanitizeSshPort(readEnvValue("EXPO_PUBLIC_DEV_SERVER_SSH_PORT")),
-    portainerUrl: readEnvValue("EXPO_PUBLIC_DEV_SERVER_PORTAINER_URL") || undefined,
-    proxmoxUrl: readEnvValue("EXPO_PUBLIC_DEV_SERVER_PROXMOX_URL") || undefined,
-    grafanaUrl: readEnvValue("EXPO_PUBLIC_DEV_SERVER_GRAFANA_URL") || undefined,
+    sshHost: config?.sshHost?.trim() || undefined,
+    sshUser: config?.sshUser?.trim() || undefined,
+    sshPort: sanitizeSshPort(config?.sshPort),
+    portainerUrl: config?.portainerUrl?.trim() || undefined,
+    proxmoxUrl: config?.proxmoxUrl?.trim() || undefined,
+    grafanaUrl: config?.grafanaUrl?.trim() || undefined,
   };
+}
+
+function mergeDevSeedServer(parsedServers: ServerProfile[], seededServer: ServerProfile | null): {
+  servers: ServerProfile[];
+  changed: boolean;
+} {
+  if (!seededServer) {
+    return { servers: parsedServers, changed: false };
+  }
+
+  const normalizedSeedUrl = normalizeBaseUrl(seededServer.baseUrl);
+  const matchIndex = parsedServers.findIndex(
+    (server) => server.id === seededServer.id || normalizeBaseUrl(server.baseUrl) === normalizedSeedUrl
+  );
+
+  if (matchIndex === -1) {
+    return {
+      servers: [seededServer, ...parsedServers],
+      changed: true,
+    };
+  }
+
+  const existing = parsedServers[matchIndex];
+  const merged: ServerProfile = normalizeServerProfile({
+    ...existing,
+    ...seededServer,
+    id: seededServer.id,
+    source: "local",
+  });
+
+  const nextServers = parsedServers.map((server, index) => (index === matchIndex ? merged : server));
+  const changed = JSON.stringify(existing) !== JSON.stringify(merged);
+  return { servers: nextServers, changed };
 }
 
 function sanitizeSshPort(value: string | number | undefined): number | undefined {
@@ -482,15 +509,13 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
           }
         }
 
-        if (__DEV__ && parsedServers.length === 0) {
-          const seededServer = buildDevSeedServer();
-          if (seededServer) {
-            parsedServers = [seededServer];
-            await Promise.all([
-              SecureStore.setItemAsync(STORAGE_SERVERS, JSON.stringify(parsedServers)),
-              SecureStore.setItemAsync(STORAGE_ACTIVE_SERVER_ID, seededServer.id),
-            ]);
-          }
+        let seededServer: ServerProfile | null = null;
+        let seededServerChanged = false;
+        if (__DEV__) {
+          seededServer = buildDevSeedServer();
+          const merged = mergeDevSeedServer(parsedServers, seededServer);
+          parsedServers = merged.servers;
+          seededServerChanged = merged.changed;
         }
 
         if (parsedServers.length === 0) {
@@ -506,7 +531,19 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         }
 
         const resolvedActive =
-          parsedServers.find((server) => server.id === savedActiveId)?.id ?? parsedServers[0]?.id ?? null;
+          parsedServers.find((server) => server.id === savedActiveId)?.id ??
+          seededServer?.id ??
+          parsedServers[0]?.id ??
+          null;
+
+        if (__DEV__ && seededServerChanged) {
+          await Promise.all([
+            SecureStore.setItemAsync(STORAGE_SERVERS, JSON.stringify(parsedServers)),
+            resolvedActive
+              ? SecureStore.setItemAsync(STORAGE_ACTIVE_SERVER_ID, resolvedActive)
+              : SecureStore.deleteItemAsync(STORAGE_ACTIVE_SERVER_ID),
+          ]);
+        }
 
         setServers(parsedServers);
         setActiveServerId(resolvedActive);

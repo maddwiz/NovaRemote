@@ -2,6 +2,7 @@ import * as SecureStore from "expo-secure-store";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { STORAGE_ACTIVE_LLM_PROFILE_ID, STORAGE_LLM_PROFILES, makeId } from "../constants";
+import { getDevSeedOllamaConfig } from "../devSeed";
 import { LlmProfile } from "../types";
 
 const LLM_EXPORT_PREFIX = "novaremote.llm.aes.v1.";
@@ -10,14 +11,6 @@ const LLM_EXPORT_PBKDF2_ITERATIONS = 120000;
 const DEV_LOCAL_OLLAMA_PROFILE_ID = "dev-local-ollama";
 
 let cryptoJsCache: any | null = null;
-
-function readEnvValue(name: string): string {
-  if (typeof process === "undefined") {
-    return "";
-  }
-  const raw = process.env[name];
-  return typeof raw === "string" ? raw.trim() : "";
-}
 
 function getCryptoJs() {
   if (!cryptoJsCache) {
@@ -226,16 +219,47 @@ function normalizeImportedProfile(profile: LlmProfile): LlmProfile {
 }
 
 function buildDevLocalOllamaProfile(): LlmProfile {
+  const config = getDevSeedOllamaConfig();
   return {
     id: DEV_LOCAL_OLLAMA_PROFILE_ID,
-    name: readEnvValue("EXPO_PUBLIC_DEV_OLLAMA_NAME") || "Nova Local (Ollama)",
+    name: config?.name || "Nova Local (Ollama)",
     kind: "ollama",
-    baseUrl: readEnvValue("EXPO_PUBLIC_DEV_OLLAMA_URL") || "http://localhost:11434",
+    baseUrl: config?.baseUrl || "http://localhost:11434",
     apiKey: "",
-    model: readEnvValue("EXPO_PUBLIC_DEV_OLLAMA_MODEL") || "llama3.2:3b",
+    model: config?.model || "llama3.2:3b",
     systemPrompt:
       "You are Nova running on a local Ollama model for development testing. Keep responses concise and action-oriented.",
   };
+}
+
+function mergeDevSeedProfile(parsedProfiles: LlmProfile[], seededProfile: LlmProfile): {
+  profiles: LlmProfile[];
+  changed: boolean;
+} {
+  const matchIndex = parsedProfiles.findIndex(
+    (profile) =>
+      profile.id === seededProfile.id ||
+      (profile.kind === "ollama" &&
+        profile.baseUrl.trim() === seededProfile.baseUrl.trim() &&
+        profile.model.trim() === seededProfile.model.trim())
+  );
+
+  if (matchIndex === -1) {
+    return {
+      profiles: [seededProfile, ...parsedProfiles],
+      changed: true,
+    };
+  }
+
+  const existing = parsedProfiles[matchIndex];
+  const merged: LlmProfile = {
+    ...existing,
+    ...seededProfile,
+    id: seededProfile.id,
+  };
+  const nextProfiles = parsedProfiles.map((profile, index) => (index === matchIndex ? merged : profile));
+  const changed = JSON.stringify(existing) !== JSON.stringify(merged);
+  return { profiles: nextProfiles, changed };
 }
 
 export function useLlmProfiles() {
@@ -266,16 +290,28 @@ export function useLlmProfiles() {
         }
       }
 
-      if (__DEV__ && parsedProfiles.length === 0) {
-        const seededProfile = buildDevLocalOllamaProfile();
-        parsedProfiles = [seededProfile];
+      let seededProfileChanged = false;
+      if (__DEV__) {
+        const merged = mergeDevSeedProfile(parsedProfiles, buildDevLocalOllamaProfile());
+        parsedProfiles = merged.profiles;
+        seededProfileChanged = merged.changed;
+      }
+
+      const active =
+        parsedProfiles.find((profile) => profile.id === rawActive)?.id ||
+        parsedProfiles.find((profile) => profile.id === DEV_LOCAL_OLLAMA_PROFILE_ID)?.id ||
+        parsedProfiles[0]?.id ||
+        null;
+
+      if (__DEV__ && seededProfileChanged) {
         await Promise.all([
           SecureStore.setItemAsync(STORAGE_LLM_PROFILES, JSON.stringify(parsedProfiles)),
-          SecureStore.setItemAsync(STORAGE_ACTIVE_LLM_PROFILE_ID, seededProfile.id),
+          active
+            ? SecureStore.setItemAsync(STORAGE_ACTIVE_LLM_PROFILE_ID, active)
+            : SecureStore.deleteItemAsync(STORAGE_ACTIVE_LLM_PROFILE_ID),
         ]);
       }
 
-      const active = parsedProfiles.find((profile) => profile.id === rawActive)?.id || parsedProfiles[0]?.id || null;
       setProfiles(parsedProfiles);
       setActiveProfileId(active);
       setLoading(false);

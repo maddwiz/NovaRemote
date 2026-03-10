@@ -109,4 +109,45 @@ describe("useLlmProfiles hook", () => {
       renderer?.unmount();
     });
   });
+
+  it("upserts a dev ollama profile even when stored profiles already exist", async () => {
+    vi.stubGlobal("__DEV__", true);
+    vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_URL", "http://10.0.0.71:11434");
+    vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_MODEL", "llama3.2:3b");
+    vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_NAME", "Macbook Ollama");
+    secureStoreMock.storage.set(
+      STORAGE_LLM_PROFILES,
+      JSON.stringify([
+        {
+          id: "existing-profile",
+          name: "Existing",
+          kind: "openai_compatible",
+          baseUrl: "https://api.openai.com/v1",
+          apiKey: "key",
+          model: "gpt-test",
+        },
+      ])
+    );
+    secureStoreMock.storage.set(STORAGE_ACTIVE_LLM_PROFILE_ID, "existing-profile");
+
+    let latest: UseLlmProfilesHandle | null = null;
+    function Harness() {
+      latest = useLlmProfiles();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await waitFor(() => !latestOrThrow(latest).loading, "merged seeded llm load");
+
+    expect(latestOrThrow(latest).profiles).toHaveLength(2);
+    expect(latestOrThrow(latest).profiles.map((profile) => profile.id)).toContain("dev-local-ollama");
+    expect(latestOrThrow(latest).activeProfileId).toBe("existing-profile");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
 });
