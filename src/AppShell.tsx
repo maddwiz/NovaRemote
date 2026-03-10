@@ -759,7 +759,7 @@ export default function AppShell() {
   const [novaSpeakRepliesEnabled, setNovaSpeakRepliesEnabled] = useState<boolean>(true);
   const [novaVoiceModeActive, setNovaVoiceModeActive] = useState<boolean>(false);
   const [novaOpenRequestToken, setNovaOpenRequestToken] = useState<number>(0);
-  const [novaAlwaysListeningEnabled, setNovaAlwaysListeningEnabled] = useState<boolean>(true);
+  const [novaAlwaysListeningEnabled, setNovaAlwaysListeningEnabled] = useState<boolean>(false);
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [paywallVisible, setPaywallVisible] = useState<boolean>(false);
@@ -840,7 +840,15 @@ export default function AppShell() {
     async function loadNovaVoiceSettings() {
       try {
         const raw = await SecureStore.getItemAsync(STORAGE_NOVA_VOICE_SETTINGS);
-        if (!mounted || !raw) {
+        if (!mounted) {
+          return;
+        }
+        if (!raw) {
+          setNovaAlwaysListeningEnabled(false);
+          setNovaHandsFreeEnabled(false);
+          setNovaWakePhrase(DEFAULT_NOVA_WAKE_PHRASE);
+          setNovaConversationIdleMs(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
+          setNovaSpeakRepliesEnabled(true);
           return;
         }
         const parsed = JSON.parse(raw) as Partial<{
@@ -857,7 +865,7 @@ export default function AppShell() {
         setNovaSpeakRepliesEnabled(parsed.speakRepliesEnabled !== false);
       } catch {
         if (mounted) {
-          setNovaAlwaysListeningEnabled(true);
+          setNovaAlwaysListeningEnabled(false);
           setNovaHandsFreeEnabled(false);
           setNovaWakePhrase(DEFAULT_NOVA_WAKE_PHRASE);
           setNovaConversationIdleMs(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
@@ -1772,9 +1780,7 @@ export default function AppShell() {
     (liveVoiceRecognitionActive ||
       voiceRecording ||
       pendingNovaListenModeRef.current !== null ||
-      novaConversationModeEnabled ||
-      novaHandsFreeEnabled ||
-      novaAlwaysListeningEnabled);
+      novaVoiceModeActive);
 
   const scopedServerId = focusedServerId ?? activeServerId;
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(scopedServerId);
@@ -3952,6 +3958,37 @@ export default function AppShell() {
     clearTimeout(timer);
     novaConversationIdleTimerRef.current = null;
   }, []);
+
+  useEffect(() => {
+    if (!novaVoiceSettingsLoadedRef.current) {
+      return;
+    }
+    if (novaAlwaysListeningEnabled || novaHandsFreeEnabled || novaConversationModeEnabled) {
+      return;
+    }
+
+    pendingNovaListenModeRef.current = null;
+    clearNovaVoiceLoopRestart();
+    clearNovaConversationIdleTimer();
+
+    if (novaListeningModeRef.current !== "walkie") {
+      if (liveVoiceRecognitionActiveRef.current) {
+        void stopLiveRecognition("abort");
+      }
+      if (voiceRecordingRef.current) {
+        void stopVoiceCapture();
+      }
+      setNovaVoiceModeActive(false);
+    }
+  }, [
+    clearNovaConversationIdleTimer,
+    clearNovaVoiceLoopRestart,
+    novaAlwaysListeningEnabled,
+    novaConversationModeEnabled,
+    novaHandsFreeEnabled,
+    stopLiveRecognition,
+    stopVoiceCapture,
+  ]);
 
   const resolveDefaultNovaListeningMode = useCallback((): "wake" | "conversation" | null => {
     if (novaHandsFreeEnabledRef.current || novaConversationModeEnabledRef.current) {
