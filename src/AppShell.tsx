@@ -819,7 +819,7 @@ export default function AppShell() {
   }, []);
 
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
-  const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
+  const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock, forceLock } = useBiometricLock();
   const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
 
   useEffect(() => {
@@ -5691,7 +5691,7 @@ export default function AppShell() {
           onLogOff={() => {
             void runWithStatus("Logging off", async () => {
               setPageMenuVisible(false);
-              await lock();
+              forceLock();
             });
           }}
           onNavigate={openRouteFromMenu}

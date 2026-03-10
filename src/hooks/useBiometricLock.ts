@@ -98,6 +98,10 @@ export function useBiometricLock() {
     }
   }, [requireBiometric]);
 
+  const forceLock = useCallback(() => {
+    setUnlocked(false);
+  }, []);
+
   return {
     loading,
     requireBiometric,
@@ -105,5 +109,6 @@ export function useBiometricLock() {
     setRequireBiometric,
     unlock,
     lock,
+    forceLock,
   };
 }
