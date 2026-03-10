@@ -39,7 +39,6 @@ import {
   DEFAULT_CWD,
   DEFAULT_FLEET_WAIT_MS,
   NOVA_VOICE_CAPTURE_MS,
-  NOVA_VOICE_CONVERSATION_IDLE_MS,
   NOVA_VOICE_VAD_SILENCE_MS,
   NOVA_AGENT_MONITORING_INTERVAL_MS,
   DEFAULT_SPECTATE_TTL_SECONDS,
@@ -100,6 +99,7 @@ import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TeamScreen } from "./screens/TeamScreen";
 import { GlassesModeScreen } from "./screens/GlassesModeScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { VrCommandCenterScreen } from "./screens/VrCommandCenterScreen";
 import { styles } from "./theme/styles";
@@ -113,7 +113,13 @@ import {
   resolveAssistantServer,
   resolveAssistantSession,
 } from "./novaAssistant";
-import { DEFAULT_NOVA_WAKE_PHRASE, normalizeNovaWakePhrase, resolveNovaWakeCommand } from "./novaVoice";
+import {
+  DEFAULT_NOVA_CONVERSATION_IDLE_MS,
+  DEFAULT_NOVA_WAKE_PHRASE,
+  normalizeNovaConversationIdleMs,
+  normalizeNovaWakePhrase,
+  resolveNovaWakeCommand,
+} from "./novaVoice";
 import { findBlockedCommandPattern, resolveSessionTimeoutMs } from "./teamPolicy";
 import {
   AiEnginePreference,
@@ -187,6 +193,15 @@ function getSpeechOutputModule(): SpeechOutputModule | null {
     return speechOutputModuleCache;
   }
   try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const expoModulesCore = require("expo-modules-core") as {
+      requireOptionalNativeModule?: (moduleName: string) => unknown;
+    };
+    const nativeSpeechModule = expoModulesCore.requireOptionalNativeModule?.("ExpoSpeech");
+    if (!nativeSpeechModule) {
+      speechOutputModuleCache = null;
+      return null;
+    }
     // Lazy require keeps older dev-client builds from crashing if the module
     // has not been compiled into the installed binary yet.
     // eslint-disable-next-line @typescript-eslint/no-require-imports
@@ -575,6 +590,26 @@ function shouldRetryVoiceLoopError(message: string): boolean {
   return true;
 }
 
+function summarizeNovaVoiceError(message: string): string {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return "Voice retrying";
+  }
+  if (/no speech|no transcript/.test(normalized)) {
+    return "Voice retrying: no speech";
+  }
+  if (/network|timeout|http \d+/.test(normalized)) {
+    return "Voice retrying: network";
+  }
+  if (/permission/.test(normalized)) {
+    return "Voice permission needed";
+  }
+  if (/unavailable in this build|unavailable on this device/.test(normalized)) {
+    return "Voice unavailable";
+  }
+  return "Voice retrying";
+}
+
 function adaptCommandForBackend(command: string, backend: TerminalBackendKind | undefined): string {
   const parts = command.split(/(\|\||&&|;|\|)/);
   if (parts.length > 1) {
@@ -720,6 +755,8 @@ export default function AppShell() {
   const [novaHandsFreeEnabled, setNovaHandsFreeEnabled] = useState<boolean>(false);
   const [novaConversationModeEnabled, setNovaConversationModeEnabled] = useState<boolean>(false);
   const [novaWakePhrase, setNovaWakePhrase] = useState<string>(DEFAULT_NOVA_WAKE_PHRASE);
+  const [novaConversationIdleMs, setNovaConversationIdleMs] = useState<number>(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
+  const [novaSpeakRepliesEnabled, setNovaSpeakRepliesEnabled] = useState<boolean>(true);
   const [novaVoiceModeActive, setNovaVoiceModeActive] = useState<boolean>(false);
   const [novaOpenRequestToken, setNovaOpenRequestToken] = useState<number>(0);
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
@@ -770,13 +807,17 @@ export default function AppShell() {
   const novaVoiceLoopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaVoiceStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaConversationIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const startNovaVoiceCaptureRef = useRef<() => void>(() => undefined);
+  const startNovaVoiceCaptureRef = useRef<(mode?: "wake" | "conversation" | "walkie") => void>(() => undefined);
   const stopVoiceCaptureIntoNovaRef = useRef<() => Promise<boolean>>(async () => false);
   const novaVoiceSettingsLoadedRef = useRef<boolean>(false);
   const novaHandsFreeEnabledRef = useRef<boolean>(novaHandsFreeEnabled);
   const novaConversationModeEnabledRef = useRef<boolean>(novaConversationModeEnabled);
   const novaWakePhraseRef = useRef<string>(novaWakePhrase);
+  const novaConversationIdleMsRef = useRef<number>(novaConversationIdleMs);
+  const novaSpeakRepliesEnabledRef = useRef<boolean>(novaSpeakRepliesEnabled);
   const novaVoiceModeActiveRef = useRef<boolean>(novaVoiceModeActive);
+  const novaListeningModeRef = useRef<"wake" | "conversation" | "walkie">("wake");
+  const pendingNovaListenModeRef = useRef<"wake" | "conversation" | "walkie" | null>(null);
   const appOpenTrackedRef = useRef<boolean>(false);
   const crossServerWatchRulesRef = useRef<Record<string, Record<string, WatchRule>>>({});
   const lastActivityAtRef = useRef<number>(Date.now());
@@ -803,13 +844,19 @@ export default function AppShell() {
         const parsed = JSON.parse(raw) as Partial<{
           handsFreeEnabled: boolean;
           wakePhrase: string;
+          conversationIdleMs: number;
+          speakRepliesEnabled: boolean;
         }>;
         setNovaHandsFreeEnabled(Boolean(parsed.handsFreeEnabled));
         setNovaWakePhrase(normalizeNovaWakePhrase(parsed.wakePhrase));
+        setNovaConversationIdleMs(normalizeNovaConversationIdleMs(parsed.conversationIdleMs));
+        setNovaSpeakRepliesEnabled(parsed.speakRepliesEnabled !== false);
       } catch {
         if (mounted) {
           setNovaHandsFreeEnabled(false);
           setNovaWakePhrase(DEFAULT_NOVA_WAKE_PHRASE);
+          setNovaConversationIdleMs(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
+          setNovaSpeakRepliesEnabled(true);
         }
       } finally {
         if (mounted) {
@@ -834,9 +881,11 @@ export default function AppShell() {
       JSON.stringify({
         handsFreeEnabled: novaHandsFreeEnabled,
         wakePhrase: normalizeNovaWakePhrase(novaWakePhrase),
+        conversationIdleMs: normalizeNovaConversationIdleMs(novaConversationIdleMs),
+        speakRepliesEnabled: novaSpeakRepliesEnabled,
       })
     );
-  }, [novaHandsFreeEnabled, novaWakePhrase]);
+  }, [novaConversationIdleMs, novaHandsFreeEnabled, novaSpeakRepliesEnabled, novaWakePhrase]);
 
   useEffect(() => {
     novaHandsFreeEnabledRef.current = novaHandsFreeEnabled;
@@ -849,6 +898,14 @@ export default function AppShell() {
   useEffect(() => {
     novaWakePhraseRef.current = novaWakePhrase;
   }, [novaWakePhrase]);
+
+  useEffect(() => {
+    novaConversationIdleMsRef.current = novaConversationIdleMs;
+  }, [novaConversationIdleMs]);
+
+  useEffect(() => {
+    novaSpeakRepliesEnabledRef.current = novaSpeakRepliesEnabled;
+  }, [novaSpeakRepliesEnabled]);
 
   useEffect(() => {
     novaVoiceModeActiveRef.current = novaVoiceModeActive;
@@ -3874,17 +3931,59 @@ export default function AppShell() {
     novaConversationIdleTimerRef.current = null;
   }, []);
 
+  const resolveDefaultNovaListeningMode = useCallback((): "wake" | "conversation" => {
+    if (novaHandsFreeEnabledRef.current || novaConversationModeEnabledRef.current) {
+      return "conversation";
+    }
+    return "wake";
+  }, []);
+
+  const queueNovaListeningMode = useCallback(
+    (mode: "wake" | "conversation" | "walkie", delayMs: number = 0) => {
+      const schedule = (nextMode: "wake" | "conversation" | "walkie", nextDelay: number) => {
+        const voiceRouteAvailable = route !== "glasses";
+        pendingNovaListenModeRef.current = nextMode;
+        clearNovaVoiceLoopRestart();
+        if (!voiceRouteAvailable || !unlocked || appStateStatus !== "active") {
+          return;
+        }
+        novaVoiceLoopTimerRef.current = setTimeout(() => {
+          novaVoiceLoopTimerRef.current = null;
+          const queuedMode = pendingNovaListenModeRef.current;
+          pendingNovaListenModeRef.current = null;
+          if (!queuedMode || !voiceRouteAvailable || !unlocked || appStateStatus !== "active") {
+            return;
+          }
+          if (voiceBusyRef.current) {
+            schedule(queuedMode, 320);
+            return;
+          }
+          if (liveVoiceRecognitionActiveRef.current) {
+            void stopLiveRecognition("abort");
+            schedule(queuedMode, 180);
+            return;
+          }
+          if (voiceRecordingRef.current) {
+            void stopVoiceCapture();
+            schedule(queuedMode, 180);
+            return;
+          }
+          setNovaVoiceModeActive(true);
+          startNovaVoiceCaptureRef.current(queuedMode);
+        }, Math.max(0, Math.min(nextDelay, 15000)));
+      };
+
+      schedule(mode, delayMs);
+    },
+    [appStateStatus, clearNovaVoiceLoopRestart, route, stopLiveRecognition, stopVoiceCapture, unlocked]
+  );
+
   const endNovaConversationSession = useCallback(
     (reason: "idle" | "manual") => {
       clearNovaConversationIdleTimer();
+      pendingNovaListenModeRef.current = null;
+      novaConversationModeEnabledRef.current = false;
       setNovaConversationModeEnabled(false);
-      if (reason === "idle") {
-        if (novaHandsFreeEnabledRef.current) {
-          setStatus({ text: `Listening for "${novaWakePhraseRef.current}"...`, error: false });
-        } else {
-          setStatus({ text: "Nova voice session ended.", error: false });
-        }
-      }
       getSpeechOutputModule()?.stop?.();
       if (liveVoiceRecognitionActiveRef.current) {
         void stopLiveRecognition("abort");
@@ -3893,8 +3992,21 @@ export default function AppShell() {
         void stopVoiceCapture();
       }
       setNovaVoiceModeActive(false);
+      const nextMode = resolveDefaultNovaListeningMode();
+      if (reason === "idle") {
+        setStatus({
+          text: nextMode === "conversation" ? "Hands-Free listening..." : "Ready",
+          error: false,
+        });
+      } else {
+        setStatus({
+          text: nextMode === "conversation" ? "Nova voice paused." : "Nova voice paused.",
+          error: false,
+        });
+      }
+      queueNovaListeningMode(nextMode, 200);
     },
-    [clearNovaConversationIdleTimer, setStatus, stopLiveRecognition, stopVoiceCapture]
+    [clearNovaConversationIdleTimer, queueNovaListeningMode, resolveDefaultNovaListeningMode, setStatus, stopLiveRecognition, stopVoiceCapture]
   );
 
   const resetNovaConversationIdleTimer = useCallback(() => {
@@ -3902,37 +4014,61 @@ export default function AppShell() {
     novaConversationIdleTimerRef.current = setTimeout(() => {
       novaConversationIdleTimerRef.current = null;
       endNovaConversationSession("idle");
-    }, NOVA_VOICE_CONVERSATION_IDLE_MS);
+    }, novaConversationIdleMsRef.current);
   }, [clearNovaConversationIdleTimer, endNovaConversationSession]);
 
-  const speakNovaReply = useCallback(
+  const handleNovaAssistantReply = useCallback(
     async (reply: string) => {
-      if (!novaConversationModeEnabledRef.current) {
-        return;
-      }
+      const nextMode = resolveDefaultNovaListeningMode();
       const spoken = summarizeNovaReplyForSpeech(reply);
-      if (!spoken) {
+      const resumeConversation = () => {
+        if (nextMode === "conversation") {
+          resetNovaConversationIdleTimer();
+        }
+        queueNovaListeningMode(nextMode, 220);
+      };
+
+      if (!spoken || !novaSpeakRepliesEnabledRef.current) {
+        resumeConversation();
         return;
       }
-      resetNovaConversationIdleTimer();
+
       const speechModule = getSpeechOutputModule();
       if (!speechModule) {
-        setStatus({ text: "Nova reply voice is unavailable in this build.", error: true });
+        resumeConversation();
         return;
       }
+
       try {
         speechModule.stop?.();
-        speechModule.speak(spoken, {
-          language: "en-US",
-          pitch: 1,
-          rate: 0.96,
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            resolve();
+          };
+
+          speechModule.speak(spoken, {
+            language: "en-US",
+            pitch: 1,
+            rate: 0.96,
+            onDone: finish,
+            onStopped: finish,
+            onError: finish,
+          });
+
+          setTimeout(finish, Math.max(3500, Math.min(9000, spoken.length * 55)));
         });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        setStatus({ text: `Nova reply voice failed: ${message}`, error: true });
+      } catch {
+        // best effort
       }
+
+      resumeConversation();
     },
-    [resetNovaConversationIdleTimer, setStatus]
+    [queueNovaListeningMode, resetNovaConversationIdleTimer, resolveDefaultNovaListeningMode]
   );
 
   const novaAssistant = useNovaAssistant({
@@ -3940,7 +4076,7 @@ export default function AppShell() {
     sendPromptDetailed,
     buildContext: buildNovaAssistantContext,
     executeActions: executeNovaAssistantActions,
-    onAssistantReply: speakNovaReply,
+    onAssistantReply: handleNovaAssistantReply,
   });
 
   const scheduleNovaVoiceStop = useCallback(
@@ -3961,129 +4097,127 @@ export default function AppShell() {
     [clearNovaVoiceStopTimer, stopLiveRecognition]
   );
 
-  const scheduleNovaVoiceLoopRestart = useCallback(
-    (delayMs: number) => {
-      clearNovaVoiceLoopRestart();
-      novaVoiceLoopTimerRef.current = setTimeout(() => {
-        novaVoiceLoopTimerRef.current = null;
-        if (voiceBusyRef.current || voiceRecordingRef.current || liveVoiceRecognitionActiveRef.current) {
-          return;
-        }
-        setNovaVoiceModeActive(true);
-        startNovaVoiceCaptureRef.current();
-      }, Math.max(150, Math.min(delayMs, 15000)));
-    },
-    [clearNovaVoiceLoopRestart]
-  );
-
   const handleNovaTranscript = useCallback(
-    async (rawTranscript: string): Promise<boolean> => {
-      const activeWakePhrase = novaWakePhraseRef.current;
-      const handsFreeEnabled = novaHandsFreeEnabledRef.current;
-      const conversationModeEnabled = novaConversationModeEnabledRef.current;
-      const handsFreeWake = resolveNovaWakeCommand(rawTranscript, activeWakePhrase);
-      const shouldContinueVoiceLoop = handsFreeEnabled || conversationModeEnabled;
-      const shouldRequireWakePhrase = handsFreeEnabled && !conversationModeEnabled;
+    async (rawTranscript: string, mode: "wake" | "conversation" | "walkie"): Promise<boolean> => {
+      const transcript = rawTranscript.trim();
+      const activeWakePhrase = normalizeNovaWakePhrase(novaWakePhraseRef.current);
 
-      if (shouldRequireWakePhrase && !handsFreeWake.heardWakePhrase) {
-        setStatus({ text: `Listening for "${activeWakePhrase}"...`, error: false });
-        scheduleNovaVoiceLoopRestart(220);
+      if (!transcript) {
         return false;
       }
 
-      if (!conversationModeEnabled) {
+      if (mode === "wake") {
+        const wake = resolveNovaWakeCommand(transcript, activeWakePhrase);
+        if (!wake.heardWakePhrase) {
+          queueNovaListeningMode("wake", 160);
+          return false;
+        }
+        requestNovaOverlayOpen();
+        novaConversationModeEnabledRef.current = true;
         setNovaConversationModeEnabled(true);
-      }
-      resetNovaConversationIdleTimer();
+        resetNovaConversationIdleTimer();
 
-      const transcript = shouldRequireWakePhrase ? handsFreeWake.command : rawTranscript;
-      requestNovaOverlayOpen();
+        if (!wake.command.trim()) {
+          setStatus({ text: "Nova is listening.", error: false });
+          queueNovaListeningMode("conversation", 180);
+          return true;
+        }
 
-      if (!transcript) {
-        setStatus({ text: `Nova is ready. Say "${activeWakePhrase}" followed by a request.`, error: false });
-        if (shouldContinueVoiceLoop) {
-          scheduleNovaVoiceLoopRestart(220);
-        } else {
-          setNovaVoiceModeActive(false);
+        const sent = await novaAssistant.submitTranscript(wake.command.trim(), { autoSend: true });
+        if (!sent) {
+          throw new Error("Nova could not submit the wake command.");
         }
         return true;
       }
 
+      if (mode === "conversation") {
+        requestNovaOverlayOpen();
+        novaConversationModeEnabledRef.current = true;
+        setNovaConversationModeEnabled(true);
+        resetNovaConversationIdleTimer();
+        const sent = await novaAssistant.submitTranscript(transcript, { autoSend: true });
+        if (!sent) {
+          throw new Error("Nova could not submit the transcript.");
+        }
+        return true;
+      }
+
+      requestNovaOverlayOpen();
       const sent = await novaAssistant.submitTranscript(transcript, { autoSend: true });
       if (!sent) {
         throw new Error("Nova could not submit the transcript.");
       }
-      if (shouldContinueVoiceLoop) {
-        scheduleNovaVoiceLoopRestart(220);
-      } else {
-        setNovaVoiceModeActive(false);
-      }
       return true;
     },
-    [novaAssistant, requestNovaOverlayOpen, resetNovaConversationIdleTimer, scheduleNovaVoiceLoopRestart, setStatus]
+    [novaAssistant, queueNovaListeningMode, requestNovaOverlayOpen, resetNovaConversationIdleTimer, setStatus]
   );
 
-  const handleNovaVoiceNoSpeech = useCallback(() => {
-    const handsFreeEnabled = novaHandsFreeEnabledRef.current;
-    const conversationModeEnabled = novaConversationModeEnabledRef.current;
-    const activeWakePhrase = novaWakePhraseRef.current;
-    const shouldContinueVoiceLoop = handsFreeEnabled || conversationModeEnabled;
-    if (shouldContinueVoiceLoop) {
-      setStatus({
-        text: conversationModeEnabled ? "Voice mode is listening..." : `Listening for "${activeWakePhrase}"...`,
-        error: false,
-      });
-      scheduleNovaVoiceLoopRestart(350);
-      return;
-    }
-    setNovaVoiceModeActive(false);
-    setStatus({ text: "Nova did not hear anything.", error: false });
-  }, [scheduleNovaVoiceLoopRestart, setStatus]);
+  const handleNovaVoiceNoSpeech = useCallback(
+    (mode: "wake" | "conversation" | "walkie") => {
+      const nextMode =
+        mode === "wake"
+          ? "wake"
+          : novaHandsFreeEnabledRef.current || novaConversationModeEnabledRef.current
+            ? "conversation"
+            : resolveDefaultNovaListeningMode();
+
+      if (mode !== "wake") {
+        setStatus({
+          text:
+            nextMode === "conversation"
+              ? novaHandsFreeEnabledRef.current
+                ? "Hands-Free listening..."
+                : "Nova is listening."
+              : "Ready",
+          error: false,
+        });
+      }
+      queueNovaListeningMode(nextMode, mode === "walkie" ? 260 : 180);
+    },
+    [queueNovaListeningMode, resolveDefaultNovaListeningMode, setStatus]
+  );
 
   const handleNovaVoiceError = useCallback(
-    (message: string): boolean => {
-      const handsFreeEnabled = novaHandsFreeEnabledRef.current;
-      const conversationModeEnabled = novaConversationModeEnabledRef.current;
-      const activeWakePhrase = novaWakePhraseRef.current;
-      const shouldContinueVoiceLoop = handsFreeEnabled || conversationModeEnabled;
-      if (shouldContinueVoiceLoop && shouldRetryVoiceLoopError(message)) {
-        if (/no transcript|voice capture has not started|no speech/i.test(message)) {
-          setStatus({
-            text: conversationModeEnabled ? "Voice mode is listening..." : `Listening for "${activeWakePhrase}"...`,
-            error: false,
-          });
-        } else {
-          setStatus({ text: `Nova voice retrying: ${message}`, error: true });
-        }
-        scheduleNovaVoiceLoopRestart(1200);
+    (mode: "wake" | "conversation" | "walkie", message: string): boolean => {
+      const nextMode =
+        mode === "wake"
+          ? "wake"
+          : novaHandsFreeEnabledRef.current || novaConversationModeEnabledRef.current
+            ? "conversation"
+            : resolveDefaultNovaListeningMode();
+
+      if (shouldRetryVoiceLoopError(message)) {
+        setStatus({ text: summarizeNovaVoiceError(message), error: /permission|unavailable/.test(message.toLowerCase()) });
+        queueNovaListeningMode(nextMode, /no speech|no transcript/i.test(message) ? 260 : 1200);
         return false;
       }
       setNovaVoiceModeActive(false);
-      setStatus({ text: `Nova voice error: ${message}`, error: true });
+      setStatus({ text: summarizeNovaVoiceError(message), error: true });
       return false;
     },
-    [scheduleNovaVoiceLoopRestart, setStatus]
+    [queueNovaListeningMode, resolveDefaultNovaListeningMode, setStatus]
   );
 
   const stopVoiceCaptureIntoNova = useCallback(async (): Promise<boolean> => {
     clearNovaVoiceStopTimer();
+    const mode = novaListeningModeRef.current;
     try {
       const rawTranscript = (
         await stopVoiceCaptureAndTranscribe({
           wakePhrase: novaWakePhraseRef.current,
-          requireWakePhrase: false,
+          requireWakePhrase: mode === "wake",
           vadEnabled: true,
           vadSilenceMs: NOVA_VOICE_VAD_SILENCE_MS,
         })
       ).trim();
       if (!rawTranscript) {
-        handleNovaVoiceNoSpeech();
+        handleNovaVoiceNoSpeech(mode);
         return false;
       }
-      return await handleNovaTranscript(rawTranscript);
+      return await handleNovaTranscript(rawTranscript, mode);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return handleNovaVoiceError(message);
+      return handleNovaVoiceError(mode, message);
     }
   }, [
     clearNovaVoiceStopTimer,
@@ -4097,117 +4231,125 @@ export default function AppShell() {
     stopVoiceCaptureIntoNovaRef.current = stopVoiceCaptureIntoNova;
   }, [stopVoiceCaptureIntoNova]);
 
-  const startNovaVoiceCapture = useCallback(() => {
-    if (voiceBusy || voiceRecording || liveVoiceRecognitionActive) {
-      return;
-    }
-    clearNovaVoiceLoopRestart();
-    setNovaVoiceModeActive(true);
-    devVoiceUiLog("startNovaVoiceCapture");
-    void startLiveRecognition({
-      contextualStrings: [
-        "nova",
-        "hey nova",
-        "open terminals",
-        "open servers",
-        "open files",
-        "open snippets",
-        "open team",
-        "open vr",
-        "tell codex",
-        normalizeNovaWakePhrase(novaWakePhraseRef.current),
-      ],
-      onTranscript: async (transcript) => {
-        await handleNovaTranscript(transcript.trim());
-      },
-      onNoSpeech: async () => {
-        handleNovaVoiceNoSpeech();
-      },
-      onError: async (message) => {
-        handleNovaVoiceError(message);
-      },
-    })
-      .then(() => {
+  const startNovaVoiceCapture = useCallback(
+    (mode: "wake" | "conversation" | "walkie" = "conversation") => {
+      const activeWakePhrase = normalizeNovaWakePhrase(novaWakePhraseRef.current);
+      if (voiceBusyRef.current) {
+        return;
+      }
+      if (liveVoiceRecognitionActiveRef.current || voiceRecordingRef.current) {
+        queueNovaListeningMode(mode, 120);
+        if (liveVoiceRecognitionActiveRef.current) {
+          void stopLiveRecognition("abort");
+        }
+        if (voiceRecordingRef.current) {
+          void stopVoiceCapture();
+        }
+        return;
+      }
+
+      novaListeningModeRef.current = mode;
+      pendingNovaListenModeRef.current = null;
+      clearNovaVoiceStopTimer();
+      clearNovaVoiceLoopRestart();
+      setNovaVoiceModeActive(true);
+
+      if (mode !== "wake") {
         setStatus({
-          text: novaConversationModeEnabledRef.current
-            ? "Voice mode is listening..."
-            : `Listening for "${novaWakePhraseRef.current}"...`,
+          text:
+            mode === "walkie"
+              ? "Listening... release to send."
+              : novaHandsFreeEnabledRef.current
+                ? "Hands-Free listening..."
+                : "Nova is listening.",
           error: false,
         });
+      }
+
+      devVoiceUiLog("startNovaVoiceCapture", { mode });
+      void startLiveRecognition({
+        contextualStrings: [
+          "nova",
+          "hey nova",
+          activeWakePhrase,
+          "open terminals",
+          "open servers",
+          "open files",
+          "open snippets",
+          "open settings",
+          "open team",
+          "open vr",
+          "tell codex",
+        ],
+        onTranscript: async (transcript) => {
+          await handleNovaTranscript(transcript.trim(), mode);
+        },
+        onNoSpeech: async () => {
+          handleNovaVoiceNoSpeech(mode);
+        },
+        onError: async (message) => {
+          handleNovaVoiceError(mode, message);
+        },
       })
-      .catch((error) => {
-        devVoiceUiLog("startNovaVoiceCapture:liveError", error instanceof Error ? error.message : String(error));
-        void startVoiceCapture()
-          .then(() => {
-            scheduleNovaVoiceStop();
-          })
-          .catch((fallbackError) => {
-            const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-            setNovaVoiceModeActive(false);
-            devVoiceUiLog("startNovaVoiceCapture:error", message);
-            setStatus({ text: message, error: true });
-          });
-      });
-  }, [
-    clearNovaVoiceLoopRestart,
-    handleNovaTranscript,
-    handleNovaVoiceError,
-    handleNovaVoiceNoSpeech,
-    liveVoiceRecognitionActive,
-    scheduleNovaVoiceStop,
-    setStatus,
-    startLiveRecognition,
-    startVoiceCapture,
-    voiceBusy,
-    voiceRecording,
-  ]);
+        .catch((error) => {
+          devVoiceUiLog("startNovaVoiceCapture:liveError", error instanceof Error ? error.message : String(error));
+          void startVoiceCapture()
+            .then(() => {
+              scheduleNovaVoiceStop(mode === "walkie" ? 15000 : NOVA_VOICE_CAPTURE_MS);
+            })
+            .catch((fallbackError) => {
+              const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+              setNovaVoiceModeActive(false);
+              devVoiceUiLog("startNovaVoiceCapture:error", message);
+              handleNovaVoiceError(mode, message);
+            });
+        });
+    },
+    [
+      clearNovaVoiceLoopRestart,
+      clearNovaVoiceStopTimer,
+      handleNovaTranscript,
+      handleNovaVoiceError,
+      handleNovaVoiceNoSpeech,
+      queueNovaListeningMode,
+      scheduleNovaVoiceStop,
+      setStatus,
+      startLiveRecognition,
+      startVoiceCapture,
+      stopLiveRecognition,
+      stopVoiceCapture,
+    ]
+  );
 
   useEffect(() => {
     startNovaVoiceCaptureRef.current = startNovaVoiceCapture;
   }, [startNovaVoiceCapture]);
 
   useEffect(() => {
-    if (novaHandsFreeEnabled || novaConversationModeEnabled || (!voiceRecording && !liveVoiceRecognitionActive)) {
+    if (voiceRecording || liveVoiceRecognitionActive) {
       return;
     }
-    clearNovaVoiceLoopRestart();
-    if (!novaVoiceModeActive) {
-      return;
-    }
-    setNovaVoiceModeActive(false);
-  }, [
-    clearNovaVoiceLoopRestart,
-    liveVoiceRecognitionActive,
-    novaConversationModeEnabled,
-    novaHandsFreeEnabled,
-    novaVoiceModeActive,
-    voiceRecording,
-  ]);
-
-  useEffect(() => {
     if (
-      (!novaHandsFreeEnabled && !novaConversationModeEnabled) ||
       route === "glasses" ||
       !unlocked ||
       appStateStatus !== "active" ||
       voiceBusy ||
-      voiceRecording ||
-      liveVoiceRecognitionActive ||
       novaVoiceModeActive
     ) {
       return;
     }
-    startNovaVoiceCapture();
+    queueNovaListeningMode(resolveDefaultNovaListeningMode(), 120);
   }, [
     appStateStatus,
+    liveVoiceRecognitionActive,
     novaConversationModeEnabled,
     novaHandsFreeEnabled,
     novaVoiceModeActive,
+    queueNovaListeningMode,
+    resolveDefaultNovaListeningMode,
     route,
-    startNovaVoiceCapture,
     unlocked,
     voiceBusy,
-    liveVoiceRecognitionActive,
     voiceRecording,
   ]);
 
@@ -5040,6 +5182,7 @@ export default function AppShell() {
     snippets: "Snippets",
     files: "Files",
     llms: "Nova",
+    settings: "Settings",
     team: "Team",
     glasses: "Glasses",
     vr: "VR",
@@ -5642,6 +5785,24 @@ export default function AppShell() {
             />
           ) : null}
 
+          {route === "settings" ? (
+            <SettingsScreen
+              handsFreeEnabled={novaHandsFreeEnabled}
+              speakRepliesEnabled={novaSpeakRepliesEnabled}
+              wakePhrase={novaWakePhrase}
+              conversationIdleMs={novaConversationIdleMs}
+              speechOutputAvailable={Boolean(getSpeechOutputModule())}
+              onSetHandsFreeEnabled={setNovaHandsFreeEnabled}
+              onSetSpeakRepliesEnabled={setNovaSpeakRepliesEnabled}
+              onSetWakePhrase={(value) => {
+                setNovaWakePhrase(normalizeNovaWakePhrase(value));
+              }}
+              onSetConversationIdleMs={(value) => {
+                setNovaConversationIdleMs(normalizeNovaConversationIdleMs(value));
+              }}
+            />
+          ) : null}
+
           {route === "team" ? (
             <TeamScreen
               identity={teamIdentity}
@@ -5929,6 +6090,11 @@ export default function AppShell() {
           route={route}
           onClose={() => setPageMenuVisible(false)}
           onGoHome={() => setHomeHubVisible(true)}
+          onOpenSettings={() => {
+            setPageMenuVisible(false);
+            setHomeHubVisible(false);
+            setRoute("settings");
+          }}
           onLogOff={() => {
             Alert.alert(
               Platform.OS === "ios" ? "Log off?" : "Close NovaRemote?",
@@ -5994,39 +6160,36 @@ export default function AppShell() {
             setRoute("llms");
           }}
           onSetHandsFreeEnabled={(value) => {
+            novaHandsFreeEnabledRef.current = value;
             setNovaHandsFreeEnabled(value);
             if (value) {
-              setStatus({ text: `Hands-free Nova enabled. Say "${novaWakePhrase}" to wake.`, error: false });
+              requestNovaOverlayOpen();
+              novaConversationModeEnabledRef.current = true;
+              setNovaConversationModeEnabled(true);
+              setStatus({ text: "Hands-Free listening...", error: false });
               void requestLiveRecognitionPermission().catch(() => undefined);
+              queueNovaListeningMode("conversation", 0);
               return;
             }
-            setStatus({ text: "Hands-free Nova disabled.", error: false });
-            clearNovaVoiceLoopRestart();
-            clearNovaVoiceStopTimer();
-            if (!novaConversationModeEnabled) {
-              if (liveVoiceRecognitionActive && novaVoiceModeActive) {
-                void stopLiveRecognition("abort");
-              }
-              if (voiceRecording && novaVoiceModeActive) {
-                void stopVoiceCapture();
-              }
-              setNovaVoiceModeActive(false);
-            }
+            endNovaConversationSession("manual");
           }}
           onToggleVoiceMode={() => {
             if (novaConversationModeEnabled) {
-              clearNovaVoiceLoopRestart();
-              clearNovaVoiceStopTimer();
               endNovaConversationSession("manual");
               setStatus({ text: "Nova voice mode disabled.", error: false });
               return;
             }
             requestNovaOverlayOpen();
+            novaConversationModeEnabledRef.current = true;
             setNovaConversationModeEnabled(true);
             resetNovaConversationIdleTimer();
             setStatus({ text: "Nova voice mode enabled. Speak naturally.", error: false });
+            queueNovaListeningMode("conversation", 0);
           }}
-          onVoiceHoldStart={startNovaVoiceCapture}
+          onVoiceHoldStart={() => {
+            requestNovaOverlayOpen();
+            startNovaVoiceCaptureRef.current("walkie");
+          }}
           onVoiceHoldEnd={() => {
             if (liveVoiceRecognitionActive) {
               void stopLiveRecognition("stop");

@@ -1,8 +1,13 @@
 export const DEFAULT_NOVA_WAKE_PHRASE = "hey nova";
+export const DEFAULT_NOVA_CONVERSATION_IDLE_MS = 10 * 1000;
+export const MIN_NOVA_CONVERSATION_IDLE_MS = 5 * 1000;
+export const MAX_NOVA_CONVERSATION_IDLE_MS = 30 * 1000;
 
 export type NovaVoiceSettings = {
   handsFreeEnabled: boolean;
   wakePhrase: string;
+  conversationIdleMs: number;
+  speakRepliesEnabled: boolean;
 };
 
 export type NovaWakeResolution = {
@@ -19,6 +24,15 @@ export function normalizeNovaWakePhrase(value: unknown): string {
     return DEFAULT_NOVA_WAKE_PHRASE;
   }
   return normalized.slice(0, 32);
+}
+
+export function normalizeNovaConversationIdleMs(value: unknown): number {
+  const parsed = Number.parseInt(String(value ?? ""), 10);
+  if (!Number.isFinite(parsed)) {
+    return DEFAULT_NOVA_CONVERSATION_IDLE_MS;
+  }
+  const normalized = Math.round(parsed / 1000) * 1000;
+  return Math.min(MAX_NOVA_CONVERSATION_IDLE_MS, Math.max(MIN_NOVA_CONVERSATION_IDLE_MS, normalized));
 }
 
 function escapeRegex(value: string): string {

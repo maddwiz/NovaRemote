@@ -264,8 +264,8 @@ export function NovaAssistantOverlay({
                     : voiceModeEnabled
                       ? "Voice mode stays live. Speak naturally and Nova will keep listening."
                       : handsFreeEnabled
-                      ? `Say "${wakePhrase}" to wake Nova, or hold the orb to talk instantly.`
-                      : "Talk naturally. Hold the Nova orb to speak, or type to control the app and remote sessions."}
+                        ? "Hands-Free keeps Nova in an always-on conversation."
+                        : `Say "${wakePhrase}" to wake Nova, hold the orb like a walkie, or tap Voice in chat.`}
               </Text>
               {!canSend ? (
                 <Pressable

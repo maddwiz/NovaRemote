@@ -25,6 +25,7 @@ type PageSlideMenuProps = {
   onClose: () => void;
   onGoHome: () => void;
   onLogOff: () => void;
+  onOpenSettings: () => void;
   onNavigate: (route: RouteTab) => void;
   poolLifecyclePaused: boolean;
   onTogglePoolLifecycle: () => void;
@@ -47,6 +48,7 @@ function routeTitle(route: RouteTab): string {
     snippets: "Snippets",
     files: "Files",
     llms: "Nova",
+    settings: "Settings",
     team: "Team",
     glasses: "Glasses",
     vr: "VR",
@@ -61,6 +63,7 @@ function routeDescription(route: RouteTab): string {
     snippets: "Keep reusable flows and quick actions close without crowding the main screen.",
     files: "Browse remote code, tail output, and adjust file visibility from one focused surface.",
     llms: "Configure Nova, providers, and assistant behavior from a calmer control panel.",
+    settings: "Tune wake phrase, reply voice, and hands-free behavior without leaving the app shell.",
     team: "Manage shared access, policy, and audit controls without leaving the current route.",
     glasses: "Adjust the wearable command surface and voice-first controls.",
     vr: "Shape the spatial command center and immersive execution surfaces.",
@@ -74,6 +77,7 @@ export function PageSlideMenu({
   onClose,
   onGoHome,
   onLogOff,
+  onOpenSettings,
   onNavigate,
   poolLifecyclePaused,
   onTogglePoolLifecycle,
@@ -127,6 +131,7 @@ export function PageSlideMenu({
             { key: "servers" as RouteTab, label: "Servers" },
             { key: "files" as RouteTab, label: "Files" },
             { key: "llms" as RouteTab, label: "Nova" },
+            { key: "settings" as RouteTab, label: "Settings" },
             { key: "team" as RouteTab, label: "Team" },
             { key: "vr" as RouteTab, label: "VR" },
           ].map((entry) => (
@@ -373,17 +378,28 @@ export function PageSlideMenu({
                 ))}
               </View>
             )}
-            <View style={styles.pageMenuLogOffInline}>
+            <View style={styles.pageMenuUtilityRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open settings"
+                style={styles.pageMenuUtilityButton}
+                onPress={() => {
+                  onClose();
+                  onOpenSettings();
+                }}
+              >
+                <Text style={styles.pageMenuUtilityText}>Settings</Text>
+              </Pressable>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log off and return to the lock screen"
-                style={styles.pageMenuLogOffButton}
+                style={styles.pageMenuUtilityButton}
                 onPress={() => {
                   onClose();
                   onLogOff();
                 }}
               >
-                <Text style={styles.pageMenuLogOffText}>Log Off</Text>
+                <Text style={styles.pageMenuUtilityText}>Log Off</Text>
               </Pressable>
             </View>
           </ScrollView>

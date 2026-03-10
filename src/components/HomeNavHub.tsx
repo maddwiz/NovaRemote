@@ -28,6 +28,7 @@ const ROUTES: HomeNavItem[] = [
   { key: "servers", title: "Servers", subtitle: "Targets and security", tone: "slate" },
   { key: "files", title: "Files", subtitle: "Remote browser and editor", tone: "cyan" },
   { key: "llms", title: "Nova", subtitle: "Voice, models, and control", tone: "violet" },
+  { key: "settings", title: "Settings", subtitle: "Voice and app behavior", tone: "slate" },
   { key: "snippets", title: "Snippets", subtitle: "Reusable actions", tone: "violet" },
   { key: "team", title: "Team", subtitle: "Policies and audit", tone: "slate" },
   { key: "vr", title: "Spatial", subtitle: "Glasses and VR center", tone: "pink" },
@@ -89,6 +90,20 @@ function HomeHubRouteIcon({ route }: { route: RouteTab }) {
         <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
           <Circle cx={12} cy={12} r={2.4} {...commonProps} />
           <Path d="M12 4.8 13.4 8l3.3.6-2.4 2.3.6 3.4L12 12.8l-2.9 1.5.6-3.4-2.4-2.3 3.3-.6L12 4.8Z" {...commonProps} />
+        </Svg>
+      );
+    case "settings":
+      return (
+        <Svg width={ICON_SIZE} height={ICON_SIZE} viewBox="0 0 24 24">
+          <Circle cx={12} cy={12} r={2.8} {...commonProps} />
+          <Path d="M12 4.8v2.1" {...commonProps} />
+          <Path d="M12 17.1v2.1" {...commonProps} />
+          <Path d="M19.2 12h-2.1" {...commonProps} />
+          <Path d="M6.9 12H4.8" {...commonProps} />
+          <Path d="m17.2 6.8-1.4 1.4" {...commonProps} />
+          <Path d="m8.2 15.8-1.4 1.4" {...commonProps} />
+          <Path d="m17.2 17.2-1.4-1.4" {...commonProps} />
+          <Path d="m8.2 8.2-1.4-1.4" {...commonProps} />
         </Svg>
       );
     case "snippets":

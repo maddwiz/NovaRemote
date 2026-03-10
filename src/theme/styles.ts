@@ -1768,11 +1768,11 @@ export const styles = StyleSheet.create({
     height: 82,
     borderRadius: 41,
     borderWidth: 1,
-    borderColor: "rgba(111, 228, 255, 0.34)",
-    backgroundColor: "rgba(16, 31, 52, 0.78)",
+    borderColor: "rgba(255, 118, 211, 0.42)",
+    backgroundColor: "rgba(58, 23, 71, 0.78)",
     alignItems: "center",
     justifyContent: "center",
-    shadowColor: "#43d7ff",
+    shadowColor: "#ff63c9",
     shadowOpacity: 0.22,
     shadowRadius: 18,
     shadowOffset: { width: 0, height: 8 },
@@ -1783,7 +1783,7 @@ export const styles = StyleSheet.create({
     width: 50,
     height: 50,
     borderRadius: 25,
-    backgroundColor: "rgba(103, 225, 255, 0.14)",
+    backgroundColor: "rgba(255, 115, 206, 0.16)",
   },
   homeHubLaunchTitle: {
     color: "#eff7ff",
@@ -2031,11 +2031,13 @@ export const styles = StyleSheet.create({
     borderColor: "rgba(255, 121, 206, 0.12)",
     backgroundColor: "rgba(16, 12, 27, 0.72)",
   },
-  pageMenuLogOffInline: {
-    marginTop: -4,
+  pageMenuUtilityRow: {
+    flexDirection: "row",
+    gap: 10,
+    marginTop: -2,
     paddingTop: 0,
   },
-  pageMenuLogOffButton: {
+  pageMenuUtilityButton: {
     alignSelf: "flex-start",
     borderRadius: 14,
     borderWidth: 1,
@@ -2043,8 +2045,10 @@ export const styles = StyleSheet.create({
     backgroundColor: "rgba(42, 52, 88, 0.5)",
     paddingHorizontal: 14,
     paddingVertical: 10,
+    minWidth: 112,
+    alignItems: "center",
   },
-  pageMenuLogOffText: {
+  pageMenuUtilityText: {
     color: "#c8e8ff",
     fontSize: 13,
     fontWeight: "700",
@@ -2064,6 +2068,29 @@ export const styles = StyleSheet.create({
     color: "#fff1fb",
     fontSize: 15,
     fontWeight: "700",
+  },
+  settingsModeList: {
+    gap: 10,
+  },
+  settingsModeCard: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: "rgba(255, 126, 209, 0.16)",
+    backgroundColor: "rgba(58, 29, 71, 0.78)",
+    paddingHorizontal: 14,
+    paddingVertical: 14,
+    gap: 4,
+  },
+  settingsModeTitle: {
+    color: "#fff1fb",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+  settingsModeCopy: {
+    color: "#b7cae8",
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "500",
   },
   pageMenuSwitchRow: {
     borderRadius: 18,
