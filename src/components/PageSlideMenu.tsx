@@ -24,6 +24,7 @@ type PageSlideMenuProps = {
   route: RouteTab;
   onClose: () => void;
   onGoHome: () => void;
+  onLogOff: () => void;
   onNavigate: (route: RouteTab) => void;
   poolLifecyclePaused: boolean;
   onTogglePoolLifecycle: () => void;
@@ -72,6 +73,7 @@ export function PageSlideMenu({
   route,
   onClose,
   onGoHome,
+  onLogOff,
   onNavigate,
   poolLifecyclePaused,
   onTogglePoolLifecycle,
@@ -372,6 +374,19 @@ export function PageSlideMenu({
               </View>
             )}
           </ScrollView>
+          <View style={styles.pageMenuSecondaryActions}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Log off and return to the lock screen"
+              style={styles.pageMenuLogOffButton}
+              onPress={() => {
+                onClose();
+                onLogOff();
+              }}
+            >
+              <Text style={styles.pageMenuLogOffText}>Log Off</Text>
+            </Pressable>
+          </View>
           <View style={styles.pageMenuFooterActions}>
             <Pressable
               accessibilityRole="button"

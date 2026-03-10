@@ -5668,6 +5668,12 @@ export default function AppShell() {
           route={route}
           onClose={() => setPageMenuVisible(false)}
           onGoHome={() => setHomeHubVisible(true)}
+          onLogOff={() => {
+            void runWithStatus("Logging off", async () => {
+              setPageMenuVisible(false);
+              await lock();
+            });
+          }}
           onNavigate={openRouteFromMenu}
           poolLifecyclePaused={poolLifecyclePaused}
           onTogglePoolLifecycle={togglePoolLifecycleFromMenu}
