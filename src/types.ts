@@ -376,6 +376,8 @@ export type NovaSpineContext = {
 
 export type NovaAdaptBridgeHealth = {
   ok: boolean;
+  protocolVersion?: string | null;
+  agentContractVersion?: string | null;
   [key: string]: unknown;
 };
 
@@ -387,6 +389,8 @@ export type NovaAdaptBridgeMemoryStatus = {
 };
 
 export type NovaAdaptBridgeCapabilities = {
+  protocolVersion?: string | null;
+  agentContractVersion?: string | null;
   memoryStatus: boolean;
   governance: boolean;
   workflows: boolean;

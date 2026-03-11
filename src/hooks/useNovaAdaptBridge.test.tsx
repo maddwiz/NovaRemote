@@ -229,6 +229,8 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).supported).toBe(true);
     expect(latestOrThrow(latest).runtimeAvailable).toBe(true);
     expect(latestOrThrow(latest).capabilities).toEqual({
+      protocolVersion: null,
+      agentContractVersion: null,
       memoryStatus: true,
       governance: true,
       workflows: true,
@@ -414,6 +416,8 @@ describe("useNovaAdaptBridge", () => {
     await waitFor(() => !latestOrThrow(latest).loading, "capability-aware bridge load");
 
     expect(latestOrThrow(latest).capabilities).toEqual({
+      protocolVersion: null,
+      agentContractVersion: null,
       memoryStatus: false,
       governance: false,
       workflows: true,
@@ -452,6 +456,8 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).supported).toBe(false);
     expect(latestOrThrow(latest).runtimeAvailable).toBe(false);
     expect(latestOrThrow(latest).capabilities).toEqual({
+      protocolVersion: null,
+      agentContractVersion: null,
       memoryStatus: false,
       governance: false,
       workflows: false,
@@ -518,6 +524,8 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).runtimeAvailable).toBe(true);
     expect(latestOrThrow(latest).error).toBeNull();
     expect(latestOrThrow(latest).capabilities).toEqual({
+      protocolVersion: null,
+      agentContractVersion: null,
       memoryStatus: false,
       governance: false,
       workflows: false,

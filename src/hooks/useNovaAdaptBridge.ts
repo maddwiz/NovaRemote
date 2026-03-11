@@ -212,6 +212,8 @@ function capabilityFromSettled(result: PromiseSettledResult<unknown>): boolean {
 function normalizeCapabilities(value: unknown): NovaAdaptBridgeCapabilities {
   const raw = value as Partial<Record<keyof NovaAdaptBridgeCapabilities, unknown>> | null;
   return {
+    protocolVersion: asNullableString(raw?.protocolVersion),
+    agentContractVersion: asNullableString(raw?.agentContractVersion),
     memoryStatus: Boolean(raw?.memoryStatus),
     governance: Boolean(raw?.governance),
     workflows: Boolean(raw?.workflows),
@@ -385,6 +387,8 @@ type RawBridgeAuditEvent = {
 };
 
 const DEFAULT_BRIDGE_CAPABILITIES: NovaAdaptBridgeCapabilities = {
+  protocolVersion: null,
+  agentContractVersion: null,
   memoryStatus: false,
   governance: false,
   workflows: false,
@@ -577,6 +581,8 @@ export async function fetchNovaAdaptBridgeSnapshot(
     const effectiveCapabilities =
       bridgeCapabilities ??
       ({
+        protocolVersion: null,
+        agentContractVersion: null,
         memoryStatus: capabilityFromSettled(memoryResult),
         governance: capabilityFromSettled(governanceResult),
         workflows: capabilityFromSettled(workflowsResult),

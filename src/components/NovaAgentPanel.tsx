@@ -143,6 +143,9 @@ function summarizeBridgeHealth(health: NovaAdaptBridgeHealth | null, runtimeAvai
   if (memoryBackend) {
     parts.push("NovaSpine linked");
   }
+  if (health.protocolVersion) {
+    parts.push(`Proto ${health.protocolVersion}`);
+  }
   return parts.join(" • ");
 }
 
@@ -196,10 +199,13 @@ function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): strin
   if (capabilities.governance) {
     available.push("governance");
   }
+  const versions = [capabilities.protocolVersion, capabilities.agentContractVersion].filter(Boolean);
   if (available.length === 0) {
-    return "Companion capabilities unavailable.";
+    return versions.length > 0 ? `Companion capabilities unavailable • ${versions.join(" / ")}` : "Companion capabilities unavailable.";
   }
-  return `Companion capabilities: ${available.join(", ")}`;
+  return versions.length > 0
+    ? `Companion capabilities: ${available.join(", ")} • ${versions.join(" / ")}`
+    : `Companion capabilities: ${available.join(", ")}`;
 }
 
 function canApprovePlan(status: string): boolean {
