@@ -492,10 +492,11 @@ describe("NovaAgentPanel", () => {
 
     expect(useNovaAgentRuntimeMock).not.toHaveBeenCalled();
     expect(() => renderer.root.findByProps({ accessibilityLabel: "Add NovaAdapt agent" })).toThrow();
-    expect(() => renderer.root.findByProps({ children: "Use Local Fallback" })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Enable Device Fallback" })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Companion capabilities unavailable." })).not.toThrow();
 
     await act(async () => {
-      renderer.root.findByProps({ accessibilityLabel: "Use local fallback controls" }).props.onPress();
+      renderer.root.findByProps({ accessibilityLabel: "Enable device fallback controls" }).props.onPress();
     });
 
     expect(useNovaAgentRuntimeMock).toHaveBeenCalled();

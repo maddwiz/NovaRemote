@@ -34,6 +34,7 @@ Updated: 2026-03-11
   - focused-server agent CRUD/approval execution now also refuses to fall through to the phone runtime while the server bridge reports an online runtime
   - the dedicated `Agents` screen now avoids mounting the phone-side NovaAdapt runtime unless the bridge/runtime is unavailable
   - the dedicated `Agents` screen now requires an explicit `Use Local Fallback` action before mounting the phone-side runtime when the bridge/runtime is unavailable
+  - the dedicated `Agents` screen now labels that path as `device fallback` and surfaces companion capability availability so fallback use stays explicit
   - the focused-server `AppShell` runtime now also disables its local NovaAdapt hook entirely while the bridge/runtime is online, leaving the phone runtime as a real fallback path instead of an always-mounted duplicate
   - non-focused local agent fallback no longer auto-focuses and queues hidden phone-runtime work; when the bridge runtime is down, the local fallback is now explicit to the currently focused server only
   - generic `AppShell` agent actions now stop at the server-runtime boundary and direct users to the dedicated `Agents` screen for any explicit local fallback

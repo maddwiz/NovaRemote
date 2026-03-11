@@ -179,6 +179,29 @@ function summarizeTemplate(template: NovaAdaptBridgeTemplate): string {
   return parts.join(" • ");
 }
 
+function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): string {
+  const available: string[] = [];
+  if (capabilities.workflows) {
+    available.push("workflows");
+  }
+  if (capabilities.templates) {
+    available.push("templates");
+  }
+  if (capabilities.templateGallery) {
+    available.push("gallery");
+  }
+  if (capabilities.memoryStatus) {
+    available.push("memory");
+  }
+  if (capabilities.governance) {
+    available.push("governance");
+  }
+  if (available.length === 0) {
+    return "Companion capabilities unavailable.";
+  }
+  return `Companion capabilities: ${available.join(", ")}`;
+}
+
 function canApprovePlan(status: string): boolean {
   return status.trim().toLowerCase() === "pending";
 }
@@ -1063,16 +1086,17 @@ export function NovaAgentPanel({
         <View style={styles.panel}>
           <Text style={styles.panelLabel}>Server Runtime Unavailable</Text>
           <Text style={styles.serverSubtitle}>
-            The server-backed NovaAdapt runtime is not available right now. Use local fallback only if you need temporary agent controls on this device.
+            The server-backed NovaAdapt runtime is not available right now. Enable device fallback only if you need temporary agent controls on this phone.
           </Text>
+          <Text style={styles.emptyText}>{summarizeCapabilities(bridgeCapabilities)}</Text>
           <View style={styles.actionsWrap}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={localFallbackEnabled ? "Hide local fallback controls" : "Use local fallback controls"}
+              accessibilityLabel={localFallbackEnabled ? "Hide device fallback controls" : "Enable device fallback controls"}
               style={[styles.actionButton, localFallbackEnabled ? styles.chipActive : null]}
               onPress={() => setLocalFallbackEnabled((current) => !current)}
             >
-              <Text style={styles.actionButtonText}>{localFallbackEnabled ? "Hide Local Fallback" : "Use Local Fallback"}</Text>
+              <Text style={styles.actionButtonText}>{localFallbackEnabled ? "Hide Device Fallback" : "Enable Device Fallback"}</Text>
             </Pressable>
           </View>
         </View>

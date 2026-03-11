@@ -137,6 +137,7 @@ Updated: 2026-03-11
   - [x] dedicated `Agents` route now prefers server-backed creation (`Create Approval Plan`, `Start Workflow`, `Resume Workflow`)
   - [x] audit-event SSE now triggers quiet bridge refreshes so server-side plan/job/memory changes land without waiting for the poll interval
   - [x] server-backed runtime governance controls are now surfaced in the mobile bridge runtime section (pause, resume, reset usage, cancel all jobs)
+  - [x] dedicated `Agents` runtime-unavailable state now labels the remaining phone-side controls explicitly as `device fallback` and shows companion capability availability in that panel
   - [x] local NovaAdapt preview no longer mounts inside the embedded `Terminals` panel; local fallback is now reserved for explicit preview surfaces and the dedicated `Agents` screen when the server runtime is unavailable
   - [x] the embedded `Terminals` panel now exposes an explicit `Open Agents` CTA whenever the server runtime is unavailable, so the remaining local fallback path is discoverable instead of implicit
   - [x] AppShell agent actions now route remote-first through the bridge, translating assistant/runtime actions into server plans/workflows before falling back to the phone runtime
