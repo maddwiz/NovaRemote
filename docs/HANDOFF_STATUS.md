@@ -211,6 +211,7 @@ Updated: 2026-03-11
   - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
   - explicit `Open Agents` routing from the embedded `Terminals` panel when the server runtime is unavailable
   - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
+  - codex_remote sidecar validation is now scriptable for both package and live stack checks via `scripts/validate_nova_sidecars.py`
 - Remaining server-runtime migration work is:
   - finish release-hardening and packaging around the validated `codex_remote + NovaAdapt + NovaSpine` sidecar topology
   - clean auth/protocol boundaries before companion-server open-sourcing
