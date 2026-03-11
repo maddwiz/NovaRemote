@@ -98,6 +98,7 @@ import {
 } from "./fleetTerminalBasePath";
 import { findApprovedFleetApproval, findPendingFleetApproval } from "./fleetApproval";
 import { formatAssistantShellPath, resolveAssistantFolderTarget } from "./assistantPath";
+import { buildAgentRuntimeFallback } from "./agentFallback";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
 import { AgentsScreen } from "./screens/AgentsScreen";
@@ -2778,13 +2779,17 @@ export default function AppShell() {
       if (remoteResult !== null) {
         return remoteResult;
       }
-      if (focusedServerId === targetServerId) {
-        throw new Error("Server runtime unavailable. Open the Agents screen to use the local NovaAdapt fallback for the focused server.");
+      const fallback = buildAgentRuntimeFallback({
+        targetServerId,
+        focusedServerId,
+      });
+      if (fallback.focusedServerId) {
+        setPoolFocusedServerId(fallback.focusedServerId);
       }
-
-      throw new Error("Target server runtime unavailable. Focus the server and open the Agents screen to use the local NovaAdapt fallback.");
+      setRoute(fallback.route);
+      throw new Error(fallback.message);
     },
-    [executeRemoteAgentServerAction, focusedServerId, servers]
+    [executeRemoteAgentServerAction, focusedServerId, servers, setPoolFocusedServerId]
   );
 
   const approveReadyAgentsForServer = useCallback(

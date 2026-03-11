@@ -215,6 +215,7 @@ Updated: 2026-03-11
   - explicit opt-in local fallback controls on the dedicated `Agents` screen when the server runtime is unavailable
   - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
   - explicit `Open Agents` routing from the embedded `Terminals` panel when the server runtime is unavailable
+  - server-runtime misses now redirect the app into the dedicated `Agents` screen for the target server before surfacing the device-fallback message
   - server-backed template gallery + saved-template launch controls in the dedicated `Agents` screen
   - capability-aware optional bridge controls that hide or replace unsupported memory/governance/workflow/template surfaces instead of surfacing dead actions when a sidecar route is not available yet
   - workflow creation and template workflow-launch actions are now capability-gated, so the mobile surface stops offering dead workflow actions when the companion reports `workflows: false`
