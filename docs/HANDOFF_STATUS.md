@@ -212,6 +212,7 @@ Updated: 2026-03-11
   - explicit `Open Agents` routing from the embedded `Terminals` panel when the server runtime is unavailable
   - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
   - codex_remote sidecar validation is now scriptable for both package and live stack checks via `scripts/validate_nova_sidecars.py`
+  - codex_remote now also ships sidecar lifecycle wrappers (`scripts/start_nova_sidecars.sh`, `scripts/stop_nova_sidecars.sh`) for repeatable bring-up and teardown
 - Remaining server-runtime migration work is:
   - finish release-hardening and packaging around the validated `codex_remote + NovaAdapt + NovaSpine` sidecar topology
   - clean auth/protocol boundaries before companion-server open-sourcing

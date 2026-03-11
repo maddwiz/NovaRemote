@@ -26,6 +26,7 @@ Updated: 2026-03-11
 - audit-event SSE proxy route
 - validated sidecar stack with `codex_remote + NovaAdapt + NovaSpine`
 - repo-local sidecar validator in `codex_remote/scripts/validate_nova_sidecars.py` now supports both package checks and live runtime checks (`--live-check`)
+- repo-local lifecycle wrappers now exist for sidecar bring-up and teardown: `scripts/start_nova_sidecars.sh` and `scripts/stop_nova_sidecars.sh`
 - validated host forwarding for `/agents/workflows/status`, `/agents/workflows/list`, `/agents/workflows/item`, and `/agents/workflows/start`
 
 ### Still pending

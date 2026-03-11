@@ -39,5 +39,6 @@ Updated: 2026-03-11
   - generic `AppShell` agent actions now stop at the server-runtime boundary and direct users to the dedicated `Agents` screen for any explicit local fallback
   - sidecar topology validation now covers `codex_remote + NovaAdapt + NovaSpine`, including workflow forwarding through host `/agents/*`
   - codex_remote now exposes a reusable sidecar validator script that can check both the package and the live runtime stack before mobile rollout
+  - codex_remote now includes repeatable sidecar lifecycle scripts so the NovaAdapt/NovaSpine stack can be started and stopped without copying compose commands out of the runbook
   - remaining release-hardening / protocol cleanup before companion-server open-sourcing
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).
