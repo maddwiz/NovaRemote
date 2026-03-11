@@ -56,6 +56,13 @@ import { useCommandHistory } from "./hooks/useCommandHistory";
 import { commandQueueStatus, useCommandQueue } from "./hooks/useCommandQueue";
 import { useCollaboration } from "./hooks/useCollaboration";
 import { useConnectionPool } from "./hooks/useConnectionPool";
+import {
+  approveNovaAdaptBridgePlanAsync,
+  createNovaAdaptBridgePlan,
+  fetchNovaAdaptBridgeSnapshot,
+  rejectNovaAdaptBridgePlan,
+  resumeNovaAdaptBridgeWorkflow,
+} from "./hooks/useNovaAdaptBridge";
 import { useServerConnection } from "./hooks/useServerConnection";
 import { useNovaAgentRuntime } from "./hooks/useNovaAgentRuntime";
 import { useProcessManager } from "./hooks/useProcessManager";
@@ -125,6 +132,8 @@ import { findBlockedCommandPattern, resolveSessionTimeoutMs } from "./teamPolicy
 import {
   AiEnginePreference,
   FleetRunResult,
+  NovaAdaptBridgePlan,
+  NovaAdaptBridgeWorkflow,
   ProcessSignal,
   RemoteFileEntry,
   RecordingChunk,
@@ -164,6 +173,41 @@ function uniqueServerIds(serverIds: string[]): string[] {
     next.push(value);
   });
   return next;
+}
+
+function normalizeRemoteAgentName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function remoteWorkflowMatchesAgentName(workflow: NovaAdaptBridgeWorkflow, name: string): boolean {
+  const normalizedName = normalizeRemoteAgentName(name);
+  if (!normalizedName) {
+    return false;
+  }
+  const contextName =
+    typeof workflow.context.agent_name === "string" ? normalizeRemoteAgentName(workflow.context.agent_name) : "";
+  if (contextName && contextName === normalizedName) {
+    return true;
+  }
+  const objective = normalizeRemoteAgentName(workflow.objective);
+  return objective.includes(normalizedName);
+}
+
+function remotePlanMatchesAgentName(plan: NovaAdaptBridgePlan, name: string): boolean {
+  const normalizedName = normalizeRemoteAgentName(name);
+  if (!normalizedName) {
+    return false;
+  }
+  return normalizeRemoteAgentName(plan.objective).includes(normalizedName);
+}
+
+function canApproveRemotePlanStatus(status: string): boolean {
+  return status.trim().toLowerCase() === "pending";
+}
+
+function canRejectRemotePlanStatus(status: string): boolean {
+  const normalized = status.trim().toLowerCase();
+  return normalized === "pending" || normalized === "approved";
 }
 
 function buildTeamServerSignature(servers: ServerProfile[]): string {
@@ -2597,7 +2641,7 @@ export default function AppShell() {
   type AgentServerAction =
     | { kind: "approve" }
     | { kind: "deny" }
-    | { kind: "create"; name: string }
+    | { kind: "create"; name: string; goal?: string }
     | { kind: "remove"; name: string }
     | { kind: "set_status"; name: string; status: "idle" | "monitoring" | "executing" | "waiting_approval" }
     | { kind: "set_goal"; name: string; goal: string }
@@ -2609,6 +2653,129 @@ export default function AppShell() {
     reject: (error: unknown) => void;
   };
   const pendingAgentServerActionsRef = useRef<PendingAgentServerAction[]>([]);
+  const buildRemoteAgentObjective = useCallback((action: AgentServerAction): string => {
+    if (action.kind === "create") {
+      const name = action.name.trim();
+      const goal = action.goal?.trim() || "";
+      return goal ? `Create agent "${name}" with goal: ${goal}` : `Create agent "${name}"`;
+    }
+    if (action.kind === "remove") {
+      return `Remove agent "${action.name.trim()}"`;
+    }
+    if (action.kind === "set_status") {
+      return `Set agent "${action.name.trim()}" status to ${action.status}`;
+    }
+    if (action.kind === "set_goal") {
+      return `Update agent "${action.name.trim()}" goal to: ${action.goal.trim()}`;
+    }
+    if (action.kind === "queue_command") {
+      return `Run command for agent "${action.name.trim()}": ${action.command.trim()}`;
+    }
+    return "";
+  }, []);
+  const executeRemoteAgentServerAction = useCallback(
+    async (serverId: string, action: AgentServerAction): Promise<string[] | null> => {
+      const targetServer = servers.find((server) => server.id === serverId) || null;
+      if (!targetServer) {
+        throw new Error("Target server is not available.");
+      }
+
+      const snapshot = await fetchNovaAdaptBridgeSnapshot(targetServer, {
+        planLimit: 50,
+        jobLimit: 25,
+        workflowLimit: 50,
+      });
+      if (!snapshot.supported || !snapshot.runtimeAvailable) {
+        return null;
+      }
+
+      if (action.kind === "approve") {
+        const pendingPlans = snapshot.plans.filter((plan) => canApproveRemotePlanStatus(plan.status));
+        if (pendingPlans.length === 0) {
+          return [];
+        }
+        for (const plan of pendingPlans) {
+          await approveNovaAdaptBridgePlanAsync(targetServer, plan.id);
+        }
+        return pendingPlans.map((plan) => plan.id);
+      }
+
+      if (action.kind === "deny") {
+        const pendingPlans = snapshot.plans.filter((plan) => canRejectRemotePlanStatus(plan.status));
+        if (pendingPlans.length === 0) {
+          return [];
+        }
+        for (const plan of pendingPlans) {
+          await rejectNovaAdaptBridgePlan(targetServer, plan.id, "Rejected from NovaRemote agent controls");
+        }
+        return pendingPlans.map((plan) => plan.id);
+      }
+
+      if (action.kind === "create") {
+        const created = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return created ? [created.id] : [];
+      }
+
+      if (action.kind === "remove") {
+        const matchingPendingPlans = snapshot.plans.filter(
+          (plan) => canRejectRemotePlanStatus(plan.status) && remotePlanMatchesAgentName(plan, action.name)
+        );
+        if (matchingPendingPlans.length > 0) {
+          for (const plan of matchingPendingPlans) {
+            await rejectNovaAdaptBridgePlan(targetServer, plan.id, `Removed agent ${action.name.trim()} from NovaRemote`);
+          }
+          return matchingPendingPlans.map((plan) => plan.id);
+        }
+        const removalPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return removalPlan ? [removalPlan.id] : [];
+      }
+
+      if (action.kind === "set_status") {
+        const matchingWorkflows = snapshot.workflows.filter((workflow) => remoteWorkflowMatchesAgentName(workflow, action.name));
+        if ((action.status === "executing" || action.status === "monitoring") && matchingWorkflows.length > 0) {
+          const resumed: string[] = [];
+          for (const workflow of matchingWorkflows) {
+            if (workflow.status.trim().toLowerCase() === "running") {
+              resumed.push(workflow.workflowId);
+              continue;
+            }
+            const ok = await resumeNovaAdaptBridgeWorkflow(targetServer, workflow.workflowId);
+            if (ok) {
+              resumed.push(workflow.workflowId);
+            }
+          }
+          if (resumed.length > 0) {
+            return resumed;
+          }
+        }
+        const statusPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return statusPlan ? [statusPlan.id] : [];
+      }
+
+      if (action.kind === "set_goal") {
+        const goalPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return goalPlan ? [goalPlan.id] : [];
+      }
+
+      const commandPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+        strategy: "single",
+      });
+      if (!commandPlan) {
+        return [];
+      }
+      await approveNovaAdaptBridgePlanAsync(targetServer, commandPlan.id);
+      return [commandPlan.id];
+    },
+    [buildRemoteAgentObjective, servers]
+  );
   const dispatchFocusedServerAgentCommand = useCallback(
     (session: string, command: string) => {
       if (!agentRuntimeServerId) {
@@ -2841,6 +3008,10 @@ export default function AppShell() {
       if (!servers.some((server) => server.id === targetServerId)) {
         throw new Error("Target server is not available.");
       }
+      const remoteResult = await executeRemoteAgentServerAction(targetServerId, action);
+      if (remoteResult !== null) {
+        return remoteResult;
+      }
       if (focusedServerId === targetServerId) {
         return executeFocusedAgentServerAction(action);
       }
@@ -2855,7 +3026,7 @@ export default function AppShell() {
         processPendingAgentServerActions();
       });
     },
-    [executeFocusedAgentServerAction, focusedServerId, processPendingAgentServerActions, servers]
+    [executeFocusedAgentServerAction, executeRemoteAgentServerAction, focusedServerId, processPendingAgentServerActions, servers]
   );
 
   const approveReadyAgentsForServer = useCallback(
@@ -2869,7 +3040,8 @@ export default function AppShell() {
   );
 
   const createAgentForServer = useCallback(
-    async (serverId: string, name: string): Promise<string[]> => await runAgentServerAction(serverId, { kind: "create", name }),
+    async (serverId: string, name: string, goal?: string): Promise<string[]> =>
+      await runAgentServerAction(serverId, { kind: "create", name, goal }),
     [runAgentServerAction]
   );
 
@@ -2925,10 +3097,10 @@ export default function AppShell() {
   );
 
   const createAgentForServers = useCallback(
-    async (serverIds: string[], name: string): Promise<string[]> => {
+    async (serverIds: string[], name: string, goal?: string): Promise<string[]> => {
       const created: string[] = [];
       for (const serverId of uniqueServerIds(serverIds)) {
-        const next = await createAgentForServer(serverId, name);
+        const next = await createAgentForServer(serverId, name, goal);
         created.push(...next);
       }
       return created;
@@ -3673,10 +3845,7 @@ export default function AppShell() {
           }
 
           if (action.type === "create_agent") {
-            await createAgentForServer(server.id, action.name);
-            if (action.goal) {
-              await setAgentGoalForServer(server.id, action.name, action.goal);
-            }
+            await createAgentForServer(server.id, action.name, action.goal);
             results.push({ action: action.type, ok: true, detail: `Created agent ${action.name} on ${server.name}` });
             continue;
           }

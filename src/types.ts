@@ -411,8 +411,10 @@ export type NovaAdaptBridgeWorkflow = {
   workflowId: string;
   status: string;
   objective: string;
+  createdAt: string | null;
   updatedAt: string | null;
   lastError: string | null;
+  context: Record<string, unknown>;
 };
 
 export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";

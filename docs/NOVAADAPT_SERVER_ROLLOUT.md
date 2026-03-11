@@ -1,6 +1,6 @@
 # NovaRemote Server-Side NovaAdapt Rollout
 
-Updated: 2026-03-10
+Updated: 2026-03-11
 
 ## Current Progress
 
@@ -14,6 +14,7 @@ Updated: 2026-03-10
 - a dedicated `Agents` screen now exists in NovaRemote for the server-backed runtime
 - the dedicated `Agents` screen now creates approval plans and persistent workflows directly on the server runtime
 - workflow resume actions are now available from the mobile runtime surface
+- AppShell assistant/runtime agent actions now route remote-first through the bridge, translating create/update/queue/approve/deny operations into server plans/workflow resume actions
 - the old in-app NovaAdapt runtime is now fallback-only on the dedicated `Agents` screen and remains available in `Terminals` during migration
 
 ### Completed in companion bridge
@@ -26,7 +27,7 @@ Updated: 2026-03-10
 
 ### Still pending
 
-- move the remaining agent CRUD/update paths fully from phone runtime to server runtime
+- move the last remaining non-bridge agent CRUD/update paths from phone runtime to server runtime
 - add sidecar packaging/runbooks for `codex_remote + NovaAdapt + NovaSpine`
 - add richer runtime event transport if NovaAdapt grows beyond plan/job SSE
 - clean auth/protocol surface and publish the companion server openly

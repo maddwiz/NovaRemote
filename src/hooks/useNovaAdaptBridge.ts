@@ -69,8 +69,10 @@ type RawBridgeWorkflow = {
   workflow_id?: unknown;
   status?: unknown;
   objective?: unknown;
+  created_at?: unknown;
   updated_at?: unknown;
   last_error?: unknown;
+  context?: unknown;
 };
 
 type RawWorkflowsResponse = {
@@ -167,8 +169,10 @@ function normalizeWorkflow(value: unknown): NovaAdaptBridgeWorkflow | null {
     workflowId,
     objective,
     status,
+    createdAt: asNullableString(raw?.created_at),
     updatedAt: asNullableString(raw?.updated_at),
     lastError: asNullableString(raw?.last_error),
+    context: raw?.context && typeof raw.context === "object" ? { ...(raw.context as Record<string, unknown>) } : {},
   };
 }
 
@@ -290,6 +294,235 @@ export const novaAdaptBridgeTestUtils = {
   splitStreamBuffer,
 };
 
+export type NovaAdaptBridgeSnapshot = {
+  supported: boolean;
+  runtimeAvailable: boolean;
+  error: string | null;
+  health: NovaAdaptBridgeHealth | null;
+  memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  plans: NovaAdaptBridgePlan[];
+  jobs: NovaAdaptBridgeJob[];
+  workflows: NovaAdaptBridgeWorkflow[];
+};
+
+type BridgeSnapshotOptions = {
+  planLimit?: number;
+  jobLimit?: number;
+  workflowLimit?: number;
+};
+
+function hasBridgeCredentials(server: ServerProfile | null | undefined): server is ServerProfile {
+  return Boolean(server && normalizeBaseUrl(server.baseUrl) && server.token.trim());
+}
+
+export async function fetchNovaAdaptBridgeSnapshot(
+  server: ServerProfile | null,
+  options: BridgeSnapshotOptions = {}
+): Promise<NovaAdaptBridgeSnapshot> {
+  if (!hasBridgeCredentials(server)) {
+    return {
+      supported: false,
+      runtimeAvailable: false,
+      error: null,
+      health: null,
+      memoryStatus: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+    };
+  }
+
+  const planLimit = Math.max(1, Math.min(100, options.planLimit ?? 12));
+  const jobLimit = Math.max(1, Math.min(100, options.jobLimit ?? 12));
+  const workflowLimit = Math.max(1, Math.min(100, options.workflowLimit ?? 12));
+
+  try {
+    const nextHealth = await apiRequest<NovaAdaptBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
+    const [plansResult, jobsResult, memoryResult, workflowsResult] = await Promise.allSettled([
+      apiRequest<unknown>(server.baseUrl, server.token, `/agents/plans?limit=${planLimit}`),
+      apiRequest<unknown>(server.baseUrl, server.token, `/agents/jobs?limit=${jobLimit}`),
+      apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
+      apiRequest<RawWorkflowsResponse>(server.baseUrl, server.token, `/agents/workflows/list?limit=${workflowLimit}&context=api`),
+    ]);
+
+    return {
+      supported: true,
+      runtimeAvailable: Boolean(nextHealth.ok),
+      error: null,
+      health: nextHealth,
+      memoryStatus: memoryResult.status === "fulfilled" ? memoryResult.value : null,
+      plans:
+        plansResult.status === "fulfilled" && Array.isArray(plansResult.value)
+          ? sortNewest(plansResult.value.map(normalizePlan).filter((item): item is NovaAdaptBridgePlan => Boolean(item)))
+          : [],
+      jobs:
+        jobsResult.status === "fulfilled" && Array.isArray(jobsResult.value)
+          ? sortNewest(jobsResult.value.map(normalizeJob).filter((item): item is NovaAdaptBridgeJob => Boolean(item)))
+          : [],
+      workflows:
+        workflowsResult.status === "fulfilled" && Array.isArray(workflowsResult.value?.workflows)
+          ? sortNewest(
+              workflowsResult.value.workflows
+                .map(normalizeWorkflow)
+                .filter((item): item is NovaAdaptBridgeWorkflow => Boolean(item))
+            )
+          : [],
+    };
+  } catch (nextError) {
+    if (isBridgeUnavailableError(nextError)) {
+      return {
+        supported: false,
+        runtimeAvailable: false,
+        error: null,
+        health: null,
+        memoryStatus: null,
+        plans: [],
+        jobs: [],
+        workflows: [],
+      };
+    }
+    return {
+      supported: true,
+      runtimeAvailable: false,
+      error: nextError instanceof Error ? nextError.message : String(nextError || "Unknown error"),
+      health: null,
+      memoryStatus: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+    };
+  }
+}
+
+async function postNovaAdaptBridgeJson<T>(
+  server: ServerProfile | null,
+  path: string,
+  body?: Record<string, unknown>
+): Promise<T | null> {
+  if (!hasBridgeCredentials(server)) {
+    return null;
+  }
+  return await apiRequest<T>(server.baseUrl, server.token, path, {
+    method: "POST",
+    body: body ? JSON.stringify(body) : undefined,
+  });
+}
+
+export async function createNovaAdaptBridgePlan(
+  server: ServerProfile | null,
+  objective: string,
+  options?: { strategy?: string }
+): Promise<NovaAdaptBridgePlan | null> {
+  const normalizedObjective = objective.trim();
+  if (!normalizedObjective) {
+    return null;
+  }
+  const payload: Record<string, unknown> = {
+    objective: normalizedObjective,
+  };
+  if (options?.strategy?.trim()) {
+    payload.strategy = options.strategy.trim();
+  }
+  return normalizePlan(await postNovaAdaptBridgeJson<unknown>(server, "/agents/plans", payload));
+}
+
+export async function startNovaAdaptBridgeWorkflow(
+  server: ServerProfile | null,
+  objective: string,
+  options?: { metadata?: Record<string, unknown>; autoResume?: boolean }
+): Promise<NovaAdaptBridgeWorkflow | null> {
+  const normalizedObjective = objective.trim();
+  if (!normalizedObjective) {
+    return null;
+  }
+  const metadata =
+    options?.metadata && Object.keys(options.metadata).length > 0
+      ? { ...options.metadata, created_by: "novaremote_mobile" }
+      : { created_by: "novaremote_mobile" };
+  const created = normalizeWorkflow(
+    await postNovaAdaptBridgeJson<unknown>(server, "/agents/workflows/start", {
+      objective: normalizedObjective,
+      metadata,
+      context: "api",
+    })
+  );
+  if (!created || options?.autoResume === false) {
+    return created;
+  }
+  const resumed = await postNovaAdaptBridgeJson<unknown>(server, "/agents/workflows/resume", {
+    workflow_id: created.workflowId,
+    context: "api",
+  });
+  return normalizeWorkflow(resumed) ?? created;
+}
+
+export async function resumeNovaAdaptBridgeWorkflow(server: ServerProfile | null, workflowId: string): Promise<boolean> {
+  const normalizedWorkflowId = workflowId.trim();
+  if (!normalizedWorkflowId) {
+    return false;
+  }
+  return Boolean(
+    await postNovaAdaptBridgeJson<unknown>(server, "/agents/workflows/resume", {
+      workflow_id: normalizedWorkflowId,
+      context: "api",
+    })
+  );
+}
+
+export async function approveNovaAdaptBridgePlanAsync(server: ServerProfile | null, planId: string): Promise<boolean> {
+  const normalizedPlanId = planId.trim();
+  if (!normalizedPlanId) {
+    return false;
+  }
+  return Boolean(
+    await postNovaAdaptBridgeJson<unknown>(server, `/agents/plans/${encodeURIComponent(normalizedPlanId)}/approve_async`, {
+      execute: true,
+    })
+  );
+}
+
+export async function rejectNovaAdaptBridgePlan(
+  server: ServerProfile | null,
+  planId: string,
+  reason?: string
+): Promise<boolean> {
+  const normalizedPlanId = planId.trim();
+  if (!normalizedPlanId) {
+    return false;
+  }
+  return Boolean(
+    await postNovaAdaptBridgeJson<unknown>(
+      server,
+      `/agents/plans/${encodeURIComponent(normalizedPlanId)}/reject`,
+      reason?.trim() ? { reason: reason.trim() } : {}
+    )
+  );
+}
+
+export async function retryFailedNovaAdaptBridgePlanAsync(server: ServerProfile | null, planId: string): Promise<boolean> {
+  const normalizedPlanId = planId.trim();
+  if (!normalizedPlanId) {
+    return false;
+  }
+  return Boolean(
+    await postNovaAdaptBridgeJson<unknown>(
+      server,
+      `/agents/plans/${encodeURIComponent(normalizedPlanId)}/retry_failed_async`,
+      { execute: true, retry_failed_only: true }
+    )
+  );
+}
+
+export async function undoNovaAdaptBridgePlan(server: ServerProfile | null, planId: string): Promise<boolean> {
+  const normalizedPlanId = planId.trim();
+  if (!normalizedPlanId) {
+    return false;
+  }
+  return Boolean(
+    await postNovaAdaptBridgeJson<unknown>(server, `/agents/plans/${encodeURIComponent(normalizedPlanId)}/undo`, {})
+  );
+}
+
 export function useNovaAdaptBridge({
   server,
   enabled = true,
@@ -349,55 +582,20 @@ export function useNovaAdaptBridge({
       }
 
       try {
-        const nextHealth = await apiRequest<NovaAdaptBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
-        const [plansResult, jobsResult, memoryResult, workflowsResult] = await Promise.allSettled([
-          apiRequest<unknown>(server.baseUrl, server.token, "/agents/plans?limit=12"),
-          apiRequest<unknown>(server.baseUrl, server.token, "/agents/jobs?limit=12"),
-          apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
-          apiRequest<RawWorkflowsResponse>(server.baseUrl, server.token, "/agents/workflows/list?limit=12&context=api"),
-        ]);
-
-        const nextPlans =
-          plansResult.status === "fulfilled" && Array.isArray(plansResult.value)
-            ? sortNewest(plansResult.value.map(normalizePlan).filter((item): item is NovaAdaptBridgePlan => Boolean(item)))
-            : [];
-        const nextJobs =
-          jobsResult.status === "fulfilled" && Array.isArray(jobsResult.value)
-            ? sortNewest(jobsResult.value.map(normalizeJob).filter((item): item is NovaAdaptBridgeJob => Boolean(item)))
-            : [];
-        const nextWorkflows =
-          workflowsResult.status === "fulfilled" && Array.isArray(workflowsResult.value?.workflows)
-            ? sortNewest(
-                workflowsResult.value.workflows
-                  .map(normalizeWorkflow)
-                  .filter((item): item is NovaAdaptBridgeWorkflow => Boolean(item))
-              )
-            : [];
-
-        setSupported(true);
-        setRuntimeAvailable(Boolean(nextHealth.ok));
-        setError(null);
-        setHealth(nextHealth);
-        setMemoryStatus(memoryResult.status === "fulfilled" ? memoryResult.value : null);
-        setPlans(nextPlans);
-        setJobs(nextJobs);
-        setWorkflows(nextWorkflows);
+        const snapshot = await fetchNovaAdaptBridgeSnapshot(server);
+        setSupported(snapshot.supported);
+        setRuntimeAvailable(snapshot.runtimeAvailable);
+        setError(snapshot.error);
+        setHealth(snapshot.health);
+        setMemoryStatus(snapshot.memoryStatus);
+        setPlans(snapshot.plans);
+        setJobs(snapshot.jobs);
+        setWorkflows(snapshot.workflows);
       } catch (nextError) {
-        if (isBridgeUnavailableError(nextError)) {
-          setSupported(false);
-          setRuntimeAvailable(false);
-          setError(null);
-          setHealth(null);
-          setMemoryStatus(null);
-          setPlans([]);
-          setJobs([]);
-          setWorkflows([]);
-        } else {
-          const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
-          setSupported(true);
-          setRuntimeAvailable(false);
-          setError(detail);
-        }
+        const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
+        setSupported(true);
+        setRuntimeAvailable(false);
+        setError(detail);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -679,68 +877,22 @@ export function useNovaAdaptBridge({
     []
   );
 
-  const runPlanMutation = useCallback(
-    async (path: string, body?: Record<string, unknown>): Promise<boolean> => {
-      if (!serverReady || !server) {
-        return false;
-      }
-      await apiRequest<unknown>(server.baseUrl, server.token, path, {
-        method: "POST",
-        body: body ? JSON.stringify(body) : undefined,
-      });
-      await refresh({ quiet: true });
-      return true;
-    },
-    [refresh, server, serverReady]
-  );
-
-  const runJsonMutation = useCallback(
-    async <T,>(path: string, body?: Record<string, unknown>): Promise<T | null> => {
-      if (!serverReady || !server) {
-        return null;
-      }
-      const result = await apiRequest<T>(server.baseUrl, server.token, path, {
-        method: "POST",
-        body: body ? JSON.stringify(body) : undefined,
-      });
+  const createPlan = useCallback(
+    async (objective: string, options?: { strategy?: string }): Promise<NovaAdaptBridgePlan | null> => {
+      const result = await createNovaAdaptBridgePlan(server, objective, options);
       await refresh({ quiet: true });
       return result;
     },
-    [refresh, server, serverReady]
-  );
-
-  const createPlan = useCallback(
-    async (objective: string, options?: { strategy?: string }): Promise<NovaAdaptBridgePlan | null> => {
-      const normalizedObjective = objective.trim();
-      if (!normalizedObjective) {
-        return null;
-      }
-      const payload: Record<string, unknown> = {
-        objective: normalizedObjective,
-      };
-      if (options?.strategy?.trim()) {
-        payload.strategy = options.strategy.trim();
-      }
-      const result = await runJsonMutation<unknown>("/agents/plans", payload);
-      return normalizePlan(result);
-    },
-    [runJsonMutation]
+    [refresh, server]
   );
 
   const resumeWorkflow = useCallback(
     async (workflowId: string): Promise<boolean> => {
-      const normalizedWorkflowId = workflowId.trim();
-      if (!normalizedWorkflowId) {
-        return false;
-      }
-      return Boolean(
-        await runJsonMutation<unknown>("/agents/workflows/resume", {
-          workflow_id: normalizedWorkflowId,
-          context: "api",
-        })
-      );
+      const ok = await resumeNovaAdaptBridgeWorkflow(server, workflowId);
+      await refresh({ quiet: true });
+      return ok;
     },
-    [runJsonMutation]
+    [refresh, server]
   );
 
   const startWorkflow = useCallback(
@@ -748,55 +900,47 @@ export function useNovaAdaptBridge({
       objective: string,
       options?: { metadata?: Record<string, unknown>; autoResume?: boolean }
     ): Promise<NovaAdaptBridgeWorkflow | null> => {
-      const normalizedObjective = objective.trim();
-      if (!normalizedObjective) {
-        return null;
-      }
-      const metadata =
-        options?.metadata && Object.keys(options.metadata).length > 0
-          ? { ...options.metadata, created_by: "novaremote_mobile" }
-          : { created_by: "novaremote_mobile" };
-      const created = await runJsonMutation<unknown>("/agents/workflows/start", {
-        objective: normalizedObjective,
-        metadata,
-        context: "api",
-      });
-      const normalized = normalizeWorkflow(created);
-      if (!normalized) {
-        return null;
-      }
-      if (options?.autoResume === false) {
-        return normalized;
-      }
-      const resumed = await runJsonMutation<unknown>("/agents/workflows/resume", {
-        workflow_id: normalized.workflowId,
-        context: "api",
-      });
-      return normalizeWorkflow(resumed) ?? normalized;
+      const result = await startNovaAdaptBridgeWorkflow(server, objective, options);
+      await refresh({ quiet: true });
+      return result;
     },
-    [runJsonMutation]
+    [refresh, server]
   );
 
   const approvePlanAsync = useCallback(
-    async (planId: string) => runPlanMutation(`/agents/plans/${encodeURIComponent(planId)}/approve_async`, { execute: true }),
-    [runPlanMutation]
+    async (planId: string) => {
+      const ok = await approveNovaAdaptBridgePlanAsync(server, planId);
+      await refresh({ quiet: true });
+      return ok;
+    },
+    [refresh, server]
   );
 
   const rejectPlan = useCallback(
-    async (planId: string, reason?: string) =>
-      runPlanMutation(`/agents/plans/${encodeURIComponent(planId)}/reject`, reason?.trim() ? { reason: reason.trim() } : {}),
-    [runPlanMutation]
+    async (planId: string, reason?: string) => {
+      const ok = await rejectNovaAdaptBridgePlan(server, planId, reason);
+      await refresh({ quiet: true });
+      return ok;
+    },
+    [refresh, server]
   );
 
   const retryFailedPlanAsync = useCallback(
-    async (planId: string) =>
-      runPlanMutation(`/agents/plans/${encodeURIComponent(planId)}/retry_failed_async`, { execute: true, retry_failed_only: true }),
-    [runPlanMutation]
+    async (planId: string) => {
+      const ok = await retryFailedNovaAdaptBridgePlanAsync(server, planId);
+      await refresh({ quiet: true });
+      return ok;
+    },
+    [refresh, server]
   );
 
   const undoPlan = useCallback(
-    async (planId: string) => runPlanMutation(`/agents/plans/${encodeURIComponent(planId)}/undo`, {}),
-    [runPlanMutation]
+    async (planId: string) => {
+      const ok = await undoNovaAdaptBridgePlan(server, planId);
+      await refresh({ quiet: true });
+      return ok;
+    },
+    [refresh, server]
   );
 
   return useMemo(
