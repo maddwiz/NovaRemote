@@ -552,19 +552,17 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onRemoveAgentForServers: runRemoveAgentForServers,
     onQueueAgentCommandForServer: runQueueAgentCommandForServer,
     onQueueAgentCommandForServers: runQueueAgentCommandForServers,
-    onApproveReadyAgentsForFocusedServer: () => {
-      if (typeof approveReadyAgentsForFocusedServer !== "function") {
+    onApproveReadyAgentsForFocusedServer: async () => {
+      if (!activeServer?.id) {
         return [];
       }
-      const approved = approveReadyAgentsForFocusedServer();
-      return Array.isArray(approved) ? approved : [];
+      return runApproveReadyAgentsForServer(activeServer.id);
     },
-    onDenyAllPendingAgentsForFocusedServer: () => {
-      if (typeof denyAllPendingAgentsForFocusedServer !== "function") {
+    onDenyAllPendingAgentsForFocusedServer: async () => {
+      if (!activeServer?.id) {
         return [];
       }
-      const denied = denyAllPendingAgentsForFocusedServer();
-      return Array.isArray(denied) ? denied : [];
+      return runDenyAllPendingAgentsForServer(activeServer.id);
     },
     onApproveReadyAgentsForServer: runApproveReadyAgentsForServer,
     onDenyAllPendingAgentsForServer: runDenyAllPendingAgentsForServer,

@@ -161,8 +161,8 @@ function makeBaseArgs() {
     setAgentGoalForServers: vi.fn(async () => []),
     queueAgentCommandForServer: vi.fn(async () => []),
     queueAgentCommandForServers: vi.fn(async () => []),
-    approveReadyAgentsForFocusedServer: vi.fn(() => []),
-    denyAllPendingAgentsForFocusedServer: vi.fn(() => []),
+    approveReadyAgentsForFocusedServer: vi.fn(async () => []),
+    denyAllPendingAgentsForFocusedServer: vi.fn(async () => []),
     approveReadyAgentsForServer: vi.fn(async () => []),
     denyAllPendingAgentsForServer: vi.fn(async () => []),
     approveReadyAgentsForServers: vi.fn(async () => []),
@@ -444,6 +444,28 @@ describe("useTerminalsViewModel", () => {
     await expect(model.onDenyAllPendingAgentsForServer("dgx")).resolves.toEqual(["agent-b"]);
     expect(approveReadyAgentsForServer).toHaveBeenCalledWith("dgx");
     expect(denyAllPendingAgentsForServer).toHaveBeenCalledWith("dgx");
+  });
+
+  it("routes focused agent approval actions through the same async server-first callbacks", async () => {
+    const approveReadyAgentsForServer = vi.fn(async (_serverId: string) => ["agent-focused-a"]);
+    const denyAllPendingAgentsForServer = vi.fn(async (_serverId: string) => ["agent-focused-b"]);
+    const approveReadyAgentsForFocusedServer = vi.fn(async () => ["legacy-approve"]);
+    const denyAllPendingAgentsForFocusedServer = vi.fn(async () => ["legacy-deny"]);
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      activeServer: { id: "dgx", name: "DGX", baseUrl: "https://dgx.example.com", token: "token" },
+      approveReadyAgentsForServer,
+      denyAllPendingAgentsForServer,
+      approveReadyAgentsForFocusedServer,
+      denyAllPendingAgentsForFocusedServer,
+    });
+
+    await expect(model.onApproveReadyAgentsForFocusedServer()).resolves.toEqual(["agent-focused-a"]);
+    await expect(model.onDenyAllPendingAgentsForFocusedServer()).resolves.toEqual(["agent-focused-b"]);
+    expect(approveReadyAgentsForServer).toHaveBeenCalledWith("dgx");
+    expect(denyAllPendingAgentsForServer).toHaveBeenCalledWith("dgx");
+    expect(approveReadyAgentsForFocusedServer).not.toHaveBeenCalled();
+    expect(denyAllPendingAgentsForFocusedServer).not.toHaveBeenCalled();
   });
 
   it("routes cross-server session creation through async callback", async () => {

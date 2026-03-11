@@ -108,8 +108,8 @@ export type TerminalsViewModel = {
   onReconnectAllServers: () => void;
   onConnectAllServers: () => void;
   onDisconnectAllServers: () => void;
-  onApproveReadyAgentsForFocusedServer: () => string[];
-  onDenyAllPendingAgentsForFocusedServer: () => string[];
+  onApproveReadyAgentsForFocusedServer: () => Promise<string[]>;
+  onDenyAllPendingAgentsForFocusedServer: () => Promise<string[]>;
   onCreateAgentForServer: (serverId: string, name: string) => Promise<string[]>;
   onSetAgentStatusForServer: (
     serverId: string,
