@@ -40,7 +40,6 @@ import {
   DEFAULT_FLEET_WAIT_MS,
   NOVA_VOICE_CAPTURE_MS,
   NOVA_VOICE_VAD_SILENCE_MS,
-  NOVA_AGENT_MONITORING_INTERVAL_MS,
   DEFAULT_SPECTATE_TTL_SECONDS,
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
@@ -62,10 +61,8 @@ import {
   fetchNovaAdaptBridgeSnapshot,
   rejectNovaAdaptBridgePlan,
   resumeNovaAdaptBridgeWorkflow,
-  useNovaAdaptBridge,
 } from "./hooks/useNovaAdaptBridge";
 import { useServerConnection } from "./hooks/useServerConnection";
-import { useNovaAgentRuntime } from "./hooks/useNovaAgentRuntime";
 import { useProcessManager } from "./hooks/useProcessManager";
 import { useSessionRecordings } from "./hooks/useSessionRecordings";
 import { useNotifications } from "./hooks/useNotifications";
@@ -114,7 +111,6 @@ import { VrCommandCenterScreen } from "./screens/VrCommandCenterScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
 import { evaluateCrossServerWatchAlerts } from "./crossServerWatchAlerts";
-import { findAgentIdsByName, hasExactAgentName } from "./agentMatching";
 import {
   NovaAssistantAction,
   NovaAssistantExecutionResult,
@@ -1207,10 +1203,6 @@ export default function AppShell() {
   const focusedConnection = useServerConnection(pool, focusedServerId) ?? poolFocusedConnection;
   const activeServer = focusedConnection?.server ?? selectedServer ?? null;
   const connected = focusedConnection?.connected ?? Boolean(activeServer && normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
-  const { runtimeAvailable: focusedBridgeRuntimeAvailable } = useNovaAdaptBridge({
-    server: activeServer,
-    enabled: Boolean(activeServer && connected),
-  });
   const defaultCapabilities = useMemo(
     () => ({
       terminal: false,
@@ -2642,7 +2634,6 @@ export default function AppShell() {
     [assertServerWritable, markActivity, poolConnections, recordAuditEvent, scopedServerId, sendPoolControlChar, sessionReadOnly]
   );
 
-  const agentRuntimeServerId = focusedServerId;
   type AgentServerAction =
     | { kind: "approve" }
     | { kind: "deny" }
@@ -2774,200 +2765,6 @@ export default function AppShell() {
     },
     [buildRemoteAgentObjective, servers]
   );
-  const dispatchFocusedServerAgentCommand = useCallback(
-    (session: string, command: string) => {
-      if (!agentRuntimeServerId) {
-        return;
-      }
-      void sendServerSessionCommand(agentRuntimeServerId, session, command, "shell").catch((error) => {
-        setError(error);
-      });
-    },
-    [agentRuntimeServerId, sendServerSessionCommand, setError]
-  );
-  const resolveFocusedServerAgentSession = useCallback((): string | null => {
-    if (!agentRuntimeServerId) {
-      return null;
-    }
-    const connection = poolConnections.get(agentRuntimeServerId);
-    if (!connection) {
-      return null;
-    }
-    const sessionCandidates = [...connection.openSessions, ...connection.allSessions];
-    const remoteSession = sessionCandidates.find((session) => !connection.localAiSessions.includes(session));
-    return remoteSession || null;
-  }, [agentRuntimeServerId, poolConnections]);
-  const shouldUseLocalFocusedAgentRuntime = !focusedBridgeRuntimeAvailable;
-  const focusedLocalAgentRuntimeServerId = shouldUseLocalFocusedAgentRuntime ? agentRuntimeServerId : null;
-  const {
-    agents: focusedServerAgents,
-    addRuntimeAgent: addFocusedServerRuntimeAgent,
-    removeRuntimeAgent: removeFocusedServerRuntimeAgent,
-    setRuntimeAgentStatus: setFocusedServerRuntimeAgentStatus,
-    setRuntimeAgentGoal: setFocusedServerRuntimeAgentGoal,
-    requestAgentApproval: requestFocusedServerAgentApproval,
-    approveReadyApprovals: approveReadyAgentsForFocusedServer,
-    denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer,
-    runMonitoringCycle: runFocusedServerMonitoringCycle,
-  } = useNovaAgentRuntime({
-    serverId: focusedLocalAgentRuntimeServerId,
-    onDispatchCommand: dispatchFocusedServerAgentCommand,
-    resolveDefaultSession: resolveFocusedServerAgentSession,
-  });
-  const hasFocusedMonitoringAgents = useMemo(
-    () => shouldUseLocalFocusedAgentRuntime && focusedServerAgents.some((agent) => agent.status === "monitoring"),
-    [focusedServerAgents, shouldUseLocalFocusedAgentRuntime]
-  );
-
-  useEffect(() => {
-    if (!connected || !agentRuntimeServerId || !shouldUseLocalFocusedAgentRuntime || !hasFocusedMonitoringAgents) {
-      return;
-    }
-
-    const runCycle = () => {
-      try {
-        const cycle = runFocusedServerMonitoringCycle({
-          intervalMs: NOVA_AGENT_MONITORING_INTERVAL_MS,
-        });
-        if (cycle.requested.length === 0 && cycle.approved.length === 0) {
-          return;
-        }
-        const serverName = poolConnections.get(agentRuntimeServerId)?.server.name || "server";
-        setStatus({
-          text: `${serverName}: monitoring cycle queued ${cycle.requested.length}, dispatched ${cycle.approved.length}.`,
-          error: false,
-        });
-      } catch (error) {
-        setError(error);
-      }
-    };
-
-    runCycle();
-    const intervalId = setInterval(runCycle, 5000);
-    return () => clearInterval(intervalId);
-  }, [
-    agentRuntimeServerId,
-    connected,
-    hasFocusedMonitoringAgents,
-    poolConnections,
-    runFocusedServerMonitoringCycle,
-    setError,
-    setStatus,
-    shouldUseLocalFocusedAgentRuntime,
-  ]);
-
-  const executeFocusedAgentServerAction = useCallback(
-    (action: AgentServerAction): string[] => {
-      if (!shouldUseLocalFocusedAgentRuntime) {
-        return [];
-      }
-      if (action.kind === "approve") {
-        const approved = approveReadyAgentsForFocusedServer();
-        return Array.isArray(approved) ? approved : [];
-      }
-      if (action.kind === "deny") {
-        const denied = denyAllPendingAgentsForFocusedServer();
-        return Array.isArray(denied) ? denied : [];
-      }
-      if (action.kind === "create") {
-        const name = action.name.trim();
-        if (!name) {
-          return [];
-        }
-        if (hasExactAgentName(focusedServerAgents, name)) {
-          return [];
-        }
-        const created = addFocusedServerRuntimeAgent(name);
-        return created ? [created.agentId] : [];
-      }
-      if (action.kind === "remove") {
-        const name = action.name.trim();
-        if (!name) {
-          return [];
-        }
-        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-        matchingAgentIds.forEach((agentId) => {
-          removeFocusedServerRuntimeAgent(agentId);
-        });
-        return matchingAgentIds;
-      }
-      if (action.kind === "set_status") {
-        const name = action.name.trim();
-        if (!name) {
-          return [];
-        }
-        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-        matchingAgentIds.forEach((agentId) => {
-          setFocusedServerRuntimeAgentStatus(agentId, action.status);
-        });
-        return matchingAgentIds;
-      }
-      if (action.kind === "set_goal") {
-        const name = action.name.trim();
-        const goal = action.goal.trim();
-        if (!name || !goal) {
-          return [];
-        }
-        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-        matchingAgentIds.forEach((agentId) => {
-          setFocusedServerRuntimeAgentGoal(agentId, goal);
-        });
-        return matchingAgentIds;
-      }
-      const name = action.name.trim();
-      const command = action.command.trim();
-      if (!name || !command) {
-        return [];
-      }
-      const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-      const resolvedAgentIds =
-        matchingAgentIds.length > 0
-          ? matchingAgentIds
-          : (() => {
-              const created = addFocusedServerRuntimeAgent(name);
-              return created ? [created.agentId] : [];
-            })();
-      if (resolvedAgentIds.length === 0) {
-        return [];
-      }
-      const agentRuntimeConnection = agentRuntimeServerId ? poolConnections.get(agentRuntimeServerId) : null;
-      const sessionCandidates = agentRuntimeConnection
-        ? [...agentRuntimeConnection.openSessions, ...agentRuntimeConnection.allSessions]
-        : [];
-      const remoteSession = sessionCandidates.find((session) => !(agentRuntimeConnection?.localAiSessions || []).includes(session));
-      if (!remoteSession) {
-        return [];
-      }
-
-      const queuedAgentIds: string[] = [];
-      resolvedAgentIds.forEach((agentId) => {
-        setFocusedServerRuntimeAgentGoal(agentId, command);
-        const queued = requestFocusedServerAgentApproval(agentId, {
-          command,
-          session: remoteSession,
-          summary: `Queued by voice route for ${remoteSession}`,
-        });
-        if (queued) {
-          queuedAgentIds.push(agentId);
-        }
-      });
-      return queuedAgentIds;
-    },
-    [
-      agentRuntimeServerId,
-      addFocusedServerRuntimeAgent,
-      approveReadyAgentsForFocusedServer,
-      denyAllPendingAgentsForFocusedServer,
-      focusedServerAgents,
-      poolConnections,
-      requestFocusedServerAgentApproval,
-      removeFocusedServerRuntimeAgent,
-      setFocusedServerRuntimeAgentStatus,
-      setFocusedServerRuntimeAgentGoal,
-      shouldUseLocalFocusedAgentRuntime,
-    ]
-  );
-
   const runAgentServerAction = useCallback(
     async (serverId: string, action: AgentServerAction): Promise<string[]> => {
       const targetServerId = serverId.trim();
@@ -2982,12 +2779,12 @@ export default function AppShell() {
         return remoteResult;
       }
       if (focusedServerId === targetServerId) {
-        return executeFocusedAgentServerAction(action);
+        throw new Error("Server runtime unavailable. Open the Agents screen to use the local NovaAdapt fallback for the focused server.");
       }
 
-      throw new Error("Focus the target server first to use the local NovaAdapt fallback while the server runtime is unavailable.");
+      throw new Error("Target server runtime unavailable. Focus the server and open the Agents screen to use the local NovaAdapt fallback.");
     },
-    [executeFocusedAgentServerAction, executeRemoteAgentServerAction, focusedServerId, servers]
+    [executeRemoteAgentServerAction, focusedServerId, servers]
   );
 
   const approveReadyAgentsForServer = useCallback(

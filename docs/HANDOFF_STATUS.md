@@ -143,6 +143,7 @@ Updated: 2026-03-11
   - [x] focused-server local agent CRUD/approval execution is now gated behind bridge availability checks, so an online server runtime no longer silently falls through to phone-side execution on the active server
   - [x] the dedicated `Agents` screen no longer mounts the phone-side NovaAdapt runtime hook when the server bridge is live; local preview now renders only as an explicit fallback surface
   - [x] `AppShell` now passes `serverId: null` into the focused local NovaAdapt runtime hook while the server bridge is online, so the active-server phone runtime is actually disabled instead of merely gated at action time
+  - [x] generic `AppShell` agent actions no longer run the hidden focused-server phone runtime at all; when the server runtime is unavailable, fallback is now explicit through the dedicated `Agents` screen only
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
@@ -207,7 +208,6 @@ Updated: 2026-03-11
   - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
   - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
 - Remaining server-runtime migration work is:
-  - remove the remaining focused-server local runtime CRUD/update fallback once server-runtime parity is complete
   - finish release-hardening and packaging around the validated `codex_remote + NovaAdapt + NovaSpine` sidecar topology
   - clean auth/protocol boundaries before companion-server open-sourcing
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.
