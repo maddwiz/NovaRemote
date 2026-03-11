@@ -27,5 +27,6 @@ Updated: 2026-03-11
   - remote-first workflow/plan creation from the new `Agents` tab
   - live audit-event refreshes feeding the bridge runtime surface
   - remote-first AppShell assistant/runtime agent actions with local fallback only when the server bridge is unavailable
+  - focused-server monitoring now defers to the server runtime when it is online, leaving the phone runtime as fallback only
   - remaining sidecar packaging / NovaSpine rollout / protocol cleanup
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).

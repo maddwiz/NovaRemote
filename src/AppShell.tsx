@@ -62,6 +62,7 @@ import {
   fetchNovaAdaptBridgeSnapshot,
   rejectNovaAdaptBridgePlan,
   resumeNovaAdaptBridgeWorkflow,
+  useNovaAdaptBridge,
 } from "./hooks/useNovaAdaptBridge";
 import { useServerConnection } from "./hooks/useServerConnection";
 import { useNovaAgentRuntime } from "./hooks/useNovaAgentRuntime";
@@ -1206,6 +1207,10 @@ export default function AppShell() {
   const focusedConnection = useServerConnection(pool, focusedServerId) ?? poolFocusedConnection;
   const activeServer = focusedConnection?.server ?? selectedServer ?? null;
   const connected = focusedConnection?.connected ?? Boolean(activeServer && normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
+  const { runtimeAvailable: focusedBridgeRuntimeAvailable } = useNovaAdaptBridge({
+    server: activeServer,
+    enabled: Boolean(activeServer && connected),
+  });
   const defaultCapabilities = useMemo(
     () => ({
       terminal: false,
@@ -2814,13 +2819,14 @@ export default function AppShell() {
     onDispatchCommand: dispatchFocusedServerAgentCommand,
     resolveDefaultSession: resolveFocusedServerAgentSession,
   });
+  const shouldUseLocalFocusedAgentRuntime = !focusedBridgeRuntimeAvailable;
   const hasFocusedMonitoringAgents = useMemo(
-    () => focusedServerAgents.some((agent) => agent.status === "monitoring"),
-    [focusedServerAgents]
+    () => shouldUseLocalFocusedAgentRuntime && focusedServerAgents.some((agent) => agent.status === "monitoring"),
+    [focusedServerAgents, shouldUseLocalFocusedAgentRuntime]
   );
 
   useEffect(() => {
-    if (!connected || !agentRuntimeServerId || !hasFocusedMonitoringAgents) {
+    if (!connected || !agentRuntimeServerId || !shouldUseLocalFocusedAgentRuntime || !hasFocusedMonitoringAgents) {
       return;
     }
 
@@ -2853,6 +2859,7 @@ export default function AppShell() {
     runFocusedServerMonitoringCycle,
     setError,
     setStatus,
+    shouldUseLocalFocusedAgentRuntime,
   ]);
 
   const executeFocusedAgentServerAction = useCallback(
