@@ -5,9 +5,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const { useNovaAgentRuntimeMock } = vi.hoisted(() => ({
   useNovaAgentRuntimeMock: vi.fn(),
 }));
+const { useNovaAdaptBridgeMock } = vi.hoisted(() => ({
+  useNovaAdaptBridgeMock: vi.fn(),
+}));
 
 vi.mock("../hooks/useNovaAgentRuntime", () => ({
   useNovaAgentRuntime: (...args: unknown[]) => useNovaAgentRuntimeMock(...args),
+}));
+vi.mock("../hooks/useNovaAdaptBridge", () => ({
+  useNovaAdaptBridge: (...args: unknown[]) => useNovaAdaptBridgeMock(...args),
 }));
 
 import { NovaAgentPanel } from "./NovaAgentPanel";
@@ -16,6 +22,7 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 beforeEach(() => {
   useNovaAgentRuntimeMock.mockReset();
+  useNovaAdaptBridgeMock.mockReset();
   const defaultRuntime = {
     agents: [],
     loading: false,
@@ -38,6 +45,23 @@ beforeEach(() => {
     pendingSpineApprovals: 0,
   };
   useNovaAgentRuntimeMock.mockReturnValue(defaultRuntime);
+  useNovaAdaptBridgeMock.mockReturnValue({
+    loading: false,
+    refreshing: false,
+    supported: false,
+    runtimeAvailable: false,
+    error: null,
+    health: null,
+    memoryStatus: null,
+    plans: [],
+    jobs: [],
+    workflows: [],
+    refresh: vi.fn(),
+    approvePlanAsync: vi.fn(async () => true),
+    rejectPlan: vi.fn(async () => true),
+    retryFailedPlanAsync: vi.fn(async () => true),
+    undoPlan: vi.fn(async () => true),
+  });
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const joined = args.map((value) => String(value)).join(" ");
     if (joined.includes("react-test-renderer is deprecated")) {
@@ -100,6 +124,7 @@ describe("NovaAgentPanel", () => {
     await act(async () => {
       renderer = TestRenderer.create(
         React.createElement(NovaAgentPanel, {
+          server: null,
           serverId: "dgx",
           serverName: "DGX",
           sessions: ["main"],
@@ -127,6 +152,7 @@ describe("NovaAgentPanel", () => {
     await act(async () => {
       renderer = TestRenderer.create(
         React.createElement(NovaAgentPanel, {
+          server: null,
           serverId: "dgx",
           serverName: "DGX",
           sessions: ["main"],
@@ -139,6 +165,72 @@ describe("NovaAgentPanel", () => {
 
     const button = renderer.root.findByProps({ accessibilityLabel: "Run monitoring cycle now" });
     expect(button.props.disabled).toBe(true);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("renders remote runtime plans and routes plan actions through the bridge", async () => {
+    const approvePlanAsync = vi.fn(async () => true);
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      error: null,
+      health: { ok: true },
+      memoryStatus: { backend: "novaspine-http", enabled: true },
+      plans: [
+        {
+          id: "plan-1",
+          objective: "Watch the cluster",
+          status: "pending",
+          createdAt: "2026-03-10T00:00:00.000Z",
+          updatedAt: "2026-03-10T00:00:00.000Z",
+          progressCompleted: 0,
+          progressTotal: 3,
+          executionError: null,
+          rejectReason: null,
+        },
+      ],
+      jobs: [],
+      workflows: [],
+      refresh: vi.fn(),
+      approvePlanAsync,
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+        })
+      );
+    });
+
+    expect(() => renderer.root.findByProps({ children: "Server Runtime" })).not.toThrow();
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Approve plan plan-1" }).props.onPress();
+    });
+
+    expect(approvePlanAsync).toHaveBeenCalledWith("plan-1");
 
     await act(async () => {
       renderer.unmount();

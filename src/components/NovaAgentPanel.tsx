@@ -1,11 +1,24 @@
 import React, { useCallback, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
 import { useNovaAgentRuntime } from "../hooks/useNovaAgentRuntime";
-import { NovaAgent, NovaAgentStatus, NovaMemoryEntry, NovaSpineContext } from "../types";
+import {
+  NovaAdaptBridgeHealth,
+  NovaAdaptBridgeJob,
+  NovaAdaptBridgeMemoryStatus,
+  NovaAdaptBridgePlan,
+  NovaAdaptBridgeWorkflow,
+  NovaAgent,
+  NovaAgentStatus,
+  NovaMemoryEntry,
+  NovaSpineContext,
+  ServerProfile,
+} from "../types";
 import { styles } from "../theme/styles";
 
 type NovaAgentPanelProps = {
+  server: ServerProfile | null;
   serverId: string | null;
   serverName: string | null;
   sessions: string[];
@@ -50,6 +63,274 @@ function spineStatusLabel(status: NovaSpineContext["status"]): string {
     return "HEALTHY";
   }
   return "IDLE";
+}
+
+function bridgeStatusLabel(status: string): string {
+  const normalized = status.trim().toLowerCase();
+  if (!normalized) {
+    return "UNKNOWN";
+  }
+  if (normalized === "pending") {
+    return "PENDING";
+  }
+  if (normalized === "approved") {
+    return "APPROVED";
+  }
+  if (normalized === "executing") {
+    return "EXEC";
+  }
+  if (normalized === "executed") {
+    return "DONE";
+  }
+  if (normalized === "rejected") {
+    return "REJECTED";
+  }
+  if (normalized === "failed") {
+    return "FAILED";
+  }
+  if (normalized === "queued") {
+    return "QUEUED";
+  }
+  if (normalized === "running") {
+    return "RUNNING";
+  }
+  if (normalized === "paused") {
+    return "PAUSED";
+  }
+  return normalized.replace(/_/g, " ").toUpperCase();
+}
+
+function modePillForStatus(status: string): object {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "failed" || normalized === "rejected") {
+    return styles.modePillAi;
+  }
+  return styles.modePillShell;
+}
+
+function formatBridgeDate(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+  return new Date(timestamp).toLocaleTimeString();
+}
+
+function summarizeBridgeHealth(health: NovaAdaptBridgeHealth | null, runtimeAvailable: boolean): string {
+  if (!health) {
+    return runtimeAvailable ? "Runtime reachable" : "Runtime unavailable";
+  }
+  const featureCount =
+    health.features && typeof health.features === "object"
+      ? Object.values(health.features as Record<string, unknown>).filter(Boolean).length
+      : 0;
+  const memoryBackend =
+    health.novaspine && typeof health.novaspine === "object"
+      ? String((health.novaspine as Record<string, unknown>).url || "").trim()
+      : "";
+  const parts = [runtimeAvailable ? "Runtime online" : "Runtime unavailable"];
+  if (featureCount > 0) {
+    parts.push(`${featureCount} features`);
+  }
+  if (memoryBackend) {
+    parts.push("NovaSpine linked");
+  }
+  return parts.join(" • ");
+}
+
+function summarizeMemoryStatus(memoryStatus: NovaAdaptBridgeMemoryStatus | null): string {
+  if (!memoryStatus) {
+    return "Memory backend unavailable";
+  }
+  const backend = typeof memoryStatus.backend === "string" && memoryStatus.backend.trim() ? memoryStatus.backend.trim() : "default";
+  const enabled = memoryStatus.enabled === false ? "disabled" : "enabled";
+  return `${backend} • ${enabled}`;
+}
+
+function canApprovePlan(status: string): boolean {
+  return status.trim().toLowerCase() === "pending";
+}
+
+function canRejectPlan(status: string): boolean {
+  return ["pending", "approved"].includes(status.trim().toLowerCase());
+}
+
+function canRetryPlan(status: string): boolean {
+  return status.trim().toLowerCase() === "failed";
+}
+
+function canUndoPlan(status: string): boolean {
+  return ["approved", "executed", "rejected", "failed"].includes(status.trim().toLowerCase());
+}
+
+function RemoteBridgeSection({
+  loading,
+  refreshing,
+  supported,
+  runtimeAvailable,
+  error,
+  health,
+  memoryStatus,
+  plans,
+  jobs,
+  workflows,
+  mutationPlanId,
+  onRefresh,
+  onApprovePlan,
+  onRejectPlan,
+  onRetryPlan,
+  onUndoPlan,
+}: {
+  loading: boolean;
+  refreshing: boolean;
+  supported: boolean;
+  runtimeAvailable: boolean;
+  error: string | null;
+  health: NovaAdaptBridgeHealth | null;
+  memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  plans: NovaAdaptBridgePlan[];
+  jobs: NovaAdaptBridgeJob[];
+  workflows: NovaAdaptBridgeWorkflow[];
+  mutationPlanId: string | null;
+  onRefresh: () => void;
+  onApprovePlan: (planId: string) => void;
+  onRejectPlan: (planId: string) => void;
+  onRetryPlan: (planId: string) => void;
+  onUndoPlan: (planId: string) => void;
+}) {
+  return (
+    <View style={styles.panel}>
+      <View style={styles.rowInlineSpace}>
+        <Text style={styles.panelLabel}>Server Runtime</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh NovaAdapt runtime"
+          style={[styles.actionButton, loading || refreshing ? styles.buttonDisabled : null]}
+          disabled={loading || refreshing}
+          onPress={onRefresh}
+        >
+          <Text style={styles.actionButtonText}>{loading || refreshing ? "Refreshing..." : "Refresh"}</Text>
+        </Pressable>
+      </View>
+      {!supported ? (
+        <Text style={styles.emptyText}>
+          {loading ? "Checking server runtime..." : "Server runtime is not enabled on this companion server yet."}
+        </Text>
+      ) : (
+        <>
+          <Text style={styles.serverSubtitle}>{summarizeBridgeHealth(health, runtimeAvailable)}</Text>
+          <Text style={styles.emptyText}>{`Memory ${summarizeMemoryStatus(memoryStatus)}`}</Text>
+          {error ? <Text style={styles.emptyText}>{`Runtime error: ${error}`}</Text> : null}
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Plans</Text>
+            {plans.length === 0 ? (
+              <Text style={styles.emptyText}>No server plans yet.</Text>
+            ) : (
+              plans.slice(0, 4).map((plan) => {
+                const progressLabel =
+                  plan.progressTotal > 0 ? `${plan.progressCompleted}/${plan.progressTotal}` : `${plan.progressCompleted}`;
+                const updatedAt = formatBridgeDate(plan.updatedAt || plan.createdAt);
+                const busy = mutationPlanId === plan.id;
+                return (
+                  <View key={`bridge-plan-${plan.id}`} style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{plan.objective}</Text>
+                      <Text style={[styles.modePill, modePillForStatus(plan.status)]}>{bridgeStatusLabel(plan.status)}</Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>{`Plan ${plan.id}`}</Text>
+                    <Text style={styles.emptyText}>{`Progress ${progressLabel}${updatedAt ? ` • ${updatedAt}` : ""}`}</Text>
+                    {plan.executionError ? <Text style={styles.emptyText}>{`Error ${plan.executionError}`}</Text> : null}
+                    {plan.rejectReason ? <Text style={styles.emptyText}>{`Rejected ${plan.rejectReason}`}</Text> : null}
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Approve plan ${plan.id}`}
+                        style={[styles.actionButton, !canApprovePlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canApprovePlan(plan.status) || busy}
+                        onPress={() => onApprovePlan(plan.id)}
+                      >
+                        <Text style={styles.actionButtonText}>Approve</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Retry plan ${plan.id}`}
+                        style={[styles.actionButton, !canRetryPlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canRetryPlan(plan.status) || busy}
+                        onPress={() => onRetryPlan(plan.id)}
+                      >
+                        <Text style={styles.actionButtonText}>Retry</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Undo plan ${plan.id}`}
+                        style={[styles.actionButton, !canUndoPlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canUndoPlan(plan.status) || busy}
+                        onPress={() => onUndoPlan(plan.id)}
+                      >
+                        <Text style={styles.actionButtonText}>Undo</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Reject plan ${plan.id}`}
+                        style={[styles.actionDangerButton, !canRejectPlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canRejectPlan(plan.status) || busy}
+                        onPress={() => onRejectPlan(plan.id)}
+                      >
+                        <Text style={styles.actionDangerText}>Reject</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Workflows</Text>
+            {workflows.length === 0 ? (
+              <Text style={styles.emptyText}>No server workflows yet.</Text>
+            ) : (
+              workflows.slice(0, 4).map((workflow) => (
+                <View key={`bridge-workflow-${workflow.workflowId}`} style={styles.terminalCard}>
+                  <View style={styles.terminalNameRow}>
+                    <Text style={styles.terminalName}>{workflow.objective}</Text>
+                    <Text style={[styles.modePill, modePillForStatus(workflow.status)]}>{bridgeStatusLabel(workflow.status)}</Text>
+                  </View>
+                  <Text style={styles.serverSubtitle}>{`Workflow ${workflow.workflowId}`}</Text>
+                  <Text style={styles.emptyText}>{formatBridgeDate(workflow.updatedAt) ? `Updated ${formatBridgeDate(workflow.updatedAt)}` : "Awaiting activity"}</Text>
+                  {workflow.lastError ? <Text style={styles.emptyText}>{`Error ${workflow.lastError}`}</Text> : null}
+                </View>
+              ))
+            )}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Jobs</Text>
+            {jobs.length === 0 ? (
+              <Text style={styles.emptyText}>No server jobs yet.</Text>
+            ) : (
+              jobs.slice(0, 4).map((job) => (
+                <View key={`bridge-job-${job.id}`} style={styles.terminalCard}>
+                  <View style={styles.terminalNameRow}>
+                    <Text style={styles.terminalName}>{job.id}</Text>
+                    <Text style={[styles.modePill, modePillForStatus(job.status)]}>{bridgeStatusLabel(job.status)}</Text>
+                  </View>
+                  <Text style={styles.serverSubtitle}>
+                    {`Created ${formatBridgeDate(job.createdAt) || "unknown"}${formatBridgeDate(job.finishedAt) ? ` • Finished ${formatBridgeDate(job.finishedAt)}` : ""}`}
+                  </Text>
+                  {job.error ? <Text style={styles.emptyText}>{`Error ${job.error}`}</Text> : null}
+                </View>
+              ))
+            )}
+          </View>
+        </>
+      )}
+    </View>
+  );
 }
 
 function AgentCard({
@@ -250,6 +531,7 @@ function AgentCard({
 }
 
 export function NovaAgentPanel({
+  server,
   serverId,
   serverName,
   sessions,
@@ -303,6 +585,36 @@ export function NovaAgentPanel({
   );
 
   const defaultSession = useMemo(() => sessions[0] || null, [sessions]);
+  const {
+    loading: bridgeLoading,
+    refreshing: bridgeRefreshing,
+    supported: bridgeSupported,
+    runtimeAvailable: bridgeRuntimeAvailable,
+    error: bridgeError,
+    health: bridgeHealth,
+    memoryStatus: bridgeMemoryStatus,
+    plans: bridgePlans,
+    jobs: bridgeJobs,
+    workflows: bridgeWorkflows,
+    refresh: refreshBridge,
+    approvePlanAsync,
+    rejectPlan,
+    retryFailedPlanAsync,
+    undoPlan,
+  } = useNovaAdaptBridge({ server, enabled: Boolean(serverId) });
+  const [remoteMutationPlanId, setRemoteMutationPlanId] = useState<string | null>(null);
+
+  const runRemotePlanAction = useCallback(
+    async (planId: string, action: (targetPlanId: string) => Promise<boolean>) => {
+      setRemoteMutationPlanId(planId);
+      try {
+        await action(planId);
+      } finally {
+        setRemoteMutationPlanId((current) => (current === planId ? null : current));
+      }
+    },
+    []
+  );
 
   const addNewAgent = () => {
     if (!canAddAgent) {
@@ -366,6 +678,37 @@ export function NovaAgentPanel({
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>NovaAdapt Agents (Preview)</Text>
       <Text style={styles.serverSubtitle}>{`${serverName || "Server"} • Agent lifecycle + approval queue groundwork`}</Text>
+
+      <RemoteBridgeSection
+        loading={bridgeLoading}
+        refreshing={bridgeRefreshing}
+        supported={bridgeSupported}
+        runtimeAvailable={bridgeRuntimeAvailable}
+        error={bridgeError}
+        health={bridgeHealth}
+        memoryStatus={bridgeMemoryStatus}
+        plans={bridgePlans}
+        jobs={bridgeJobs}
+        workflows={bridgeWorkflows}
+        mutationPlanId={remoteMutationPlanId}
+        onRefresh={() => {
+          void refreshBridge({ quiet: true });
+        }}
+        onApprovePlan={(planId) => {
+          void runRemotePlanAction(planId, approvePlanAsync);
+        }}
+        onRejectPlan={(planId) => {
+          void runRemotePlanAction(planId, (targetPlanId) =>
+            rejectPlan(targetPlanId, "Rejected from NovaRemote mobile panel")
+          );
+        }}
+        onRetryPlan={(planId) => {
+          void runRemotePlanAction(planId, retryFailedPlanAsync);
+        }}
+        onUndoPlan={(planId) => {
+          void runRemotePlanAction(planId, undoPlan);
+        }}
+      />
 
       <TextInput
         style={styles.input}

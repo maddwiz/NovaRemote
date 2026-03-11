@@ -364,6 +364,47 @@ export type NovaSpineContext = {
   recentEntries: NovaMemoryEntry[];
 };
 
+export type NovaAdaptBridgeHealth = {
+  ok: boolean;
+  [key: string]: unknown;
+};
+
+export type NovaAdaptBridgeMemoryStatus = {
+  ok?: boolean;
+  enabled?: boolean;
+  backend?: string | null;
+  [key: string]: unknown;
+};
+
+export type NovaAdaptBridgePlan = {
+  id: string;
+  objective: string;
+  status: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  progressCompleted: number;
+  progressTotal: number;
+  executionError: string | null;
+  rejectReason: string | null;
+};
+
+export type NovaAdaptBridgeJob = {
+  id: string;
+  status: string;
+  createdAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+};
+
+export type NovaAdaptBridgeWorkflow = {
+  workflowId: string;
+  status: string;
+  objective: string;
+  updatedAt: string | null;
+  lastError: string | null;
+};
+
 export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";
 
 export type AiEnginePreference = "auto" | "server" | "external";

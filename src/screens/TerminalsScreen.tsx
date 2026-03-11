@@ -1326,6 +1326,7 @@ export function TerminalsScreen() {
       </View>
 
       <NovaAgentPanel
+        server={activeServer}
         serverId={focusedServerId}
         serverName={activeServer?.name || null}
         sessions={sortedOpenSessions}
