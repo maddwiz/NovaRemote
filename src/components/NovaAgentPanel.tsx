@@ -568,51 +568,9 @@ export function NovaAgentPanel({
   onQueueCommand,
   surface = "preview",
 }: NovaAgentPanelProps) {
-  const resolveDefaultSession = useCallback(() => sessions[0] || null, [sessions]);
-  const {
-    agents,
-    loading,
-    memoryEntries,
-    memoryLoading,
-    addRuntimeAgent,
-    removeRuntimeAgent,
-    setRuntimeAgentStatus,
-    setRuntimeAgentGoal,
-    setRuntimeAgentCapabilities,
-    requestAgentApproval,
-    approveAgentApproval,
-    denyAgentApproval,
-    approveReadyApprovals,
-    denyAllPendingApprovals,
-    runMonitoringCycle,
-    clearAgentMemory,
-    spineContexts,
-    findSpineContextByAgentId,
-    pendingSpineApprovals,
-  } = useNovaAgentRuntime({
-    serverId,
-    onDispatchCommand: onQueueCommand,
-    resolveDefaultSession,
-  });
-
   const [newAgentName, setNewAgentName] = useState<string>("");
   const [newAgentCapabilities, setNewAgentCapabilities] = useState<string>("watch,tool-calling");
-  const [commandByAgent, setCommandByAgent] = useState<Record<string, string>>({});
-  const [goalDrafts, setGoalDrafts] = useState<Record<string, string>>({});
-  const [capabilityDrafts, setCapabilityDrafts] = useState<Record<string, string>>({});
-  const [sessionByAgent, setSessionByAgent] = useState<Record<string, string>>({});
-  const [monitoringCycleStatus, setMonitoringCycleStatus] = useState<string>("");
   const [remoteCreateStatus, setRemoteCreateStatus] = useState<string>("");
-
-  const canAddAgent = isPro || agents.length < 1;
-  const pendingAgents = useMemo(
-    () => agents.filter((agent) => agent.pendingApproval !== null),
-    [agents]
-  );
-  const monitoringAgents = useMemo(
-    () => agents.filter((agent) => agent.status === "monitoring"),
-    [agents]
-  );
 
   const defaultSession = useMemo(() => sessions[0] || null, [sessions]);
   const {
@@ -664,24 +622,6 @@ export function NovaAgentPanel({
     []
   );
 
-  const addNewAgent = () => {
-    if (!canAddAgent) {
-      onShowPaywall();
-      return;
-    }
-    const capabilities = parseCapabilities(newAgentCapabilities);
-    const created = addRuntimeAgent(newAgentName, capabilities);
-    if (!created) {
-      return;
-    }
-    setGoalDrafts((prev) => ({ ...prev, [created.agentId]: created.currentGoal }));
-    setCapabilityDrafts((prev) => ({ ...prev, [created.agentId]: created.capabilities.join(",") }));
-    if (defaultSession) {
-      setSessionByAgent((prev) => ({ ...prev, [created.agentId]: defaultSession }));
-    }
-    setNewAgentName("");
-  };
-
   const createRemotePlan = useCallback(async () => {
     const objective = newAgentName.trim();
     if (!objective) {
@@ -725,37 +665,6 @@ export function NovaAgentPanel({
       setRemoteCreateStatus(`Workflow start failed: ${detail}`);
     }
   }, [newAgentCapabilities, newAgentName, startWorkflow]);
-
-  const approveReadyPending = () => {
-    const approvedAgentIds = approveReadyApprovals({
-      commandByAgent,
-      sessionByAgent,
-      defaultSession,
-    });
-    if (approvedAgentIds.length === 0) {
-      return;
-    }
-    setCommandByAgent((previous) => {
-      const next = { ...previous };
-      approvedAgentIds.forEach((agentId) => {
-        next[agentId] = "";
-      });
-      return next;
-    });
-  };
-
-  const denyAllPending = () => {
-    denyAllPendingApprovals();
-  };
-
-  const runMonitoringNow = () => {
-    const cycle = runMonitoringCycle({ defaultSession: defaultSession || undefined });
-    if (cycle.requested.length === 0 && cycle.approved.length === 0) {
-      setMonitoringCycleStatus("No monitoring updates queued.");
-      return;
-    }
-    setMonitoringCycleStatus(`Queued ${cycle.requested.length} • dispatched ${cycle.approved.length}`);
-  };
 
   if (!serverId) {
     return (
@@ -858,81 +767,212 @@ export function NovaAgentPanel({
       ) : null}
 
       {showLocalPreview ? (
-        <>
-          <TextInput
-            style={styles.input}
-            value={newAgentName}
-            onChangeText={setNewAgentName}
-            placeholder="Agent name (example: Build Watcher)"
-            placeholderTextColor="#7f7aa8"
-          />
-          <TextInput
-            style={styles.input}
-            value={newAgentCapabilities}
-            onChangeText={setNewAgentCapabilities}
-            placeholder="Capabilities (comma separated)"
-            placeholderTextColor="#7f7aa8"
-            autoCapitalize="none"
-          />
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Add NovaAdapt agent"
-            style={[styles.buttonPrimary, (!newAgentName.trim() || !canAddAgent) ? styles.buttonDisabled : null]}
-            disabled={!newAgentName.trim()}
-            onPress={addNewAgent}
-          >
-            <Text style={styles.buttonPrimaryText}>{canAddAgent ? "Add Agent" : "Unlock More Agents"}</Text>
-          </Pressable>
-          {!canAddAgent ? (
-            <Text style={styles.emptyText}>Free tier supports one agent per server. Upgrade to add more.</Text>
-          ) : null}
-          {surface === "screen" ? (
-            <Text style={styles.emptyText}>Server runtime unavailable. Local preview fallback is active on this screen.</Text>
-          ) : null}
-        </>
+        <LocalPreviewSection
+          serverId={serverId}
+          sessions={sessions}
+          isPro={isPro}
+          surface={surface}
+          newAgentName={newAgentName}
+          newAgentCapabilities={newAgentCapabilities}
+          defaultSession={defaultSession}
+          onShowPaywall={onShowPaywall}
+          onQueueCommand={onQueueCommand}
+          onNewAgentNameChange={setNewAgentName}
+          onNewAgentCapabilitiesChange={setNewAgentCapabilities}
+          onAgentCreated={() => {
+            setNewAgentName("");
+          }}
+        />
+      ) : null}
+    </View>
+  );
+}
+
+function LocalPreviewSection({
+  serverId,
+  sessions,
+  isPro,
+  surface,
+  newAgentName,
+  newAgentCapabilities,
+  defaultSession,
+  onShowPaywall,
+  onQueueCommand,
+  onNewAgentNameChange,
+  onNewAgentCapabilitiesChange,
+  onAgentCreated,
+}: {
+  serverId: string;
+  sessions: string[];
+  isPro: boolean;
+  surface: "preview" | "screen";
+  newAgentName: string;
+  newAgentCapabilities: string;
+  defaultSession: string | null;
+  onShowPaywall: () => void;
+  onQueueCommand: (session: string, command: string) => void;
+  onNewAgentNameChange: (value: string) => void;
+  onNewAgentCapabilitiesChange: (value: string) => void;
+  onAgentCreated: () => void;
+}) {
+  const resolveDefaultSession = useCallback(() => sessions[0] || null, [sessions]);
+  const {
+    agents,
+    loading,
+    memoryEntries,
+    memoryLoading,
+    addRuntimeAgent,
+    removeRuntimeAgent,
+    setRuntimeAgentStatus,
+    setRuntimeAgentGoal,
+    setRuntimeAgentCapabilities,
+    requestAgentApproval,
+    approveAgentApproval,
+    denyAgentApproval,
+    approveReadyApprovals,
+    denyAllPendingApprovals,
+    runMonitoringCycle,
+    clearAgentMemory,
+    spineContexts,
+    findSpineContextByAgentId,
+    pendingSpineApprovals,
+  } = useNovaAgentRuntime({
+    serverId,
+    onDispatchCommand: onQueueCommand,
+    resolveDefaultSession,
+  });
+
+  const [commandByAgent, setCommandByAgent] = useState<Record<string, string>>({});
+  const [goalDrafts, setGoalDrafts] = useState<Record<string, string>>({});
+  const [capabilityDrafts, setCapabilityDrafts] = useState<Record<string, string>>({});
+  const [sessionByAgent, setSessionByAgent] = useState<Record<string, string>>({});
+  const [monitoringCycleStatus, setMonitoringCycleStatus] = useState<string>("");
+
+  const canAddAgent = isPro || agents.length < 1;
+  const pendingAgents = useMemo(() => agents.filter((agent) => agent.pendingApproval !== null), [agents]);
+  const monitoringAgents = useMemo(() => agents.filter((agent) => agent.status === "monitoring"), [agents]);
+
+  const addNewAgent = () => {
+    if (!canAddAgent) {
+      onShowPaywall();
+      return;
+    }
+    const capabilities = parseCapabilities(newAgentCapabilities);
+    const created = addRuntimeAgent(newAgentName, capabilities);
+    if (!created) {
+      return;
+    }
+    setGoalDrafts((prev) => ({ ...prev, [created.agentId]: created.currentGoal }));
+    setCapabilityDrafts((prev) => ({ ...prev, [created.agentId]: created.capabilities.join(",") }));
+    if (defaultSession) {
+      setSessionByAgent((prev) => ({ ...prev, [created.agentId]: defaultSession }));
+    }
+    onAgentCreated();
+  };
+
+  const approveReadyPending = () => {
+    const approvedAgentIds = approveReadyApprovals({
+      commandByAgent,
+      sessionByAgent,
+      defaultSession,
+    });
+    if (approvedAgentIds.length === 0) {
+      return;
+    }
+    setCommandByAgent((previous) => {
+      const next = { ...previous };
+      approvedAgentIds.forEach((agentId) => {
+        next[agentId] = "";
+      });
+      return next;
+    });
+  };
+
+  const denyAllPending = () => {
+    denyAllPendingApprovals();
+  };
+
+  const runMonitoringNow = () => {
+    const cycle = runMonitoringCycle({ defaultSession: defaultSession || undefined });
+    if (cycle.requested.length === 0 && cycle.approved.length === 0) {
+      setMonitoringCycleStatus("No monitoring updates queued.");
+      return;
+    }
+    setMonitoringCycleStatus(`Queued ${cycle.requested.length} • dispatched ${cycle.approved.length}`);
+  };
+
+  return (
+    <>
+      <TextInput
+        style={styles.input}
+        value={newAgentName}
+        onChangeText={onNewAgentNameChange}
+        placeholder="Agent name (example: Build Watcher)"
+        placeholderTextColor="#7f7aa8"
+      />
+      <TextInput
+        style={styles.input}
+        value={newAgentCapabilities}
+        onChangeText={onNewAgentCapabilitiesChange}
+        placeholder="Capabilities (comma separated)"
+        placeholderTextColor="#7f7aa8"
+        autoCapitalize="none"
+      />
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Add NovaAdapt agent"
+        style={[styles.buttonPrimary, (!newAgentName.trim() || !canAddAgent) ? styles.buttonDisabled : null]}
+        disabled={!newAgentName.trim()}
+        onPress={addNewAgent}
+      >
+        <Text style={styles.buttonPrimaryText}>{canAddAgent ? "Add Agent" : "Unlock More Agents"}</Text>
+      </Pressable>
+      {!canAddAgent ? (
+        <Text style={styles.emptyText}>Free tier supports one agent per server. Upgrade to add more.</Text>
+      ) : null}
+      {surface === "screen" ? (
+        <Text style={styles.emptyText}>Server runtime unavailable. Local preview fallback is active on this screen.</Text>
       ) : null}
 
-      {showLocalPreview ? (
-        <>
-          <View style={styles.actionsWrap}>
-            <Text style={styles.serverSubtitle}>{`Pending approvals: ${pendingAgents.length} • NovaSpine ${pendingSpineApprovals}`}</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Run monitoring cycle now"
-              style={[styles.actionButton, monitoringAgents.length === 0 ? styles.buttonDisabled : null]}
-              disabled={monitoringAgents.length === 0}
-              onPress={runMonitoringNow}
-            >
-              <Text style={styles.actionButtonText}>Run Monitoring</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Approve pending agents with ready command and session routes"
-              style={[styles.actionButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
-              disabled={pendingAgents.length === 0}
-              onPress={approveReadyPending}
-            >
-              <Text style={styles.actionButtonText}>Approve Ready</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Deny all pending agent approvals"
-              style={[styles.actionDangerButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
-              disabled={pendingAgents.length === 0}
-              onPress={denyAllPending}
-            >
-              <Text style={styles.actionDangerText}>Deny All</Text>
-            </Pressable>
-          </View>
-          {monitoringCycleStatus ? <Text style={styles.emptyText}>{monitoringCycleStatus}</Text> : null}
+      <View style={styles.actionsWrap}>
+        <Text style={styles.serverSubtitle}>{`Pending approvals: ${pendingAgents.length} • NovaSpine ${pendingSpineApprovals}`}</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Run monitoring cycle now"
+          style={[styles.actionButton, monitoringAgents.length === 0 ? styles.buttonDisabled : null]}
+          disabled={monitoringAgents.length === 0}
+          onPress={runMonitoringNow}
+        >
+          <Text style={styles.actionButtonText}>Run Monitoring</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Approve pending agents with ready command and session routes"
+          style={[styles.actionButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
+          disabled={pendingAgents.length === 0}
+          onPress={approveReadyPending}
+        >
+          <Text style={styles.actionButtonText}>Approve Ready</Text>
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Deny all pending agent approvals"
+          style={[styles.actionDangerButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
+          disabled={pendingAgents.length === 0}
+          onPress={denyAllPending}
+        >
+          <Text style={styles.actionDangerText}>Deny All</Text>
+        </Pressable>
+      </View>
+      {monitoringCycleStatus ? <Text style={styles.emptyText}>{monitoringCycleStatus}</Text> : null}
 
-          {loading || memoryLoading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
-          {!loading && !memoryLoading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
-          {!loading && !memoryLoading && spineContexts.length > 0 ? (
-            <Text style={styles.emptyText}>{`Contexts: ${spineContexts.length}`}</Text>
-          ) : null}
+      {loading || memoryLoading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
+      {!loading && !memoryLoading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
+      {!loading && !memoryLoading && spineContexts.length > 0 ? (
+        <Text style={styles.emptyText}>{`Contexts: ${spineContexts.length}`}</Text>
+      ) : null}
 
-          {agents.map((agent) => {
+      {agents.map((agent) => {
         const draftGoal = goalDrafts[agent.agentId] ?? agent.currentGoal;
         const draftCapabilities = capabilityDrafts[agent.agentId] ?? agent.capabilities.join(",");
         const selectedSession = sessionByAgent[agent.agentId] || agent.pendingApproval?.session || defaultSession;
@@ -991,9 +1031,7 @@ export function NovaAgentPanel({
             }}
           />
         );
-          })}
-        </>
-      ) : null}
-    </View>
+      })}
+    </>
   );
 }

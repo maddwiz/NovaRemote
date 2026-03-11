@@ -141,6 +141,7 @@ Updated: 2026-03-11
   - [x] focused-server local monitoring cycles are now suppressed when the server NovaAdapt runtime is available, preventing duplicate phone-side monitoring on the active server
   - [x] terminals/app context no longer expose focused-only approve/deny shortcuts; agent approvals now route through the same server-scoped async bridge callbacks everywhere
   - [x] focused-server local agent CRUD/approval execution is now gated behind bridge availability checks, so an online server runtime no longer silently falls through to phone-side execution on the active server
+  - [x] the dedicated `Agents` screen no longer mounts the phone-side NovaAdapt runtime hook when the server bridge is live; local preview now renders only as an explicit fallback surface
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
@@ -207,5 +208,5 @@ Updated: 2026-03-11
   - add sidecar/runbook packaging for `codex_remote + NovaAdapt + NovaSpine`
   - clean auth/protocol boundaries before companion-server open-sourcing
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.
-- All changes above were validated locally with `npm run ci` and pushed to `main`.
-- GitHub Actions CI is currently green on the latest push that updated this status.
+- All changes above were validated locally with focused typecheck/test runs, and stable slices were pushed to `feat/novaremote-runtime-migration`.
+- GitHub Actions CI status should be evaluated against that feature branch until it is merged to `main`.

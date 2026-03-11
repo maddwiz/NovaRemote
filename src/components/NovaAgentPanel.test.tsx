@@ -305,6 +305,8 @@ describe("NovaAgentPanel", () => {
       );
     });
 
+    expect(useNovaAgentRuntimeMock).not.toHaveBeenCalled();
+
     const objectiveInput = renderer.root.findByProps({
       placeholder: "Objective (example: Watch cluster load and notify me)",
     });
