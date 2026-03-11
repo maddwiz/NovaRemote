@@ -223,6 +223,7 @@ Updated: 2026-03-11
   - codex_remote live sidecar validation now tolerates a missing `.env.nova-sidecars` file, so operators can validate an already-running stack directly against host/runtime state
   - codex_remote now also ships sidecar lifecycle wrappers (`scripts/start_nova_sidecars.sh`, `scripts/stop_nova_sidecars.sh`) for repeatable bring-up and teardown
   - codex_remote proxy allowlist now includes runtime governance routes for future mobile-side pause/cancel controls (`/agents/runtime/governance`, `/agents/runtime/jobs/cancel_all`)
+  - the bridge now preserves companion `protocol_version` / `agent_contract_version` from both `/agents/health` and `/agents/capabilities`, and the server-runtime panel warns when the companion contract drifts from the mobile client expectation
 - Remaining server-runtime migration work is:
   - finish release-hardening and packaging around the validated `codex_remote + NovaAdapt + NovaSpine` sidecar topology
   - clean auth/protocol boundaries before companion-server open-sourcing

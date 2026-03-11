@@ -302,6 +302,80 @@ describe("NovaAgentPanel", () => {
     });
   });
 
+  it("shows a compatibility warning when the companion protocol drifts", async () => {
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      capabilities: {
+        protocolVersion: "2026-03-10.0",
+        agentContractVersion: "2026-03-10.0",
+        memoryStatus: true,
+        governance: true,
+        workflows: true,
+        templates: true,
+        templateGallery: true,
+      },
+      error: null,
+      health: {
+        ok: true,
+        protocolVersion: "2026-03-10.0",
+        agentContractVersion: "2026-03-10.0",
+      },
+      memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      templates: [],
+      galleryTemplates: [],
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+        })
+      );
+    });
+
+    expect(() =>
+      renderer.root.findByProps({ children: "Companion update recommended: protocol 2026-03-10.0 • agent contract 2026-03-10.0" })
+    ).not.toThrow();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("creates server plans and workflows directly when screen mode has a live runtime", async () => {
     const createPlan = vi.fn(async () => ({
       id: "plan-remote",

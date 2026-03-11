@@ -45,6 +45,7 @@ Updated: 2026-03-11
   - codex_remote now exposes a reusable sidecar validator script that can check both the package and the live runtime stack before mobile rollout
   - codex_remote live sidecar validation no longer depends on a local `.env.nova-sidecars` file when the host/runtime stack is already running
   - codex_remote now includes repeatable sidecar lifecycle scripts so the NovaAdapt/NovaSpine stack can be started and stopped without copying compose commands out of the runbook
+  - the server-runtime UI now preserves the companion protocol/agent-contract versions and warns when the installed companion contract drifts from the mobile client expectation
   - remaining release-hardening / protocol cleanup before companion-server open-sourcing
   - dedicated runtime-governance controls are now part of the server-backed bridge surface
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).

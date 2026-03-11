@@ -33,6 +33,8 @@ type NovaAgentPanelProps = {
 };
 
 const STATUS_ORDER: NovaAgentStatus[] = ["idle", "monitoring", "executing", "waiting_approval"];
+const EXPECTED_COMPANION_PROTOCOL_VERSION = "2026-03-11.1";
+const EXPECTED_AGENT_CONTRACT_VERSION = "2026-03-11.1";
 
 function parseCapabilities(raw: string): string[] {
   return raw
@@ -208,6 +210,29 @@ function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): strin
     : `Companion capabilities: ${available.join(", ")}`;
 }
 
+function buildCompatibilityWarning(
+  capabilities: NovaAdaptBridgeCapabilities,
+  health: NovaAdaptBridgeHealth | null
+): string | null {
+  const protocolVersion = capabilities.protocolVersion || health?.protocolVersion || null;
+  const agentContractVersion = capabilities.agentContractVersion || health?.agentContractVersion || null;
+  if (!protocolVersion && !agentContractVersion) {
+    return null;
+  }
+
+  const mismatches: string[] = [];
+  if (protocolVersion && protocolVersion !== EXPECTED_COMPANION_PROTOCOL_VERSION) {
+    mismatches.push(`protocol ${protocolVersion}`);
+  }
+  if (agentContractVersion && agentContractVersion !== EXPECTED_AGENT_CONTRACT_VERSION) {
+    mismatches.push(`agent contract ${agentContractVersion}`);
+  }
+  if (mismatches.length === 0) {
+    return null;
+  }
+  return `Companion update recommended: ${mismatches.join(" • ")}`;
+}
+
 function canApprovePlan(status: string): boolean {
   return status.trim().toLowerCase() === "pending";
 }
@@ -290,6 +315,8 @@ function RemoteBridgeSection({
   onCancelAllJobs: () => void;
   onLaunchTemplate: (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => void;
 }) {
+  const compatibilityWarning = buildCompatibilityWarning(capabilities, health);
+
   return (
     <View style={styles.panel}>
       <View style={styles.rowInlineSpace}>
@@ -311,6 +338,7 @@ function RemoteBridgeSection({
       ) : (
         <>
           <Text style={styles.serverSubtitle}>{summarizeBridgeHealth(health, runtimeAvailable)}</Text>
+          {compatibilityWarning ? <Text style={styles.emptyText}>{compatibilityWarning}</Text> : null}
           <Text style={styles.emptyText}>
             {capabilities.memoryStatus ? `Memory ${summarizeMemoryStatus(memoryStatus)}` : "Memory status unavailable on this runtime."}
           </Text>
