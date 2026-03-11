@@ -205,7 +205,7 @@ Updated: 2026-03-11
   - server-backed workflow creation + resume actions
   - server-backed plan creation from the dedicated `Agents` screen
 - Remaining server-runtime migration work is:
-  - move the last non-bridge agent CRUD/update surfaces fully off the phone runtime
+  - remove the remaining focused-server local runtime CRUD/update fallback once server-runtime parity is complete
   - add sidecar/runbook packaging for `codex_remote + NovaAdapt + NovaSpine`
   - clean auth/protocol boundaries before companion-server open-sourcing
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.

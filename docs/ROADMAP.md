@@ -32,5 +32,6 @@ Updated: 2026-03-11
   - focused-server agent CRUD/approval execution now also refuses to fall through to the phone runtime while the server bridge reports an online runtime
   - the dedicated `Agents` screen now avoids mounting the phone-side NovaAdapt runtime unless the bridge/runtime is unavailable
   - the focused-server `AppShell` runtime now also disables its local NovaAdapt hook entirely while the bridge/runtime is online, leaving the phone runtime as a real fallback path instead of an always-mounted duplicate
+  - non-focused local agent fallback no longer auto-focuses and queues hidden phone-runtime work; when the bridge runtime is down, the local fallback is now explicit to the currently focused server only
   - remaining sidecar packaging / NovaSpine rollout / protocol cleanup
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).

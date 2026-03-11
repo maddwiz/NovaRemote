@@ -2651,13 +2651,6 @@ export default function AppShell() {
     | { kind: "set_status"; name: string; status: "idle" | "monitoring" | "executing" | "waiting_approval" }
     | { kind: "set_goal"; name: string; goal: string }
     | { kind: "queue_command"; name: string; command: string };
-  type PendingAgentServerAction = {
-    serverId: string;
-    action: AgentServerAction;
-    resolve: (agentIds: string[]) => void;
-    reject: (error: unknown) => void;
-  };
-  const pendingAgentServerActionsRef = useRef<PendingAgentServerAction[]>([]);
   const buildRemoteAgentObjective = useCallback((action: AgentServerAction): string => {
     if (action.kind === "create") {
       const name = action.name.trim();
@@ -2975,42 +2968,6 @@ export default function AppShell() {
     ]
   );
 
-  const processPendingAgentServerActions = useCallback(() => {
-    while (pendingAgentServerActionsRef.current.length > 0) {
-      const current = pendingAgentServerActionsRef.current[0];
-      if (!servers.some((server) => server.id === current.serverId)) {
-        pendingAgentServerActionsRef.current.shift();
-        current.reject(new Error("Target server is no longer available."));
-        continue;
-      }
-
-      if (!focusedServerId || focusedServerId !== current.serverId) {
-        focusServer(current.serverId);
-        return;
-      }
-
-      pendingAgentServerActionsRef.current.shift();
-      try {
-        current.resolve(executeFocusedAgentServerAction(current.action));
-      } catch (error) {
-        current.reject(error);
-      }
-    }
-  }, [executeFocusedAgentServerAction, focusServer, focusedServerId, servers]);
-
-  useEffect(() => {
-    processPendingAgentServerActions();
-  }, [focusedServerId, processPendingAgentServerActions]);
-
-  useEffect(() => {
-    return () => {
-      const error = new Error("Agent action was cancelled.");
-      while (pendingAgentServerActionsRef.current.length > 0) {
-        pendingAgentServerActionsRef.current.shift()?.reject(error);
-      }
-    };
-  }, []);
-
   const runAgentServerAction = useCallback(
     async (serverId: string, action: AgentServerAction): Promise<string[]> => {
       const targetServerId = serverId.trim();
@@ -3028,17 +2985,9 @@ export default function AppShell() {
         return executeFocusedAgentServerAction(action);
       }
 
-      return await new Promise<string[]>((resolve, reject) => {
-        pendingAgentServerActionsRef.current.push({
-          serverId: targetServerId,
-          action,
-          resolve,
-          reject,
-        });
-        processPendingAgentServerActions();
-      });
+      throw new Error("Focus the target server first to use the local NovaAdapt fallback while the server runtime is unavailable.");
     },
-    [executeFocusedAgentServerAction, executeRemoteAgentServerAction, focusedServerId, processPendingAgentServerActions, servers]
+    [executeFocusedAgentServerAction, executeRemoteAgentServerAction, focusedServerId, servers]
   );
 
   const approveReadyAgentsForServer = useCallback(
