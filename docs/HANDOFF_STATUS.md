@@ -205,9 +205,10 @@ Updated: 2026-03-11
   - server-backed workflow creation + resume actions
   - server-backed plan creation from the dedicated `Agents` screen
   - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
+  - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
 - Remaining server-runtime migration work is:
   - remove the remaining focused-server local runtime CRUD/update fallback once server-runtime parity is complete
-  - add sidecar/runbook packaging for `codex_remote + NovaAdapt + NovaSpine`
+  - finish release-hardening and packaging around the validated `codex_remote + NovaAdapt + NovaSpine` sidecar topology
   - clean auth/protocol boundaries before companion-server open-sourcing
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.
 - All changes above were validated locally with focused typecheck/test runs, and stable slices were pushed to `feat/novaremote-runtime-migration`.

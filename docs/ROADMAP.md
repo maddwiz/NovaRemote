@@ -34,5 +34,6 @@ Updated: 2026-03-11
   - the dedicated `Agents` screen now avoids mounting the phone-side NovaAdapt runtime unless the bridge/runtime is unavailable
   - the focused-server `AppShell` runtime now also disables its local NovaAdapt hook entirely while the bridge/runtime is online, leaving the phone runtime as a real fallback path instead of an always-mounted duplicate
   - non-focused local agent fallback no longer auto-focuses and queues hidden phone-runtime work; when the bridge runtime is down, the local fallback is now explicit to the currently focused server only
-  - remaining sidecar packaging / NovaSpine rollout / protocol cleanup
+  - sidecar topology validation now covers `codex_remote + NovaAdapt + NovaSpine`, including workflow forwarding through host `/agents/*`
+  - remaining release-hardening / protocol cleanup before companion-server open-sourcing
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).

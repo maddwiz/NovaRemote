@@ -24,11 +24,13 @@ Updated: 2026-03-11
 - workflow proxy routes
 - plan/job SSE proxy routes
 - audit-event SSE proxy route
+- validated sidecar stack with `codex_remote + NovaAdapt + NovaSpine`
+- validated host forwarding for `/agents/workflows/status`, `/agents/workflows/list`, `/agents/workflows/item`, and `/agents/workflows/start`
 
 ### Still pending
 
 - move the last remaining non-bridge agent CRUD/update paths from phone runtime to server runtime
-- add sidecar packaging/runbooks for `codex_remote + NovaAdapt + NovaSpine`
+- finish release-hardening around the validated sidecar packaging/runbooks for `codex_remote + NovaAdapt + NovaSpine`
 - add richer runtime event transport if NovaAdapt grows beyond plan/job SSE
 - clean auth/protocol surface and publish the companion server openly
 
