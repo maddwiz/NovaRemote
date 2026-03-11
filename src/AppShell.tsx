@@ -2864,6 +2864,9 @@ export default function AppShell() {
 
   const executeFocusedAgentServerAction = useCallback(
     (action: AgentServerAction): string[] => {
+      if (!shouldUseLocalFocusedAgentRuntime) {
+        return [];
+      }
       if (action.kind === "approve") {
         const approved = approveReadyAgentsForFocusedServer();
         return Array.isArray(approved) ? approved : [];
@@ -2967,6 +2970,7 @@ export default function AppShell() {
       removeFocusedServerRuntimeAgent,
       setFocusedServerRuntimeAgentStatus,
       setFocusedServerRuntimeAgentGoal,
+      shouldUseLocalFocusedAgentRuntime,
     ]
   );
 
