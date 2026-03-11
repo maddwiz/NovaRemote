@@ -1,0 +1,14 @@
+{
+  "repo_root": "/Users/desmondpottle/Documents/New project/NovaRemote",
+  "origin_url": "https://github.com/maddwiz/NovaRemote.git",
+  "repo_name": "NovaRemote",
+  "default_branch": "main",
+  "allowed_branch_prefixes": [
+    "swarm/",
+    "feat/",
+    "fix/",
+    "hotfix/",
+    "release/"
+  ],
+  "created_at_utc": "2026-03-11T17:10:00Z"
+}
