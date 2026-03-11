@@ -131,6 +131,36 @@ describe("useNovaAdaptBridge", () => {
         expect(init?.method).toBe("POST");
         return responseOf(200, { ok: true });
       }
+      if (url.endsWith("/agents/plans")) {
+        expect(init?.method).toBe("POST");
+        return responseOf(200, {
+          id: "plan-2",
+          objective: "Create a deployment plan",
+          status: "pending",
+          created_at: "2026-03-10T03:00:00.000Z",
+          updated_at: "2026-03-10T03:00:00.000Z",
+          progress_completed: 0,
+          progress_total: 2,
+        });
+      }
+      if (url.endsWith("/agents/workflows/start")) {
+        expect(init?.method).toBe("POST");
+        return responseOf(200, {
+          workflow_id: "wf-2",
+          objective: "Watch the render deploy",
+          status: "queued",
+          updated_at: "2026-03-10T03:30:00.000Z",
+        });
+      }
+      if (url.endsWith("/agents/workflows/resume")) {
+        expect(init?.method).toBe("POST");
+        return responseOf(200, {
+          workflow_id: "wf-2",
+          objective: "Watch the render deploy",
+          status: "running",
+          updated_at: "2026-03-10T03:31:00.000Z",
+        });
+      }
       if (url.includes("/agents/plans/plan-1/stream")) {
         return streamResponse('event: end\ndata: {"id":"plan-1","status":"pending"}\n\n');
       }
@@ -170,6 +200,27 @@ describe("useNovaAdaptBridge", () => {
 
     expect(fetchMock).toHaveBeenCalledWith(
       "https://dgx.novaremote.test/agents/plans/plan-1/approve_async",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    await act(async () => {
+      const createdPlan = await latestOrThrow(latest).createPlan("Create a deployment plan");
+      expect(createdPlan).toMatchObject({ id: "plan-2", status: "pending" });
+    });
+
+    await act(async () => {
+      const workflow = await latestOrThrow(latest).startWorkflow("Watch the render deploy", {
+        metadata: { capabilities: ["watch"] },
+      });
+      expect(workflow).toMatchObject({ workflowId: "wf-2", status: "running" });
+    });
+
+    await act(async () => {
+      await latestOrThrow(latest).resumeWorkflow("wf-2");
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dgx.novaremote.test/agents/workflows/resume",
       expect.objectContaining({ method: "POST" })
     );
 

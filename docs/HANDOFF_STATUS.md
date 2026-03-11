@@ -134,7 +134,8 @@ Updated: 2026-03-10
   - [x] live plan/job SSE follow for active plans and jobs
   - [x] server-runtime plan actions (`approve`, `reject`, `retry`, `undo`) from mobile
   - [x] dedicated `Agents` route/screen backed by the bridge
-  - [x] local NovaAdapt preview remains available in `Terminals` as migration fallback
+  - [x] dedicated `Agents` route now prefers server-backed creation (`Create Approval Plan`, `Start Workflow`, `Resume Workflow`)
+  - [x] local NovaAdapt preview remains available in `Terminals` and only falls back on the dedicated `Agents` screen when the server runtime is unavailable
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
@@ -193,8 +194,10 @@ Updated: 2026-03-10
   - plans/jobs/workflows listing
   - plan/job live stream updates
   - plan action mutations
+  - server-backed workflow creation + resume actions
+  - server-backed plan creation from the dedicated `Agents` screen
 - Remaining server-runtime migration work is:
-  - move more agent CRUD/execution paths off the phone runtime
+  - move the remaining agent CRUD/update flows fully off the phone runtime
   - add sidecar/runbook packaging for `codex_remote + NovaAdapt + NovaSpine`
   - clean auth/protocol boundaries before companion-server open-sourcing
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.

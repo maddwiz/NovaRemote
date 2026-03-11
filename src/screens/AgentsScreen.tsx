@@ -38,7 +38,7 @@ export function AgentsScreen() {
       <PageHeroCard
         eyebrow="Agent Runtime"
         title="Create, review, approve, retry, and monitor agents."
-        summary="Use the server-backed NovaAdapt runtime for plans, jobs, workflows, and approvals while keeping the local preview available as a fallback."
+        summary="Use the server-backed NovaAdapt runtime for plans, jobs, workflows, approvals, and recovery actions."
         tone="violet"
         stats={heroStats}
       />

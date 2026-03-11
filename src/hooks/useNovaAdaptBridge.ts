@@ -32,6 +32,12 @@ export type UseNovaAdaptBridgeResult = {
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
   refresh: (options?: RefreshOptions) => Promise<void>;
+  createPlan: (objective: string, options?: { strategy?: string }) => Promise<NovaAdaptBridgePlan | null>;
+  startWorkflow: (
+    objective: string,
+    options?: { metadata?: Record<string, unknown>; autoResume?: boolean }
+  ) => Promise<NovaAdaptBridgeWorkflow | null>;
+  resumeWorkflow: (workflowId: string) => Promise<boolean>;
   approvePlanAsync: (planId: string) => Promise<boolean>;
   rejectPlan: (planId: string, reason?: string) => Promise<boolean>;
   retryFailedPlanAsync: (planId: string) => Promise<boolean>;
@@ -559,6 +565,89 @@ export function useNovaAdaptBridge({
     [refresh, server, serverReady]
   );
 
+  const runJsonMutation = useCallback(
+    async <T,>(path: string, body?: Record<string, unknown>): Promise<T | null> => {
+      if (!serverReady || !server) {
+        return null;
+      }
+      const result = await apiRequest<T>(server.baseUrl, server.token, path, {
+        method: "POST",
+        body: body ? JSON.stringify(body) : undefined,
+      });
+      await refresh({ quiet: true });
+      return result;
+    },
+    [refresh, server, serverReady]
+  );
+
+  const createPlan = useCallback(
+    async (objective: string, options?: { strategy?: string }): Promise<NovaAdaptBridgePlan | null> => {
+      const normalizedObjective = objective.trim();
+      if (!normalizedObjective) {
+        return null;
+      }
+      const payload: Record<string, unknown> = {
+        objective: normalizedObjective,
+      };
+      if (options?.strategy?.trim()) {
+        payload.strategy = options.strategy.trim();
+      }
+      const result = await runJsonMutation<unknown>("/agents/plans", payload);
+      return normalizePlan(result);
+    },
+    [runJsonMutation]
+  );
+
+  const resumeWorkflow = useCallback(
+    async (workflowId: string): Promise<boolean> => {
+      const normalizedWorkflowId = workflowId.trim();
+      if (!normalizedWorkflowId) {
+        return false;
+      }
+      return Boolean(
+        await runJsonMutation<unknown>("/agents/workflows/resume", {
+          workflow_id: normalizedWorkflowId,
+          context: "api",
+        })
+      );
+    },
+    [runJsonMutation]
+  );
+
+  const startWorkflow = useCallback(
+    async (
+      objective: string,
+      options?: { metadata?: Record<string, unknown>; autoResume?: boolean }
+    ): Promise<NovaAdaptBridgeWorkflow | null> => {
+      const normalizedObjective = objective.trim();
+      if (!normalizedObjective) {
+        return null;
+      }
+      const metadata =
+        options?.metadata && Object.keys(options.metadata).length > 0
+          ? { ...options.metadata, created_by: "novaremote_mobile" }
+          : { created_by: "novaremote_mobile" };
+      const created = await runJsonMutation<unknown>("/agents/workflows/start", {
+        objective: normalizedObjective,
+        metadata,
+        context: "api",
+      });
+      const normalized = normalizeWorkflow(created);
+      if (!normalized) {
+        return null;
+      }
+      if (options?.autoResume === false) {
+        return normalized;
+      }
+      const resumed = await runJsonMutation<unknown>("/agents/workflows/resume", {
+        workflow_id: normalized.workflowId,
+        context: "api",
+      });
+      return normalizeWorkflow(resumed) ?? normalized;
+    },
+    [runJsonMutation]
+  );
+
   const approvePlanAsync = useCallback(
     async (planId: string) => runPlanMutation(`/agents/plans/${encodeURIComponent(planId)}/approve_async`, { execute: true }),
     [runPlanMutation]
@@ -594,6 +683,9 @@ export function useNovaAdaptBridge({
       jobs,
       workflows,
       refresh,
+      createPlan,
+      startWorkflow,
+      resumeWorkflow,
       approvePlanAsync,
       rejectPlan,
       retryFailedPlanAsync,
@@ -601,6 +693,7 @@ export function useNovaAdaptBridge({
     }),
     [
       approvePlanAsync,
+      createPlan,
       error,
       health,
       jobs,
@@ -610,8 +703,10 @@ export function useNovaAdaptBridge({
       refresh,
       refreshing,
       rejectPlan,
+      resumeWorkflow,
       retryFailedPlanAsync,
       runtimeAvailable,
+      startWorkflow,
       supported,
       undoPlan,
       workflows,

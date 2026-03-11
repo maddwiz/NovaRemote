@@ -11,6 +11,9 @@ Updated: 2026-03-10
 - companion-backed health, memory status, plans, jobs, and workflows are visible in-app
 - active plans and jobs now stream live into the app over SSE
 - a dedicated `Agents` screen now exists in NovaRemote for the server-backed runtime
+- the dedicated `Agents` screen now creates approval plans and persistent workflows directly on the server runtime
+- workflow resume actions are now available from the mobile runtime surface
+- the old in-app NovaAdapt runtime is now fallback-only on the dedicated `Agents` screen and remains available in `Terminals` during migration
 
 ### Completed in companion bridge
 
@@ -21,7 +24,7 @@ Updated: 2026-03-10
 
 ### Still pending
 
-- move agent CRUD/execution fully from phone runtime to server runtime
+- move the remaining agent CRUD/update paths fully from phone runtime to server runtime
 - add sidecar packaging/runbooks for `codex_remote + NovaAdapt + NovaSpine`
 - add richer runtime event transport if NovaAdapt grows beyond plan/job SSE
 - clean auth/protocol surface and publish the companion server openly

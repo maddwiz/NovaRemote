@@ -57,6 +57,9 @@ beforeEach(() => {
     jobs: [],
     workflows: [],
     refresh: vi.fn(),
+    createPlan: vi.fn(async () => null),
+    startWorkflow: vi.fn(async () => null),
+    resumeWorkflow: vi.fn(async () => true),
     approvePlanAsync: vi.fn(async () => true),
     rejectPlan: vi.fn(async () => true),
     retryFailedPlanAsync: vi.fn(async () => true),
@@ -197,6 +200,9 @@ describe("NovaAgentPanel", () => {
       jobs: [],
       workflows: [],
       refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      resumeWorkflow: vi.fn(async () => true),
       approvePlanAsync,
       rejectPlan: vi.fn(async () => true),
       retryFailedPlanAsync: vi.fn(async () => true),
@@ -231,6 +237,102 @@ describe("NovaAgentPanel", () => {
     });
 
     expect(approvePlanAsync).toHaveBeenCalledWith("plan-1");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("creates server plans and workflows directly when screen mode has a live runtime", async () => {
+    const createPlan = vi.fn(async () => ({
+      id: "plan-remote",
+      objective: "Watch the cluster",
+      status: "pending",
+      createdAt: "2026-03-10T04:00:00.000Z",
+      updatedAt: "2026-03-10T04:00:00.000Z",
+      progressCompleted: 0,
+      progressTotal: 2,
+      executionError: null,
+      rejectReason: null,
+    }));
+    const startWorkflow = vi.fn(async () => ({
+      workflowId: "wf-remote",
+      objective: "Watch the cluster",
+      status: "running",
+      updatedAt: "2026-03-10T04:01:00.000Z",
+      lastError: null,
+    }));
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      error: null,
+      health: { ok: true },
+      memoryStatus: { backend: "novaspine-http", enabled: true },
+      plans: [],
+      jobs: [],
+      workflows: [],
+      refresh: vi.fn(),
+      createPlan,
+      startWorkflow,
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+          surface: "screen",
+        })
+      );
+    });
+
+    const objectiveInput = renderer.root.findByProps({
+      placeholder: "Objective (example: Watch cluster load and notify me)",
+    });
+
+    await act(async () => {
+      objectiveInput.props.onChangeText("Watch the cluster");
+    });
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Create server approval plan" }).props.onPress();
+    });
+
+    expect(createPlan).toHaveBeenCalledWith("Watch the cluster", { strategy: "single" });
+
+    await act(async () => {
+      objectiveInput.props.onChangeText("Watch the cluster");
+    });
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Start server workflow" }).props.onPress();
+    });
+
+    expect(startWorkflow).toHaveBeenCalledWith("Watch the cluster", {
+      autoResume: true,
+      metadata: { capabilities: ["watch", "tool-calling"] },
+    });
+
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Add NovaAdapt agent" })).toThrow();
 
     await act(async () => {
       renderer.unmount();
