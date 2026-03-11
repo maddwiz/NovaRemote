@@ -573,6 +573,7 @@ export function NovaAgentPanel({
   const [newAgentName, setNewAgentName] = useState<string>("");
   const [newAgentCapabilities, setNewAgentCapabilities] = useState<string>("watch,tool-calling");
   const [remoteCreateStatus, setRemoteCreateStatus] = useState<string>("");
+  const [localFallbackEnabled, setLocalFallbackEnabled] = useState<boolean>(surface === "preview");
 
   const defaultSession = useMemo(() => sessions[0] || null, [sessions]);
   const {
@@ -598,7 +599,7 @@ export function NovaAgentPanel({
   const [remoteMutationPlanId, setRemoteMutationPlanId] = useState<string | null>(null);
   const [remoteMutationWorkflowId, setRemoteMutationWorkflowId] = useState<string | null>(null);
   const showLocalPreview =
-    surface === "preview" || (surface === "screen" && (!bridgeSupported || !bridgeRuntimeAvailable));
+    surface === "preview" || (surface === "screen" && (!bridgeSupported || !bridgeRuntimeAvailable) && localFallbackEnabled);
   const showRemoteCreateControls = surface === "screen" && bridgeSupported && bridgeRuntimeAvailable;
 
   const runRemotePlanAction = useCallback(
@@ -668,6 +669,8 @@ export function NovaAgentPanel({
       setRemoteCreateStatus(`Workflow start failed: ${detail}`);
     }
   }, [newAgentCapabilities, newAgentName, startWorkflow]);
+
+  const runtimeUnavailable = !bridgeSupported || !bridgeRuntimeAvailable;
 
   if (!serverId) {
     return (
@@ -768,6 +771,25 @@ export function NovaAgentPanel({
             </Pressable>
           </View>
           {remoteCreateStatus ? <Text style={styles.emptyText}>{remoteCreateStatus}</Text> : null}
+        </View>
+      ) : null}
+
+      {surface === "screen" && runtimeUnavailable ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>Server Runtime Unavailable</Text>
+          <Text style={styles.serverSubtitle}>
+            The server-backed NovaAdapt runtime is not available right now. Use local fallback only if you need temporary agent controls on this device.
+          </Text>
+          <View style={styles.actionsWrap}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={localFallbackEnabled ? "Hide local fallback controls" : "Use local fallback controls"}
+              style={[styles.actionButton, localFallbackEnabled ? styles.chipActive : null]}
+              onPress={() => setLocalFallbackEnabled((current) => !current)}
+            >
+              <Text style={styles.actionButtonText}>{localFallbackEnabled ? "Hide Local Fallback" : "Use Local Fallback"}</Text>
+            </Pressable>
+          </View>
         </View>
       ) : null}
 

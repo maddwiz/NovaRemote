@@ -341,6 +341,66 @@ describe("NovaAgentPanel", () => {
     });
   });
 
+  it("keeps local fallback hidden on the dedicated screen until explicitly enabled", async () => {
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: false,
+      error: "Runtime unavailable",
+      health: { ok: false },
+      memoryStatus: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+          surface: "screen",
+        })
+      );
+    });
+
+    expect(useNovaAgentRuntimeMock).not.toHaveBeenCalled();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Add NovaAdapt agent" })).toThrow();
+    expect(() => renderer.root.findByProps({ children: "Use Local Fallback" })).not.toThrow();
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Use local fallback controls" }).props.onPress();
+    });
+
+    expect(useNovaAgentRuntimeMock).toHaveBeenCalled();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Add NovaAdapt agent" })).not.toThrow();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("keeps the terminals panel server-first without showing local preview when runtime is live", async () => {
     useNovaAdaptBridgeMock.mockReturnValue({
       loading: false,
