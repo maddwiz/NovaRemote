@@ -204,6 +204,7 @@ Updated: 2026-03-11
   - plan action mutations
   - server-backed workflow creation + resume actions
   - server-backed plan creation from the dedicated `Agents` screen
+  - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
 - Remaining server-runtime migration work is:
   - remove the remaining focused-server local runtime CRUD/update fallback once server-runtime parity is complete
   - add sidecar/runbook packaging for `codex_remote + NovaAdapt + NovaSpine`

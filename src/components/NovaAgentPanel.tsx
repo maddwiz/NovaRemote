@@ -25,7 +25,7 @@ type NovaAgentPanelProps = {
   isPro: boolean;
   onShowPaywall: () => void;
   onQueueCommand: (session: string, command: string) => void;
-  surface?: "preview" | "screen";
+  surface?: "preview" | "panel" | "screen";
 };
 
 const STATUS_ORDER: NovaAgentStatus[] = ["idle", "monitoring", "executing", "waiting_approval"];
@@ -595,7 +595,7 @@ export function NovaAgentPanel({
   } = useNovaAdaptBridge({ server, enabled: Boolean(serverId) });
   const [remoteMutationPlanId, setRemoteMutationPlanId] = useState<string | null>(null);
   const [remoteMutationWorkflowId, setRemoteMutationWorkflowId] = useState<string | null>(null);
-  const showLocalPreview = surface !== "screen" || !bridgeSupported || !bridgeRuntimeAvailable;
+  const showLocalPreview = surface === "preview" || !bridgeSupported || !bridgeRuntimeAvailable;
   const showRemoteCreateControls = surface === "screen" && bridgeSupported && bridgeRuntimeAvailable;
 
   const runRemotePlanAction = useCallback(
@@ -681,7 +681,9 @@ export function NovaAgentPanel({
       <Text style={styles.serverSubtitle}>
         {surface === "screen"
           ? `${serverName || "Server"} • Live runtime, plans, jobs, and workflows`
-          : `${serverName || "Server"} • Agent lifecycle + approval queue groundwork`}
+          : surface === "panel"
+            ? `${serverName || "Server"} • Runtime status, plans, and workflows`
+            : `${serverName || "Server"} • Agent lifecycle + approval queue groundwork`}
       </Text>
 
       <RemoteBridgeSection
@@ -805,7 +807,7 @@ function LocalPreviewSection({
   serverId: string;
   sessions: string[];
   isPro: boolean;
-  surface: "preview" | "screen";
+  surface: "preview" | "panel" | "screen";
   newAgentName: string;
   newAgentCapabilities: string;
   defaultSession: string | null;

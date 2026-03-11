@@ -1333,6 +1333,7 @@ export function TerminalsScreen() {
         isPro={isPro}
         onShowPaywall={onShowPaywall}
         onQueueCommand={queueAgentCommand}
+        surface="panel"
       />
 
       <WorkspaceVoiceChannelsPanel
