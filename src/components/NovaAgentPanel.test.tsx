@@ -50,6 +50,13 @@ beforeEach(() => {
     refreshing: false,
     supported: false,
     runtimeAvailable: false,
+    capabilities: {
+      memoryStatus: false,
+      governance: false,
+      workflows: false,
+      templates: false,
+      templateGallery: false,
+    },
     error: null,
     health: null,
     memoryStatus: null,
@@ -193,6 +200,13 @@ describe("NovaAgentPanel", () => {
       refreshing: false,
       supported: true,
       runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: true,
+        governance: true,
+        workflows: true,
+        templates: true,
+        templateGallery: true,
+      },
       error: null,
       health: { ok: true },
       memoryStatus: { backend: "novaspine-http", enabled: true },
@@ -312,6 +326,13 @@ describe("NovaAgentPanel", () => {
       refreshing: false,
       supported: true,
       runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: true,
+        governance: true,
+        workflows: true,
+        templates: true,
+        templateGallery: true,
+      },
       error: null,
       health: { ok: true },
       memoryStatus: { backend: "novaspine-http", enabled: true },
@@ -415,6 +436,13 @@ describe("NovaAgentPanel", () => {
       refreshing: false,
       supported: true,
       runtimeAvailable: false,
+      capabilities: {
+        memoryStatus: false,
+        governance: false,
+        workflows: false,
+        templates: false,
+        templateGallery: false,
+      },
       error: "Runtime unavailable",
       health: { ok: false },
       memoryStatus: null,
@@ -484,6 +512,13 @@ describe("NovaAgentPanel", () => {
       refreshing: false,
       supported: true,
       runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: true,
+        governance: true,
+        workflows: true,
+        templates: true,
+        templateGallery: true,
+      },
       error: null,
       health: { ok: true },
       memoryStatus: { backend: "novaspine-http", enabled: true },
@@ -546,6 +581,13 @@ describe("NovaAgentPanel", () => {
       refreshing: false,
       supported: true,
       runtimeAvailable: false,
+      capabilities: {
+        memoryStatus: false,
+        governance: false,
+        workflows: false,
+        templates: false,
+        templateGallery: false,
+      },
       error: "Runtime unavailable",
       health: { ok: false },
       memoryStatus: null,
@@ -622,6 +664,13 @@ describe("NovaAgentPanel", () => {
       refreshing: false,
       supported: true,
       runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: true,
+        governance: true,
+        workflows: true,
+        templates: true,
+        templateGallery: true,
+      },
       error: null,
       health: { ok: true },
       memoryStatus: { backend: "novaspine-http", enabled: true },
@@ -717,6 +766,77 @@ describe("NovaAgentPanel", () => {
     });
     expect(importTemplate).toHaveBeenCalledWith(expect.objectContaining({ templateId: "gallery-1" }));
     expect(launchTemplate).toHaveBeenCalledWith("gallery-1", { mode: "workflow" });
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("shows bridge-mismatch notices when optional runtime routes are unavailable", async () => {
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: false,
+        governance: false,
+        workflows: false,
+        templates: false,
+        templateGallery: false,
+      },
+      error: null,
+      health: { ok: true },
+      memoryStatus: null,
+      governance: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      templates: [],
+      galleryTemplates: [],
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
+      resumeWorkflow: vi.fn(async () => false),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => false),
+      resumeRuntime: vi.fn(async () => false),
+      resetGovernanceUsage: vi.fn(async () => false),
+      cancelAllJobs: vi.fn(async () => false),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+          surface: "screen",
+        })
+      );
+    });
+
+    expect(() => renderer.root.findByProps({ children: "Memory status unavailable on this runtime." })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "This server runtime does not expose governance controls yet." })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "This server runtime does not expose workflow controls yet." })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "This bridge does not expose saved template routes yet." })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "This bridge does not expose gallery import routes yet." })).not.toThrow();
 
     await act(async () => {
       renderer.unmount();

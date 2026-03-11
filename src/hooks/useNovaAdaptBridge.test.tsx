@@ -228,6 +228,13 @@ describe("useNovaAdaptBridge", () => {
 
     expect(latestOrThrow(latest).supported).toBe(true);
     expect(latestOrThrow(latest).runtimeAvailable).toBe(true);
+    expect(latestOrThrow(latest).capabilities).toEqual({
+      memoryStatus: true,
+      governance: true,
+      workflows: true,
+      templates: true,
+      templateGallery: true,
+    });
     expect(latestOrThrow(latest).plans[0]).toMatchObject({
       id: "plan-1",
       objective: "Watch DGX",
@@ -377,8 +384,79 @@ describe("useNovaAdaptBridge", () => {
 
     expect(latestOrThrow(latest).supported).toBe(false);
     expect(latestOrThrow(latest).runtimeAvailable).toBe(false);
+    expect(latestOrThrow(latest).capabilities).toEqual({
+      memoryStatus: false,
+      governance: false,
+      workflows: false,
+      templates: false,
+      templateGallery: false,
+    });
     expect(latestOrThrow(latest).error).toBeNull();
     expect(latestOrThrow(latest).governance).toBeNull();
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("keeps runtime online while marking optional missing routes unavailable", async () => {
+    const server = buildServer();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/agents/health?deep=1")) {
+        return responseOf(200, { ok: true, features: { agents: true } });
+      }
+      if (url.endsWith("/agents/plans?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/jobs?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/memory/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/runtime/governance")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/templates?limit=12")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/gallery")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.includes("/agents/events/stream")) {
+        return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    let latest: BridgeHandle | null = null;
+    function Harness() {
+      latest = useNovaAdaptBridge({ server, refreshIntervalMs: 60_000 });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await waitFor(() => !latestOrThrow(latest).loading, "bridge optional route load");
+
+    expect(latestOrThrow(latest).supported).toBe(true);
+    expect(latestOrThrow(latest).runtimeAvailable).toBe(true);
+    expect(latestOrThrow(latest).error).toBeNull();
+    expect(latestOrThrow(latest).capabilities).toEqual({
+      memoryStatus: false,
+      governance: false,
+      workflows: false,
+      templates: false,
+      templateGallery: false,
+    });
 
     await act(async () => {
       renderer?.unmount();

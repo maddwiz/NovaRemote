@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiRequest, normalizeBaseUrl } from "../api/client";
 import {
+  NovaAdaptBridgeCapabilities,
   NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
@@ -27,6 +28,7 @@ export type UseNovaAdaptBridgeResult = {
   refreshing: boolean;
   supported: boolean;
   runtimeAvailable: boolean;
+  capabilities: NovaAdaptBridgeCapabilities;
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
@@ -186,6 +188,18 @@ function isBridgeUnavailableError(error: unknown): boolean {
     message.includes("novaadapt bridge is not configured") ||
     message.includes("upstream unavailable")
   );
+}
+
+function isMissingRouteError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message.toLowerCase() : String(error || "").toLowerCase();
+  return message.includes("404");
+}
+
+function capabilityFromSettled(result: PromiseSettledResult<unknown>): boolean {
+  if (result.status === "fulfilled") {
+    return true;
+  }
+  return !isMissingRouteError(result.reason);
 }
 
 function normalizePlan(value: unknown): NovaAdaptBridgePlan | null {
@@ -352,6 +366,14 @@ type RawBridgeAuditEvent = {
   entity_type?: unknown;
 };
 
+const DEFAULT_BRIDGE_CAPABILITIES: NovaAdaptBridgeCapabilities = {
+  memoryStatus: false,
+  governance: false,
+  workflows: false,
+  templates: false,
+  templateGallery: false,
+};
+
 function extractSseEvents(lines: string[]): SseEvent[] {
   const events: SseEvent[] = [];
   let eventName = "message";
@@ -439,6 +461,7 @@ export const novaAdaptBridgeTestUtils = {
 export type NovaAdaptBridgeSnapshot = {
   supported: boolean;
   runtimeAvailable: boolean;
+  capabilities: NovaAdaptBridgeCapabilities;
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
@@ -468,6 +491,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
     return {
       supported: false,
       runtimeAvailable: false,
+      capabilities: DEFAULT_BRIDGE_CAPABILITIES,
       error: null,
       health: null,
       memoryStatus: null,
@@ -500,6 +524,13 @@ export async function fetchNovaAdaptBridgeSnapshot(
     return {
       supported: true,
       runtimeAvailable: Boolean(nextHealth.ok),
+      capabilities: {
+        memoryStatus: capabilityFromSettled(memoryResult),
+        governance: capabilityFromSettled(governanceResult),
+        workflows: capabilityFromSettled(workflowsResult),
+        templates: capabilityFromSettled(templatesResult),
+        templateGallery: capabilityFromSettled(galleryResult),
+      },
       error: null,
       health: nextHealth,
       memoryStatus: memoryResult.status === "fulfilled" ? memoryResult.value : null,
@@ -540,6 +571,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
       return {
         supported: false,
         runtimeAvailable: false,
+        capabilities: DEFAULT_BRIDGE_CAPABILITIES,
         error: null,
         health: null,
         memoryStatus: null,
@@ -554,6 +586,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
     return {
       supported: true,
       runtimeAvailable: false,
+      capabilities: DEFAULT_BRIDGE_CAPABILITIES,
       error: nextError instanceof Error ? nextError.message : String(nextError || "Unknown error"),
       health: null,
       memoryStatus: null,
@@ -755,6 +788,7 @@ export function useNovaAdaptBridge({
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [supported, setSupported] = useState<boolean>(false);
   const [runtimeAvailable, setRuntimeAvailable] = useState<boolean>(false);
+  const [capabilities, setCapabilities] = useState<NovaAdaptBridgeCapabilities>(DEFAULT_BRIDGE_CAPABILITIES);
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<NovaAdaptBridgeHealth | null>(null);
   const [memoryStatus, setMemoryStatus] = useState<NovaAdaptBridgeMemoryStatus | null>(null);
@@ -786,6 +820,7 @@ export function useNovaAdaptBridge({
         setRefreshing(false);
         setSupported(false);
         setRuntimeAvailable(false);
+        setCapabilities(DEFAULT_BRIDGE_CAPABILITIES);
         setError(null);
         setHealth(null);
         setMemoryStatus(null);
@@ -808,6 +843,7 @@ export function useNovaAdaptBridge({
         const snapshot = await fetchNovaAdaptBridgeSnapshot(server);
         setSupported(snapshot.supported);
         setRuntimeAvailable(snapshot.runtimeAvailable);
+        setCapabilities(snapshot.capabilities);
         setError(snapshot.error);
         setHealth(snapshot.health);
         setMemoryStatus(snapshot.memoryStatus);
@@ -821,6 +857,7 @@ export function useNovaAdaptBridge({
         const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
         setSupported(true);
         setRuntimeAvailable(false);
+        setCapabilities(DEFAULT_BRIDGE_CAPABILITIES);
         setError(detail);
         setGovernance(null);
       } finally {
@@ -1115,11 +1152,14 @@ export function useNovaAdaptBridge({
 
   const resumeWorkflow = useCallback(
     async (workflowId: string): Promise<boolean> => {
+      if (!capabilities.workflows) {
+        return false;
+      }
       const ok = await resumeNovaAdaptBridgeWorkflow(server, workflowId);
       await refresh({ quiet: true });
       return ok;
     },
-    [refresh, server]
+    [capabilities.workflows, refresh, server]
   );
 
   const startWorkflow = useCallback(
@@ -1127,15 +1167,21 @@ export function useNovaAdaptBridge({
       objective: string,
       options?: { metadata?: Record<string, unknown>; autoResume?: boolean }
     ): Promise<NovaAdaptBridgeWorkflow | null> => {
+      if (!capabilities.workflows) {
+        return null;
+      }
       const result = await startNovaAdaptBridgeWorkflow(server, objective, options);
       await refresh({ quiet: true });
       return result;
     },
-    [refresh, server]
+    [capabilities.workflows, refresh, server]
   );
 
   const importTemplate = useCallback(
     async (template: NovaAdaptBridgeTemplate): Promise<NovaAdaptBridgeTemplate | null> => {
+      if (!capabilities.templates && !capabilities.templateGallery) {
+        return null;
+      }
       const result = await importNovaAdaptBridgeTemplate(server, template);
       if (result) {
         setTemplates((current) =>
@@ -1144,7 +1190,7 @@ export function useNovaAdaptBridge({
       }
       return result;
     },
-    [server]
+    [capabilities.templateGallery, capabilities.templates, server]
   );
 
   const launchTemplate = useCallback(
@@ -1152,11 +1198,14 @@ export function useNovaAdaptBridge({
       templateId: string,
       options?: { mode?: "plan" | "workflow" | "run"; execute?: boolean; allowDangerous?: boolean }
     ): Promise<boolean> => {
+      if (!capabilities.templates && !capabilities.templateGallery) {
+        return false;
+      }
       const ok = await launchNovaAdaptBridgeTemplate(server, templateId, options);
       await refresh({ quiet: true });
       return ok;
     },
-    [refresh, server]
+    [capabilities.templateGallery, capabilities.templates, refresh, server]
   );
 
   const approvePlanAsync = useCallback(
@@ -1197,6 +1246,9 @@ export function useNovaAdaptBridge({
 
   const pauseRuntime = useCallback(
     async (reason?: string) => {
+      if (!capabilities.governance) {
+        return false;
+      }
       const result = normalizeGovernance(
         await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/governance", {
           paused: true,
@@ -1206,11 +1258,14 @@ export function useNovaAdaptBridge({
       await refresh({ quiet: true });
       return Boolean(result);
     },
-    [refresh, server]
+    [capabilities.governance, refresh, server]
   );
 
   const resumeRuntime = useCallback(
     async () => {
+      if (!capabilities.governance) {
+        return false;
+      }
       const result = normalizeGovernance(
         await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/governance", {
           paused: false,
@@ -1220,11 +1275,14 @@ export function useNovaAdaptBridge({
       await refresh({ quiet: true });
       return Boolean(result);
     },
-    [refresh, server]
+    [capabilities.governance, refresh, server]
   );
 
   const resetGovernanceUsage = useCallback(
     async () => {
+      if (!capabilities.governance) {
+        return false;
+      }
       const result = normalizeGovernance(
         await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/governance", {
           reset_usage: true,
@@ -1233,11 +1291,14 @@ export function useNovaAdaptBridge({
       await refresh({ quiet: true });
       return Boolean(result);
     },
-    [refresh, server]
+    [capabilities.governance, refresh, server]
   );
 
   const cancelAllJobs = useCallback(
     async (reason?: string) => {
+      if (!capabilities.governance) {
+        return false;
+      }
       const result = await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/jobs/cancel_all", {
         pause: true,
         pause_reason: reason?.trim() || "Canceled from NovaRemote mobile",
@@ -1245,7 +1306,7 @@ export function useNovaAdaptBridge({
       await refresh({ quiet: true });
       return Boolean(result);
     },
-    [refresh, server]
+    [capabilities.governance, refresh, server]
   );
 
   return useMemo(
@@ -1254,6 +1315,7 @@ export function useNovaAdaptBridge({
       refreshing,
       supported,
       runtimeAvailable,
+      capabilities,
       error,
       health,
       memoryStatus,
@@ -1288,6 +1350,7 @@ export function useNovaAdaptBridge({
       jobs,
       loading,
       galleryTemplates,
+      capabilities,
       memoryStatus,
       plans,
       refresh,

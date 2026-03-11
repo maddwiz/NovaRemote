@@ -386,6 +386,14 @@ export type NovaAdaptBridgeMemoryStatus = {
   [key: string]: unknown;
 };
 
+export type NovaAdaptBridgeCapabilities = {
+  memoryStatus: boolean;
+  governance: boolean;
+  workflows: boolean;
+  templates: boolean;
+  templateGallery: boolean;
+};
+
 export type NovaAdaptBridgePlan = {
   id: string;
   objective: string;
