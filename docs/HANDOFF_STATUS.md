@@ -1,6 +1,6 @@
 # NovaRemote Handoff Status
 
-Updated: 2026-03-08
+Updated: 2026-03-10
 
 ## v1.2 Connection Pool + Switcher
 
@@ -128,6 +128,13 @@ Updated: 2026-03-08
 
 - [x] NovaAdapt runtime/panel lifecycle is now implemented in-app (agent CRUD, status/goal/capability updates, approvals, memory timeline, monitoring controls, voice-routed lifecycle actions across AR/VR surfaces)
 - [x] In-app NovaSpine context snapshots are wired (`useNovaSpine` + runtime/panel integration for context status, pending approvals, and recent timeline state)
+- [x] External LLM replies now stream into NovaRemote for supported providers (OpenAI-compatible, Azure OpenAI, Anthropic, Ollama) with timing metrics surfaced in diagnostics
+- [x] Server-side NovaAdapt bridge groundwork is now live in-app:
+  - [x] `useNovaAdaptBridge` thin client against companion `/agents/*`
+  - [x] live plan/job SSE follow for active plans and jobs
+  - [x] server-runtime plan actions (`approve`, `reject`, `retry`, `undo`) from mobile
+  - [x] dedicated `Agents` route/screen backed by the bridge
+  - [x] local NovaAdapt preview remains available in `Terminals` as migration fallback
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
@@ -180,6 +187,16 @@ Updated: 2026-03-08
 
 ## Notes
 
+- Companion-server-side NovaAdapt rollout is now documented in [docs/NOVAADAPT_SERVER_ROLLOUT.md](./NOVAADAPT_SERVER_ROLLOUT.md).
+- Current server-backed NovaAdapt scope in-app is:
+  - health + memory status reads
+  - plans/jobs/workflows listing
+  - plan/job live stream updates
+  - plan action mutations
+- Remaining server-runtime migration work is:
+  - move more agent CRUD/execution paths off the phone runtime
+  - add sidecar/runbook packaging for `codex_remote + NovaAdapt + NovaSpine`
+  - clean auth/protocol boundaries before companion-server open-sourcing
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.
 - All changes above were validated locally with `npm run ci` and pushed to `main`.
 - GitHub Actions CI is currently green on the latest push that updated this status.

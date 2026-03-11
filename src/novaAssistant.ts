@@ -155,7 +155,7 @@ export const NOVA_ASSISTANT_TOOL_NAME = "plan_nova_actions";
 
 type NovaAssistantPreferenceKey = Extract<NovaAssistantAction, { type: "set_preference" }>["key"];
 
-const ALLOWED_ROUTES: RouteTab[] = ["terminals", "servers", "snippets", "files", "llms", "team", "glasses", "vr"];
+const ALLOWED_ROUTES: RouteTab[] = ["terminals", "servers", "agents", "snippets", "files", "llms", "team", "glasses", "vr"];
 const ALLOWED_AGENT_STATUSES: NovaAgentStatus[] = ["idle", "monitoring", "executing", "waiting_approval"];
 const ALLOWED_PREFERENCE_KEYS = new Set<NovaAssistantPreferenceKey>([
   "glasses.enabled",

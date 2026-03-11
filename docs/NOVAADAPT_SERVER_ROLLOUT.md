@@ -2,6 +2,30 @@
 
 Updated: 2026-03-10
 
+## Current Progress
+
+### Completed in app
+
+- external LLM replies stream for supported providers
+- `useNovaAdaptBridge` thin client targets companion `/agents/*`
+- companion-backed health, memory status, plans, jobs, and workflows are visible in-app
+- active plans and jobs now stream live into the app over SSE
+- a dedicated `Agents` screen now exists in NovaRemote for the server-backed runtime
+
+### Completed in companion bridge
+
+- NovaAdapt health passthrough
+- allowlisted `/agents/*` JSON proxy routes
+- workflow proxy routes
+- plan/job SSE proxy routes
+
+### Still pending
+
+- move agent CRUD/execution fully from phone runtime to server runtime
+- add sidecar packaging/runbooks for `codex_remote + NovaAdapt + NovaSpine`
+- add richer runtime event transport if NovaAdapt grows beyond plan/job SSE
+- clean auth/protocol surface and publish the companion server openly
+
 ## Goal
 
 Move NovaAdapt from the current in-app orchestration model toward a server-resident runtime without breaking NovaRemote's existing terminal, voice, fleet, and multi-server UX.

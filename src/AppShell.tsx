@@ -95,6 +95,7 @@ import { findApprovedFleetApproval, findPendingFleetApproval } from "./fleetAppr
 import { formatAssistantShellPath, resolveAssistantFolderTarget } from "./assistantPath";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
+import { AgentsScreen } from "./screens/AgentsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TeamScreen } from "./screens/TeamScreen";
@@ -5331,6 +5332,7 @@ export default function AppShell() {
   const routeLabel: Record<RouteTab, string> = {
     terminals: "Terminals",
     servers: "Servers",
+    agents: "Agents",
     snippets: "Snippets",
     files: "Files",
     llms: "Nova",
@@ -5671,6 +5673,12 @@ export default function AppShell() {
           {route === "terminals" ? (
             <AppProvider value={{ terminals: terminalsViewModel }}>
               <TerminalsScreen />
+            </AppProvider>
+          ) : null}
+
+          {route === "agents" ? (
+            <AppProvider value={{ terminals: terminalsViewModel }}>
+              <AgentsScreen />
             </AppProvider>
           ) : null}
 

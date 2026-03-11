@@ -25,6 +25,7 @@ type NovaAgentPanelProps = {
   isPro: boolean;
   onShowPaywall: () => void;
   onQueueCommand: (session: string, command: string) => void;
+  surface?: "preview" | "screen";
 };
 
 const STATUS_ORDER: NovaAgentStatus[] = ["idle", "monitoring", "executing", "waiting_approval"];
@@ -538,6 +539,7 @@ export function NovaAgentPanel({
   isPro,
   onShowPaywall,
   onQueueCommand,
+  surface = "preview",
 }: NovaAgentPanelProps) {
   const resolveDefaultSession = useCallback(() => sessions[0] || null, [sessions]);
   const {
@@ -668,7 +670,7 @@ export function NovaAgentPanel({
   if (!serverId) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>NovaAdapt Agents (Preview)</Text>
+        <Text style={styles.panelLabel}>{surface === "screen" ? "NovaAdapt Agents" : "NovaAdapt Agents (Preview)"}</Text>
         <Text style={styles.emptyText}>Select a server to manage agents.</Text>
       </View>
     );
@@ -676,8 +678,12 @@ export function NovaAgentPanel({
 
   return (
     <View style={styles.panel}>
-      <Text style={styles.panelLabel}>NovaAdapt Agents (Preview)</Text>
-      <Text style={styles.serverSubtitle}>{`${serverName || "Server"} • Agent lifecycle + approval queue groundwork`}</Text>
+      <Text style={styles.panelLabel}>{surface === "screen" ? "NovaAdapt Agents" : "NovaAdapt Agents (Preview)"}</Text>
+      <Text style={styles.serverSubtitle}>
+        {surface === "screen"
+          ? `${serverName || "Server"} • Live runtime, approvals, jobs, and local fallback tooling`
+          : `${serverName || "Server"} • Agent lifecycle + approval queue groundwork`}
+      </Text>
 
       <RemoteBridgeSection
         loading={bridgeLoading}

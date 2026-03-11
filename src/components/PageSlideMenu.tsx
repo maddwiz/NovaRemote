@@ -46,6 +46,7 @@ function routeTitle(route: RouteTab): string {
   const titles: Record<RouteTab, string> = {
     terminals: "Terminals",
     servers: "Servers",
+    agents: "Agents",
     snippets: "Snippets",
     files: "Files",
     llms: "Nova",
@@ -61,6 +62,7 @@ function routeDescription(route: RouteTab): string {
   const descriptions: Record<RouteTab, string> = {
     terminals: "Launch sessions, manage the pool, and move fast without opening utility clutter.",
     servers: "Tune connection security, switch targets, and control your remote machine lane.",
+    agents: "Monitor the live NovaAdapt runtime, review plans, and handle approvals from one dedicated surface.",
     snippets: "Keep reusable flows and quick actions close without crowding the main screen.",
     files: "Browse remote code, tail output, and adjust file visibility from one focused surface.",
     llms: "Configure Nova, providers, and assistant behavior from a calmer control panel.",
@@ -138,6 +140,7 @@ export function PageSlideMenu({
           {[
             { key: "terminals" as RouteTab, label: "Terminals" },
             { key: "servers" as RouteTab, label: "Servers" },
+            { key: "agents" as RouteTab, label: "Agents" },
             { key: "files" as RouteTab, label: "Files" },
             { key: "llms" as RouteTab, label: "Nova" },
             { key: "settings" as RouteTab, label: "Settings" },
