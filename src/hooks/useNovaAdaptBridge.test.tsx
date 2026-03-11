@@ -3,7 +3,7 @@ import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ServerProfile } from "../types";
-import { useNovaAdaptBridge } from "./useNovaAdaptBridge";
+import { novaAdaptBridgeTestUtils, useNovaAdaptBridge } from "./useNovaAdaptBridge";
 
 type BridgeHandle = ReturnType<typeof useNovaAdaptBridge>;
 
@@ -26,6 +26,15 @@ function responseOf(status: number, payload: unknown, statusText: string = "OK")
     statusText,
     json: vi.fn(async () => payload),
   } as unknown as Response;
+}
+
+function streamResponse(body: string, status: number = 200): Response {
+  return new Response(body, {
+    status,
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+    },
+  });
 }
 
 function latestOrThrow(value: BridgeHandle | null): BridgeHandle {
@@ -122,6 +131,12 @@ describe("useNovaAdaptBridge", () => {
         expect(init?.method).toBe("POST");
         return responseOf(200, { ok: true });
       }
+      if (url.includes("/agents/plans/plan-1/stream")) {
+        return streamResponse('event: end\ndata: {"id":"plan-1","status":"pending"}\n\n');
+      }
+      if (url.includes("/agents/jobs/job-1/stream")) {
+        return streamResponse('event: end\ndata: {"id":"job-1","status":"running"}\n\n');
+      }
       throw new Error(`Unexpected fetch ${url}`);
     });
 
@@ -188,5 +203,21 @@ describe("useNovaAdaptBridge", () => {
     await act(async () => {
       renderer?.unmount();
     });
+  });
+
+  it("parses sse event batches", () => {
+    const parsed = novaAdaptBridgeTestUtils.extractSseEvents([
+      "event: plan",
+      'data: {"id":"plan-1"}',
+      "",
+      "event: end",
+      'data: {"status":"done"}',
+      "",
+    ]);
+
+    expect(parsed).toEqual([
+      { event: "plan", data: '{"id":"plan-1"}' },
+      { event: "end", data: '{"status":"done"}' },
+    ]);
   });
 });
