@@ -135,6 +135,7 @@ Updated: 2026-03-10
   - [x] server-runtime plan actions (`approve`, `reject`, `retry`, `undo`) from mobile
   - [x] dedicated `Agents` route/screen backed by the bridge
   - [x] dedicated `Agents` route now prefers server-backed creation (`Create Approval Plan`, `Start Workflow`, `Resume Workflow`)
+  - [x] audit-event SSE now triggers quiet bridge refreshes so server-side plan/job/memory changes land without waiting for the poll interval
   - [x] local NovaAdapt preview remains available in `Terminals` and only falls back on the dedicated `Agents` screen when the server runtime is unavailable
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
@@ -193,6 +194,7 @@ Updated: 2026-03-10
   - health + memory status reads
   - plans/jobs/workflows listing
   - plan/job live stream updates
+  - audit-event-driven quiet refresh for relevant bridge mutations
   - plan action mutations
   - server-backed workflow creation + resume actions
   - server-backed plan creation from the dedicated `Agents` screen

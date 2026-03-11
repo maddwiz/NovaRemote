@@ -10,6 +10,7 @@ Updated: 2026-03-10
 - `useNovaAdaptBridge` thin client targets companion `/agents/*`
 - companion-backed health, memory status, plans, jobs, and workflows are visible in-app
 - active plans and jobs now stream live into the app over SSE
+- NovaAdapt audit events now trigger quiet bridge refreshes for relevant plan/job/memory mutations
 - a dedicated `Agents` screen now exists in NovaRemote for the server-backed runtime
 - the dedicated `Agents` screen now creates approval plans and persistent workflows directly on the server runtime
 - workflow resume actions are now available from the mobile runtime surface
@@ -21,6 +22,7 @@ Updated: 2026-03-10
 - allowlisted `/agents/*` JSON proxy routes
 - workflow proxy routes
 - plan/job SSE proxy routes
+- audit-event SSE proxy route
 
 ### Still pending
 

@@ -127,6 +127,9 @@ describe("useNovaAdaptBridge", () => {
           ],
         });
       }
+      if (url.includes("/agents/events/stream")) {
+        return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
+      }
       if (url.endsWith("/agents/plans/plan-1/approve_async")) {
         expect(init?.method).toBe("POST");
         return responseOf(200, { ok: true });
@@ -223,6 +226,79 @@ describe("useNovaAdaptBridge", () => {
       "https://dgx.novaremote.test/agents/workflows/resume",
       expect.objectContaining({ method: "POST" })
     );
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("refreshes bridge state when relevant audit events arrive", async () => {
+    const server = buildServer();
+    const fetchMock = vi.mocked(fetch);
+    let plansFetchCount = 0;
+
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/agents/health?deep=1")) {
+        return responseOf(200, { ok: true, features: { agents: true } });
+      }
+      if (url.endsWith("/agents/plans?limit=12")) {
+        plansFetchCount += 1;
+        if (plansFetchCount === 1) {
+          return responseOf(200, []);
+        }
+        return responseOf(200, [
+          {
+            id: "plan-9",
+            objective: "Auto recover cluster",
+            status: "approved",
+            created_at: "2026-03-10T04:00:00.000Z",
+            updated_at: "2026-03-10T04:05:00.000Z",
+            progress_completed: 1,
+            progress_total: 1,
+          },
+        ]);
+      }
+      if (url.endsWith("/agents/jobs?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/memory/status")) {
+        return responseOf(200, { ok: true, enabled: true, backend: "novaspine-http" });
+      }
+      if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
+        return responseOf(200, { workflows: [] });
+      }
+      if (url.includes("/agents/events/stream")) {
+        return streamResponse(
+          'event: audit\ndata: {"id":17,"category":"plans","action":"approve_async","entity_type":"plan","entity_id":"plan-9"}\n\n' +
+            'event: timeout\ndata: {"request_id":"test"}\n\n'
+        );
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    let latest: BridgeHandle | null = null;
+    function Harness() {
+      latest = useNovaAdaptBridge({ server, refreshIntervalMs: 60_000 });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await waitFor(() => !latestOrThrow(latest).loading, "bridge load");
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+    });
+    await waitFor(() => latestOrThrow(latest).plans.some((plan) => plan.id === "plan-9"), "audit-triggered refresh");
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      expect.stringContaining("/agents/events/stream"),
+      expect.objectContaining({ method: "GET" })
+    );
+    expect(latestOrThrow(latest).plans[0]).toMatchObject({ id: "plan-9", status: "approved" });
 
     await act(async () => {
       renderer?.unmount();

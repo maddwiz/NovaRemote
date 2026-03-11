@@ -82,6 +82,8 @@ const STREAM_TIMEOUT_SECONDS = 300;
 const STREAM_INTERVAL_SECONDS = 0.25;
 const MAX_ACTIVE_PLAN_STREAMS = 3;
 const MAX_ACTIVE_JOB_STREAMS = 3;
+const EVENT_STREAM_RECONNECT_DELAY_MS = 500;
+const EVENT_REFRESH_DEBOUNCE_MS = 250;
 
 function asString(value: unknown): string {
   return typeof value === "string" ? value : "";
@@ -197,6 +199,13 @@ type SseEvent = {
   data: string;
 };
 
+type RawBridgeAuditEvent = {
+  id?: unknown;
+  category?: unknown;
+  action?: unknown;
+  entity_type?: unknown;
+};
+
 function extractSseEvents(lines: string[]): SseEvent[] {
   const events: SseEvent[] = [];
   let eventName = "message";
@@ -240,6 +249,23 @@ function isActivePlanStatus(status: string): boolean {
 function isActiveJobStatus(status: string): boolean {
   const normalized = status.trim().toLowerCase();
   return normalized !== "succeeded" && normalized !== "failed" && normalized !== "canceled";
+}
+
+function isRelevantBridgeAuditEvent(value: unknown): boolean {
+  const raw = value as RawBridgeAuditEvent | null;
+  const category = asString(raw?.category).trim().toLowerCase();
+  const action = asString(raw?.action).trim().toLowerCase();
+  const entityType = asString(raw?.entity_type).trim().toLowerCase();
+  if (category === "plans" || category === "jobs" || category === "memory") {
+    return true;
+  }
+  if (entityType === "plan" || entityType === "job" || entityType === "memory") {
+    return true;
+  }
+  if (action === "approve" || action === "approve_async" || action === "retry_failed" || action === "retry_failed_async") {
+    return true;
+  }
+  return false;
 }
 
 function upsertById<T extends { id: string; updatedAt?: string | null; createdAt?: string | null }>(items: T[], nextItem: T): T[] {
@@ -287,6 +313,8 @@ export function useNovaAdaptBridge({
   const [workflows, setWorkflows] = useState<NovaAdaptBridgeWorkflow[]>([]);
   const activePlanStreamIdsRef = useRef<Set<string>>(new Set());
   const activeJobStreamIdsRef = useRef<Set<string>>(new Set());
+  const lastAuditEventIdRef = useRef<number>(0);
+  const eventRefreshTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const activePlanTargets = useMemo(
     () => plans.filter((plan) => isActivePlanStatus(plan.status)).slice(0, MAX_ACTIVE_PLAN_STREAMS),
     [plans]
@@ -378,6 +406,16 @@ export function useNovaAdaptBridge({
     [server, serverReady]
   );
 
+  const scheduleEventRefresh = useCallback(() => {
+    if (eventRefreshTimeoutRef.current) {
+      return;
+    }
+    eventRefreshTimeoutRef.current = setTimeout(() => {
+      eventRefreshTimeoutRef.current = null;
+      void refresh({ quiet: true });
+    }, EVENT_REFRESH_DEBOUNCE_MS);
+  }, [refresh]);
+
   useEffect(() => {
     void refresh();
   }, [refresh]);
@@ -391,6 +429,87 @@ export function useNovaAdaptBridge({
     }, Math.max(5_000, refreshIntervalMs));
     return () => clearInterval(interval);
   }, [refresh, refreshIntervalMs, serverReady]);
+
+  useEffect(() => {
+    if (!serverReady || !server || !supported) {
+      lastAuditEventIdRef.current = 0;
+      return undefined;
+    }
+
+    const controller = new AbortController();
+    let closed = false;
+
+    const connect = async () => {
+      while (!closed) {
+        try {
+          const response = await fetch(
+            `${normalizeBaseUrl(server.baseUrl)}/agents/events/stream?timeout=${STREAM_TIMEOUT_SECONDS}&interval=${STREAM_INTERVAL_SECONDS}&since_id=${lastAuditEventIdRef.current}`,
+            {
+              method: "GET",
+              headers: {
+                Authorization: `Bearer ${server.token}`,
+                Accept: "text/event-stream",
+              },
+              signal: controller.signal,
+            }
+          );
+          if (!response.ok || !supportsBodyStreaming(response.body)) {
+            return;
+          }
+
+          const reader = response.body.getReader();
+          const decoder = new TextDecoder("utf-8");
+          let buffer = "";
+
+          while (!closed) {
+            const { done, value } = await reader.read();
+            if (done) {
+              break;
+            }
+            buffer += decoder.decode(value, { stream: true });
+            const next = splitStreamBuffer(buffer);
+            buffer = next.remainder;
+            extractSseEvents(next.lines).forEach((event) => {
+              if (event.event !== "audit") {
+                if (event.event === "end" || event.event === "timeout" || event.event === "error") {
+                  scheduleEventRefresh();
+                }
+                return;
+              }
+              try {
+                const parsed = JSON.parse(event.data) as RawBridgeAuditEvent;
+                const eventId = asInteger(parsed.id);
+                if (eventId > 0) {
+                  lastAuditEventIdRef.current = Math.max(lastAuditEventIdRef.current, eventId);
+                }
+                if (isRelevantBridgeAuditEvent(parsed)) {
+                  scheduleEventRefresh();
+                }
+              } catch {
+                // Ignore malformed frames.
+              }
+            });
+          }
+        } catch (streamError) {
+          if (streamError instanceof Error && streamError.name === "AbortError") {
+            return;
+          }
+          scheduleEventRefresh();
+        }
+
+        if (!closed) {
+          await new Promise((resolve) => setTimeout(resolve, EVENT_STREAM_RECONNECT_DELAY_MS));
+        }
+      }
+    };
+
+    void connect();
+
+    return () => {
+      closed = true;
+      controller.abort();
+    };
+  }, [scheduleEventRefresh, server, serverReady, supported]);
 
   useEffect(() => {
     if (!serverReady || !server) {
@@ -549,6 +668,16 @@ export function useNovaAdaptBridge({
       controllers.forEach((controller) => controller.abort());
     };
   }, [activeJobStreamKey, refresh, server, serverReady]);
+
+  useEffect(
+    () => () => {
+      if (eventRefreshTimeoutRef.current) {
+        clearTimeout(eventRefreshTimeoutRef.current);
+        eventRefreshTimeoutRef.current = null;
+      }
+    },
+    []
+  );
 
   const runPlanMutation = useCallback(
     async (path: string, body?: Record<string, unknown>): Promise<boolean> => {

@@ -13,7 +13,7 @@ Updated: 2026-03-10
 | v1.5 | VM Grouping + Fleet Scoping | VM metadata model, server grouping by VM host/type, VM-aware fleet target helpers | Complete |
 | v1.6 | Team MVP (Enterprise Foundation) | Team auth, token broker, team server governance, audit log + exports, team screen, tier-aware paywall, enforced safety/fleet/session policies | Complete (app-side) |
 | v2.0 | Enterprise Readiness | SSO/OIDC/SAML lifecycle, fleet approval governance, compliance export workflows, cloud/dashboard scaffolding and bootstrap verification | In progress (production rollout/hardening pending) |
-| v2.0+ | NovaAdapt + NovaSpine | In-app agent runtime integration, context snapshots, approvals, voice controls, autonomous monitoring workflows, plus the new server-backed `/agents/*` bridge with a dedicated Agents tab, live plan/job streaming, and remote-first plan/workflow creation | In progress (server-runtime migration underway) |
+| v2.0+ | NovaAdapt + NovaSpine | In-app agent runtime integration, context snapshots, approvals, voice controls, autonomous monitoring workflows, plus the new server-backed `/agents/*` bridge with a dedicated Agents tab, live plan/job streaming, audit-event refreshes, and remote-first plan/workflow creation | In progress (server-runtime migration underway) |
 | v2.1 | Team Collaboration | Presence-aware collaboration and voice channels across team workspaces with dedicated voice backplane transport/reconciliation | Complete (in-app) |
 
 ## Notes
@@ -25,5 +25,6 @@ Updated: 2026-03-10
   - completed in-app orchestration
   - in-progress companion-server bridge + dedicated `Agents` surface
   - remote-first workflow/plan creation from the new `Agents` tab
+  - live audit-event refreshes feeding the bridge runtime surface
   - remaining sidecar packaging / NovaSpine rollout / protocol cleanup
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).
