@@ -125,7 +125,20 @@ type RawCapabilitiesResponse = {
   ok?: unknown;
   checked_at?: unknown;
   cached?: unknown;
+  protocol_version?: unknown;
+  protocolVersion?: unknown;
+  agent_contract_version?: unknown;
+  agentContractVersion?: unknown;
   capabilities?: unknown;
+};
+
+type RawBridgeHealth = {
+  ok?: unknown;
+  protocol_version?: unknown;
+  protocolVersion?: unknown;
+  agent_contract_version?: unknown;
+  agentContractVersion?: unknown;
+  [key: string]: unknown;
 };
 
 type RawBridgeGovernance = {
@@ -212,13 +225,25 @@ function capabilityFromSettled(result: PromiseSettledResult<unknown>): boolean {
 function normalizeCapabilities(value: unknown): NovaAdaptBridgeCapabilities {
   const raw = value as Partial<Record<keyof NovaAdaptBridgeCapabilities, unknown>> | null;
   return {
-    protocolVersion: asNullableString(raw?.protocolVersion),
-    agentContractVersion: asNullableString(raw?.agentContractVersion),
+    protocolVersion: asNullableString(raw?.protocolVersion ?? (raw as { protocol_version?: unknown } | null)?.protocol_version),
+    agentContractVersion: asNullableString(
+      raw?.agentContractVersion ?? (raw as { agent_contract_version?: unknown } | null)?.agent_contract_version
+    ),
     memoryStatus: Boolean(raw?.memoryStatus),
     governance: Boolean(raw?.governance),
     workflows: Boolean(raw?.workflows),
     templates: Boolean(raw?.templates),
     templateGallery: Boolean(raw?.templateGallery),
+  };
+}
+
+function normalizeHealth(value: unknown): NovaAdaptBridgeHealth {
+  const raw = (value as RawBridgeHealth | null) ?? {};
+  return {
+    ...raw,
+    ok: Boolean(raw.ok),
+    protocolVersion: asNullableString(raw.protocolVersion ?? raw.protocol_version),
+    agentContractVersion: asNullableString(raw.agentContractVersion ?? raw.agent_contract_version),
   };
 }
 
@@ -531,7 +556,8 @@ export async function fetchNovaAdaptBridgeSnapshot(
   const workflowLimit = Math.max(1, Math.min(100, options.workflowLimit ?? 12));
 
   try {
-    const nextHealth = await apiRequest<NovaAdaptBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
+    const healthResponse = await apiRequest<RawBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
+    const nextHealth = normalizeHealth(healthResponse);
     let bridgeCapabilities: NovaAdaptBridgeCapabilities | null = null;
     try {
       const capabilitiesResponse = await apiRequest<RawCapabilitiesResponse>(
@@ -539,7 +565,16 @@ export async function fetchNovaAdaptBridgeSnapshot(
         server.token,
         "/agents/capabilities"
       );
-      bridgeCapabilities = normalizeCapabilities(capabilitiesResponse?.capabilities ?? capabilitiesResponse);
+      const capabilityPayload =
+        capabilitiesResponse?.capabilities && typeof capabilitiesResponse.capabilities === "object"
+          ? {
+              ...(capabilitiesResponse.capabilities as Record<string, unknown>),
+              protocolVersion: capabilitiesResponse.protocolVersion ?? capabilitiesResponse.protocol_version,
+              agentContractVersion:
+                capabilitiesResponse.agentContractVersion ?? capabilitiesResponse.agent_contract_version,
+            }
+          : capabilitiesResponse;
+      bridgeCapabilities = normalizeCapabilities(capabilityPayload);
     } catch (capabilitiesError) {
       if (!isMissingRouteError(capabilitiesError) && !isBridgeUnavailableError(capabilitiesError)) {
         bridgeCapabilities = null;

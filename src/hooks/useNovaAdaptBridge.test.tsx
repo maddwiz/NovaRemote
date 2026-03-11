@@ -88,7 +88,26 @@ describe("useNovaAdaptBridge", () => {
     fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input);
       if (url.endsWith("/agents/health?deep=1")) {
-        return responseOf(200, { ok: true, features: { agents: true } });
+        return responseOf(200, {
+          ok: true,
+          features: { agents: true },
+          protocol_version: "2026-03-11.1",
+          agent_contract_version: "2026-03-11.1",
+        });
+      }
+      if (url.endsWith("/agents/capabilities")) {
+        return responseOf(200, {
+          ok: true,
+          protocol_version: "2026-03-11.1",
+          agent_contract_version: "2026-03-11.1",
+          capabilities: {
+            memoryStatus: true,
+            governance: true,
+            workflows: true,
+            templates: true,
+            templateGallery: true,
+          },
+        });
       }
       if (url.endsWith("/agents/plans?limit=12")) {
         return responseOf(200, [
@@ -229,13 +248,17 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).supported).toBe(true);
     expect(latestOrThrow(latest).runtimeAvailable).toBe(true);
     expect(latestOrThrow(latest).capabilities).toEqual({
-      protocolVersion: null,
-      agentContractVersion: null,
+      protocolVersion: "2026-03-11.1",
+      agentContractVersion: "2026-03-11.1",
       memoryStatus: true,
       governance: true,
       workflows: true,
       templates: true,
       templateGallery: true,
+    });
+    expect(latestOrThrow(latest).health).toMatchObject({
+      protocolVersion: "2026-03-11.1",
+      agentContractVersion: "2026-03-11.1",
     });
     expect(latestOrThrow(latest).plans[0]).toMatchObject({
       id: "plan-1",
