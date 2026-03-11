@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
 import { useNovaAgentRuntime } from "../hooks/useNovaAgentRuntime";
 import {
+  NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
   NovaAdaptBridgeMemoryStatus,
@@ -152,6 +153,21 @@ function summarizeMemoryStatus(memoryStatus: NovaAdaptBridgeMemoryStatus | null)
   return `${backend} • ${enabled}`;
 }
 
+function summarizeGovernance(governance: NovaAdaptBridgeGovernance | null): string {
+  if (!governance) {
+    return "Governance unavailable";
+  }
+  const parts = [
+    governance.paused ? "Paused" : "Active",
+    `${governance.activeRuns} active runs`,
+    `${governance.jobs.running} running jobs`,
+  ];
+  if (governance.budgetLimitUsd !== null) {
+    parts.push(`Budget $${governance.budgetLimitUsd.toFixed(2)}`);
+  }
+  return parts.join(" • ");
+}
+
 function canApprovePlan(status: string): boolean {
   return status.trim().toLowerCase() === "pending";
 }
@@ -181,17 +197,23 @@ function RemoteBridgeSection({
   error,
   health,
   memoryStatus,
+  governance,
   plans,
   jobs,
   workflows,
   mutationPlanId,
   mutationWorkflowId,
+  governanceBusy,
   onRefresh,
   onApprovePlan,
   onRejectPlan,
   onRetryPlan,
   onUndoPlan,
   onResumeWorkflow,
+  onPauseRuntime,
+  onResumeRuntime,
+  onResetGovernanceUsage,
+  onCancelAllJobs,
 }: {
   loading: boolean;
   refreshing: boolean;
@@ -200,17 +222,23 @@ function RemoteBridgeSection({
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  governance: NovaAdaptBridgeGovernance | null;
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
   mutationPlanId: string | null;
   mutationWorkflowId: string | null;
+  governanceBusy: boolean;
   onRefresh: () => void;
   onApprovePlan: (planId: string) => void;
   onRejectPlan: (planId: string) => void;
   onRetryPlan: (planId: string) => void;
   onUndoPlan: (planId: string) => void;
   onResumeWorkflow: (workflowId: string) => void;
+  onPauseRuntime: () => void;
+  onResumeRuntime: () => void;
+  onResetGovernanceUsage: () => void;
+  onCancelAllJobs: () => void;
 }) {
   return (
     <View style={styles.panel}>
@@ -235,6 +263,49 @@ function RemoteBridgeSection({
           <Text style={styles.serverSubtitle}>{summarizeBridgeHealth(health, runtimeAvailable)}</Text>
           <Text style={styles.emptyText}>{`Memory ${summarizeMemoryStatus(memoryStatus)}`}</Text>
           {error ? <Text style={styles.emptyText}>{`Runtime error: ${error}`}</Text> : null}
+
+          {governance ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Runtime Governance</Text>
+              <Text style={styles.serverSubtitle}>{summarizeGovernance(governance)}</Text>
+              <Text style={styles.emptyText}>
+                {`Spend $${governance.spendEstimateUsd.toFixed(2)} • LLM calls ${governance.llmCallsTotal} • Runs ${governance.runsTotal}`}
+              </Text>
+              {governance.pauseReason ? <Text style={styles.emptyText}>{`Reason ${governance.pauseReason}`}</Text> : null}
+              {governance.lastObjectivePreview ? (
+                <Text style={styles.emptyText}>{`Last objective ${governance.lastObjectivePreview}`}</Text>
+              ) : null}
+              <View style={styles.actionsWrap}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={governance.paused ? "Resume runtime governance" : "Pause runtime governance"}
+                  style={[styles.actionButton, governanceBusy ? styles.buttonDisabled : null]}
+                  disabled={governanceBusy}
+                  onPress={governance.paused ? onResumeRuntime : onPauseRuntime}
+                >
+                  <Text style={styles.actionButtonText}>{governance.paused ? "Resume Runtime" : "Pause Runtime"}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Reset runtime governance usage"
+                  style={[styles.actionButton, governanceBusy ? styles.buttonDisabled : null]}
+                  disabled={governanceBusy}
+                  onPress={onResetGovernanceUsage}
+                >
+                  <Text style={styles.actionButtonText}>Reset Usage</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel all runtime jobs"
+                  style={[styles.actionDangerButton, governanceBusy ? styles.buttonDisabled : null]}
+                  disabled={governanceBusy}
+                  onPress={onCancelAllJobs}
+                >
+                  <Text style={styles.actionDangerText}>Cancel All Jobs</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
 
           <View style={styles.panel}>
             <Text style={styles.panelLabel}>Plans</Text>
@@ -584,6 +655,7 @@ export function NovaAgentPanel({
     error: bridgeError,
     health: bridgeHealth,
     memoryStatus: bridgeMemoryStatus,
+    governance,
     plans: bridgePlans,
     jobs: bridgeJobs,
     workflows: bridgeWorkflows,
@@ -595,9 +667,14 @@ export function NovaAgentPanel({
     rejectPlan,
     retryFailedPlanAsync,
     undoPlan,
+    pauseRuntime,
+    resumeRuntime,
+    resetGovernanceUsage,
+    cancelAllJobs,
   } = useNovaAdaptBridge({ server, enabled: Boolean(serverId) });
   const [remoteMutationPlanId, setRemoteMutationPlanId] = useState<string | null>(null);
   const [remoteMutationWorkflowId, setRemoteMutationWorkflowId] = useState<string | null>(null);
+  const [governanceBusy, setGovernanceBusy] = useState<boolean>(false);
   const showLocalPreview =
     surface === "preview" || (surface === "screen" && (!bridgeSupported || !bridgeRuntimeAvailable) && localFallbackEnabled);
   const showRemoteCreateControls = surface === "screen" && bridgeSupported && bridgeRuntimeAvailable;
@@ -625,6 +702,15 @@ export function NovaAgentPanel({
     },
     []
   );
+
+  const runGovernanceAction = useCallback(async (action: () => Promise<boolean>) => {
+    setGovernanceBusy(true);
+    try {
+      await action();
+    } finally {
+      setGovernanceBusy(false);
+    }
+  }, []);
 
   const createRemotePlan = useCallback(async () => {
     const objective = newAgentName.trim();
@@ -700,11 +786,13 @@ export function NovaAgentPanel({
         error={bridgeError}
         health={bridgeHealth}
         memoryStatus={bridgeMemoryStatus}
+        governance={governance}
         plans={bridgePlans}
         jobs={bridgeJobs}
         workflows={bridgeWorkflows}
         mutationPlanId={remoteMutationPlanId}
         mutationWorkflowId={remoteMutationWorkflowId}
+        governanceBusy={governanceBusy}
         onRefresh={() => {
           void refreshBridge({ quiet: true });
         }}
@@ -724,6 +812,18 @@ export function NovaAgentPanel({
         }}
         onResumeWorkflow={(workflowId) => {
           void runRemoteWorkflowAction(workflowId, resumeWorkflow);
+        }}
+        onPauseRuntime={() => {
+          void runGovernanceAction(() => pauseRuntime("Paused from NovaRemote mobile panel"));
+        }}
+        onResumeRuntime={() => {
+          void runGovernanceAction(resumeRuntime);
+        }}
+        onResetGovernanceUsage={() => {
+          void runGovernanceAction(resetGovernanceUsage);
+        }}
+        onCancelAllJobs={() => {
+          void runGovernanceAction(() => cancelAllJobs("Canceled from NovaRemote mobile panel"));
         }}
       />
 

@@ -417,6 +417,29 @@ export type NovaAdaptBridgeWorkflow = {
   context: Record<string, unknown>;
 };
 
+export type NovaAdaptBridgeGovernanceJobs = {
+  active: number;
+  queued: number;
+  running: number;
+  maxWorkers: number;
+};
+
+export type NovaAdaptBridgeGovernance = {
+  paused: boolean;
+  pauseReason: string | null;
+  budgetLimitUsd: number | null;
+  maxActiveRuns: number | null;
+  activeRuns: number;
+  runsTotal: number;
+  llmCallsTotal: number;
+  spendEstimateUsd: number;
+  updatedAt: string | null;
+  lastRunAt: string | null;
+  lastObjectivePreview: string | null;
+  lastStrategy: string | null;
+  jobs: NovaAdaptBridgeGovernanceJobs;
+};
+
 export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";
 
 export type AiEnginePreference = "auto" | "server" | "external";

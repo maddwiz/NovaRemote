@@ -53,6 +53,7 @@ beforeEach(() => {
     error: null,
     health: null,
     memoryStatus: null,
+    governance: null,
     plans: [],
     jobs: [],
     workflows: [],
@@ -64,6 +65,10 @@ beforeEach(() => {
     rejectPlan: vi.fn(async () => true),
     retryFailedPlanAsync: vi.fn(async () => true),
     undoPlan: vi.fn(async () => true),
+    pauseRuntime: vi.fn(async () => true),
+    resumeRuntime: vi.fn(async () => true),
+    resetGovernanceUsage: vi.fn(async () => true),
+    cancelAllJobs: vi.fn(async () => true),
   });
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const joined = args.map((value) => String(value)).join(" ");
@@ -176,6 +181,9 @@ describe("NovaAgentPanel", () => {
 
   it("renders remote runtime plans and routes plan actions through the bridge", async () => {
     const approvePlanAsync = vi.fn(async () => true);
+    const pauseRuntime = vi.fn(async () => true);
+    const resetGovernanceUsage = vi.fn(async () => true);
+    const cancelAllJobs = vi.fn(async () => true);
     useNovaAdaptBridgeMock.mockReturnValue({
       loading: false,
       refreshing: false,
@@ -184,6 +192,21 @@ describe("NovaAgentPanel", () => {
       error: null,
       health: { ok: true },
       memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: {
+        paused: false,
+        pauseReason: null,
+        budgetLimitUsd: 4,
+        maxActiveRuns: 2,
+        activeRuns: 1,
+        runsTotal: 3,
+        llmCallsTotal: 9,
+        spendEstimateUsd: 0.5,
+        updatedAt: null,
+        lastRunAt: null,
+        lastObjectivePreview: "Watch the cluster",
+        lastStrategy: "single",
+        jobs: { active: 1, queued: 0, running: 1, maxWorkers: 2 },
+      },
       plans: [
         {
           id: "plan-1",
@@ -207,6 +230,10 @@ describe("NovaAgentPanel", () => {
       rejectPlan: vi.fn(async () => true),
       retryFailedPlanAsync: vi.fn(async () => true),
       undoPlan: vi.fn(async () => true),
+      pauseRuntime,
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage,
+      cancelAllJobs,
     });
 
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -237,6 +264,16 @@ describe("NovaAgentPanel", () => {
     });
 
     expect(approvePlanAsync).toHaveBeenCalledWith("plan-1");
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Pause runtime governance" }).props.onPress();
+      renderer.root.findByProps({ accessibilityLabel: "Reset runtime governance usage" }).props.onPress();
+      renderer.root.findByProps({ accessibilityLabel: "Cancel all runtime jobs" }).props.onPress();
+    });
+
+    expect(pauseRuntime).toHaveBeenCalledWith("Paused from NovaRemote mobile panel");
+    expect(resetGovernanceUsage).toHaveBeenCalledTimes(1);
+    expect(cancelAllJobs).toHaveBeenCalledWith("Canceled from NovaRemote mobile panel");
 
     await act(async () => {
       renderer.unmount();
@@ -270,6 +307,21 @@ describe("NovaAgentPanel", () => {
       error: null,
       health: { ok: true },
       memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: {
+        paused: false,
+        pauseReason: null,
+        budgetLimitUsd: null,
+        maxActiveRuns: null,
+        activeRuns: 0,
+        runsTotal: 0,
+        llmCallsTotal: 0,
+        spendEstimateUsd: 0,
+        updatedAt: null,
+        lastRunAt: null,
+        lastObjectivePreview: null,
+        lastStrategy: null,
+        jobs: { active: 0, queued: 0, running: 0, maxWorkers: 2 },
+      },
       plans: [],
       jobs: [],
       workflows: [],
@@ -281,6 +333,10 @@ describe("NovaAgentPanel", () => {
       rejectPlan: vi.fn(async () => true),
       retryFailedPlanAsync: vi.fn(async () => true),
       undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
     });
 
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -350,6 +406,7 @@ describe("NovaAgentPanel", () => {
       error: "Runtime unavailable",
       health: { ok: false },
       memoryStatus: null,
+      governance: null,
       plans: [],
       jobs: [],
       workflows: [],
@@ -361,6 +418,10 @@ describe("NovaAgentPanel", () => {
       rejectPlan: vi.fn(async () => true),
       retryFailedPlanAsync: vi.fn(async () => true),
       undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
     });
 
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -410,6 +471,7 @@ describe("NovaAgentPanel", () => {
       error: null,
       health: { ok: true },
       memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: null,
       plans: [],
       jobs: [],
       workflows: [],
@@ -421,6 +483,10 @@ describe("NovaAgentPanel", () => {
       rejectPlan: vi.fn(async () => true),
       retryFailedPlanAsync: vi.fn(async () => true),
       undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
     });
 
     let renderer!: TestRenderer.ReactTestRenderer;
@@ -463,6 +529,7 @@ describe("NovaAgentPanel", () => {
       error: "Runtime unavailable",
       health: { ok: false },
       memoryStatus: null,
+      governance: null,
       plans: [],
       jobs: [],
       workflows: [],
@@ -474,6 +541,10 @@ describe("NovaAgentPanel", () => {
       rejectPlan: vi.fn(async () => true),
       retryFailedPlanAsync: vi.fn(async () => true),
       undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
     });
 
     let renderer!: TestRenderer.ReactTestRenderer;

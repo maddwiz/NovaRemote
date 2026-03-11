@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { apiRequest, normalizeBaseUrl } from "../api/client";
 import {
+  NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
   NovaAdaptBridgeMemoryStatus,
@@ -28,6 +29,7 @@ export type UseNovaAdaptBridgeResult = {
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  governance: NovaAdaptBridgeGovernance | null;
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
@@ -42,6 +44,10 @@ export type UseNovaAdaptBridgeResult = {
   rejectPlan: (planId: string, reason?: string) => Promise<boolean>;
   retryFailedPlanAsync: (planId: string) => Promise<boolean>;
   undoPlan: (planId: string) => Promise<boolean>;
+  pauseRuntime: (reason?: string) => Promise<boolean>;
+  resumeRuntime: () => Promise<boolean>;
+  resetGovernanceUsage: () => Promise<boolean>;
+  cancelAllJobs: (reason?: string) => Promise<boolean>;
 };
 
 type RawBridgeJob = {
@@ -79,6 +85,22 @@ type RawWorkflowsResponse = {
   workflows?: unknown;
 };
 
+type RawBridgeGovernance = {
+  paused?: unknown;
+  pause_reason?: unknown;
+  budget_limit_usd?: unknown;
+  max_active_runs?: unknown;
+  active_runs?: unknown;
+  runs_total?: unknown;
+  llm_calls_total?: unknown;
+  spend_estimate_usd?: unknown;
+  updated_at?: unknown;
+  last_run_at?: unknown;
+  last_objective_preview?: unknown;
+  last_strategy?: unknown;
+  jobs?: unknown;
+};
+
 const DEFAULT_REFRESH_INTERVAL_MS = 15_000;
 const STREAM_TIMEOUT_SECONDS = 300;
 const STREAM_INTERVAL_SECONDS = 0.25;
@@ -107,6 +129,19 @@ function asInteger(value: unknown): number {
     }
   }
   return 0;
+}
+
+function asNullableNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
 }
 
 function isBridgeUnavailableError(error: unknown): boolean {
@@ -173,6 +208,34 @@ function normalizeWorkflow(value: unknown): NovaAdaptBridgeWorkflow | null {
     updatedAt: asNullableString(raw?.updated_at),
     lastError: asNullableString(raw?.last_error),
     context: raw?.context && typeof raw.context === "object" ? { ...(raw.context as Record<string, unknown>) } : {},
+  };
+}
+
+function normalizeGovernance(value: unknown): NovaAdaptBridgeGovernance | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const raw = value as RawBridgeGovernance;
+  const jobs = raw.jobs && typeof raw.jobs === "object" ? (raw.jobs as Record<string, unknown>) : {};
+  return {
+    paused: Boolean(raw.paused),
+    pauseReason: asNullableString(raw.pause_reason),
+    budgetLimitUsd: asNullableNumber(raw.budget_limit_usd),
+    maxActiveRuns: asNullableNumber(raw.max_active_runs),
+    activeRuns: asInteger(raw.active_runs),
+    runsTotal: asInteger(raw.runs_total),
+    llmCallsTotal: asInteger(raw.llm_calls_total),
+    spendEstimateUsd: asNullableNumber(raw.spend_estimate_usd) ?? 0,
+    updatedAt: asNullableString(raw.updated_at),
+    lastRunAt: asNullableString(raw.last_run_at),
+    lastObjectivePreview: asNullableString(raw.last_objective_preview),
+    lastStrategy: asNullableString(raw.last_strategy),
+    jobs: {
+      active: asInteger(jobs.active),
+      queued: asInteger(jobs.queued),
+      running: asInteger(jobs.running),
+      maxWorkers: asInteger(jobs.max_workers),
+    },
   };
 }
 
@@ -300,6 +363,7 @@ export type NovaAdaptBridgeSnapshot = {
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  governance: NovaAdaptBridgeGovernance | null;
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
@@ -326,6 +390,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
       error: null,
       health: null,
       memoryStatus: null,
+      governance: null,
       plans: [],
       jobs: [],
       workflows: [],
@@ -338,11 +403,12 @@ export async function fetchNovaAdaptBridgeSnapshot(
 
   try {
     const nextHealth = await apiRequest<NovaAdaptBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
-    const [plansResult, jobsResult, memoryResult, workflowsResult] = await Promise.allSettled([
+    const [plansResult, jobsResult, memoryResult, workflowsResult, governanceResult] = await Promise.allSettled([
       apiRequest<unknown>(server.baseUrl, server.token, `/agents/plans?limit=${planLimit}`),
       apiRequest<unknown>(server.baseUrl, server.token, `/agents/jobs?limit=${jobLimit}`),
       apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
       apiRequest<RawWorkflowsResponse>(server.baseUrl, server.token, `/agents/workflows/list?limit=${workflowLimit}&context=api`),
+      apiRequest<unknown>(server.baseUrl, server.token, "/agents/runtime/governance"),
     ]);
 
     return {
@@ -351,6 +417,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
       error: null,
       health: nextHealth,
       memoryStatus: memoryResult.status === "fulfilled" ? memoryResult.value : null,
+      governance: governanceResult.status === "fulfilled" ? normalizeGovernance(governanceResult.value) : null,
       plans:
         plansResult.status === "fulfilled" && Array.isArray(plansResult.value)
           ? sortNewest(plansResult.value.map(normalizePlan).filter((item): item is NovaAdaptBridgePlan => Boolean(item)))
@@ -376,6 +443,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
         error: null,
         health: null,
         memoryStatus: null,
+        governance: null,
         plans: [],
         jobs: [],
         workflows: [],
@@ -387,6 +455,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
       error: nextError instanceof Error ? nextError.message : String(nextError || "Unknown error"),
       health: null,
       memoryStatus: null,
+      governance: null,
       plans: [],
       jobs: [],
       workflows: [],
@@ -541,6 +610,7 @@ export function useNovaAdaptBridge({
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<NovaAdaptBridgeHealth | null>(null);
   const [memoryStatus, setMemoryStatus] = useState<NovaAdaptBridgeMemoryStatus | null>(null);
+  const [governance, setGovernance] = useState<NovaAdaptBridgeGovernance | null>(null);
   const [plans, setPlans] = useState<NovaAdaptBridgePlan[]>([]);
   const [jobs, setJobs] = useState<NovaAdaptBridgeJob[]>([]);
   const [workflows, setWorkflows] = useState<NovaAdaptBridgeWorkflow[]>([]);
@@ -569,6 +639,7 @@ export function useNovaAdaptBridge({
         setError(null);
         setHealth(null);
         setMemoryStatus(null);
+        setGovernance(null);
         setPlans([]);
         setJobs([]);
         setWorkflows([]);
@@ -588,6 +659,7 @@ export function useNovaAdaptBridge({
         setError(snapshot.error);
         setHealth(snapshot.health);
         setMemoryStatus(snapshot.memoryStatus);
+        setGovernance(snapshot.governance);
         setPlans(snapshot.plans);
         setJobs(snapshot.jobs);
         setWorkflows(snapshot.workflows);
@@ -596,6 +668,7 @@ export function useNovaAdaptBridge({
         setSupported(true);
         setRuntimeAvailable(false);
         setError(detail);
+        setGovernance(null);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -943,6 +1016,59 @@ export function useNovaAdaptBridge({
     [refresh, server]
   );
 
+  const pauseRuntime = useCallback(
+    async (reason?: string) => {
+      const result = normalizeGovernance(
+        await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/governance", {
+          paused: true,
+          pause_reason: reason?.trim() || "Paused from NovaRemote mobile",
+        })
+      );
+      await refresh({ quiet: true });
+      return Boolean(result);
+    },
+    [refresh, server]
+  );
+
+  const resumeRuntime = useCallback(
+    async () => {
+      const result = normalizeGovernance(
+        await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/governance", {
+          paused: false,
+          pause_reason: "",
+        })
+      );
+      await refresh({ quiet: true });
+      return Boolean(result);
+    },
+    [refresh, server]
+  );
+
+  const resetGovernanceUsage = useCallback(
+    async () => {
+      const result = normalizeGovernance(
+        await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/governance", {
+          reset_usage: true,
+        })
+      );
+      await refresh({ quiet: true });
+      return Boolean(result);
+    },
+    [refresh, server]
+  );
+
+  const cancelAllJobs = useCallback(
+    async (reason?: string) => {
+      const result = await postNovaAdaptBridgeJson<unknown>(server, "/agents/runtime/jobs/cancel_all", {
+        pause: true,
+        pause_reason: reason?.trim() || "Canceled from NovaRemote mobile",
+      });
+      await refresh({ quiet: true });
+      return Boolean(result);
+    },
+    [refresh, server]
+  );
+
   return useMemo(
     () => ({
       loading,
@@ -952,6 +1078,7 @@ export function useNovaAdaptBridge({
       error,
       health,
       memoryStatus,
+      governance,
       plans,
       jobs,
       workflows,
@@ -963,11 +1090,17 @@ export function useNovaAdaptBridge({
       rejectPlan,
       retryFailedPlanAsync,
       undoPlan,
+      pauseRuntime,
+      resumeRuntime,
+      resetGovernanceUsage,
+      cancelAllJobs,
     }),
     [
       approvePlanAsync,
+      cancelAllJobs,
       createPlan,
       error,
+      governance,
       health,
       jobs,
       loading,
@@ -976,12 +1109,15 @@ export function useNovaAdaptBridge({
       refresh,
       refreshing,
       rejectPlan,
+      resetGovernanceUsage,
       resumeWorkflow,
+      resumeRuntime,
       retryFailedPlanAsync,
       runtimeAvailable,
       startWorkflow,
       supported,
       undoPlan,
+      pauseRuntime,
       workflows,
     ]
   );

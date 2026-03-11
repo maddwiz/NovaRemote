@@ -22,12 +22,14 @@ Updated: 2026-03-11
 - NovaAdapt health passthrough
 - allowlisted `/agents/*` JSON proxy routes
 - workflow proxy routes
+- runtime governance proxy routes (`/agents/runtime/governance`, `/agents/runtime/jobs/cancel_all`)
 - plan/job SSE proxy routes
 - audit-event SSE proxy route
 - validated sidecar stack with `codex_remote + NovaAdapt + NovaSpine`
 - repo-local sidecar validator in `codex_remote/scripts/validate_nova_sidecars.py` now supports both package checks and live runtime checks (`--live-check`)
 - repo-local lifecycle wrappers now exist for sidecar bring-up and teardown: `scripts/start_nova_sidecars.sh` and `scripts/stop_nova_sidecars.sh`
 - validated host forwarding for `/agents/workflows/status`, `/agents/workflows/list`, `/agents/workflows/item`, and `/agents/workflows/start`
+- note: runtime-governance proxy code is in place in `codex_remote`, but the currently running local sidecar stack must be rebuilt before those routes answer live
 
 ### Still pending
 

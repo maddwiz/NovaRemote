@@ -115,6 +115,16 @@ describe("useNovaAdaptBridge", () => {
       if (url.endsWith("/agents/memory/status")) {
         return responseOf(200, { ok: true, enabled: true, backend: "novaspine-http" });
       }
+      if (url.endsWith("/agents/runtime/governance")) {
+        return responseOf(200, {
+          paused: false,
+          active_runs: 1,
+          runs_total: 4,
+          llm_calls_total: 12,
+          spend_estimate_usd: 0.42,
+          jobs: { active: 1, queued: 0, running: 1, max_workers: 4 },
+        });
+      }
       if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
         return responseOf(200, {
           workflows: [
@@ -195,6 +205,7 @@ describe("useNovaAdaptBridge", () => {
     });
     expect(latestOrThrow(latest).jobs[0]).toMatchObject({ id: "job-1", status: "running" });
     expect(latestOrThrow(latest).memoryStatus).toMatchObject({ backend: "novaspine-http", enabled: true });
+    expect(latestOrThrow(latest).governance).toMatchObject({ paused: false, activeRuns: 1, llmCallsTotal: 12 });
     expect(latestOrThrow(latest).workflows[0]).toMatchObject({ workflowId: "wf-1", status: "queued" });
 
     await act(async () => {
@@ -265,6 +276,9 @@ describe("useNovaAdaptBridge", () => {
       if (url.endsWith("/agents/memory/status")) {
         return responseOf(200, { ok: true, enabled: true, backend: "novaspine-http" });
       }
+      if (url.endsWith("/agents/runtime/governance")) {
+        return responseOf(200, { paused: false, jobs: { active: 0, queued: 0, running: 0, max_workers: 2 } });
+      }
       if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
         return responseOf(200, { workflows: [] });
       }
@@ -326,6 +340,7 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).supported).toBe(false);
     expect(latestOrThrow(latest).runtimeAvailable).toBe(false);
     expect(latestOrThrow(latest).error).toBeNull();
+    expect(latestOrThrow(latest).governance).toBeNull();
 
     await act(async () => {
       renderer?.unmount();
@@ -346,5 +361,89 @@ describe("useNovaAdaptBridge", () => {
       { event: "plan", data: '{"id":"plan-1"}' },
       { event: "end", data: '{"status":"done"}' },
     ]);
+  });
+
+  it("supports runtime governance actions", async () => {
+    const server = buildServer();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/agents/health?deep=1")) {
+        return responseOf(200, { ok: true, features: { agents: true } });
+      }
+      if (url.endsWith("/agents/plans?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/jobs?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/memory/status")) {
+        return responseOf(200, { ok: true, enabled: true, backend: "novaspine-http" });
+      }
+      if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
+        return responseOf(200, { workflows: [] });
+      }
+      if (url.includes("/agents/events/stream")) {
+        return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
+      }
+      if (url.endsWith("/agents/runtime/governance") && init?.method === "POST") {
+        return responseOf(200, {
+          paused: true,
+          pause_reason: "Paused from test",
+          active_runs: 0,
+          runs_total: 4,
+          llm_calls_total: 2,
+          spend_estimate_usd: 0.25,
+          jobs: { active: 0, queued: 0, running: 0, max_workers: 2 },
+        });
+      }
+      if (url.endsWith("/agents/runtime/jobs/cancel_all")) {
+        expect(init?.method).toBe("POST");
+        return responseOf(200, { ok: true, canceled_now: 1 });
+      }
+      if (url.endsWith("/agents/runtime/governance")) {
+        return responseOf(200, {
+          paused: false,
+          active_runs: 1,
+          runs_total: 4,
+          llm_calls_total: 2,
+          spend_estimate_usd: 0.25,
+          jobs: { active: 1, queued: 0, running: 1, max_workers: 2 },
+        });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    let latest: BridgeHandle | null = null;
+    function Harness() {
+      latest = useNovaAdaptBridge({ server, refreshIntervalMs: 60_000 });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await waitFor(() => !latestOrThrow(latest).loading, "bridge governance load");
+
+    await act(async () => {
+      await latestOrThrow(latest).pauseRuntime("Paused from test");
+      await latestOrThrow(latest).resetGovernanceUsage();
+      await latestOrThrow(latest).cancelAllJobs("Canceled from test");
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dgx.novaremote.test/agents/runtime/governance",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dgx.novaremote.test/agents/runtime/jobs/cancel_all",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    await act(async () => {
+      renderer?.unmount();
+    });
   });
 });
