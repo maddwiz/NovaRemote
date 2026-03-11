@@ -393,4 +393,58 @@ describe("NovaAgentPanel", () => {
       renderer.unmount();
     });
   });
+
+  it("keeps the terminals panel server-first even when the bridge runtime is unavailable", async () => {
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: false,
+      error: "Runtime unavailable",
+      health: { ok: false },
+      memoryStatus: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+          surface: "panel",
+        })
+      );
+    });
+
+    expect(useNovaAgentRuntimeMock).not.toHaveBeenCalled();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Add NovaAdapt agent" })).toThrow();
+    expect(() => renderer.root.findByProps({ children: "Memory Timeline" })).toThrow();
+    expect(() => renderer.root.findByProps({ children: "Runtime unavailable" })).not.toThrow();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
 });

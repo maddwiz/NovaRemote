@@ -595,7 +595,8 @@ export function NovaAgentPanel({
   } = useNovaAdaptBridge({ server, enabled: Boolean(serverId) });
   const [remoteMutationPlanId, setRemoteMutationPlanId] = useState<string | null>(null);
   const [remoteMutationWorkflowId, setRemoteMutationWorkflowId] = useState<string | null>(null);
-  const showLocalPreview = surface === "preview" || !bridgeSupported || !bridgeRuntimeAvailable;
+  const showLocalPreview =
+    surface === "preview" || (surface === "screen" && (!bridgeSupported || !bridgeRuntimeAvailable));
   const showRemoteCreateControls = surface === "screen" && bridgeSupported && bridgeRuntimeAvailable;
 
   const runRemotePlanAction = useCallback(
