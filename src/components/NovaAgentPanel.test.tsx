@@ -504,6 +504,113 @@ describe("NovaAgentPanel", () => {
     });
   });
 
+  it("disables workflow actions when the companion does not expose workflows", async () => {
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: true,
+        governance: true,
+        workflows: false,
+        templates: true,
+        templateGallery: true,
+      },
+      error: null,
+      health: { ok: true },
+      memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      templates: [
+        {
+          templateId: "saved-1",
+          name: "Saved Ops Template",
+          description: "Saved template",
+          objective: "Saved objective",
+          strategy: "single",
+          source: "saved",
+          tags: [],
+        },
+      ],
+      galleryTemplates: [
+        {
+          templateId: "gallery-1",
+          name: "Gallery Ops Template",
+          description: "Gallery template",
+          objective: "Gallery objective",
+          strategy: "single",
+          source: "gallery",
+          tags: [],
+        },
+      ],
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+          surface: "screen",
+        })
+      );
+    });
+
+    const objectiveInput = renderer.root.findByProps({
+      placeholder: "Objective (example: Watch cluster load and notify me)",
+    });
+
+    await act(async () => {
+      objectiveInput.props.onChangeText("Watch the cluster");
+    });
+
+    const startWorkflowButton = renderer.root.findByProps({ accessibilityLabel: "Start server workflow" });
+    expect(startWorkflowButton.props.disabled).toBe(true);
+    expect(() => renderer.root.findByProps({ children: "This companion runtime does not expose workflow creation yet." })).not.toThrow();
+
+    const launchWorkflowButton = renderer.root.findByProps({
+      accessibilityLabel: "Launch Saved Ops Template as workflow",
+    });
+    expect(launchWorkflowButton.props.disabled).toBe(true);
+
+    const importWorkflowButton = renderer.root.findByProps({
+      accessibilityLabel: "Import and launch Gallery Ops Template as workflow",
+    });
+    expect(importWorkflowButton.props.disabled).toBe(true);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("keeps local fallback hidden on the dedicated screen until explicitly enabled", async () => {
     useNovaAdaptBridgeMock.mockReturnValue({
       loading: false,

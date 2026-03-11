@@ -554,11 +554,16 @@ function RemoteBridgeSection({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Launch ${template.name} as workflow`}
-                          style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
-                          disabled={busy}
+                          style={[
+                            styles.actionButton,
+                            busy || !capabilities.workflows ? styles.buttonDisabled : null,
+                          ]}
+                          disabled={busy || !capabilities.workflows}
                           onPress={() => onLaunchTemplate(template, "workflow")}
                         >
-                          <Text style={styles.actionButtonText}>{busy ? "Launching..." : "Start Workflow"}</Text>
+                          <Text style={styles.actionButtonText}>
+                            {busy ? "Launching..." : capabilities.workflows ? "Start Workflow" : "Workflow Unavailable"}
+                          </Text>
                         </Pressable>
                       </View>
                     </View>
@@ -602,11 +607,16 @@ function RemoteBridgeSection({
                         <Pressable
                           accessibilityRole="button"
                           accessibilityLabel={`Import and launch ${template.name} as workflow`}
-                          style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
-                          disabled={busy}
+                          style={[
+                            styles.actionButton,
+                            busy || !capabilities.workflows ? styles.buttonDisabled : null,
+                          ]}
+                          disabled={busy || !capabilities.workflows}
                           onPress={() => onLaunchTemplate(template, "workflow")}
                         >
-                          <Text style={styles.actionButtonText}>{busy ? "Importing..." : "Import + Workflow"}</Text>
+                          <Text style={styles.actionButtonText}>
+                            {busy ? "Importing..." : capabilities.workflows ? "Import + Workflow" : "Workflow Unavailable"}
+                          </Text>
                         </Pressable>
                       </View>
                     </View>
@@ -928,7 +938,7 @@ export function NovaAgentPanel({
 
   const startRemoteWorkflow = useCallback(async () => {
     const objective = newAgentName.trim();
-    if (!objective) {
+    if (!objective || !bridgeCapabilities.workflows) {
       return;
     }
     const capabilities = parseCapabilities(newAgentCapabilities);
@@ -948,7 +958,7 @@ export function NovaAgentPanel({
       const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
       setRemoteCreateStatus(`Workflow start failed: ${detail}`);
     }
-  }, [newAgentCapabilities, newAgentName, startWorkflow]);
+  }, [bridgeCapabilities.workflows, newAgentCapabilities, newAgentName, startWorkflow]);
 
   const runTemplateLaunch = useCallback(
     async (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => {
@@ -1103,15 +1113,23 @@ export function NovaAgentPanel({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Start server workflow"
-              style={[styles.actionButton, !newAgentName.trim() ? styles.buttonDisabled : null]}
-              disabled={!newAgentName.trim()}
+              style={[
+                styles.actionButton,
+                !newAgentName.trim() || !bridgeCapabilities.workflows ? styles.buttonDisabled : null,
+              ]}
+              disabled={!newAgentName.trim() || !bridgeCapabilities.workflows}
               onPress={() => {
                 void startRemoteWorkflow();
               }}
             >
-              <Text style={styles.actionButtonText}>Start Workflow</Text>
+              <Text style={styles.actionButtonText}>
+                {bridgeCapabilities.workflows ? "Start Workflow" : "Workflow Unavailable"}
+              </Text>
             </Pressable>
           </View>
+          {!bridgeCapabilities.workflows ? (
+            <Text style={styles.emptyText}>This companion runtime does not expose workflow creation yet.</Text>
+          ) : null}
           {remoteCreateStatus ? <Text style={styles.emptyText}>{remoteCreateStatus}</Text> : null}
         </View>
       ) : null}
