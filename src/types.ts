@@ -523,6 +523,14 @@ export type LlmSendOptions = {
   toolContext?: Record<string, string>;
   maxToolRounds?: number;
   responseFormat?: "text" | "json";
+  onTextDelta?: (delta: string, fullText: string) => void;
+  signal?: AbortSignal;
+};
+
+export type LlmTimingMetrics = {
+  streamed: boolean;
+  totalMs: number;
+  firstTokenMs: number | null;
 };
 
 export type LlmSendResult = {
@@ -530,6 +538,7 @@ export type LlmSendResult = {
   toolCalls: LlmToolExecution[];
   usedVision: boolean;
   usedTools: boolean;
+  timings?: LlmTimingMetrics;
 };
 
 export type SharedServerTemplate = {

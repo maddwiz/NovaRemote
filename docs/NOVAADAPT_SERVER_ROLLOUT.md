@@ -1,0 +1,144 @@
+# NovaRemote Server-Side NovaAdapt Rollout
+
+Updated: 2026-03-10
+
+## Goal
+
+Move NovaAdapt from the current in-app orchestration model toward a server-resident runtime without breaking NovaRemote's existing terminal, voice, fleet, and multi-server UX.
+
+## Recommended Architecture
+
+Use a sidecar/service split first, not a hard merge.
+
+```text
+NovaRemote mobile app
+  -> companion server / transport API
+  -> NovaAdapt runtime service
+  -> NovaSpine memory service (optional but preferred)
+```
+
+### Responsibilities
+
+- NovaRemote app:
+  - approvals
+  - agent dashboard
+  - voice / wearable / AR / VR control
+  - live terminal and file views
+  - push-driven operator actions
+- Companion server:
+  - auth
+  - terminal transport
+  - session/files/process APIs
+  - bridge and websocket fanout
+  - routing to NovaAdapt runtime
+- NovaAdapt runtime:
+  - planning
+  - job execution
+  - undo/rollback
+  - persistent agent state
+  - long-running autonomous workflows
+- NovaSpine:
+  - memory ingest
+  - recall
+  - augment
+  - long-horizon context store
+
+## Why Not Do a Hard Merge First
+
+A single-image direct merge raises deployment, rollback, and debugging risk immediately.
+
+Sidecar rollout is safer because it gives:
+
+- separate failure boundaries
+- easier upgrades and rollback
+- optional NovaSpine enablement
+- simpler observability
+- cleaner open-source boundary for the companion server
+
+## API Contract to Target
+
+The app should treat NovaAdapt as a server capability exposed through the companion server.
+
+### Minimum runtime endpoints
+
+- `GET /novaadapt/health`
+- `GET /novaadapt/agents`
+- `POST /novaadapt/agents`
+- `PATCH /novaadapt/agents/{id}`
+- `POST /novaadapt/agents/{id}/approve`
+- `POST /novaadapt/agents/{id}/deny`
+- `POST /novaadapt/agents/{id}/pause`
+- `POST /novaadapt/agents/{id}/resume`
+- `GET /novaadapt/jobs`
+- `GET /novaadapt/jobs/{id}`
+- `GET /novaadapt/jobs/{id}/stream`
+- `GET /novaadapt/plans/{id}/stream`
+- `POST /novaadapt/undo`
+- `GET /novaadapt/history`
+
+### Memory endpoints
+
+Prefer NovaSpine over local in-app snapshots when server memory is enabled.
+
+- `GET /memory/status`
+- `POST /memory/recall`
+- `POST /memory/ingest`
+- `POST /memory/augment`
+
+NovaAdapt already supports NovaSpine over HTTP through:
+
+- `NOVAADAPT_MEMORY_BACKEND=novaspine-http`
+- `NOVAADAPT_SPINE_URL`
+- `NOVAADAPT_SPINE_TOKEN`
+
+## Rollout Phases
+
+### Phase A: Preserve Current App UX, Move Execution Outward
+
+- keep current NovaRemote agent UI
+- replace in-app agent execution with thin HTTP/WebSocket calls
+- keep fallback UI paths until runtime parity is verified
+
+### Phase B: Add Server Push + Live Runtime State
+
+- approval notifications
+- job/plan event streams
+- shared team visibility
+- lock-screen decision flows
+
+### Phase C: Enable NovaSpine Server Memory
+
+- ingest approvals, runs, summaries, and operator feedback
+- use `/memory/augment` for plan context
+- use `/memory/recall` for agent follow-up chat and incident history
+
+### Phase D: Collapse Packaging Only If It Still Helps
+
+If deployment experience is materially better, publish a bundled image later.
+Until then, prefer compose or supervisor-managed services.
+
+## Open-Source Companion Server Recommendation
+
+Yes, open source it.
+
+Do it after these conditions are true:
+
+- auth/token model is documented and stable
+- terminal/file/process/codex routes are documented
+- NovaAdapt bridge boundary is stable
+- secrets and private infra assumptions are removed
+- CI covers build, tests, and protocol compatibility
+
+What should remain separate if commercialized:
+
+- hosted team cloud
+- billing / entitlement services
+- managed push / team admin SaaS
+
+## Success Criteria
+
+- phone can be offline and agents continue to run
+- operator approvals still work from NovaRemote
+- terminal/fleet/file features do not regress
+- NovaSpine memory is optional but first-class
+- rollback is one service-level change, not a full mobile rewrite

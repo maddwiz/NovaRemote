@@ -1017,7 +1017,7 @@ export default function AppShell() {
     exportEncrypted,
     importEncrypted,
   } = useLlmProfiles();
-  const { sendPrompt, sendPromptDetailed } = useLlmClient();
+  const { sendPrompt, sendPromptDetailed, sendPromptStream } = useLlmClient();
 
   const {
     servers,
@@ -2123,12 +2123,19 @@ export default function AppShell() {
       }
 
       setPoolDrafts(serverId, (prev) => ({ ...prev, [session]: "" }));
-      const reply = await sendPrompt(activeProfile, cleanPrompt);
-      const nextBlock = `\\n\\n[LLM Prompt]\\n${cleanPrompt}\\n\\n[LLM Reply]\\n${reply}\\n`;
-      setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prev[session] || ""}${nextBlock}` }));
+      const baseTail = poolConnectionsRef.current.get(serverId)?.tails[session] || "";
+      const prefix = `${baseTail}\\n\\n[LLM Prompt]\\n${cleanPrompt}\\n\\n[LLM Reply]\\n`;
+      setPoolTails(serverId, (prev) => ({ ...prev, [session]: prefix }));
+
+      const result = await sendPromptStream(activeProfile, cleanPrompt, {
+        onTextDelta: (_delta, fullText) => {
+          setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prefix}${fullText}` }));
+        },
+      });
+      setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prefix}${result.text}\\n` }));
       return cleanPrompt;
     },
-    [activeProfile, sendPrompt, setPoolDrafts, setPoolTails]
+    [activeProfile, sendPromptStream, setPoolDrafts, setPoolTails]
   );
 
   const sendViaExternalLlm = useCallback(
@@ -5890,6 +5897,12 @@ export default function AppShell() {
                     const output = trace
                       ? `${result.text}\n\n[Tool Calls]\n${trace}`
                       : result.text;
+                    const timingFlags = result.timings
+                      ? [
+                          result.timings.streamed ? `first token ${result.timings.firstTokenMs ?? "n/a"} ms` : "",
+                          `total ${result.timings.totalMs} ms`,
+                        ].filter(Boolean)
+                      : [`${elapsed} ms`];
                     const flags = [
                       result.usedVision ? "vision" : "",
                       result.usedTools ? `${result.toolCalls.length} tool call(s)` : "",
@@ -5897,7 +5910,7 @@ export default function AppShell() {
                       .filter(Boolean)
                       .join(" • ");
                     setLlmTestSummary(
-                      `${profile.kind} • ${profile.model} • ${elapsed} ms${flags ? ` • ${flags}` : ""}`
+                      `${profile.kind} • ${profile.model} • ${timingFlags.join(" • ")}${flags ? ` • ${flags}` : ""}`
                     );
                     setLlmTestOutput(output);
                   } catch (error) {
