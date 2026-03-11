@@ -28,5 +28,6 @@ Updated: 2026-03-11
   - live audit-event refreshes feeding the bridge runtime surface
   - remote-first AppShell assistant/runtime agent actions with local fallback only when the server bridge is unavailable
   - focused-server monitoring now defers to the server runtime when it is online, leaving the phone runtime as fallback only
+  - legacy focused-only agent approval shortcuts have been removed from the terminals context in favor of server-scoped bridge callbacks
   - remaining sidecar packaging / NovaSpine rollout / protocol cleanup
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).

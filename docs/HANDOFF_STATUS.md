@@ -139,6 +139,7 @@ Updated: 2026-03-11
   - [x] local NovaAdapt preview remains available in `Terminals` and only falls back on the dedicated `Agents` screen when the server runtime is unavailable
   - [x] AppShell agent actions now route remote-first through the bridge, translating assistant/runtime actions into server plans/workflows before falling back to the phone runtime
   - [x] focused-server local monitoring cycles are now suppressed when the server NovaAdapt runtime is available, preventing duplicate phone-side monitoring on the active server
+  - [x] terminals/app context no longer expose focused-only approve/deny shortcuts; agent approvals now route through the same server-scoped async bridge callbacks everywhere
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets

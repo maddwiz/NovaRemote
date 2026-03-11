@@ -5329,8 +5329,6 @@ export default function AppShell() {
     removeAgentForServers,
     queueAgentCommandForServer,
     queueAgentCommandForServers,
-    approveReadyAgentsForFocusedServer,
-    denyAllPendingAgentsForFocusedServer,
     approveReadyAgentsForServer,
     denyAllPendingAgentsForServer,
     approveReadyAgentsForServers,
