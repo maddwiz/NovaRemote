@@ -37,6 +37,7 @@ Updated: 2026-03-11
   - the focused-server `AppShell` runtime now also disables its local NovaAdapt hook entirely while the bridge/runtime is online, leaving the phone runtime as a real fallback path instead of an always-mounted duplicate
   - non-focused local agent fallback no longer auto-focuses and queues hidden phone-runtime work; when the bridge runtime is down, the local fallback is now explicit to the currently focused server only
   - generic `AppShell` agent actions now stop at the server-runtime boundary and direct users to the dedicated `Agents` screen for any explicit local fallback
+  - the dedicated `Agents` screen now surfaces server-backed saved templates and gallery imports, allowing direct plan/workflow launches from NovaAdapt templates
   - sidecar topology validation now covers `codex_remote + NovaAdapt + NovaSpine`, including workflow forwarding through host `/agents/*`
   - codex_remote now exposes a reusable sidecar validator script that can check both the package and the live runtime stack before mobile rollout
   - codex_remote now includes repeatable sidecar lifecycle scripts so the NovaAdapt/NovaSpine stack can be started and stopped without copying compose commands out of the runbook

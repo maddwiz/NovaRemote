@@ -7,6 +7,7 @@ import {
   NovaAdaptBridgeJob,
   NovaAdaptBridgeMemoryStatus,
   NovaAdaptBridgePlan,
+  NovaAdaptBridgeTemplate,
   NovaAdaptBridgeWorkflow,
   ServerProfile,
 } from "../types";
@@ -33,12 +34,19 @@ export type UseNovaAdaptBridgeResult = {
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
+  templates: NovaAdaptBridgeTemplate[];
+  galleryTemplates: NovaAdaptBridgeTemplate[];
   refresh: (options?: RefreshOptions) => Promise<void>;
   createPlan: (objective: string, options?: { strategy?: string }) => Promise<NovaAdaptBridgePlan | null>;
   startWorkflow: (
     objective: string,
     options?: { metadata?: Record<string, unknown>; autoResume?: boolean }
   ) => Promise<NovaAdaptBridgeWorkflow | null>;
+  importTemplate: (template: NovaAdaptBridgeTemplate) => Promise<NovaAdaptBridgeTemplate | null>;
+  launchTemplate: (
+    templateId: string,
+    options?: { mode?: "plan" | "workflow" | "run"; execute?: boolean; allowDangerous?: boolean }
+  ) => Promise<boolean>;
   resumeWorkflow: (workflowId: string) => Promise<boolean>;
   approvePlanAsync: (planId: string) => Promise<boolean>;
   rejectPlan: (planId: string, reason?: string) => Promise<boolean>;
@@ -83,6 +91,32 @@ type RawBridgeWorkflow = {
 
 type RawWorkflowsResponse = {
   workflows?: unknown;
+};
+
+type RawTemplateStep = {
+  name?: unknown;
+  objective?: unknown;
+};
+
+type RawBridgeTemplate = {
+  template_id?: unknown;
+  name?: unknown;
+  description?: unknown;
+  objective?: unknown;
+  strategy?: unknown;
+  candidates?: unknown;
+  tags?: unknown;
+  source?: unknown;
+  shared?: unknown;
+  share_token?: unknown;
+  created_at?: unknown;
+  updated_at?: unknown;
+  metadata?: unknown;
+  steps?: unknown;
+};
+
+type RawTemplatesResponse = {
+  templates?: unknown;
 };
 
 type RawBridgeGovernance = {
@@ -239,6 +273,51 @@ function normalizeGovernance(value: unknown): NovaAdaptBridgeGovernance | null {
   };
 }
 
+function normalizeTemplateStep(value: unknown) {
+  const raw = value as RawTemplateStep | null;
+  const name = asString(raw?.name).trim();
+  const objective = asString(raw?.objective).trim();
+  if (!name || !objective) {
+    return null;
+  }
+  return { name, objective };
+}
+
+function normalizeTemplate(value: unknown): NovaAdaptBridgeTemplate | null {
+  if (!value || typeof value !== "object") {
+    return null;
+  }
+  const raw = value as RawBridgeTemplate;
+  const templateId = asString(raw.template_id).trim();
+  const name = asString(raw.name).trim();
+  const objective = asString(raw.objective).trim();
+  if (!templateId || !name || !objective) {
+    return null;
+  }
+  return {
+    templateId,
+    name,
+    description: asString(raw.description).trim(),
+    objective,
+    strategy: asString(raw.strategy).trim() || "single",
+    candidates: Array.isArray(raw.candidates)
+      ? raw.candidates.map((item) => String(item).trim()).filter(Boolean)
+      : [],
+    tags: Array.isArray(raw.tags) ? raw.tags.map((item) => String(item).trim()).filter(Boolean) : [],
+    source: asString(raw.source).trim() || "local",
+    shared: Boolean(raw.shared),
+    shareToken: asNullableString(raw.share_token),
+    createdAt: asNullableString(raw.created_at),
+    updatedAt: asNullableString(raw.updated_at),
+    metadata: raw.metadata && typeof raw.metadata === "object" ? { ...(raw.metadata as Record<string, unknown>) } : {},
+    steps: Array.isArray(raw.steps)
+      ? raw.steps
+          .map(normalizeTemplateStep)
+          .filter((item): item is NonNullable<ReturnType<typeof normalizeTemplateStep>> => Boolean(item))
+      : [],
+  };
+}
+
 function sortNewest<T extends { updatedAt?: string | null; createdAt?: string | null }>(items: T[]): T[] {
   return items.slice().sort((a, b) => {
     const aTs = Date.parse(a.updatedAt || a.createdAt || "") || 0;
@@ -367,6 +446,8 @@ export type NovaAdaptBridgeSnapshot = {
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
+  templates: NovaAdaptBridgeTemplate[];
+  galleryTemplates: NovaAdaptBridgeTemplate[];
 };
 
 type BridgeSnapshotOptions = {
@@ -394,6 +475,8 @@ export async function fetchNovaAdaptBridgeSnapshot(
       plans: [],
       jobs: [],
       workflows: [],
+      templates: [],
+      galleryTemplates: [],
     };
   }
 
@@ -403,13 +486,16 @@ export async function fetchNovaAdaptBridgeSnapshot(
 
   try {
     const nextHealth = await apiRequest<NovaAdaptBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
-    const [plansResult, jobsResult, memoryResult, workflowsResult, governanceResult] = await Promise.allSettled([
-      apiRequest<unknown>(server.baseUrl, server.token, `/agents/plans?limit=${planLimit}`),
-      apiRequest<unknown>(server.baseUrl, server.token, `/agents/jobs?limit=${jobLimit}`),
-      apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
-      apiRequest<RawWorkflowsResponse>(server.baseUrl, server.token, `/agents/workflows/list?limit=${workflowLimit}&context=api`),
-      apiRequest<unknown>(server.baseUrl, server.token, "/agents/runtime/governance"),
-    ]);
+    const [plansResult, jobsResult, memoryResult, workflowsResult, governanceResult, templatesResult, galleryResult] =
+      await Promise.allSettled([
+        apiRequest<unknown>(server.baseUrl, server.token, `/agents/plans?limit=${planLimit}`),
+        apiRequest<unknown>(server.baseUrl, server.token, `/agents/jobs?limit=${jobLimit}`),
+        apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
+        apiRequest<RawWorkflowsResponse>(server.baseUrl, server.token, `/agents/workflows/list?limit=${workflowLimit}&context=api`),
+        apiRequest<unknown>(server.baseUrl, server.token, "/agents/runtime/governance"),
+        apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/templates?limit=12"),
+        apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/gallery"),
+      ]);
 
     return {
       supported: true,
@@ -434,6 +520,20 @@ export async function fetchNovaAdaptBridgeSnapshot(
                 .filter((item): item is NovaAdaptBridgeWorkflow => Boolean(item))
             )
           : [],
+      templates:
+        templatesResult.status === "fulfilled" && Array.isArray(templatesResult.value?.templates)
+          ? sortNewest(
+              templatesResult.value.templates
+                .map(normalizeTemplate)
+                .filter((item): item is NovaAdaptBridgeTemplate => Boolean(item))
+            )
+          : [],
+      galleryTemplates:
+        galleryResult.status === "fulfilled" && Array.isArray(galleryResult.value?.templates)
+          ? galleryResult.value.templates
+              .map(normalizeTemplate)
+              .filter((item): item is NovaAdaptBridgeTemplate => Boolean(item))
+          : [],
     };
   } catch (nextError) {
     if (isBridgeUnavailableError(nextError)) {
@@ -447,6 +547,8 @@ export async function fetchNovaAdaptBridgeSnapshot(
         plans: [],
         jobs: [],
         workflows: [],
+        templates: [],
+        galleryTemplates: [],
       };
     }
     return {
@@ -459,6 +561,8 @@ export async function fetchNovaAdaptBridgeSnapshot(
       plans: [],
       jobs: [],
       workflows: [],
+      templates: [],
+      galleryTemplates: [],
     };
   }
 }
@@ -523,6 +627,50 @@ export async function startNovaAdaptBridgeWorkflow(
     context: "api",
   });
   return normalizeWorkflow(resumed) ?? created;
+}
+
+export async function importNovaAdaptBridgeTemplate(
+  server: ServerProfile | null,
+  template: NovaAdaptBridgeTemplate
+): Promise<NovaAdaptBridgeTemplate | null> {
+  if (!template.templateId.trim() || !template.name.trim() || !template.objective.trim()) {
+    return null;
+  }
+  return normalizeTemplate(
+    await postNovaAdaptBridgeJson<unknown>(server, "/agents/templates/import", {
+      manifest: {
+        template_id: template.templateId,
+        name: template.name,
+        description: template.description,
+        objective: template.objective,
+        strategy: template.strategy,
+        candidates: template.candidates,
+        steps: template.steps.map((step) => ({ name: step.name, objective: step.objective })),
+        metadata: template.metadata,
+        tags: template.tags,
+        source: template.source,
+      },
+    })
+  );
+}
+
+export async function launchNovaAdaptBridgeTemplate(
+  server: ServerProfile | null,
+  templateId: string,
+  options?: { mode?: "plan" | "workflow" | "run"; execute?: boolean; allowDangerous?: boolean }
+): Promise<boolean> {
+  const normalizedTemplateId = templateId.trim();
+  if (!normalizedTemplateId) {
+    return false;
+  }
+  return Boolean(
+    await postNovaAdaptBridgeJson<unknown>(server, `/agents/templates/${encodeURIComponent(normalizedTemplateId)}/launch`, {
+      mode: options?.mode || "plan",
+      execute: Boolean(options?.execute),
+      allow_dangerous: Boolean(options?.allowDangerous),
+      context: "api",
+    })
+  );
 }
 
 export async function resumeNovaAdaptBridgeWorkflow(server: ServerProfile | null, workflowId: string): Promise<boolean> {
@@ -614,6 +762,8 @@ export function useNovaAdaptBridge({
   const [plans, setPlans] = useState<NovaAdaptBridgePlan[]>([]);
   const [jobs, setJobs] = useState<NovaAdaptBridgeJob[]>([]);
   const [workflows, setWorkflows] = useState<NovaAdaptBridgeWorkflow[]>([]);
+  const [templates, setTemplates] = useState<NovaAdaptBridgeTemplate[]>([]);
+  const [galleryTemplates, setGalleryTemplates] = useState<NovaAdaptBridgeTemplate[]>([]);
   const activePlanStreamIdsRef = useRef<Set<string>>(new Set());
   const activeJobStreamIdsRef = useRef<Set<string>>(new Set());
   const lastAuditEventIdRef = useRef<number>(0);
@@ -643,6 +793,8 @@ export function useNovaAdaptBridge({
         setPlans([]);
         setJobs([]);
         setWorkflows([]);
+        setTemplates([]);
+        setGalleryTemplates([]);
         return;
       }
 
@@ -663,6 +815,8 @@ export function useNovaAdaptBridge({
         setPlans(snapshot.plans);
         setJobs(snapshot.jobs);
         setWorkflows(snapshot.workflows);
+        setTemplates(snapshot.templates);
+        setGalleryTemplates(snapshot.galleryTemplates);
       } catch (nextError) {
         const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
         setSupported(true);
@@ -980,6 +1134,31 @@ export function useNovaAdaptBridge({
     [refresh, server]
   );
 
+  const importTemplate = useCallback(
+    async (template: NovaAdaptBridgeTemplate): Promise<NovaAdaptBridgeTemplate | null> => {
+      const result = await importNovaAdaptBridgeTemplate(server, template);
+      if (result) {
+        setTemplates((current) =>
+          sortNewest([result, ...current.filter((item) => item.templateId !== result.templateId)]).slice(0, 24)
+        );
+      }
+      return result;
+    },
+    [server]
+  );
+
+  const launchTemplate = useCallback(
+    async (
+      templateId: string,
+      options?: { mode?: "plan" | "workflow" | "run"; execute?: boolean; allowDangerous?: boolean }
+    ): Promise<boolean> => {
+      const ok = await launchNovaAdaptBridgeTemplate(server, templateId, options);
+      await refresh({ quiet: true });
+      return ok;
+    },
+    [refresh, server]
+  );
+
   const approvePlanAsync = useCallback(
     async (planId: string) => {
       const ok = await approveNovaAdaptBridgePlanAsync(server, planId);
@@ -1082,9 +1261,13 @@ export function useNovaAdaptBridge({
       plans,
       jobs,
       workflows,
+      templates,
+      galleryTemplates,
       refresh,
       createPlan,
       startWorkflow,
+      importTemplate,
+      launchTemplate,
       resumeWorkflow,
       approvePlanAsync,
       rejectPlan,
@@ -1104,6 +1287,7 @@ export function useNovaAdaptBridge({
       health,
       jobs,
       loading,
+      galleryTemplates,
       memoryStatus,
       plans,
       refresh,
@@ -1116,9 +1300,12 @@ export function useNovaAdaptBridge({
       runtimeAvailable,
       startWorkflow,
       supported,
+      templates,
       undoPlan,
       pauseRuntime,
       workflows,
+      importTemplate,
+      launchTemplate,
     ]
   );
 }

@@ -417,6 +417,28 @@ export type NovaAdaptBridgeWorkflow = {
   context: Record<string, unknown>;
 };
 
+export type NovaAdaptBridgeTemplateStep = {
+  name: string;
+  objective: string;
+};
+
+export type NovaAdaptBridgeTemplate = {
+  templateId: string;
+  name: string;
+  description: string;
+  objective: string;
+  strategy: string;
+  candidates: string[];
+  tags: string[];
+  source: string;
+  shared: boolean;
+  shareToken: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  metadata: Record<string, unknown>;
+  steps: NovaAdaptBridgeTemplateStep[];
+};
+
 export type NovaAdaptBridgeGovernanceJobs = {
   active: number;
   queued: number;

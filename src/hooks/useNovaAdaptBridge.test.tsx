@@ -137,6 +137,36 @@ describe("useNovaAdaptBridge", () => {
           ],
         });
       }
+      if (url.endsWith("/agents/templates?limit=12")) {
+        return responseOf(200, {
+          templates: [
+            {
+              template_id: "saved-1",
+              name: "Cluster Watch",
+              objective: "Watch the DGX cluster",
+              strategy: "single",
+              source: "local",
+              tags: ["ops", "watch"],
+              steps: [{ name: "watch", objective: "Watch the DGX cluster" }],
+            },
+          ],
+        });
+      }
+      if (url.endsWith("/agents/gallery")) {
+        return responseOf(200, {
+          templates: [
+            {
+              template_id: "gallery-1",
+              name: "Deploy Sweep",
+              objective: "Monitor deployment health",
+              strategy: "single",
+              source: "gallery",
+              tags: ["deploy"],
+              steps: [{ name: "monitor", objective: "Monitor deployment health" }],
+            },
+          ],
+        });
+      }
       if (url.includes("/agents/events/stream")) {
         return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
       }
@@ -207,6 +237,8 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).memoryStatus).toMatchObject({ backend: "novaspine-http", enabled: true });
     expect(latestOrThrow(latest).governance).toMatchObject({ paused: false, activeRuns: 1, llmCallsTotal: 12 });
     expect(latestOrThrow(latest).workflows[0]).toMatchObject({ workflowId: "wf-1", status: "queued" });
+    expect(latestOrThrow(latest).templates[0]).toMatchObject({ templateId: "saved-1", name: "Cluster Watch" });
+    expect(latestOrThrow(latest).galleryTemplates[0]).toMatchObject({ templateId: "gallery-1", source: "gallery" });
 
     await act(async () => {
       await latestOrThrow(latest).approvePlanAsync("plan-1");
@@ -281,6 +313,12 @@ describe("useNovaAdaptBridge", () => {
       }
       if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
         return responseOf(200, { workflows: [] });
+      }
+      if (url.endsWith("/agents/templates?limit=12")) {
+        return responseOf(200, { templates: [] });
+      }
+      if (url.endsWith("/agents/gallery")) {
+        return responseOf(200, { templates: [] });
       }
       if (url.includes("/agents/events/stream")) {
         return streamResponse(
@@ -383,6 +421,12 @@ describe("useNovaAdaptBridge", () => {
       if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
         return responseOf(200, { workflows: [] });
       }
+      if (url.endsWith("/agents/templates?limit=12")) {
+        return responseOf(200, { templates: [] });
+      }
+      if (url.endsWith("/agents/gallery")) {
+        return responseOf(200, { templates: [] });
+      }
       if (url.includes("/agents/events/stream")) {
         return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
       }
@@ -439,6 +483,107 @@ describe("useNovaAdaptBridge", () => {
     );
     expect(fetchMock).toHaveBeenCalledWith(
       "https://dgx.novaremote.test/agents/runtime/jobs/cancel_all",
+      expect.objectContaining({ method: "POST" })
+    );
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("imports and launches templates through the bridge", async () => {
+    const server = buildServer();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.endsWith("/agents/health?deep=1")) {
+        return responseOf(200, { ok: true, features: { agents: true } });
+      }
+      if (url.endsWith("/agents/plans?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/jobs?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/memory/status")) {
+        return responseOf(200, { ok: true, enabled: true, backend: "novaspine-http" });
+      }
+      if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
+        return responseOf(200, { workflows: [] });
+      }
+      if (url.endsWith("/agents/runtime/governance")) {
+        return responseOf(200, { paused: false, jobs: { active: 0, queued: 0, running: 0, max_workers: 2 } });
+      }
+      if (url.endsWith("/agents/templates?limit=12")) {
+        return responseOf(200, { templates: [] });
+      }
+      if (url.endsWith("/agents/gallery")) {
+        return responseOf(200, {
+          templates: [
+            {
+              template_id: "gallery-ops",
+              name: "Ops Gallery",
+              objective: "Watch infra",
+              strategy: "single",
+              source: "gallery",
+              tags: ["ops"],
+              steps: [{ name: "watch", objective: "Watch infra" }],
+            },
+          ],
+        });
+      }
+      if (url.includes("/agents/events/stream")) {
+        return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
+      }
+      if (url.endsWith("/agents/templates/import")) {
+        expect(init?.method).toBe("POST");
+        return responseOf(200, {
+          template_id: "gallery-ops",
+          name: "Ops Gallery",
+          objective: "Watch infra",
+          strategy: "single",
+          source: "local",
+          tags: ["ops"],
+          steps: [{ name: "watch", objective: "Watch infra" }],
+        });
+      }
+      if (url.endsWith("/agents/templates/gallery-ops/launch")) {
+        expect(init?.method).toBe("POST");
+        return responseOf(200, { ok: true });
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    let latest: BridgeHandle | null = null;
+    function Harness() {
+      latest = useNovaAdaptBridge({ server, refreshIntervalMs: 60_000 });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await waitFor(() => !latestOrThrow(latest).loading, "bridge template load");
+
+    const galleryTemplate = latestOrThrow(latest).galleryTemplates[0];
+    await act(async () => {
+      const imported = await latestOrThrow(latest).importTemplate(galleryTemplate);
+      expect(imported).toMatchObject({ templateId: "gallery-ops", source: "local" });
+    });
+
+    await act(async () => {
+      const launched = await latestOrThrow(latest).launchTemplate("gallery-ops", { mode: "workflow" });
+      expect(launched).toBe(true);
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dgx.novaremote.test/agents/templates/import",
+      expect.objectContaining({ method: "POST" })
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://dgx.novaremote.test/agents/templates/gallery-ops/launch",
       expect.objectContaining({ method: "POST" })
     );
 

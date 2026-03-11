@@ -9,6 +9,7 @@ import {
   NovaAdaptBridgeJob,
   NovaAdaptBridgeMemoryStatus,
   NovaAdaptBridgePlan,
+  NovaAdaptBridgeTemplate,
   NovaAdaptBridgeWorkflow,
   NovaAgent,
   NovaAgentStatus,
@@ -168,6 +169,15 @@ function summarizeGovernance(governance: NovaAdaptBridgeGovernance | null): stri
   return parts.join(" • ");
 }
 
+function summarizeTemplate(template: NovaAdaptBridgeTemplate): string {
+  const parts = [template.strategy];
+  if (template.tags.length > 0) {
+    parts.push(template.tags.slice(0, 2).join(", "));
+  }
+  parts.push(template.source);
+  return parts.join(" • ");
+}
+
 function canApprovePlan(status: string): boolean {
   return status.trim().toLowerCase() === "pending";
 }
@@ -201,6 +211,9 @@ function RemoteBridgeSection({
   plans,
   jobs,
   workflows,
+  templates,
+  galleryTemplates,
+  templateMutationKey,
   mutationPlanId,
   mutationWorkflowId,
   governanceBusy,
@@ -214,6 +227,7 @@ function RemoteBridgeSection({
   onResumeRuntime,
   onResetGovernanceUsage,
   onCancelAllJobs,
+  onLaunchTemplate,
 }: {
   loading: boolean;
   refreshing: boolean;
@@ -226,6 +240,9 @@ function RemoteBridgeSection({
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
+  templates: NovaAdaptBridgeTemplate[];
+  galleryTemplates: NovaAdaptBridgeTemplate[];
+  templateMutationKey: string | null;
   mutationPlanId: string | null;
   mutationWorkflowId: string | null;
   governanceBusy: boolean;
@@ -239,6 +256,7 @@ function RemoteBridgeSection({
   onResumeRuntime: () => void;
   onResetGovernanceUsage: () => void;
   onCancelAllJobs: () => void;
+  onLaunchTemplate: (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => void;
 }) {
   return (
     <View style={styles.panel}>
@@ -425,6 +443,88 @@ function RemoteBridgeSection({
                   {job.error ? <Text style={styles.emptyText}>{`Error ${job.error}`}</Text> : null}
                 </View>
               ))
+            )}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Saved Templates</Text>
+            {templates.length === 0 ? (
+              <Text style={styles.emptyText}>No saved server templates yet.</Text>
+            ) : (
+              templates.slice(0, 4).map((template) => {
+                const busy = templateMutationKey === `${template.templateId}:saved`;
+                return (
+                  <View key={`bridge-template-${template.templateId}`} style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{template.name}</Text>
+                      <Text style={[styles.modePill, styles.modePillShell]}>{template.strategy.toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
+                    <Text style={styles.emptyText}>{template.description || template.objective}</Text>
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Launch ${template.name} as approval plan`}
+                        style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                        disabled={busy}
+                        onPress={() => onLaunchTemplate(template, "plan")}
+                      >
+                        <Text style={styles.actionButtonText}>{busy ? "Launching..." : "Launch Plan"}</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Launch ${template.name} as workflow`}
+                        style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                        disabled={busy}
+                        onPress={() => onLaunchTemplate(template, "workflow")}
+                      >
+                        <Text style={styles.actionButtonText}>{busy ? "Launching..." : "Start Workflow"}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Template Gallery</Text>
+            {galleryTemplates.length === 0 ? (
+              <Text style={styles.emptyText}>No built-in templates exposed by this runtime.</Text>
+            ) : (
+              galleryTemplates.slice(0, 4).map((template) => {
+                const busy = templateMutationKey === `${template.templateId}:gallery`;
+                return (
+                  <View key={`bridge-gallery-${template.templateId}`} style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{template.name}</Text>
+                      <Text style={[styles.modePill, styles.modePillAi]}>{template.source.toUpperCase()}</Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
+                    <Text style={styles.emptyText}>{template.description || template.objective}</Text>
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Import and launch ${template.name} as approval plan`}
+                        style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                        disabled={busy}
+                        onPress={() => onLaunchTemplate(template, "plan")}
+                      >
+                        <Text style={styles.actionButtonText}>{busy ? "Importing..." : "Import + Plan"}</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Import and launch ${template.name} as workflow`}
+                        style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                        disabled={busy}
+                        onPress={() => onLaunchTemplate(template, "workflow")}
+                      >
+                        <Text style={styles.actionButtonText}>{busy ? "Importing..." : "Import + Workflow"}</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })
             )}
           </View>
         </>
@@ -659,9 +759,13 @@ export function NovaAgentPanel({
     plans: bridgePlans,
     jobs: bridgeJobs,
     workflows: bridgeWorkflows,
+    templates: bridgeTemplates,
+    galleryTemplates: bridgeGalleryTemplates,
     refresh: refreshBridge,
     createPlan,
     startWorkflow,
+    importTemplate,
+    launchTemplate,
     resumeWorkflow,
     approvePlanAsync,
     rejectPlan,
@@ -674,6 +778,7 @@ export function NovaAgentPanel({
   } = useNovaAdaptBridge({ server, enabled: Boolean(serverId) });
   const [remoteMutationPlanId, setRemoteMutationPlanId] = useState<string | null>(null);
   const [remoteMutationWorkflowId, setRemoteMutationWorkflowId] = useState<string | null>(null);
+  const [templateMutationKey, setTemplateMutationKey] = useState<string | null>(null);
   const [governanceBusy, setGovernanceBusy] = useState<boolean>(false);
   const showLocalPreview =
     surface === "preview" || (surface === "screen" && (!bridgeSupported || !bridgeRuntimeAvailable) && localFallbackEnabled);
@@ -756,6 +861,47 @@ export function NovaAgentPanel({
     }
   }, [newAgentCapabilities, newAgentName, startWorkflow]);
 
+  const runTemplateLaunch = useCallback(
+    async (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => {
+      const savedTemplate = bridgeTemplates.find((item) => item.templateId === template.templateId) || null;
+      const mutationScope = savedTemplate ? "saved" : "gallery";
+      const mutationKey = `${template.templateId}:${mutationScope}`;
+      setTemplateMutationKey(mutationKey);
+      setRemoteCreateStatus(
+        savedTemplate
+          ? `Launching template ${template.name}...`
+          : `Importing template ${template.name}...`
+      );
+      try {
+        let launchTemplateId = template.templateId;
+        if (!savedTemplate) {
+          const imported = await importTemplate(template);
+          if (!imported) {
+            setRemoteCreateStatus(`Template import failed for ${template.name}.`);
+            return;
+          }
+          launchTemplateId = imported.templateId;
+        }
+        const launched = await launchTemplate(launchTemplateId, { mode });
+        if (launched) {
+          setRemoteCreateStatus(
+            mode === "workflow"
+              ? `Started workflow from template ${template.name}`
+              : `Created approval plan from template ${template.name}`
+          );
+        } else {
+          setRemoteCreateStatus(`Template launch returned no result for ${template.name}.`);
+        }
+      } catch (nextError) {
+        const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
+        setRemoteCreateStatus(`Template launch failed: ${detail}`);
+      } finally {
+        setTemplateMutationKey((current) => (current === mutationKey ? null : current));
+      }
+    },
+    [bridgeTemplates, importTemplate, launchTemplate]
+  );
+
   const runtimeUnavailable = !bridgeSupported || !bridgeRuntimeAvailable;
 
   if (!serverId) {
@@ -790,6 +936,9 @@ export function NovaAgentPanel({
         plans={bridgePlans}
         jobs={bridgeJobs}
         workflows={bridgeWorkflows}
+        templates={bridgeTemplates}
+        galleryTemplates={bridgeGalleryTemplates}
+        templateMutationKey={templateMutationKey}
         mutationPlanId={remoteMutationPlanId}
         mutationWorkflowId={remoteMutationWorkflowId}
         governanceBusy={governanceBusy}
@@ -824,6 +973,9 @@ export function NovaAgentPanel({
         }}
         onCancelAllJobs={() => {
           void runGovernanceAction(() => cancelAllJobs("Canceled from NovaRemote mobile panel"));
+        }}
+        onLaunchTemplate={(template, mode) => {
+          void runTemplateLaunch(template, mode);
         }}
       />
 

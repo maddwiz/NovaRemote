@@ -57,9 +57,13 @@ beforeEach(() => {
     plans: [],
     jobs: [],
     workflows: [],
+    templates: [],
+    galleryTemplates: [],
     refresh: vi.fn(),
     createPlan: vi.fn(async () => null),
     startWorkflow: vi.fn(async () => null),
+    importTemplate: vi.fn(async () => null),
+    launchTemplate: vi.fn(async () => false),
     resumeWorkflow: vi.fn(async () => true),
     approvePlanAsync: vi.fn(async () => true),
     rejectPlan: vi.fn(async () => true),
@@ -222,9 +226,13 @@ describe("NovaAgentPanel", () => {
       ],
       jobs: [],
       workflows: [],
+      templates: [],
+      galleryTemplates: [],
       refresh: vi.fn(),
       createPlan: vi.fn(async () => null),
       startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
       resumeWorkflow: vi.fn(async () => true),
       approvePlanAsync,
       rejectPlan: vi.fn(async () => true),
@@ -325,9 +333,13 @@ describe("NovaAgentPanel", () => {
       plans: [],
       jobs: [],
       workflows: [],
+      templates: [],
+      galleryTemplates: [],
       refresh: vi.fn(),
       createPlan,
       startWorkflow,
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
       resumeWorkflow: vi.fn(async () => true),
       approvePlanAsync: vi.fn(async () => true),
       rejectPlan: vi.fn(async () => true),
@@ -410,9 +422,13 @@ describe("NovaAgentPanel", () => {
       plans: [],
       jobs: [],
       workflows: [],
+      templates: [],
+      galleryTemplates: [],
       refresh: vi.fn(),
       createPlan: vi.fn(async () => null),
       startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
       resumeWorkflow: vi.fn(async () => true),
       approvePlanAsync: vi.fn(async () => true),
       rejectPlan: vi.fn(async () => true),
@@ -475,9 +491,13 @@ describe("NovaAgentPanel", () => {
       plans: [],
       jobs: [],
       workflows: [],
+      templates: [],
+      galleryTemplates: [],
       refresh: vi.fn(),
       createPlan: vi.fn(async () => null),
       startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
       resumeWorkflow: vi.fn(async () => true),
       approvePlanAsync: vi.fn(async () => true),
       rejectPlan: vi.fn(async () => true),
@@ -533,9 +553,13 @@ describe("NovaAgentPanel", () => {
       plans: [],
       jobs: [],
       workflows: [],
+      templates: [],
+      galleryTemplates: [],
       refresh: vi.fn(),
       createPlan: vi.fn(async () => null),
       startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
       resumeWorkflow: vi.fn(async () => true),
       approvePlanAsync: vi.fn(async () => true),
       rejectPlan: vi.fn(async () => true),
@@ -581,6 +605,118 @@ describe("NovaAgentPanel", () => {
     });
 
     expect(onOpenAgents).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("renders saved and gallery templates and routes launches through the bridge", async () => {
+    const importTemplate = vi.fn(async (template) => ({
+      ...template,
+      source: "local",
+    }));
+    const launchTemplate = vi.fn(async () => true);
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      error: null,
+      health: { ok: true },
+      memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      templates: [
+        {
+          templateId: "saved-1",
+          name: "Saved Watch",
+          description: "Saved template",
+          objective: "Watch the cluster",
+          strategy: "single",
+          candidates: [],
+          tags: ["ops"],
+          source: "local",
+          shared: false,
+          shareToken: null,
+          createdAt: null,
+          updatedAt: null,
+          metadata: {},
+          steps: [{ name: "watch", objective: "Watch the cluster" }],
+        },
+      ],
+      galleryTemplates: [
+        {
+          templateId: "gallery-1",
+          name: "Gallery Watch",
+          description: "Gallery template",
+          objective: "Watch deploys",
+          strategy: "single",
+          candidates: [],
+          tags: ["deploy"],
+          source: "gallery",
+          shared: false,
+          shareToken: null,
+          createdAt: null,
+          updatedAt: null,
+          metadata: {},
+          steps: [{ name: "watch", objective: "Watch deploys" }],
+        },
+      ],
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      importTemplate,
+      launchTemplate,
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+          surface: "screen",
+        })
+      );
+    });
+
+    expect(() => renderer.root.findByProps({ children: "Saved Templates" })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Template Gallery" })).not.toThrow();
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Launch Saved Watch as approval plan" }).props.onPress();
+    });
+    expect(importTemplate).not.toHaveBeenCalled();
+    expect(launchTemplate).toHaveBeenCalledWith("saved-1", { mode: "plan" });
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Import and launch Gallery Watch as workflow" }).props.onPress();
+    });
+    expect(importTemplate).toHaveBeenCalledWith(expect.objectContaining({ templateId: "gallery-1" }));
+    expect(launchTemplate).toHaveBeenCalledWith("gallery-1", { mode: "workflow" });
 
     await act(async () => {
       renderer.unmount();

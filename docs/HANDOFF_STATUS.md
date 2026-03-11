@@ -147,6 +147,7 @@ Updated: 2026-03-11
   - [x] the dedicated `Agents` screen no longer auto-mounts local fallback when the runtime is down; local preview is now an explicit opt-in fallback control on that screen
   - [x] `AppShell` now passes `serverId: null` into the focused local NovaAdapt runtime hook while the server bridge is online, so the active-server phone runtime is actually disabled instead of merely gated at action time
   - [x] generic `AppShell` agent actions no longer run the hidden focused-server phone runtime at all; when the server runtime is unavailable, fallback is now explicit through the dedicated `Agents` screen only
+  - [x] server-backed template surfaces are now wired into the `Agents` screen runtime section, including saved templates, built-in gallery import, and direct plan/workflow launch actions
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
@@ -211,6 +212,7 @@ Updated: 2026-03-11
   - explicit opt-in local fallback controls on the dedicated `Agents` screen when the server runtime is unavailable
   - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
   - explicit `Open Agents` routing from the embedded `Terminals` panel when the server runtime is unavailable
+  - server-backed template gallery + saved-template launch controls in the dedicated `Agents` screen
   - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
   - codex_remote sidecar validation is now scriptable for both package and live stack checks via `scripts/validate_nova_sidecars.py`
   - codex_remote now also ships sidecar lifecycle wrappers (`scripts/start_nova_sidecars.sh`, `scripts/stop_nova_sidecars.sh`) for repeatable bring-up and teardown
