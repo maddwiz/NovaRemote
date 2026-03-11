@@ -48,3 +48,6 @@ Updated: 2026-03-11
   - remaining release-hardening / protocol cleanup before companion-server open-sourcing
   - dedicated runtime-governance controls are now part of the server-backed bridge surface
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).
+
+
+- Live companion validation now passes for `/health`, `/agents/health`, and `/agents/capabilities` on the installed macOS sidecar stack.

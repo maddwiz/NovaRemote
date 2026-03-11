@@ -229,3 +229,6 @@ Updated: 2026-03-11
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.
 - All changes above were validated locally with focused typecheck/test runs, and stable slices were pushed to `feat/novaremote-runtime-migration`.
 - GitHub Actions CI status should be evaluated against that feature branch until it is merged to `main`.
+
+
+- Live companion validation now passes for `/health`, `/agents/health`, and `/agents/capabilities` on the installed macOS sidecar stack.
