@@ -39,6 +39,7 @@ Updated: 2026-03-11
   - generic `AppShell` agent actions now stop at the server-runtime boundary and direct users to the dedicated `Agents` screen for any explicit local fallback
   - the dedicated `Agents` screen now surfaces server-backed saved templates and gallery imports, allowing direct plan/workflow launches from NovaAdapt templates
   - the bridge runtime surface now detects optional route support per capability, so missing memory/governance/workflow/template endpoints degrade cleanly instead of making the runtime look fully offline
+  - the bridge now prefers a companion-provided `/agents/capabilities` contract, reducing repeated optional-route 404 probes against sidecar deployments
   - sidecar topology validation now covers `codex_remote + NovaAdapt + NovaSpine`, including workflow forwarding through host `/agents/*`
   - codex_remote now exposes a reusable sidecar validator script that can check both the package and the live runtime stack before mobile rollout
   - codex_remote live sidecar validation no longer depends on a local `.env.nova-sidecars` file when the host/runtime stack is already running

@@ -149,6 +149,7 @@ Updated: 2026-03-11
   - [x] generic `AppShell` agent actions no longer run the hidden focused-server phone runtime at all; when the server runtime is unavailable, fallback is now explicit through the dedicated `Agents` screen only
   - [x] server-backed template surfaces are now wired into the `Agents` screen runtime section, including saved templates, built-in gallery import, and direct plan/workflow launch actions
   - [x] bridge capability detection now treats optional NovaAdapt sidecar routes independently, so missing memory/governance/workflow/template routes degrade those controls without marking the whole runtime offline
+  - [x] the bridge now prefers companion-provided `/agents/capabilities` metadata and only falls back to 404-based optional-route probing against older companion builds
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
@@ -215,6 +216,7 @@ Updated: 2026-03-11
   - explicit `Open Agents` routing from the embedded `Terminals` panel when the server runtime is unavailable
   - server-backed template gallery + saved-template launch controls in the dedicated `Agents` screen
   - capability-aware optional bridge controls that hide or replace unsupported memory/governance/workflow/template surfaces instead of surfacing dead actions when a sidecar route is not available yet
+  - companion-provided `/agents/capabilities` support flags that let the mobile bridge skip unsupported optional route fetches instead of relearning support through repeated 404s
   - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
   - codex_remote sidecar validation is now scriptable for both package and live stack checks via `scripts/validate_nova_sidecars.py`
   - codex_remote live sidecar validation now tolerates a missing `.env.nova-sidecars` file, so operators can validate an already-running stack directly against host/runtime state

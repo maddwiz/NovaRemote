@@ -364,6 +364,73 @@ describe("useNovaAdaptBridge", () => {
     });
   });
 
+  it("uses companion capabilities to skip unsupported optional route probes", async () => {
+    const server = buildServer();
+    const fetchMock = vi.mocked(fetch);
+    fetchMock.mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.endsWith("/agents/health?deep=1")) {
+        return responseOf(200, { ok: true, features: { agents: true } });
+      }
+      if (url.endsWith("/agents/capabilities")) {
+        return responseOf(200, {
+          ok: true,
+          cached: false,
+          capabilities: {
+            memoryStatus: false,
+            governance: false,
+            workflows: true,
+            templates: false,
+            templateGallery: false,
+          },
+        });
+      }
+      if (url.endsWith("/agents/plans?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/jobs?limit=12")) {
+        return responseOf(200, []);
+      }
+      if (url.endsWith("/agents/workflows/list?limit=12&context=api")) {
+        return responseOf(200, { workflows: [] });
+      }
+      if (url.includes("/agents/events/stream")) {
+        return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
+      }
+      throw new Error(`Unexpected fetch ${url}`);
+    });
+
+    let latest: BridgeHandle | null = null;
+    function Harness() {
+      latest = useNovaAdaptBridge({ server, refreshIntervalMs: 60_000 });
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+
+    await waitFor(() => !latestOrThrow(latest).loading, "capability-aware bridge load");
+
+    expect(latestOrThrow(latest).capabilities).toEqual({
+      memoryStatus: false,
+      governance: false,
+      workflows: true,
+      templates: false,
+      templateGallery: false,
+    });
+    const calledUrls = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/memory/status");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/runtime/governance");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/templates?limit=12");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/gallery");
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
   it("treats missing bridge endpoints as unsupported instead of surfacing an error", async () => {
     const server = buildServer();
     const fetchMock = vi.mocked(fetch);

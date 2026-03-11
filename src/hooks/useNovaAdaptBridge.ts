@@ -121,6 +121,13 @@ type RawTemplatesResponse = {
   templates?: unknown;
 };
 
+type RawCapabilitiesResponse = {
+  ok?: unknown;
+  checked_at?: unknown;
+  cached?: unknown;
+  capabilities?: unknown;
+};
+
 type RawBridgeGovernance = {
   paused?: unknown;
   pause_reason?: unknown;
@@ -200,6 +207,17 @@ function capabilityFromSettled(result: PromiseSettledResult<unknown>): boolean {
     return true;
   }
   return !isMissingRouteError(result.reason);
+}
+
+function normalizeCapabilities(value: unknown): NovaAdaptBridgeCapabilities {
+  const raw = value as Partial<Record<keyof NovaAdaptBridgeCapabilities, unknown>> | null;
+  return {
+    memoryStatus: Boolean(raw?.memoryStatus),
+    governance: Boolean(raw?.governance),
+    workflows: Boolean(raw?.workflows),
+    templates: Boolean(raw?.templates),
+    templateGallery: Boolean(raw?.templateGallery),
+  };
 }
 
 function normalizePlan(value: unknown): NovaAdaptBridgePlan | null {
@@ -510,27 +528,66 @@ export async function fetchNovaAdaptBridgeSnapshot(
 
   try {
     const nextHealth = await apiRequest<NovaAdaptBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
-    const [plansResult, jobsResult, memoryResult, workflowsResult, governanceResult, templatesResult, galleryResult] =
-      await Promise.allSettled([
-        apiRequest<unknown>(server.baseUrl, server.token, `/agents/plans?limit=${planLimit}`),
-        apiRequest<unknown>(server.baseUrl, server.token, `/agents/jobs?limit=${jobLimit}`),
-        apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
-        apiRequest<RawWorkflowsResponse>(server.baseUrl, server.token, `/agents/workflows/list?limit=${workflowLimit}&context=api`),
-        apiRequest<unknown>(server.baseUrl, server.token, "/agents/runtime/governance"),
-        apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/templates?limit=12"),
-        apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/gallery"),
-      ]);
+    let bridgeCapabilities: NovaAdaptBridgeCapabilities | null = null;
+    try {
+      const capabilitiesResponse = await apiRequest<RawCapabilitiesResponse>(
+        server.baseUrl,
+        server.token,
+        "/agents/capabilities"
+      );
+      bridgeCapabilities = normalizeCapabilities(capabilitiesResponse?.capabilities ?? capabilitiesResponse);
+    } catch (capabilitiesError) {
+      if (!isMissingRouteError(capabilitiesError) && !isBridgeUnavailableError(capabilitiesError)) {
+        bridgeCapabilities = null;
+      }
+    }
 
-    return {
-      supported: true,
-      runtimeAvailable: Boolean(nextHealth.ok),
-      capabilities: {
+    const [
+      plansResult,
+      jobsResult,
+      memoryResult,
+      workflowsResult,
+      governanceResult,
+      templatesResult,
+      galleryResult,
+    ] = await Promise.allSettled([
+      apiRequest<unknown>(server.baseUrl, server.token, `/agents/plans?limit=${planLimit}`),
+      apiRequest<unknown>(server.baseUrl, server.token, `/agents/jobs?limit=${jobLimit}`),
+      bridgeCapabilities && !bridgeCapabilities.memoryStatus
+        ? Promise.resolve(null)
+        : apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
+      bridgeCapabilities && !bridgeCapabilities.workflows
+        ? Promise.resolve(null)
+        : apiRequest<RawWorkflowsResponse>(
+            server.baseUrl,
+            server.token,
+            `/agents/workflows/list?limit=${workflowLimit}&context=api`
+          ),
+      bridgeCapabilities && !bridgeCapabilities.governance
+        ? Promise.resolve(null)
+        : apiRequest<unknown>(server.baseUrl, server.token, "/agents/runtime/governance"),
+      bridgeCapabilities && !bridgeCapabilities.templates
+        ? Promise.resolve(null)
+        : apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/templates?limit=12"),
+      bridgeCapabilities && !bridgeCapabilities.templateGallery
+        ? Promise.resolve(null)
+        : apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/gallery"),
+    ]);
+
+    const effectiveCapabilities =
+      bridgeCapabilities ??
+      ({
         memoryStatus: capabilityFromSettled(memoryResult),
         governance: capabilityFromSettled(governanceResult),
         workflows: capabilityFromSettled(workflowsResult),
         templates: capabilityFromSettled(templatesResult),
         templateGallery: capabilityFromSettled(galleryResult),
-      },
+      } satisfies NovaAdaptBridgeCapabilities);
+
+    return {
+      supported: true,
+      runtimeAvailable: Boolean(nextHealth.ok),
+      capabilities: effectiveCapabilities,
       error: null,
       health: nextHealth,
       memoryStatus: memoryResult.status === "fulfilled" ? memoryResult.value : null,
