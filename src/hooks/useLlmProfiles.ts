@@ -12,6 +12,10 @@ const DEV_LOCAL_OLLAMA_PROFILE_ID = "dev-local-ollama";
 
 let cryptoJsCache: any | null = null;
 
+function isDevRuntime(): boolean {
+  return typeof __DEV__ !== "undefined" && __DEV__;
+}
+
 function getCryptoJs() {
   if (!cryptoJsCache) {
     // Lazy require keeps crypto-js out of the hot startup path.
@@ -291,7 +295,7 @@ export function useLlmProfiles() {
       }
 
       let seededProfileChanged = false;
-      if (__DEV__) {
+      if (isDevRuntime()) {
         const merged = mergeDevSeedProfile(parsedProfiles, buildDevLocalOllamaProfile());
         parsedProfiles = merged.profiles;
         seededProfileChanged = merged.changed;
@@ -303,7 +307,7 @@ export function useLlmProfiles() {
         parsedProfiles[0]?.id ||
         null;
 
-      if (__DEV__ && seededProfileChanged) {
+      if (isDevRuntime() && seededProfileChanged) {
         await Promise.all([
           SecureStore.setItemAsync(STORAGE_LLM_PROFILES, JSON.stringify(parsedProfiles)),
           active

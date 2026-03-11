@@ -24,6 +24,10 @@ type UseServersArgs = {
   enabled?: boolean;
 };
 
+function isDevRuntime(): boolean {
+  return typeof __DEV__ !== "undefined" && __DEV__;
+}
+
 function buildDevSeedServer(): ServerProfile | null {
   const config = getDevSeedServerConfig();
   const baseUrl = normalizeBaseUrl(config?.baseUrl || "");
@@ -511,7 +515,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
 
         let seededServer: ServerProfile | null = null;
         let seededServerChanged = false;
-        if (__DEV__) {
+        if (isDevRuntime()) {
           seededServer = buildDevSeedServer();
           const merged = mergeDevSeedServer(parsedServers, seededServer);
           parsedServers = merged.servers;
@@ -536,7 +540,7 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
           parsedServers[0]?.id ??
           null;
 
-        if (__DEV__ && seededServerChanged) {
+        if (isDevRuntime() && seededServerChanged) {
           await Promise.all([
             SecureStore.setItemAsync(STORAGE_SERVERS, JSON.stringify(parsedServers)),
             resolvedActive

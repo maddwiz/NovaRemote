@@ -66,6 +66,7 @@ afterEach(() => {
 describe("useServers dev seeding", () => {
   it("seeds a dev server from environment when storage is empty", async () => {
     vi.stubGlobal("__DEV__", true);
+    vi.stubEnv("EXPO_PUBLIC_DEV_SEED_ENABLED", "true");
     vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_URL", "http://10.0.0.71:8787");
     vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_TOKEN", "seed-token");
     vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_NAME", "Macbook");
@@ -102,6 +103,7 @@ describe("useServers dev seeding", () => {
 
   it("upserts a dev server even when stored servers already exist", async () => {
     vi.stubGlobal("__DEV__", true);
+    vi.stubEnv("EXPO_PUBLIC_DEV_SEED_ENABLED", "true");
     vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_URL", "http://10.0.0.71:8787");
     vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_TOKEN", "seed-token");
     vi.stubEnv("EXPO_PUBLIC_DEV_SERVER_NAME", "Macbook");

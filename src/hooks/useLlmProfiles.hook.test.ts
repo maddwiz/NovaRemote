@@ -77,6 +77,7 @@ afterEach(() => {
 describe("useLlmProfiles hook", () => {
   it("seeds a dev ollama profile from environment when storage is empty", async () => {
     vi.stubGlobal("__DEV__", true);
+    vi.stubEnv("EXPO_PUBLIC_DEV_SEED_ENABLED", "true");
     vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_URL", "http://10.0.0.71:11434");
     vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_MODEL", "llama3.2:3b");
     vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_NAME", "Macbook Ollama");
@@ -112,6 +113,7 @@ describe("useLlmProfiles hook", () => {
 
   it("upserts a dev ollama profile even when stored profiles already exist", async () => {
     vi.stubGlobal("__DEV__", true);
+    vi.stubEnv("EXPO_PUBLIC_DEV_SEED_ENABLED", "true");
     vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_URL", "http://10.0.0.71:11434");
     vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_MODEL", "llama3.2:3b");
     vi.stubEnv("EXPO_PUBLIC_DEV_OLLAMA_NAME", "Macbook Ollama");

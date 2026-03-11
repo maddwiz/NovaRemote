@@ -32,17 +32,26 @@ function readEnvValue(name: string): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
+function envFlagEnabled(name: string): boolean {
+  const value = readEnvValue(name).toLowerCase();
+  return value === "1" || value === "true" || value === "yes" || value === "on";
+}
+
 function trimString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
 function loadGeneratedDevSeedConfig(): DevSeedConfig | null {
-  if (generatedConfigCache !== undefined) {
+  if (typeof __DEV__ !== "undefined" && !__DEV__) {
+    generatedConfigCache = null;
     return generatedConfigCache;
   }
 
-  if (typeof __DEV__ !== "undefined" && !__DEV__) {
-    generatedConfigCache = null;
+  if (!envFlagEnabled("EXPO_PUBLIC_DEV_SEED_ENABLED")) {
+    return null;
+  }
+
+  if (generatedConfigCache !== undefined) {
     return generatedConfigCache;
   }
 
@@ -76,6 +85,10 @@ export function getDevSeedServerConfig(): DevSeedServerConfig | null {
     };
   }
 
+  if (!envFlagEnabled("EXPO_PUBLIC_DEV_SEED_ENABLED")) {
+    return null;
+  }
+
   const baseUrl = trimString(readEnvValue("EXPO_PUBLIC_DEV_SERVER_URL"));
   const token = trimString(readEnvValue("EXPO_PUBLIC_DEV_SERVER_TOKEN"));
   if (!baseUrl || !token) {
@@ -104,6 +117,10 @@ export function getDevSeedOllamaConfig(): DevSeedOllamaConfig | null {
       baseUrl: trimString(generated.baseUrl),
       model: trimString(generated.model),
     };
+  }
+
+  if (!envFlagEnabled("EXPO_PUBLIC_DEV_SEED_ENABLED")) {
+    return null;
   }
 
   const name = trimString(readEnvValue("EXPO_PUBLIC_DEV_OLLAMA_NAME"));
