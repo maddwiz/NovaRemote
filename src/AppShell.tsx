@@ -2804,6 +2804,8 @@ export default function AppShell() {
     const remoteSession = sessionCandidates.find((session) => !connection.localAiSessions.includes(session));
     return remoteSession || null;
   }, [agentRuntimeServerId, poolConnections]);
+  const shouldUseLocalFocusedAgentRuntime = !focusedBridgeRuntimeAvailable;
+  const focusedLocalAgentRuntimeServerId = shouldUseLocalFocusedAgentRuntime ? agentRuntimeServerId : null;
   const {
     agents: focusedServerAgents,
     addRuntimeAgent: addFocusedServerRuntimeAgent,
@@ -2815,11 +2817,10 @@ export default function AppShell() {
     denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer,
     runMonitoringCycle: runFocusedServerMonitoringCycle,
   } = useNovaAgentRuntime({
-    serverId: agentRuntimeServerId,
+    serverId: focusedLocalAgentRuntimeServerId,
     onDispatchCommand: dispatchFocusedServerAgentCommand,
     resolveDefaultSession: resolveFocusedServerAgentSession,
   });
-  const shouldUseLocalFocusedAgentRuntime = !focusedBridgeRuntimeAvailable;
   const hasFocusedMonitoringAgents = useMemo(
     () => shouldUseLocalFocusedAgentRuntime && focusedServerAgents.some((agent) => agent.status === "monitoring"),
     [focusedServerAgents, shouldUseLocalFocusedAgentRuntime]

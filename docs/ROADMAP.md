@@ -31,5 +31,6 @@ Updated: 2026-03-11
   - legacy focused-only agent approval shortcuts have been removed from the terminals context in favor of server-scoped bridge callbacks
   - focused-server agent CRUD/approval execution now also refuses to fall through to the phone runtime while the server bridge reports an online runtime
   - the dedicated `Agents` screen now avoids mounting the phone-side NovaAdapt runtime unless the bridge/runtime is unavailable
+  - the focused-server `AppShell` runtime now also disables its local NovaAdapt hook entirely while the bridge/runtime is online, leaving the phone runtime as a real fallback path instead of an always-mounted duplicate
   - remaining sidecar packaging / NovaSpine rollout / protocol cleanup
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).

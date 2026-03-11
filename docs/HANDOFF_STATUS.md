@@ -142,6 +142,7 @@ Updated: 2026-03-11
   - [x] terminals/app context no longer expose focused-only approve/deny shortcuts; agent approvals now route through the same server-scoped async bridge callbacks everywhere
   - [x] focused-server local agent CRUD/approval execution is now gated behind bridge availability checks, so an online server runtime no longer silently falls through to phone-side execution on the active server
   - [x] the dedicated `Agents` screen no longer mounts the phone-side NovaAdapt runtime hook when the server bridge is live; local preview now renders only as an explicit fallback surface
+  - [x] `AppShell` now passes `serverId: null` into the focused local NovaAdapt runtime hook while the server bridge is online, so the active-server phone runtime is actually disabled instead of merely gated at action time
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
