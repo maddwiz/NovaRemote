@@ -267,6 +267,7 @@ export function TerminalsScreen() {
     onRefreshSessions,
     onRefreshAllServers,
     onOpenServers,
+    onOpenAgents,
     onFocusServer,
     onCreateSession,
     onReconnectServer,
@@ -1333,6 +1334,7 @@ export function TerminalsScreen() {
         isPro={isPro}
         onShowPaywall={onShowPaywall}
         onQueueCommand={queueAgentCommand}
+        onOpenAgents={onOpenAgents}
         surface="panel"
       />
 

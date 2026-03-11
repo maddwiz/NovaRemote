@@ -137,6 +137,7 @@ Updated: 2026-03-11
   - [x] dedicated `Agents` route now prefers server-backed creation (`Create Approval Plan`, `Start Workflow`, `Resume Workflow`)
   - [x] audit-event SSE now triggers quiet bridge refreshes so server-side plan/job/memory changes land without waiting for the poll interval
   - [x] local NovaAdapt preview no longer mounts inside the embedded `Terminals` panel; local fallback is now reserved for explicit preview surfaces and the dedicated `Agents` screen when the server runtime is unavailable
+  - [x] the embedded `Terminals` panel now exposes an explicit `Open Agents` CTA whenever the server runtime is unavailable, so the remaining local fallback path is discoverable instead of implicit
   - [x] AppShell agent actions now route remote-first through the bridge, translating assistant/runtime actions into server plans/workflows before falling back to the phone runtime
   - [x] focused-server local monitoring cycles are now suppressed when the server NovaAdapt runtime is available, preventing duplicate phone-side monitoring on the active server
   - [x] terminals/app context no longer expose focused-only approve/deny shortcuts; agent approvals now route through the same server-scoped async bridge callbacks everywhere
@@ -206,6 +207,7 @@ Updated: 2026-03-11
   - server-backed workflow creation + resume actions
   - server-backed plan creation from the dedicated `Agents` screen
   - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
+  - explicit `Open Agents` routing from the embedded `Terminals` panel when the server runtime is unavailable
   - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
 - Remaining server-runtime migration work is:
   - finish release-hardening and packaging around the validated `codex_remote + NovaAdapt + NovaSpine` sidecar topology

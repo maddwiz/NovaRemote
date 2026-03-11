@@ -417,6 +417,7 @@ describe("NovaAgentPanel", () => {
     });
 
     let renderer!: TestRenderer.ReactTestRenderer;
+    const onOpenAgents = vi.fn();
     await act(async () => {
       renderer = TestRenderer.create(
         React.createElement(NovaAgentPanel, {
@@ -433,6 +434,7 @@ describe("NovaAgentPanel", () => {
           isPro: true,
           onShowPaywall: vi.fn(),
           onQueueCommand: vi.fn(),
+          onOpenAgents,
           surface: "panel",
         })
       );
@@ -442,6 +444,12 @@ describe("NovaAgentPanel", () => {
     expect(() => renderer.root.findByProps({ accessibilityLabel: "Add NovaAdapt agent" })).toThrow();
     expect(() => renderer.root.findByProps({ children: "Memory Timeline" })).toThrow();
     expect(() => renderer.root.findByProps({ children: "Runtime unavailable" })).not.toThrow();
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Open Agents screen" }).props.onPress();
+    });
+
+    expect(onOpenAgents).toHaveBeenCalledTimes(1);
 
     await act(async () => {
       renderer.unmount();

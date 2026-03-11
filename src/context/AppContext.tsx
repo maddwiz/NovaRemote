@@ -101,6 +101,7 @@ export type TerminalsViewModel = {
   onRefreshSessions: () => void;
   onRefreshAllServers: () => void;
   onOpenServers: () => void;
+  onOpenAgents: () => void;
   onFocusServer: (serverId: string) => void;
   onCreateSession: (serverId: string, kind: "ai" | "shell", prompt?: string) => Promise<string>;
   onReconnectServer: (serverId: string) => void;

@@ -525,6 +525,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       });
     },
     onOpenServers: () => setRoute("servers"),
+    onOpenAgents: () => setRoute("agents"),
     onFocusServer: focusServer,
     onCreateSession: runCreateSession,
     onReconnectServer: reconnectServer,

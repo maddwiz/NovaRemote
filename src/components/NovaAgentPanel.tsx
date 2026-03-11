@@ -25,6 +25,7 @@ type NovaAgentPanelProps = {
   isPro: boolean;
   onShowPaywall: () => void;
   onQueueCommand: (session: string, command: string) => void;
+  onOpenAgents?: () => void;
   surface?: "preview" | "panel" | "screen";
 };
 
@@ -566,6 +567,7 @@ export function NovaAgentPanel({
   isPro,
   onShowPaywall,
   onQueueCommand,
+  onOpenAgents,
   surface = "preview",
 }: NovaAgentPanelProps) {
   const [newAgentName, setNewAgentName] = useState<string>("");
@@ -766,6 +768,25 @@ export function NovaAgentPanel({
             </Pressable>
           </View>
           {remoteCreateStatus ? <Text style={styles.emptyText}>{remoteCreateStatus}</Text> : null}
+        </View>
+      ) : null}
+
+      {surface === "panel" && (!bridgeSupported || !bridgeRuntimeAvailable) && typeof onOpenAgents === "function" ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>Need Local Controls?</Text>
+          <Text style={styles.serverSubtitle}>
+            Open the dedicated Agents screen to use the remaining local fallback tools while this server runtime is unavailable.
+          </Text>
+          <View style={styles.actionsWrap}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open Agents screen"
+              style={styles.buttonPrimary}
+              onPress={onOpenAgents}
+            >
+              <Text style={styles.buttonPrimaryText}>Open Agents</Text>
+            </Pressable>
+          </View>
         </View>
       ) : null}
 

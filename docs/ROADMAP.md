@@ -28,6 +28,7 @@ Updated: 2026-03-11
   - live audit-event refreshes feeding the bridge runtime surface
   - remote-first AppShell assistant/runtime agent actions with local fallback only when the server bridge is unavailable
   - the embedded `Terminals` agent panel now stays server-first full-time and no longer mounts the phone-side preview, leaving local fallback to the dedicated `Agents` screen / explicit preview surfaces
+  - when the embedded `Terminals` agent panel detects an unavailable server runtime, it now offers a direct `Open Agents` route into the dedicated fallback surface instead of exposing hidden phone-runtime behavior
   - focused-server monitoring now defers to the server runtime when it is online, leaving the phone runtime as fallback only
   - legacy focused-only agent approval shortcuts have been removed from the terminals context in favor of server-scoped bridge callbacks
   - focused-server agent CRUD/approval execution now also refuses to fall through to the phone runtime while the server bridge reports an online runtime
