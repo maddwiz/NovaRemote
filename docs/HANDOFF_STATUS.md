@@ -139,6 +139,7 @@ Updated: 2026-03-11
   - [x] server-backed runtime governance controls are now surfaced in the mobile bridge runtime section (pause, resume, reset usage, cancel all jobs)
   - [x] dedicated `Agents` runtime-unavailable state now labels the remaining phone-side controls explicitly as `device fallback` and shows companion capability availability in that panel
   - [x] local NovaAdapt preview no longer mounts inside the embedded `Terminals` panel; local fallback is now reserved for explicit preview surfaces and the dedicated `Agents` screen when the server runtime is unavailable
+  - [x] the remaining phone-side fallback UI is now isolated in `NovaDeviceFallbackPanel`, so `NovaAgentPanel` stays focused on the server bridge surface and explicit fallback routing
   - [x] the embedded `Terminals` panel now exposes an explicit `Open Agents` CTA whenever the server runtime is unavailable, so the remaining local fallback path is discoverable instead of implicit
   - [x] AppShell agent actions now route remote-first through the bridge, translating assistant/runtime actions into server plans/workflows before falling back to the phone runtime
   - [x] focused-server local monitoring cycles are now suppressed when the server NovaAdapt runtime is available, preventing duplicate phone-side monitoring on the active server
