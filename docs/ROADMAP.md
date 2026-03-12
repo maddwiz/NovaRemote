@@ -55,6 +55,6 @@ Updated: 2026-03-11
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).
 
 
-- The frozen NovaAdapt upgrade target `cfb8983` is now contract-validated against the companion sidecar boundary, so server-runtime rollout can proceed without merging that branch to `main` yet.
+- The merged NovaAdapt `main` baseline `d7b2e1e` is now the contract-validated runtime target for the companion sidecar boundary.
 - The pinned runtime contract is now tracked in `codex_remote/compat/novaadapt_baseline.json` so advancing NovaAdapt requires an explicit baseline update instead of a silent drift.
 - Live sidecar validation now passes on the local `codex_remote + NovaAdapt + NovaSpine` stack, so the remaining work is release-hardening and companion auth/protocol cleanup rather than basic runtime recovery.
