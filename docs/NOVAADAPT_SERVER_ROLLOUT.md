@@ -28,6 +28,7 @@ Updated: 2026-03-11
 - validated sidecar stack with `codex_remote + NovaAdapt + NovaSpine`
 - validated live host contract for `/health`, `/agents/health`, and `/agents/capabilities` against the installed macOS companion service, including explicit protocol-version fields
 - validated the frozen NovaAdapt upgrade branch target `cfb8983` locally against the companion contract using `codex_remote/scripts/validate_nova_sidecars.py --compose-only --novaadapt-contract-check --novaadapt-repo-path <NovaAdapt>`
+- the pinned NovaAdapt compatibility baseline is now tracked explicitly in `codex_remote/compat/novaadapt_baseline.json`
 - repo-local sidecar validator in `codex_remote/scripts/validate_nova_sidecars.py` now supports both package checks and live runtime checks (`--live-check`)
 - repo-local lifecycle wrappers now exist for sidecar bring-up and teardown: `scripts/start_nova_sidecars.sh` and `scripts/stop_nova_sidecars.sh`
 - clean rollback/bootstrap verification now passes against the packaged sidecar helpers, and the bootstrap helper retries live validation while NovaSpine finishes its first package install
