@@ -56,4 +56,4 @@ Updated: 2026-03-11
 
 
 - The frozen NovaAdapt upgrade target `cfb8983` is now contract-validated against the companion sidecar boundary, so server-runtime rollout can proceed without merging that branch to `main` yet.
-- Live sidecar validation is still pending because the local Docker Desktop backend and sidecar services are currently unhealthy; Codex Remote reaches `/health`, but its NovaAdapt and NovaSpine upstream checks are still resetting.
+- Live sidecar validation now passes on the local `codex_remote + NovaAdapt + NovaSpine` stack, so the remaining work is release-hardening and companion auth/protocol cleanup rather than basic runtime recovery.

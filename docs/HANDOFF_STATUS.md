@@ -237,4 +237,4 @@ Updated: 2026-03-11
 
 
 - Frozen NovaAdapt integration target `cfb8983` (`novaadapt-integration-freeze-cfb8983`) now passes the companion contract validator via `codex_remote/scripts/validate_nova_sidecars.py --compose-only --novaadapt-contract-check`.
-- Live companion validation remains pending until the local Docker Desktop backend and sidecar processes recover; current runtime checks reach Codex Remote `/health` but still see NovaAdapt/NovaSpine upstream resets.
+- Live companion validation now passes on the local sidecar stack via `codex_remote/scripts/validate_nova_sidecars.py --live-check`, with healthy Codex Remote, NovaAdapt bridge/core, and NovaSpine services.
