@@ -15,6 +15,7 @@ import {
   STORAGE_SERVERS,
   makeId,
 } from "../constants";
+import { getDevSeedServerConfig } from "../devSeed";
 import { canDeleteServerProfile, canEditServerProfile, normalizeServerProfile, normalizeTeamPermissionLevel } from "../teamServers";
 import { ServerProfile, VmType } from "../types";
 
@@ -22,6 +23,68 @@ type UseServersArgs = {
   onError: (error: unknown) => void;
   enabled?: boolean;
 };
+
+function isDevRuntime(): boolean {
+  return typeof __DEV__ !== "undefined" && __DEV__;
+}
+
+function buildDevSeedServer(): ServerProfile | null {
+  const config = getDevSeedServerConfig();
+  const baseUrl = normalizeBaseUrl(config?.baseUrl || "");
+  const token = config?.token?.trim() || "";
+  if (!baseUrl || !token) {
+    return null;
+  }
+
+  return {
+    id: "dev-seeded-server",
+    name: config?.name?.trim() || DEFAULT_SERVER_NAME,
+    baseUrl,
+    token,
+    defaultCwd: config?.defaultCwd?.trim() || DEFAULT_CWD,
+    source: "local",
+    terminalBackend: DEFAULT_TERMINAL_BACKEND,
+    sshHost: config?.sshHost?.trim() || undefined,
+    sshUser: config?.sshUser?.trim() || undefined,
+    sshPort: sanitizeSshPort(config?.sshPort),
+    portainerUrl: config?.portainerUrl?.trim() || undefined,
+    proxmoxUrl: config?.proxmoxUrl?.trim() || undefined,
+    grafanaUrl: config?.grafanaUrl?.trim() || undefined,
+  };
+}
+
+function mergeDevSeedServer(parsedServers: ServerProfile[], seededServer: ServerProfile | null): {
+  servers: ServerProfile[];
+  changed: boolean;
+} {
+  if (!seededServer) {
+    return { servers: parsedServers, changed: false };
+  }
+
+  const normalizedSeedUrl = normalizeBaseUrl(seededServer.baseUrl);
+  const matchIndex = parsedServers.findIndex(
+    (server) => server.id === seededServer.id || normalizeBaseUrl(server.baseUrl) === normalizedSeedUrl
+  );
+
+  if (matchIndex === -1) {
+    return {
+      servers: [seededServer, ...parsedServers],
+      changed: true,
+    };
+  }
+
+  const existing = parsedServers[matchIndex];
+  const merged: ServerProfile = normalizeServerProfile({
+    ...existing,
+    ...seededServer,
+    id: seededServer.id,
+    source: "local",
+  });
+
+  const nextServers = parsedServers.map((server, index) => (index === matchIndex ? merged : server));
+  const changed = JSON.stringify(existing) !== JSON.stringify(merged);
+  return { servers: nextServers, changed };
+}
 
 function sanitizeSshPort(value: string | number | undefined): number | undefined {
   if (typeof value === "number") {
@@ -450,6 +513,15 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
           }
         }
 
+        let seededServer: ServerProfile | null = null;
+        let seededServerChanged = false;
+        if (isDevRuntime()) {
+          seededServer = buildDevSeedServer();
+          const merged = mergeDevSeedServer(parsedServers, seededServer);
+          parsedServers = merged.servers;
+          seededServerChanged = merged.changed;
+        }
+
         if (parsedServers.length === 0) {
           const fallback = buildDefaultServer();
           if (legacyBaseUrl) {
@@ -463,7 +535,19 @@ export function useServers({ onError, enabled = true }: UseServersArgs) {
         }
 
         const resolvedActive =
-          parsedServers.find((server) => server.id === savedActiveId)?.id ?? parsedServers[0]?.id ?? null;
+          parsedServers.find((server) => server.id === savedActiveId)?.id ??
+          seededServer?.id ??
+          parsedServers[0]?.id ??
+          null;
+
+        if (isDevRuntime() && seededServerChanged) {
+          await Promise.all([
+            SecureStore.setItemAsync(STORAGE_SERVERS, JSON.stringify(parsedServers)),
+            resolvedActive
+              ? SecureStore.setItemAsync(STORAGE_ACTIVE_SERVER_ID, resolvedActive)
+              : SecureStore.deleteItemAsync(STORAGE_ACTIVE_SERVER_ID),
+          ]);
+        }
 
         setServers(parsedServers);
         setActiveServerId(resolvedActive);

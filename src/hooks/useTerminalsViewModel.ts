@@ -117,8 +117,6 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     removeAgentForServers,
     queueAgentCommandForServer,
     queueAgentCommandForServers,
-    approveReadyAgentsForFocusedServer,
-    denyAllPendingAgentsForFocusedServer,
     approveReadyAgentsForServer,
     denyAllPendingAgentsForServer,
     approveReadyAgentsForServers,
@@ -217,11 +215,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       const approved = await approveReadyAgentsForServer(serverId);
       return Array.isArray(approved) ? approved : [];
     }
-    if (activeServer?.id !== serverId || typeof approveReadyAgentsForFocusedServer !== "function") {
-      return [];
-    }
-    const approved = approveReadyAgentsForFocusedServer();
-    return Array.isArray(approved) ? approved : [];
+    return [];
   };
 
   const runDenyAllPendingAgentsForServer = async (serverId: string): Promise<string[]> => {
@@ -229,11 +223,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       const denied = await denyAllPendingAgentsForServer(serverId);
       return Array.isArray(denied) ? denied : [];
     }
-    if (activeServer?.id !== serverId || typeof denyAllPendingAgentsForFocusedServer !== "function") {
-      return [];
-    }
-    const denied = denyAllPendingAgentsForFocusedServer();
-    return Array.isArray(denied) ? denied : [];
+    return [];
   };
 
   const runApproveReadyAgentsForServers = async (serverIds: string[]): Promise<string[]> => {
@@ -535,6 +525,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       });
     },
     onOpenServers: () => setRoute("servers"),
+    onOpenAgents: () => setRoute("agents"),
     onFocusServer: focusServer,
     onCreateSession: runCreateSession,
     onReconnectServer: reconnectServer,
@@ -552,20 +543,6 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onRemoveAgentForServers: runRemoveAgentForServers,
     onQueueAgentCommandForServer: runQueueAgentCommandForServer,
     onQueueAgentCommandForServers: runQueueAgentCommandForServers,
-    onApproveReadyAgentsForFocusedServer: () => {
-      if (typeof approveReadyAgentsForFocusedServer !== "function") {
-        return [];
-      }
-      const approved = approveReadyAgentsForFocusedServer();
-      return Array.isArray(approved) ? approved : [];
-    },
-    onDenyAllPendingAgentsForFocusedServer: () => {
-      if (typeof denyAllPendingAgentsForFocusedServer !== "function") {
-        return [];
-      }
-      const denied = denyAllPendingAgentsForFocusedServer();
-      return Array.isArray(denied) ? denied : [];
-    },
     onApproveReadyAgentsForServer: runApproveReadyAgentsForServer,
     onDenyAllPendingAgentsForServer: runDenyAllPendingAgentsForServer,
     onApproveReadyAgentsForServers: runApproveReadyAgentsForServers,

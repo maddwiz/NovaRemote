@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { PageHeroCard } from "../components/PageHeroCard";
 import { styles } from "../theme/styles";
 import { Snippet, TerminalSendMode } from "../types";
 
@@ -52,9 +53,24 @@ export function SnippetsScreen({
       }),
     [activeServerId, snippets]
   );
+  const heroStats = useMemo(
+    () => [
+      { label: "Visible", value: `${relevantSnippets.length}` },
+      { label: "Scope", value: activeServerId ? "Focused server" : "Global" },
+      { label: "Target", value: openSessions[0] || "No session" },
+    ],
+    [activeServerId, openSessions, relevantSnippets.length]
+  );
 
   return (
     <>
+      <PageHeroCard
+        eyebrow="Snippet Library"
+        title="Save, scope, sync, and run reusable actions."
+        summary="Store shell commands and AI prompts, then insert or run them against the current session."
+        tone="violet"
+        stats={heroStats}
+      />
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Snippets / Macros</Text>
         <Text style={styles.serverSubtitle}>Save reusable AI prompts and shell commands.</Text>

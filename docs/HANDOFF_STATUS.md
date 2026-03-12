@@ -1,6 +1,6 @@
 # NovaRemote Handoff Status
 
-Updated: 2026-03-08
+Updated: 2026-03-11
 
 ## v1.2 Connection Pool + Switcher
 
@@ -128,6 +128,30 @@ Updated: 2026-03-08
 
 - [x] NovaAdapt runtime/panel lifecycle is now implemented in-app (agent CRUD, status/goal/capability updates, approvals, memory timeline, monitoring controls, voice-routed lifecycle actions across AR/VR surfaces)
 - [x] In-app NovaSpine context snapshots are wired (`useNovaSpine` + runtime/panel integration for context status, pending approvals, and recent timeline state)
+- [x] External LLM replies now stream into NovaRemote for supported providers (OpenAI-compatible, Azure OpenAI, Anthropic, Ollama) with timing metrics surfaced in diagnostics
+- [x] Server-side NovaAdapt bridge groundwork is now live in-app:
+  - [x] `useNovaAdaptBridge` thin client against companion `/agents/*`
+  - [x] live plan/job SSE follow for active plans and jobs
+  - [x] server-runtime plan actions (`approve`, `reject`, `retry`, `undo`) from mobile
+  - [x] dedicated `Agents` route/screen backed by the bridge
+  - [x] dedicated `Agents` route now prefers server-backed creation (`Create Approval Plan`, `Start Workflow`, `Resume Workflow`)
+  - [x] audit-event SSE now triggers quiet bridge refreshes so server-side plan/job/memory changes land without waiting for the poll interval
+  - [x] server-backed runtime governance controls are now surfaced in the mobile bridge runtime section (pause, resume, reset usage, cancel all jobs)
+  - [x] dedicated `Agents` runtime-unavailable state now labels the remaining phone-side controls explicitly as `device fallback` and shows companion capability availability in that panel
+  - [x] local NovaAdapt preview no longer mounts inside the embedded `Terminals` panel; local fallback is now reserved for explicit preview surfaces and the dedicated `Agents` screen when the server runtime is unavailable
+  - [x] the remaining phone-side fallback UI is now isolated in `NovaDeviceFallbackPanel`, so `NovaAgentPanel` stays focused on the server bridge surface and explicit fallback routing
+  - [x] the embedded `Terminals` panel now exposes an explicit `Open Agents` CTA whenever the server runtime is unavailable, so the remaining local fallback path is discoverable instead of implicit
+  - [x] AppShell agent actions now route remote-first through the bridge, translating assistant/runtime actions into server plans/workflows before falling back to the phone runtime
+  - [x] focused-server local monitoring cycles are now suppressed when the server NovaAdapt runtime is available, preventing duplicate phone-side monitoring on the active server
+  - [x] terminals/app context no longer expose focused-only approve/deny shortcuts; agent approvals now route through the same server-scoped async bridge callbacks everywhere
+  - [x] focused-server local agent CRUD/approval execution is now gated behind bridge availability checks, so an online server runtime no longer silently falls through to phone-side execution on the active server
+  - [x] the dedicated `Agents` screen no longer mounts the phone-side NovaAdapt runtime hook when the server bridge is live; local preview now renders only as an explicit fallback surface
+  - [x] the dedicated `Agents` screen no longer auto-mounts local fallback when the runtime is down; local preview is now an explicit opt-in fallback control on that screen
+  - [x] `AppShell` now passes `serverId: null` into the focused local NovaAdapt runtime hook while the server bridge is online, so the active-server phone runtime is actually disabled instead of merely gated at action time
+  - [x] generic `AppShell` agent actions no longer run the hidden focused-server phone runtime at all; when the server runtime is unavailable, fallback is now explicit through the dedicated `Agents` screen only
+  - [x] server-backed template surfaces are now wired into the `Agents` screen runtime section, including saved templates, built-in gallery import, and direct plan/workflow launch actions
+  - [x] bridge capability detection now treats optional NovaAdapt sidecar routes independently, so missing memory/governance/workflow/template routes degrade those controls without marking the whole runtime offline
+  - [x] the bridge now prefers companion-provided `/agents/capabilities` metadata and only falls back to 404-based optional-route probing against older companion builds
 - [x] Voice remove-agent routing in shared parser + glasses + VR runtime callbacks
 - [x] Voice set-agent-status routing in shared parser + glasses + VR runtime callbacks
 - [x] Manual VR agent status controls (idle/monitoring/executing/waiting_approval) across scoped pooled targets
@@ -180,6 +204,38 @@ Updated: 2026-03-08
 
 ## Notes
 
+- Companion-server-side NovaAdapt rollout is now documented in [docs/NOVAADAPT_SERVER_ROLLOUT.md](./NOVAADAPT_SERVER_ROLLOUT.md).
+- Current server-backed NovaAdapt scope in-app is:
+  - health + memory status reads
+  - plans/jobs/workflows listing
+  - plan/job live stream updates
+  - audit-event-driven quiet refresh for relevant bridge mutations
+  - plan action mutations
+  - server-backed workflow creation + resume actions
+  - server-backed plan creation from the dedicated `Agents` screen
+  - explicit opt-in local fallback controls on the dedicated `Agents` screen when the server runtime is unavailable
+  - server-first runtime status in the embedded `Terminals` panel without mounting the phone-side preview while the bridge runtime is healthy
+  - explicit `Open Agents` routing from the embedded `Terminals` panel when the server runtime is unavailable
+  - server-runtime misses now redirect the app into the dedicated `Agents` screen for the target server before surfacing the device-fallback message
+  - server-backed template gallery + saved-template launch controls in the dedicated `Agents` screen
+  - capability-aware optional bridge controls that hide or replace unsupported memory/governance/workflow/template surfaces instead of surfacing dead actions when a sidecar route is not available yet
+  - workflow creation and template workflow-launch actions are now capability-gated, so the mobile surface stops offering dead workflow actions when the companion reports `workflows: false`
+  - companion-provided `/agents/capabilities` support flags that let the mobile bridge skip unsupported optional route fetches instead of relearning support through repeated 404s
+  - runtime-miss redirects into the dedicated `Agents` screen now auto-open device fallback for the target server instead of forcing a second manual toggle
+  - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
+  - codex_remote sidecar validation is now scriptable for both package and live stack checks via `scripts/validate_nova_sidecars.py`
+  - codex_remote live sidecar validation now tolerates a missing `.env.nova-sidecars` file, so operators can validate an already-running stack directly against host/runtime state
+  - codex_remote now also ships sidecar lifecycle wrappers (`scripts/start_nova_sidecars.sh`, `scripts/stop_nova_sidecars.sh`) for repeatable bring-up and teardown
+  - codex_remote clean rollback/bootstrap verification now passes with the packaged helpers, and `scripts/bootstrap_nova_sidecars.sh` retries live validation while NovaSpine finishes its first package install
+  - codex_remote proxy allowlist now includes runtime governance routes for future mobile-side pause/cancel controls (`/agents/runtime/governance`, `/agents/runtime/jobs/cancel_all`), but the currently pinned sidecar runtime still returns `404` for those endpoints
+  - the bridge now preserves companion `protocol_version` / `agent_contract_version` from both `/agents/health` and `/agents/capabilities`, and the server-runtime panel warns when the companion contract drifts from the mobile client expectation
+- Remaining server-runtime migration work is:
+  - finish release-hardening and packaging around the validated `codex_remote + NovaAdapt + NovaSpine` sidecar topology
+  - clean auth/protocol boundaries before companion-server open-sourcing
 - GitHub Actions `CI` now runs `cloud:verify-bootstrap` and `vr:verify-bootstrap` in addition to typecheck/tests/doctor.
-- All changes above were validated locally with `npm run ci` and pushed to `main`.
-- GitHub Actions CI is currently green on the latest push that updated this status.
+- All changes above were validated locally with focused typecheck/test runs, and stable slices were pushed to `feat/novaremote-runtime-migration`.
+- GitHub Actions CI status should be evaluated against that feature branch until it is merged to `main`.
+
+
+- Frozen NovaAdapt integration target `cfb8983` (`novaadapt-integration-freeze-cfb8983`) now passes the companion contract validator via `codex_remote/scripts/validate_nova_sidecars.py --compose-only --novaadapt-contract-check`.
+- Live companion validation now passes on the local sidecar stack via `codex_remote/scripts/validate_nova_sidecars.py --live-check`, with healthy Codex Remote, NovaAdapt bridge/core, and NovaSpine services.

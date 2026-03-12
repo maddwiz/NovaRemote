@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { PageHeroCard } from "../components/PageHeroCard";
 import { TeamBadge } from "../components/TeamBadge";
 import { styles } from "../theme/styles";
 import {
@@ -845,8 +846,24 @@ export function TeamScreen({
     policySessionTimeoutInput,
     settings,
   ]);
+  const heroStats = useMemo(
+    () => [
+      { label: "Team", value: identity?.teamName || "Signed out" },
+      { label: "Members", value: `${members.length}` },
+      { label: "Pending", value: `${pendingFleetApprovals.length}` },
+    ],
+    [identity?.teamName, members.length, pendingFleetApprovals.length]
+  );
 
   return (
+    <>
+    <PageHeroCard
+      eyebrow="Team Surface"
+      title="Login, roles, approvals, audit, and policy."
+      summary="Manage team access, SSO, server assignment, fleet approvals, and audit exports."
+      tone="slate"
+      stats={heroStats}
+    />
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Team</Text>
       {!identity ? <Text style={styles.emptyText}>Sign in with your team account to view members and roles.</Text> : null}
@@ -1818,5 +1835,6 @@ export function TeamScreen({
         <Text style={styles.emptyText}>No members match the current filters.</Text>
       ) : null}
     </View>
+    </>
   );
 }

@@ -161,8 +161,6 @@ function makeBaseArgs() {
     setAgentGoalForServers: vi.fn(async () => []),
     queueAgentCommandForServer: vi.fn(async () => []),
     queueAgentCommandForServers: vi.fn(async () => []),
-    approveReadyAgentsForFocusedServer: vi.fn(() => []),
-    denyAllPendingAgentsForFocusedServer: vi.fn(() => []),
     approveReadyAgentsForServer: vi.fn(async () => []),
     denyAllPendingAgentsForServer: vi.fn(async () => []),
     approveReadyAgentsForServers: vi.fn(async () => []),
@@ -693,5 +691,16 @@ describe("useTerminalsViewModel", () => {
 
     model.onOpenVrCommandCenter();
     expect(setRoute).toHaveBeenCalledWith("vr");
+  });
+
+  it("opens the dedicated agents route", () => {
+    const setRoute = vi.fn();
+    const model = useTerminalsViewModel({
+      ...makeBaseArgs(),
+      setRoute,
+    });
+
+    model.onOpenAgents();
+    expect(setRoute).toHaveBeenCalledWith("agents");
   });
 });

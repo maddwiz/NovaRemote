@@ -7,6 +7,7 @@ import { ServerProfile, SharedServerTemplate, TerminalBackendKind, VmType } from
 import { ServerCard } from "../components/ServerCard";
 import { useQrSetup } from "../hooks/useQrSetup";
 import { QrScannerModal } from "../components/QrScannerModal";
+import { PageHeroCard } from "../components/PageHeroCard";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
 import { useVmGroupPrefs } from "../hooks/useVmGroupPrefs";
 import { useVoiceChannels } from "../hooks/useVoiceChannels";
@@ -227,6 +228,14 @@ export function ServersScreen({
     scope: "servers",
     groupKeys,
   });
+  const heroStats = useMemo(
+    () => [
+      { label: "Targets", value: `${servers.length}` },
+      { label: "Focused", value: servers.find((server) => server.id === activeServerId)?.name || "None" },
+      { label: "Hosts", value: `${groupedServers.length}` },
+    ],
+    [activeServerId, groupedServers.length, servers]
+  );
 
   const channelsByWorkspace = useMemo(() => {
     const grouped = new Map<string, typeof voiceChannels>();
@@ -279,6 +288,14 @@ export function ServersScreen({
   };
 
   return (
+    <>
+    <PageHeroCard
+      eyebrow="Target Registry"
+      title="Manage profiles, SSH fallback, integrations, and security."
+      summary="Set up connection targets, machine metadata, workspace access, backend hints, and connection defaults."
+      tone="slate"
+      stats={heroStats}
+    />
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>Server Profiles</Text>
       {servers.length === 0 ? <Text style={styles.emptyText}>No servers yet.</Text> : null}
@@ -927,5 +944,6 @@ export function ServersScreen({
         }}
       />
     </View>
+    </>
   );
 }

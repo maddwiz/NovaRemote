@@ -218,7 +218,17 @@ export type VmType = "proxmox" | "vmware" | "hyper-v" | "docker" | "lxc" | "qemu
 
 export type TerminalSendMode = "ai" | "shell";
 
-export type RouteTab = "terminals" | "servers" | "snippets" | "files" | "llms" | "team" | "glasses" | "vr";
+export type RouteTab =
+  | "terminals"
+  | "servers"
+  | "agents"
+  | "snippets"
+  | "files"
+  | "llms"
+  | "team"
+  | "glasses"
+  | "vr"
+  | "settings";
 
 export type Status = {
   text: string;
@@ -362,6 +372,106 @@ export type NovaSpineContext = {
   lastSummary: string | null;
   totalEntries: number;
   recentEntries: NovaMemoryEntry[];
+};
+
+export type NovaAdaptBridgeHealth = {
+  ok: boolean;
+  protocolVersion?: string | null;
+  agentContractVersion?: string | null;
+  [key: string]: unknown;
+};
+
+export type NovaAdaptBridgeMemoryStatus = {
+  ok?: boolean;
+  enabled?: boolean;
+  backend?: string | null;
+  [key: string]: unknown;
+};
+
+export type NovaAdaptBridgeCapabilities = {
+  protocolVersion?: string | null;
+  agentContractVersion?: string | null;
+  memoryStatus: boolean;
+  governance: boolean;
+  workflows: boolean;
+  templates: boolean;
+  templateGallery: boolean;
+};
+
+export type NovaAdaptBridgePlan = {
+  id: string;
+  objective: string;
+  status: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  progressCompleted: number;
+  progressTotal: number;
+  executionError: string | null;
+  rejectReason: string | null;
+};
+
+export type NovaAdaptBridgeJob = {
+  id: string;
+  status: string;
+  createdAt: string | null;
+  startedAt: string | null;
+  finishedAt: string | null;
+  error: string | null;
+};
+
+export type NovaAdaptBridgeWorkflow = {
+  workflowId: string;
+  status: string;
+  objective: string;
+  createdAt: string | null;
+  updatedAt: string | null;
+  lastError: string | null;
+  context: Record<string, unknown>;
+};
+
+export type NovaAdaptBridgeTemplateStep = {
+  name: string;
+  objective: string;
+};
+
+export type NovaAdaptBridgeTemplate = {
+  templateId: string;
+  name: string;
+  description: string;
+  objective: string;
+  strategy: string;
+  candidates: string[];
+  tags: string[];
+  source: string;
+  shared: boolean;
+  shareToken: string | null;
+  createdAt: string | null;
+  updatedAt: string | null;
+  metadata: Record<string, unknown>;
+  steps: NovaAdaptBridgeTemplateStep[];
+};
+
+export type NovaAdaptBridgeGovernanceJobs = {
+  active: number;
+  queued: number;
+  running: number;
+  maxWorkers: number;
+};
+
+export type NovaAdaptBridgeGovernance = {
+  paused: boolean;
+  pauseReason: string | null;
+  budgetLimitUsd: number | null;
+  maxActiveRuns: number | null;
+  activeRuns: number;
+  runsTotal: number;
+  llmCallsTotal: number;
+  spendEstimateUsd: number;
+  updatedAt: string | null;
+  lastRunAt: string | null;
+  lastObjectivePreview: string | null;
+  lastStrategy: string | null;
+  jobs: NovaAdaptBridgeGovernanceJobs;
 };
 
 export type LlmProviderKind = "openai_compatible" | "azure_openai" | "anthropic" | "ollama" | "gemini";
@@ -509,11 +619,28 @@ export type LlmToolExecution = {
   error?: string;
 };
 
+export type LlmToolDefinition = {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  run: (args: Record<string, unknown>, context: Record<string, string>) => string;
+};
+
 export type LlmSendOptions = {
   imageUrl?: string;
   enableBuiltInTools?: boolean;
+  customTools?: LlmToolDefinition[];
   toolContext?: Record<string, string>;
   maxToolRounds?: number;
+  responseFormat?: "text" | "json";
+  onTextDelta?: (delta: string, fullText: string) => void;
+  signal?: AbortSignal;
+};
+
+export type LlmTimingMetrics = {
+  streamed: boolean;
+  totalMs: number;
+  firstTokenMs: number | null;
 };
 
 export type LlmSendResult = {
@@ -521,6 +648,7 @@ export type LlmSendResult = {
   toolCalls: LlmToolExecution[];
   usedVision: boolean;
   usedTools: boolean;
+  timings?: LlmTimingMetrics;
 };
 
 export type SharedServerTemplate = {

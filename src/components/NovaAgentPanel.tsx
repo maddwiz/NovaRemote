@@ -1,20 +1,37 @@
-import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
+import { Pressable, Text, TextInput, View } from "react-native";
 
-import { useNovaAgentRuntime } from "../hooks/useNovaAgentRuntime";
-import { NovaAgent, NovaAgentStatus, NovaMemoryEntry, NovaSpineContext } from "../types";
+import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
+import { NovaDeviceFallbackPanel } from "./NovaDeviceFallbackPanel";
+import {
+  NovaAdaptBridgeCapabilities,
+  NovaAdaptBridgeGovernance,
+  NovaAdaptBridgeHealth,
+  NovaAdaptBridgeJob,
+  NovaAdaptBridgeMemoryStatus,
+  NovaAdaptBridgePlan,
+  NovaAdaptBridgeTemplate,
+  NovaAdaptBridgeWorkflow,
+  ServerProfile,
+} from "../types";
 import { styles } from "../theme/styles";
 
 type NovaAgentPanelProps = {
+  server: ServerProfile | null;
   serverId: string | null;
   serverName: string | null;
   sessions: string[];
   isPro: boolean;
   onShowPaywall: () => void;
   onQueueCommand: (session: string, command: string) => void;
+  onOpenAgents?: () => void;
+  autoEnableLocalFallback?: boolean;
+  onAutoEnableLocalFallbackHandled?: () => void;
+  surface?: "preview" | "panel" | "screen";
 };
 
-const STATUS_ORDER: NovaAgentStatus[] = ["idle", "monitoring", "executing", "waiting_approval"];
+const EXPECTED_COMPANION_PROTOCOL_VERSION = "2026-03-11.1";
+const EXPECTED_AGENT_CONTRACT_VERSION = "2026-03-11.1";
 
 function parseCapabilities(raw: string): string[] {
   return raw
@@ -23,340 +40,755 @@ function parseCapabilities(raw: string): string[] {
     .filter(Boolean);
 }
 
-function statusLabel(status: NovaAgentStatus): string {
-  if (status === "waiting_approval") {
-    return "WAITING";
+function bridgeStatusLabel(status: string): string {
+  const normalized = status.trim().toLowerCase();
+  if (!normalized) {
+    return "UNKNOWN";
   }
-  if (status === "monitoring") {
-    return "MONITOR";
+  if (normalized === "pending") {
+    return "PENDING";
   }
-  if (status === "executing") {
+  if (normalized === "approved") {
+    return "APPROVED";
+  }
+  if (normalized === "executing") {
     return "EXEC";
   }
-  return "IDLE";
+  if (normalized === "executed") {
+    return "DONE";
+  }
+  if (normalized === "rejected") {
+    return "REJECTED";
+  }
+  if (normalized === "failed") {
+    return "FAILED";
+  }
+  if (normalized === "queued") {
+    return "QUEUED";
+  }
+  if (normalized === "running") {
+    return "RUNNING";
+  }
+  if (normalized === "paused") {
+    return "PAUSED";
+  }
+  return normalized.replace(/_/g, " ").toUpperCase();
 }
 
-function spineStatusLabel(status: NovaSpineContext["status"]): string {
-  if (status === "waiting_approval") {
-    return "WAITING";
+function modePillForStatus(status: string): object {
+  const normalized = status.trim().toLowerCase();
+  if (normalized === "failed" || normalized === "rejected") {
+    return styles.modePillAi;
   }
-  if (status === "active") {
-    return "ACTIVE";
-  }
-  if (status === "stale") {
-    return "STALE";
-  }
-  if (status === "healthy") {
-    return "HEALTHY";
-  }
-  return "IDLE";
+  return styles.modePillShell;
 }
 
-function AgentCard({
-  agent,
-  sessions,
-  command,
-  goalDraft,
-  capabilitiesDraft,
-  memoryEntries,
-  spineContext,
-  selectedSession,
-  onCommandChange,
-  onGoalChange,
-  onGoalBlur,
-  onCapabilitiesChange,
-  onCapabilitiesBlur,
-  onSelectSession,
-  onSetStatus,
-  onRequestApproval,
-  onApprove,
-  onDeny,
-  onRemove,
-  onClearMemory,
+function formatBridgeDate(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+  const timestamp = Date.parse(value);
+  if (Number.isNaN(timestamp)) {
+    return null;
+  }
+  return new Date(timestamp).toLocaleTimeString();
+}
+
+function summarizeBridgeHealth(health: NovaAdaptBridgeHealth | null, runtimeAvailable: boolean): string {
+  if (!health) {
+    return runtimeAvailable ? "Runtime reachable" : "Runtime unavailable";
+  }
+  const featureCount =
+    health.features && typeof health.features === "object"
+      ? Object.values(health.features as Record<string, unknown>).filter(Boolean).length
+      : 0;
+  const memoryBackend =
+    health.novaspine && typeof health.novaspine === "object"
+      ? String((health.novaspine as Record<string, unknown>).url || "").trim()
+      : "";
+  const parts = [runtimeAvailable ? "Runtime online" : "Runtime unavailable"];
+  if (featureCount > 0) {
+    parts.push(`${featureCount} features`);
+  }
+  if (memoryBackend) {
+    parts.push("NovaSpine linked");
+  }
+  if (health.protocolVersion) {
+    parts.push(`Proto ${health.protocolVersion}`);
+  }
+  return parts.join(" • ");
+}
+
+function summarizeMemoryStatus(memoryStatus: NovaAdaptBridgeMemoryStatus | null): string {
+  if (!memoryStatus) {
+    return "Memory backend unavailable";
+  }
+  const backend = typeof memoryStatus.backend === "string" && memoryStatus.backend.trim() ? memoryStatus.backend.trim() : "default";
+  const enabled = memoryStatus.enabled === false ? "disabled" : "enabled";
+  return `${backend} • ${enabled}`;
+}
+
+function summarizeGovernance(governance: NovaAdaptBridgeGovernance | null): string {
+  if (!governance) {
+    return "Governance unavailable";
+  }
+  const parts = [
+    governance.paused ? "Paused" : "Active",
+    `${governance.activeRuns} active runs`,
+    `${governance.jobs.running} running jobs`,
+  ];
+  if (governance.budgetLimitUsd !== null) {
+    parts.push(`Budget $${governance.budgetLimitUsd.toFixed(2)}`);
+  }
+  return parts.join(" • ");
+}
+
+function summarizeTemplate(template: NovaAdaptBridgeTemplate): string {
+  const parts = [template.strategy];
+  if (template.tags.length > 0) {
+    parts.push(template.tags.slice(0, 2).join(", "));
+  }
+  parts.push(template.source);
+  return parts.join(" • ");
+}
+
+function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): string {
+  const available: string[] = [];
+  if (capabilities.workflows) {
+    available.push("workflows");
+  }
+  if (capabilities.templates) {
+    available.push("templates");
+  }
+  if (capabilities.templateGallery) {
+    available.push("gallery");
+  }
+  if (capabilities.memoryStatus) {
+    available.push("memory");
+  }
+  if (capabilities.governance) {
+    available.push("governance");
+  }
+  const versions = [capabilities.protocolVersion, capabilities.agentContractVersion].filter(Boolean);
+  if (available.length === 0) {
+    return versions.length > 0 ? `Companion capabilities unavailable • ${versions.join(" / ")}` : "Companion capabilities unavailable.";
+  }
+  return versions.length > 0
+    ? `Companion capabilities: ${available.join(", ")} • ${versions.join(" / ")}`
+    : `Companion capabilities: ${available.join(", ")}`;
+}
+
+function buildCompatibilityWarning(
+  capabilities: NovaAdaptBridgeCapabilities,
+  health: NovaAdaptBridgeHealth | null
+): string | null {
+  const protocolVersion = capabilities.protocolVersion || health?.protocolVersion || null;
+  const agentContractVersion = capabilities.agentContractVersion || health?.agentContractVersion || null;
+  if (!protocolVersion && !agentContractVersion) {
+    return null;
+  }
+
+  const mismatches: string[] = [];
+  if (protocolVersion && protocolVersion !== EXPECTED_COMPANION_PROTOCOL_VERSION) {
+    mismatches.push(`protocol ${protocolVersion}`);
+  }
+  if (agentContractVersion && agentContractVersion !== EXPECTED_AGENT_CONTRACT_VERSION) {
+    mismatches.push(`agent contract ${agentContractVersion}`);
+  }
+  if (mismatches.length === 0) {
+    return null;
+  }
+  return `Companion update recommended: ${mismatches.join(" • ")}`;
+}
+
+function canApprovePlan(status: string): boolean {
+  return status.trim().toLowerCase() === "pending";
+}
+
+function canRejectPlan(status: string): boolean {
+  return ["pending", "approved"].includes(status.trim().toLowerCase());
+}
+
+function canRetryPlan(status: string): boolean {
+  return status.trim().toLowerCase() === "failed";
+}
+
+function canUndoPlan(status: string): boolean {
+  return ["approved", "executed", "rejected", "failed"].includes(status.trim().toLowerCase());
+}
+
+function canResumeWorkflow(status: string): boolean {
+  const normalized = status.trim().toLowerCase();
+  return normalized !== "running" && normalized !== "done";
+}
+
+function RemoteBridgeSection({
+  loading,
+  refreshing,
+  supported,
+  runtimeAvailable,
+  capabilities,
+  error,
+  health,
+  memoryStatus,
+  governance,
+  plans,
+  jobs,
+  workflows,
+  templates,
+  galleryTemplates,
+  templateMutationKey,
+  mutationPlanId,
+  mutationWorkflowId,
+  governanceBusy,
+  onRefresh,
+  onApprovePlan,
+  onRejectPlan,
+  onRetryPlan,
+  onUndoPlan,
+  onResumeWorkflow,
+  onPauseRuntime,
+  onResumeRuntime,
+  onResetGovernanceUsage,
+  onCancelAllJobs,
+  onLaunchTemplate,
 }: {
-  agent: NovaAgent;
-  sessions: string[];
-  command: string;
-  goalDraft: string;
-  capabilitiesDraft: string;
-  memoryEntries: NovaMemoryEntry[];
-  spineContext: NovaSpineContext | null;
-  selectedSession: string | null;
-  onCommandChange: (value: string) => void;
-  onGoalChange: (value: string) => void;
-  onGoalBlur: () => void;
-  onCapabilitiesChange: (value: string) => void;
-  onCapabilitiesBlur: () => void;
-  onSelectSession: (value: string) => void;
-  onSetStatus: (status: NovaAgentStatus) => void;
-  onRequestApproval: () => void;
-  onApprove: () => void;
-  onDeny: () => void;
-  onRemove: () => void;
-  onClearMemory: () => void;
+  loading: boolean;
+  refreshing: boolean;
+  supported: boolean;
+  runtimeAvailable: boolean;
+  capabilities: NovaAdaptBridgeCapabilities;
+  error: string | null;
+  health: NovaAdaptBridgeHealth | null;
+  memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  governance: NovaAdaptBridgeGovernance | null;
+  plans: NovaAdaptBridgePlan[];
+  jobs: NovaAdaptBridgeJob[];
+  workflows: NovaAdaptBridgeWorkflow[];
+  templates: NovaAdaptBridgeTemplate[];
+  galleryTemplates: NovaAdaptBridgeTemplate[];
+  templateMutationKey: string | null;
+  mutationPlanId: string | null;
+  mutationWorkflowId: string | null;
+  governanceBusy: boolean;
+  onRefresh: () => void;
+  onApprovePlan: (planId: string) => void;
+  onRejectPlan: (planId: string) => void;
+  onRetryPlan: (planId: string) => void;
+  onUndoPlan: (planId: string) => void;
+  onResumeWorkflow: (workflowId: string) => void;
+  onPauseRuntime: () => void;
+  onResumeRuntime: () => void;
+  onResetGovernanceUsage: () => void;
+  onCancelAllJobs: () => void;
+  onLaunchTemplate: (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => void;
 }) {
-  const recentMemory = memoryEntries.slice(0, 4);
-  const contextSummary = spineContext
-    ? `${spineStatusLabel(spineContext.status)} • events ${spineContext.totalEntries}${spineContext.pendingApprovalCount > 0 ? ` • pending ${spineContext.pendingApprovalCount}` : ""}`
-    : "IDLE • events 0";
+  const compatibilityWarning = buildCompatibilityWarning(capabilities, health);
 
   return (
-    <View style={styles.terminalCard}>
-      <View style={styles.terminalNameRow}>
-        <Text style={styles.terminalName}>{agent.name}</Text>
-        <Text style={[styles.modePill, styles.modePillShell]}>{statusLabel(agent.status)}</Text>
+    <View style={styles.panel}>
+      <View style={styles.rowInlineSpace}>
+        <Text style={styles.panelLabel}>Server Runtime</Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh NovaAdapt runtime"
+          style={[styles.actionButton, loading || refreshing ? styles.buttonDisabled : null]}
+          disabled={loading || refreshing}
+          onPress={onRefresh}
+        >
+          <Text style={styles.actionButtonText}>{loading || refreshing ? "Refreshing..." : "Refresh"}</Text>
+        </Pressable>
       </View>
-      <Text style={styles.serverSubtitle}>{`Memory ${agent.memoryContextId}`}</Text>
-      <Text style={styles.emptyText}>{`Context ${contextSummary}`}</Text>
-      {spineContext?.lastSummary ? <Text style={styles.emptyText}>{`Last: ${spineContext.lastSummary}`}</Text> : null}
-
-      <TextInput
-        style={styles.input}
-        value={goalDraft}
-        onChangeText={onGoalChange}
-        onEndEditing={onGoalBlur}
-        placeholder="Current goal"
-        placeholderTextColor="#7f7aa8"
-      />
-
-      <TextInput
-        style={styles.input}
-        value={capabilitiesDraft}
-        onChangeText={onCapabilitiesChange}
-        onEndEditing={onCapabilitiesBlur}
-        placeholder="Capabilities (comma separated)"
-        placeholderTextColor="#7f7aa8"
-        autoCapitalize="none"
-      />
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-        {STATUS_ORDER.map((status) => {
-          const active = agent.status === status;
-          return (
-            <Pressable
-              key={`${agent.agentId}-status-${status}`}
-              accessibilityRole="button"
-              accessibilityLabel={`Set ${agent.name} status to ${statusLabel(status)}`}
-              style={[styles.chip, active ? styles.chipActive : null]}
-              onPress={() => onSetStatus(status)}
-            >
-              <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{statusLabel(status)}</Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
-
-      {sessions.length > 0 ? (
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipRow}>
-          {sessions.map((session) => {
-            const active = selectedSession === session;
-            return (
-              <Pressable
-                key={`${agent.agentId}-session-${session}`}
-                accessibilityRole="button"
-                accessibilityLabel={`Route ${agent.name} to ${session}`}
-                style={[styles.chip, active ? styles.chipActive : null]}
-                onPress={() => onSelectSession(session)}
-              >
-                <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{session}</Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+      {!supported ? (
+        <Text style={styles.emptyText}>
+          {loading ? "Checking server runtime..." : "Server runtime is not enabled on this companion server yet."}
+        </Text>
       ) : (
-        <Text style={styles.emptyText}>Open a terminal session to route agent commands.</Text>
-      )}
+        <>
+          <Text style={styles.serverSubtitle}>{summarizeBridgeHealth(health, runtimeAvailable)}</Text>
+          {compatibilityWarning ? <Text style={styles.emptyText}>{compatibilityWarning}</Text> : null}
+          <Text style={styles.emptyText}>
+            {capabilities.memoryStatus ? `Memory ${summarizeMemoryStatus(memoryStatus)}` : "Memory status unavailable on this runtime."}
+          </Text>
+          {error ? <Text style={styles.emptyText}>{`Runtime error: ${error}`}</Text> : null}
 
-      <TextInput
-        style={styles.input}
-        value={command}
-        onChangeText={onCommandChange}
-        placeholder="Command for approval (example: npm run deploy)"
-        placeholderTextColor="#7f7aa8"
-      />
+          {!capabilities.governance ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Runtime Governance</Text>
+              <Text style={styles.emptyText}>This server runtime does not expose governance controls yet.</Text>
+            </View>
+          ) : governance ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Runtime Governance</Text>
+              <Text style={styles.serverSubtitle}>{summarizeGovernance(governance)}</Text>
+              <Text style={styles.emptyText}>
+                {`Spend $${governance.spendEstimateUsd.toFixed(2)} • LLM calls ${governance.llmCallsTotal} • Runs ${governance.runsTotal}`}
+              </Text>
+              {governance.pauseReason ? <Text style={styles.emptyText}>{`Reason ${governance.pauseReason}`}</Text> : null}
+              {governance.lastObjectivePreview ? (
+                <Text style={styles.emptyText}>{`Last objective ${governance.lastObjectivePreview}`}</Text>
+              ) : null}
+              <View style={styles.actionsWrap}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={governance.paused ? "Resume runtime governance" : "Pause runtime governance"}
+                  style={[styles.actionButton, governanceBusy ? styles.buttonDisabled : null]}
+                  disabled={governanceBusy}
+                  onPress={governance.paused ? onResumeRuntime : onPauseRuntime}
+                >
+                  <Text style={styles.actionButtonText}>{governance.paused ? "Resume Runtime" : "Pause Runtime"}</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Reset runtime governance usage"
+                  style={[styles.actionButton, governanceBusy ? styles.buttonDisabled : null]}
+                  disabled={governanceBusy}
+                  onPress={onResetGovernanceUsage}
+                >
+                  <Text style={styles.actionButtonText}>Reset Usage</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Cancel all runtime jobs"
+                  style={[styles.actionDangerButton, governanceBusy ? styles.buttonDisabled : null]}
+                  disabled={governanceBusy}
+                  onPress={onCancelAllJobs}
+                >
+                  <Text style={styles.actionDangerText}>Cancel All Jobs</Text>
+                </Pressable>
+              </View>
+            </View>
+          ) : null}
 
-      {agent.pendingApproval ? (
-        <View style={styles.panel}>
-          <Text style={styles.panelLabel}>Pending Approval</Text>
-          <Text style={styles.serverSubtitle}>{agent.pendingApproval.summary}</Text>
-          {agent.pendingApproval.command ? <Text style={styles.emptyText}>{agent.pendingApproval.command}</Text> : null}
-          <View style={styles.actionsWrap}>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Approve ${agent.name}`}
-              style={[styles.actionButton, !selectedSession ? styles.buttonDisabled : null]}
-              disabled={!selectedSession}
-              onPress={onApprove}
-            >
-              <Text style={styles.actionButtonText}>Approve + Send</Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={`Deny ${agent.name}`}
-              style={styles.actionDangerButton}
-              onPress={onDeny}
-            >
-              <Text style={styles.actionDangerText}>Deny</Text>
-            </Pressable>
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Plans</Text>
+            {plans.length === 0 ? (
+              <Text style={styles.emptyText}>No server plans yet.</Text>
+            ) : (
+              plans.slice(0, 4).map((plan) => {
+                const progressLabel =
+                  plan.progressTotal > 0 ? `${plan.progressCompleted}/${plan.progressTotal}` : `${plan.progressCompleted}`;
+                const updatedAt = formatBridgeDate(plan.updatedAt || plan.createdAt);
+                const busy = mutationPlanId === plan.id;
+                return (
+                  <View key={`bridge-plan-${plan.id}`} style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{plan.objective}</Text>
+                      <Text style={[styles.modePill, modePillForStatus(plan.status)]}>{bridgeStatusLabel(plan.status)}</Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>{`Plan ${plan.id}`}</Text>
+                    <Text style={styles.emptyText}>{`Progress ${progressLabel}${updatedAt ? ` • ${updatedAt}` : ""}`}</Text>
+                    {plan.executionError ? <Text style={styles.emptyText}>{`Error ${plan.executionError}`}</Text> : null}
+                    {plan.rejectReason ? <Text style={styles.emptyText}>{`Rejected ${plan.rejectReason}`}</Text> : null}
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Approve plan ${plan.id}`}
+                        style={[styles.actionButton, !canApprovePlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canApprovePlan(plan.status) || busy}
+                        onPress={() => onApprovePlan(plan.id)}
+                      >
+                        <Text style={styles.actionButtonText}>Approve</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Retry plan ${plan.id}`}
+                        style={[styles.actionButton, !canRetryPlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canRetryPlan(plan.status) || busy}
+                        onPress={() => onRetryPlan(plan.id)}
+                      >
+                        <Text style={styles.actionButtonText}>Retry</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Undo plan ${plan.id}`}
+                        style={[styles.actionButton, !canUndoPlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canUndoPlan(plan.status) || busy}
+                        onPress={() => onUndoPlan(plan.id)}
+                      >
+                        <Text style={styles.actionButtonText}>Undo</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Reject plan ${plan.id}`}
+                        style={[styles.actionDangerButton, !canRejectPlan(plan.status) || busy ? styles.buttonDisabled : null]}
+                        disabled={!canRejectPlan(plan.status) || busy}
+                        onPress={() => onRejectPlan(plan.id)}
+                      >
+                        <Text style={styles.actionDangerText}>Reject</Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })
+            )}
           </View>
-        </View>
-      ) : (
-        <View style={styles.actionsWrap}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Request approval for ${agent.name}`}
-            style={[styles.actionButton, !command.trim() || !selectedSession ? styles.buttonDisabled : null]}
-            disabled={!command.trim() || !selectedSession}
-            onPress={onRequestApproval}
-          >
-            <Text style={styles.actionButtonText}>Request Approval</Text>
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Remove ${agent.name}`}
-            style={styles.actionDangerButton}
-            onPress={onRemove}
-          >
-            <Text style={styles.actionDangerText}>Remove</Text>
-          </Pressable>
-        </View>
-      )}
 
-      <View style={styles.panel}>
-        <View style={styles.terminalNameRow}>
-          <Text style={styles.panelLabel}>Memory Timeline</Text>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Clear memory for ${agent.name}`}
-            style={[styles.actionButton, memoryEntries.length === 0 ? styles.buttonDisabled : null]}
-            disabled={memoryEntries.length === 0}
-            onPress={onClearMemory}
-          >
-            <Text style={styles.actionButtonText}>Clear</Text>
-          </Pressable>
-        </View>
-        {recentMemory.length === 0 ? (
-          <Text style={styles.emptyText}>No memory events yet.</Text>
-        ) : (
-          recentMemory.map((entry) => (
-            <Text key={entry.id} style={styles.emptyText}>
-              {`${new Date(entry.createdAt).toLocaleTimeString()} • ${entry.summary}`}
-            </Text>
-          ))
-        )}
-      </View>
+          {capabilities.workflows ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Workflows</Text>
+              {workflows.length === 0 ? (
+                <Text style={styles.emptyText}>No server workflows yet.</Text>
+              ) : (
+                workflows.slice(0, 4).map((workflow) => (
+                  <View key={`bridge-workflow-${workflow.workflowId}`} style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{workflow.objective}</Text>
+                      <Text style={[styles.modePill, modePillForStatus(workflow.status)]}>{bridgeStatusLabel(workflow.status)}</Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>{`Workflow ${workflow.workflowId}`}</Text>
+                    <Text style={styles.emptyText}>{formatBridgeDate(workflow.updatedAt) ? `Updated ${formatBridgeDate(workflow.updatedAt)}` : "Awaiting activity"}</Text>
+                    {workflow.lastError ? <Text style={styles.emptyText}>{`Error ${workflow.lastError}`}</Text> : null}
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Resume workflow ${workflow.workflowId}`}
+                        style={[
+                          styles.actionButton,
+                          !canResumeWorkflow(workflow.status) || mutationWorkflowId === workflow.workflowId
+                            ? styles.buttonDisabled
+                            : null,
+                        ]}
+                        disabled={!canResumeWorkflow(workflow.status) || mutationWorkflowId === workflow.workflowId}
+                        onPress={() => onResumeWorkflow(workflow.workflowId)}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {mutationWorkflowId === workflow.workflowId ? "Resuming..." : "Resume"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          ) : (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Workflows</Text>
+              <Text style={styles.emptyText}>This server runtime does not expose workflow controls yet.</Text>
+            </View>
+          )}
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Jobs</Text>
+            {jobs.length === 0 ? (
+              <Text style={styles.emptyText}>No server jobs yet.</Text>
+            ) : (
+              jobs.slice(0, 4).map((job) => (
+                <View key={`bridge-job-${job.id}`} style={styles.terminalCard}>
+                  <View style={styles.terminalNameRow}>
+                    <Text style={styles.terminalName}>{job.id}</Text>
+                    <Text style={[styles.modePill, modePillForStatus(job.status)]}>{bridgeStatusLabel(job.status)}</Text>
+                  </View>
+                  <Text style={styles.serverSubtitle}>
+                    {`Created ${formatBridgeDate(job.createdAt) || "unknown"}${formatBridgeDate(job.finishedAt) ? ` • Finished ${formatBridgeDate(job.finishedAt)}` : ""}`}
+                  </Text>
+                  {job.error ? <Text style={styles.emptyText}>{`Error ${job.error}`}</Text> : null}
+                </View>
+              ))
+            )}
+          </View>
+
+          {!capabilities.templates ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Saved Templates</Text>
+              <Text style={styles.emptyText}>This bridge does not expose saved template routes yet.</Text>
+            </View>
+          ) : (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Saved Templates</Text>
+              {templates.length === 0 ? (
+                <Text style={styles.emptyText}>No saved server templates yet.</Text>
+              ) : (
+                templates.slice(0, 4).map((template) => {
+                  const busy = templateMutationKey === `${template.templateId}:saved`;
+                  return (
+                    <View key={`bridge-template-${template.templateId}`} style={styles.terminalCard}>
+                      <View style={styles.terminalNameRow}>
+                        <Text style={styles.terminalName}>{template.name}</Text>
+                        <Text style={[styles.modePill, styles.modePillShell]}>{template.strategy.toUpperCase()}</Text>
+                      </View>
+                      <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
+                      <Text style={styles.emptyText}>{template.description || template.objective}</Text>
+                      <View style={styles.actionsWrap}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Launch ${template.name} as approval plan`}
+                          style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                          disabled={busy}
+                          onPress={() => onLaunchTemplate(template, "plan")}
+                        >
+                          <Text style={styles.actionButtonText}>{busy ? "Launching..." : "Launch Plan"}</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Launch ${template.name} as workflow`}
+                          style={[
+                            styles.actionButton,
+                            busy || !capabilities.workflows ? styles.buttonDisabled : null,
+                          ]}
+                          disabled={busy || !capabilities.workflows}
+                          onPress={() => onLaunchTemplate(template, "workflow")}
+                        >
+                          <Text style={styles.actionButtonText}>
+                            {busy ? "Launching..." : capabilities.workflows ? "Start Workflow" : "Workflow Unavailable"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
+
+          {!capabilities.templateGallery ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Template Gallery</Text>
+              <Text style={styles.emptyText}>This bridge does not expose gallery import routes yet.</Text>
+            </View>
+          ) : (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Template Gallery</Text>
+              {galleryTemplates.length === 0 ? (
+                <Text style={styles.emptyText}>No built-in templates exposed by this runtime.</Text>
+              ) : (
+                galleryTemplates.slice(0, 4).map((template) => {
+                  const busy = templateMutationKey === `${template.templateId}:gallery`;
+                  return (
+                    <View key={`bridge-gallery-${template.templateId}`} style={styles.terminalCard}>
+                      <View style={styles.terminalNameRow}>
+                        <Text style={styles.terminalName}>{template.name}</Text>
+                        <Text style={[styles.modePill, styles.modePillAi]}>{template.source.toUpperCase()}</Text>
+                      </View>
+                      <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
+                      <Text style={styles.emptyText}>{template.description || template.objective}</Text>
+                      <View style={styles.actionsWrap}>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Import and launch ${template.name} as approval plan`}
+                          style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                          disabled={busy}
+                          onPress={() => onLaunchTemplate(template, "plan")}
+                        >
+                          <Text style={styles.actionButtonText}>{busy ? "Importing..." : "Import + Plan"}</Text>
+                        </Pressable>
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Import and launch ${template.name} as workflow`}
+                          style={[
+                            styles.actionButton,
+                            busy || !capabilities.workflows ? styles.buttonDisabled : null,
+                          ]}
+                          disabled={busy || !capabilities.workflows}
+                          onPress={() => onLaunchTemplate(template, "workflow")}
+                        >
+                          <Text style={styles.actionButtonText}>
+                            {busy ? "Importing..." : capabilities.workflows ? "Import + Workflow" : "Workflow Unavailable"}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                })
+              )}
+            </View>
+          )}
+        </>
+      )}
     </View>
   );
 }
 
 export function NovaAgentPanel({
+  server,
   serverId,
   serverName,
   sessions,
   isPro,
   onShowPaywall,
   onQueueCommand,
+  onOpenAgents,
+  autoEnableLocalFallback = false,
+  onAutoEnableLocalFallbackHandled,
+  surface = "preview",
 }: NovaAgentPanelProps) {
-  const resolveDefaultSession = useCallback(() => sessions[0] || null, [sessions]);
-  const {
-    agents,
-    loading,
-    memoryEntries,
-    memoryLoading,
-    addRuntimeAgent,
-    removeRuntimeAgent,
-    setRuntimeAgentStatus,
-    setRuntimeAgentGoal,
-    setRuntimeAgentCapabilities,
-    requestAgentApproval,
-    approveAgentApproval,
-    denyAgentApproval,
-    approveReadyApprovals,
-    denyAllPendingApprovals,
-    runMonitoringCycle,
-    clearAgentMemory,
-    spineContexts,
-    findSpineContextByAgentId,
-    pendingSpineApprovals,
-  } = useNovaAgentRuntime({
-    serverId,
-    onDispatchCommand: onQueueCommand,
-    resolveDefaultSession,
-  });
-
   const [newAgentName, setNewAgentName] = useState<string>("");
   const [newAgentCapabilities, setNewAgentCapabilities] = useState<string>("watch,tool-calling");
-  const [commandByAgent, setCommandByAgent] = useState<Record<string, string>>({});
-  const [goalDrafts, setGoalDrafts] = useState<Record<string, string>>({});
-  const [capabilityDrafts, setCapabilityDrafts] = useState<Record<string, string>>({});
-  const [sessionByAgent, setSessionByAgent] = useState<Record<string, string>>({});
-  const [monitoringCycleStatus, setMonitoringCycleStatus] = useState<string>("");
-
-  const canAddAgent = isPro || agents.length < 1;
-  const pendingAgents = useMemo(
-    () => agents.filter((agent) => agent.pendingApproval !== null),
-    [agents]
-  );
-  const monitoringAgents = useMemo(
-    () => agents.filter((agent) => agent.status === "monitoring"),
-    [agents]
-  );
+  const [remoteCreateStatus, setRemoteCreateStatus] = useState<string>("");
+  const [localFallbackEnabled, setLocalFallbackEnabled] = useState<boolean>(surface === "preview");
 
   const defaultSession = useMemo(() => sessions[0] || null, [sessions]);
+  const {
+    loading: bridgeLoading,
+    refreshing: bridgeRefreshing,
+    supported: bridgeSupported,
+    runtimeAvailable: bridgeRuntimeAvailable,
+    capabilities: bridgeCapabilities,
+    error: bridgeError,
+    health: bridgeHealth,
+    memoryStatus: bridgeMemoryStatus,
+    governance,
+    plans: bridgePlans,
+    jobs: bridgeJobs,
+    workflows: bridgeWorkflows,
+    templates: bridgeTemplates,
+    galleryTemplates: bridgeGalleryTemplates,
+    refresh: refreshBridge,
+    createPlan,
+    startWorkflow,
+    importTemplate,
+    launchTemplate,
+    resumeWorkflow,
+    approvePlanAsync,
+    rejectPlan,
+    retryFailedPlanAsync,
+    undoPlan,
+    pauseRuntime,
+    resumeRuntime,
+    resetGovernanceUsage,
+    cancelAllJobs,
+  } = useNovaAdaptBridge({ server, enabled: Boolean(serverId) });
+  const [remoteMutationPlanId, setRemoteMutationPlanId] = useState<string | null>(null);
+  const [remoteMutationWorkflowId, setRemoteMutationWorkflowId] = useState<string | null>(null);
+  const [templateMutationKey, setTemplateMutationKey] = useState<string | null>(null);
+  const [governanceBusy, setGovernanceBusy] = useState<boolean>(false);
+  const showLocalPreview =
+    surface === "preview" || (surface === "screen" && (!bridgeSupported || !bridgeRuntimeAvailable) && localFallbackEnabled);
+  const showRemoteCreateControls = surface === "screen" && bridgeSupported && bridgeRuntimeAvailable;
+  const runtimeUnavailable = !bridgeSupported || !bridgeRuntimeAvailable;
 
-  const addNewAgent = () => {
-    if (!canAddAgent) {
-      onShowPaywall();
+  useEffect(() => {
+    if (!autoEnableLocalFallback || surface !== "screen") {
+      return;
+    }
+    if (runtimeUnavailable) {
+      setLocalFallbackEnabled(true);
+    }
+    onAutoEnableLocalFallbackHandled?.();
+  }, [autoEnableLocalFallback, onAutoEnableLocalFallbackHandled, runtimeUnavailable, surface]);
+
+  const runRemotePlanAction = useCallback(
+    async (planId: string, action: (targetPlanId: string) => Promise<boolean>) => {
+      setRemoteMutationPlanId(planId);
+      try {
+        await action(planId);
+      } finally {
+        setRemoteMutationPlanId((current) => (current === planId ? null : current));
+      }
+    },
+    []
+  );
+
+  const runRemoteWorkflowAction = useCallback(
+    async (workflowId: string, action: (targetWorkflowId: string) => Promise<boolean>) => {
+      setRemoteMutationWorkflowId(workflowId);
+      try {
+        await action(workflowId);
+      } finally {
+        setRemoteMutationWorkflowId((current) => (current === workflowId ? null : current));
+      }
+    },
+    []
+  );
+
+  const runGovernanceAction = useCallback(async (action: () => Promise<boolean>) => {
+    setGovernanceBusy(true);
+    try {
+      await action();
+    } finally {
+      setGovernanceBusy(false);
+    }
+  }, []);
+
+  const createRemotePlan = useCallback(async () => {
+    const objective = newAgentName.trim();
+    if (!objective) {
+      return;
+    }
+    setRemoteCreateStatus("Creating approval plan...");
+    try {
+      const created = await createPlan(objective, { strategy: "single" });
+      if (created) {
+        setRemoteCreateStatus(`Created plan ${created.id}`);
+        setNewAgentName("");
+      } else {
+        setRemoteCreateStatus("Plan creation returned no result.");
+      }
+    } catch (nextError) {
+      const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
+      setRemoteCreateStatus(`Plan creation failed: ${detail}`);
+    }
+  }, [createPlan, newAgentName]);
+
+  const startRemoteWorkflow = useCallback(async () => {
+    const objective = newAgentName.trim();
+    if (!objective || !bridgeCapabilities.workflows) {
       return;
     }
     const capabilities = parseCapabilities(newAgentCapabilities);
-    const created = addRuntimeAgent(newAgentName, capabilities);
-    if (!created) {
-      return;
-    }
-    setGoalDrafts((prev) => ({ ...prev, [created.agentId]: created.currentGoal }));
-    setCapabilityDrafts((prev) => ({ ...prev, [created.agentId]: created.capabilities.join(",") }));
-    if (defaultSession) {
-      setSessionByAgent((prev) => ({ ...prev, [created.agentId]: defaultSession }));
-    }
-    setNewAgentName("");
-  };
-
-  const approveReadyPending = () => {
-    const approvedAgentIds = approveReadyApprovals({
-      commandByAgent,
-      sessionByAgent,
-      defaultSession,
-    });
-    if (approvedAgentIds.length === 0) {
-      return;
-    }
-    setCommandByAgent((previous) => {
-      const next = { ...previous };
-      approvedAgentIds.forEach((agentId) => {
-        next[agentId] = "";
+    setRemoteCreateStatus("Starting server workflow...");
+    try {
+      const created = await startWorkflow(objective, {
+        autoResume: true,
+        metadata: capabilities.length > 0 ? { capabilities } : {},
       });
-      return next;
-    });
-  };
-
-  const denyAllPending = () => {
-    denyAllPendingApprovals();
-  };
-
-  const runMonitoringNow = () => {
-    const cycle = runMonitoringCycle({ defaultSession: defaultSession || undefined });
-    if (cycle.requested.length === 0 && cycle.approved.length === 0) {
-      setMonitoringCycleStatus("No monitoring updates queued.");
-      return;
+      if (created) {
+        setRemoteCreateStatus(`Started workflow ${created.workflowId}`);
+        setNewAgentName("");
+      } else {
+        setRemoteCreateStatus("Workflow creation returned no result.");
+      }
+    } catch (nextError) {
+      const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
+      setRemoteCreateStatus(`Workflow start failed: ${detail}`);
     }
-    setMonitoringCycleStatus(`Queued ${cycle.requested.length} • dispatched ${cycle.approved.length}`);
-  };
+  }, [bridgeCapabilities.workflows, newAgentCapabilities, newAgentName, startWorkflow]);
+
+  const runTemplateLaunch = useCallback(
+    async (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => {
+      const savedTemplate = bridgeTemplates.find((item) => item.templateId === template.templateId) || null;
+      const mutationScope = savedTemplate ? "saved" : "gallery";
+      const mutationKey = `${template.templateId}:${mutationScope}`;
+      setTemplateMutationKey(mutationKey);
+      setRemoteCreateStatus(
+        savedTemplate
+          ? `Launching template ${template.name}...`
+          : `Importing template ${template.name}...`
+      );
+      try {
+        let launchTemplateId = template.templateId;
+        if (!savedTemplate) {
+          const imported = await importTemplate(template);
+          if (!imported) {
+            setRemoteCreateStatus(`Template import failed for ${template.name}.`);
+            return;
+          }
+          launchTemplateId = imported.templateId;
+        }
+        const launched = await launchTemplate(launchTemplateId, { mode });
+        if (launched) {
+          setRemoteCreateStatus(
+            mode === "workflow"
+              ? `Started workflow from template ${template.name}`
+              : `Created approval plan from template ${template.name}`
+          );
+        } else {
+          setRemoteCreateStatus(`Template launch returned no result for ${template.name}.`);
+        }
+      } catch (nextError) {
+        const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
+        setRemoteCreateStatus(`Template launch failed: ${detail}`);
+      } finally {
+        setTemplateMutationKey((current) => (current === mutationKey ? null : current));
+      }
+    },
+    [bridgeTemplates, importTemplate, launchTemplate]
+  );
 
   if (!serverId) {
     return (
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>NovaAdapt Agents (Preview)</Text>
+        <Text style={styles.panelLabel}>{surface === "screen" ? "NovaAdapt Agents" : "NovaAdapt Agents (Preview)"}</Text>
         <Text style={styles.emptyText}>Select a server to manage agents.</Text>
       </View>
     );
@@ -364,135 +796,186 @@ export function NovaAgentPanel({
 
   return (
     <View style={styles.panel}>
-      <Text style={styles.panelLabel}>NovaAdapt Agents (Preview)</Text>
-      <Text style={styles.serverSubtitle}>{`${serverName || "Server"} • Agent lifecycle + approval queue groundwork`}</Text>
+      <Text style={styles.panelLabel}>{surface === "screen" ? "NovaAdapt Agents" : "NovaAdapt Agents (Preview)"}</Text>
+      <Text style={styles.serverSubtitle}>
+        {surface === "screen"
+          ? `${serverName || "Server"} • Live runtime, plans, jobs, and workflows`
+          : surface === "panel"
+            ? `${serverName || "Server"} • Runtime status, plans, and workflows`
+            : `${serverName || "Server"} • Agent lifecycle + approval queue groundwork`}
+      </Text>
 
-      <TextInput
-        style={styles.input}
-        value={newAgentName}
-        onChangeText={setNewAgentName}
-        placeholder="Agent name (example: Build Watcher)"
-        placeholderTextColor="#7f7aa8"
+      <RemoteBridgeSection
+        loading={bridgeLoading}
+        refreshing={bridgeRefreshing}
+        supported={bridgeSupported}
+        runtimeAvailable={bridgeRuntimeAvailable}
+        capabilities={bridgeCapabilities}
+        error={bridgeError}
+        health={bridgeHealth}
+        memoryStatus={bridgeMemoryStatus}
+        governance={governance}
+        plans={bridgePlans}
+        jobs={bridgeJobs}
+        workflows={bridgeWorkflows}
+        templates={bridgeTemplates}
+        galleryTemplates={bridgeGalleryTemplates}
+        templateMutationKey={templateMutationKey}
+        mutationPlanId={remoteMutationPlanId}
+        mutationWorkflowId={remoteMutationWorkflowId}
+        governanceBusy={governanceBusy}
+        onRefresh={() => {
+          void refreshBridge({ quiet: true });
+        }}
+        onApprovePlan={(planId) => {
+          void runRemotePlanAction(planId, approvePlanAsync);
+        }}
+        onRejectPlan={(planId) => {
+          void runRemotePlanAction(planId, (targetPlanId) =>
+            rejectPlan(targetPlanId, "Rejected from NovaRemote mobile panel")
+          );
+        }}
+        onRetryPlan={(planId) => {
+          void runRemotePlanAction(planId, retryFailedPlanAsync);
+        }}
+        onUndoPlan={(planId) => {
+          void runRemotePlanAction(planId, undoPlan);
+        }}
+        onResumeWorkflow={(workflowId) => {
+          void runRemoteWorkflowAction(workflowId, resumeWorkflow);
+        }}
+        onPauseRuntime={() => {
+          void runGovernanceAction(() => pauseRuntime("Paused from NovaRemote mobile panel"));
+        }}
+        onResumeRuntime={() => {
+          void runGovernanceAction(resumeRuntime);
+        }}
+        onResetGovernanceUsage={() => {
+          void runGovernanceAction(resetGovernanceUsage);
+        }}
+        onCancelAllJobs={() => {
+          void runGovernanceAction(() => cancelAllJobs("Canceled from NovaRemote mobile panel"));
+        }}
+        onLaunchTemplate={(template, mode) => {
+          void runTemplateLaunch(template, mode);
+        }}
       />
-      <TextInput
-        style={styles.input}
-        value={newAgentCapabilities}
-        onChangeText={setNewAgentCapabilities}
-        placeholder="Capabilities (comma separated)"
-        placeholderTextColor="#7f7aa8"
-        autoCapitalize="none"
-      />
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Add NovaAdapt agent"
-        style={[styles.buttonPrimary, (!newAgentName.trim() || !canAddAgent) ? styles.buttonDisabled : null]}
-        disabled={!newAgentName.trim()}
-        onPress={addNewAgent}
-      >
-        <Text style={styles.buttonPrimaryText}>{canAddAgent ? "Add Agent" : "Unlock More Agents"}</Text>
-      </Pressable>
-      {!canAddAgent ? (
-        <Text style={styles.emptyText}>Free tier supports one agent per server. Upgrade to add more.</Text>
+
+      {showRemoteCreateControls ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>Create on Server</Text>
+          <Text style={styles.serverSubtitle}>Start a persistent workflow or queue an approval plan directly on NovaAdapt.</Text>
+          <TextInput
+            style={styles.input}
+            value={newAgentName}
+            onChangeText={setNewAgentName}
+            placeholder="Objective (example: Watch cluster load and notify me)"
+            placeholderTextColor="#7f7aa8"
+          />
+          <TextInput
+            style={styles.input}
+            value={newAgentCapabilities}
+            onChangeText={setNewAgentCapabilities}
+            placeholder="Metadata tags (comma separated)"
+            placeholderTextColor="#7f7aa8"
+            autoCapitalize="none"
+          />
+          <View style={styles.actionsWrap}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Create server approval plan"
+              style={[styles.buttonPrimary, !newAgentName.trim() ? styles.buttonDisabled : null]}
+              disabled={!newAgentName.trim()}
+              onPress={() => {
+                void createRemotePlan();
+              }}
+            >
+              <Text style={styles.buttonPrimaryText}>Create Approval Plan</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Start server workflow"
+              style={[
+                styles.actionButton,
+                !newAgentName.trim() || !bridgeCapabilities.workflows ? styles.buttonDisabled : null,
+              ]}
+              disabled={!newAgentName.trim() || !bridgeCapabilities.workflows}
+              onPress={() => {
+                void startRemoteWorkflow();
+              }}
+            >
+              <Text style={styles.actionButtonText}>
+                {bridgeCapabilities.workflows ? "Start Workflow" : "Workflow Unavailable"}
+              </Text>
+            </Pressable>
+          </View>
+          {!bridgeCapabilities.workflows ? (
+            <Text style={styles.emptyText}>This companion runtime does not expose workflow creation yet.</Text>
+          ) : null}
+          {remoteCreateStatus ? <Text style={styles.emptyText}>{remoteCreateStatus}</Text> : null}
+        </View>
       ) : null}
 
-      <View style={styles.actionsWrap}>
-        <Text style={styles.serverSubtitle}>{`Pending approvals: ${pendingAgents.length} • NovaSpine ${pendingSpineApprovals}`}</Text>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Run monitoring cycle now"
-          style={[styles.actionButton, monitoringAgents.length === 0 ? styles.buttonDisabled : null]}
-          disabled={monitoringAgents.length === 0}
-          onPress={runMonitoringNow}
-        >
-          <Text style={styles.actionButtonText}>Run Monitoring</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Approve pending agents with ready command and session routes"
-          style={[styles.actionButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
-          disabled={pendingAgents.length === 0}
-          onPress={approveReadyPending}
-        >
-          <Text style={styles.actionButtonText}>Approve Ready</Text>
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="Deny all pending agent approvals"
-          style={[styles.actionDangerButton, pendingAgents.length === 0 ? styles.buttonDisabled : null]}
-          disabled={pendingAgents.length === 0}
-          onPress={denyAllPending}
-        >
-          <Text style={styles.actionDangerText}>Deny All</Text>
-        </Pressable>
-      </View>
-      {monitoringCycleStatus ? <Text style={styles.emptyText}>{monitoringCycleStatus}</Text> : null}
-
-      {loading || memoryLoading ? <Text style={styles.emptyText}>Loading agents...</Text> : null}
-      {!loading && !memoryLoading && agents.length === 0 ? <Text style={styles.emptyText}>No agents yet on this server.</Text> : null}
-      {!loading && !memoryLoading && spineContexts.length > 0 ? (
-        <Text style={styles.emptyText}>{`Contexts: ${spineContexts.length}`}</Text>
+      {surface === "screen" && runtimeUnavailable ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>Server Runtime Unavailable</Text>
+          <Text style={styles.serverSubtitle}>
+            The server-backed NovaAdapt runtime is not available right now. Enable device fallback only if you need temporary agent controls on this phone.
+          </Text>
+          <Text style={styles.emptyText}>{summarizeCapabilities(bridgeCapabilities)}</Text>
+          <View style={styles.actionsWrap}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={localFallbackEnabled ? "Hide device fallback controls" : "Enable device fallback controls"}
+              style={[styles.actionButton, localFallbackEnabled ? styles.chipActive : null]}
+              onPress={() => setLocalFallbackEnabled((current) => !current)}
+            >
+              <Text style={styles.actionButtonText}>{localFallbackEnabled ? "Hide Device Fallback" : "Enable Device Fallback"}</Text>
+            </Pressable>
+          </View>
+        </View>
       ) : null}
 
-      {agents.map((agent) => {
-        const draftGoal = goalDrafts[agent.agentId] ?? agent.currentGoal;
-        const draftCapabilities = capabilityDrafts[agent.agentId] ?? agent.capabilities.join(",");
-        const selectedSession = sessionByAgent[agent.agentId] || agent.pendingApproval?.session || defaultSession;
-        const command = commandByAgent[agent.agentId] || "";
-        const agentMemory = memoryEntries.filter((entry) => entry.memoryContextId === agent.memoryContextId);
-        const spineContext = findSpineContextByAgentId(agent.agentId);
+      {surface === "panel" && (!bridgeSupported || !bridgeRuntimeAvailable) && typeof onOpenAgents === "function" ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>Need Local Controls?</Text>
+          <Text style={styles.serverSubtitle}>
+            Open the dedicated Agents screen to use the remaining local fallback tools while this server runtime is unavailable.
+          </Text>
+          <View style={styles.actionsWrap}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open Agents screen"
+              style={styles.buttonPrimary}
+              onPress={onOpenAgents}
+            >
+              <Text style={styles.buttonPrimaryText}>Open Agents</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
 
-        return (
-          <AgentCard
-            key={agent.agentId}
-            agent={agent}
+      {showLocalPreview ? (
+        <View style={styles.panel}>
+          <Text style={styles.panelLabel}>{surface === "screen" ? "Device Fallback Controls" : "Preview Runtime Controls"}</Text>
+          <NovaDeviceFallbackPanel
+            serverId={serverId}
             sessions={sessions}
-            command={command}
-            goalDraft={draftGoal}
-            capabilitiesDraft={draftCapabilities}
-            memoryEntries={agentMemory}
-            spineContext={spineContext}
-            selectedSession={selectedSession}
-            onCommandChange={(value) => setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: value }))}
-            onGoalChange={(value) => setGoalDrafts((prev) => ({ ...prev, [agent.agentId]: value }))}
-            onGoalBlur={() => {
-              setRuntimeAgentGoal(agent.agentId, draftGoal);
-            }}
-            onCapabilitiesChange={(value) => setCapabilityDrafts((prev) => ({ ...prev, [agent.agentId]: value }))}
-            onCapabilitiesBlur={() => setRuntimeAgentCapabilities(agent.agentId, parseCapabilities(draftCapabilities))}
-            onSelectSession={(value) => setSessionByAgent((prev) => ({ ...prev, [agent.agentId]: value }))}
-            onSetStatus={(status) => setRuntimeAgentStatus(agent.agentId, status)}
-            onRequestApproval={() => {
-              if (!selectedSession || !command.trim()) {
-                return;
-              }
-              requestAgentApproval(agent.agentId, {
-                summary: `${agent.name} requests command approval`,
-                command,
-                session: selectedSession,
-              });
-            }}
-            onApprove={() => {
-              const approved = approveAgentApproval(agent.agentId, {
-                commandOverride: command.trim() ? command : undefined,
-                sessionOverride: selectedSession || undefined,
-                nextStatus: "executing",
-              });
-              if (approved) {
-                setCommandByAgent((prev) => ({ ...prev, [agent.agentId]: "" }));
-              }
-            }}
-            onDeny={() => {
-              denyAgentApproval(agent.agentId);
-            }}
-            onRemove={() => {
-              removeRuntimeAgent(agent.agentId);
-            }}
-            onClearMemory={() => {
-              clearAgentMemory(agent.agentId);
+            isPro={isPro}
+            surface={surface}
+            newAgentName={newAgentName}
+            newAgentCapabilities={newAgentCapabilities}
+            defaultSession={defaultSession}
+            onShowPaywall={onShowPaywall}
+            onQueueCommand={onQueueCommand}
+            onNewAgentNameChange={setNewAgentName}
+            onNewAgentCapabilitiesChange={setNewAgentCapabilities}
+            onAgentCreated={() => {
+              setNewAgentName("");
             }}
           />
-        );
-      })}
+        </View>
+      ) : null}
     </View>
   );
 }

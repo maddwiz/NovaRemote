@@ -25,13 +25,14 @@ export function TabBar({
   const allTabs: Array<{ key: RouteTab; label: string; shortLabel: string; accessibilityLabel: string }> = [
     { key: "terminals", label: "Terminals", shortLabel: "Home", accessibilityLabel: "Open terminals tab" },
     { key: "servers", label: "Servers", shortLabel: "Servers", accessibilityLabel: "Open servers tab" },
+    { key: "agents", label: "Agents", shortLabel: "Agents", accessibilityLabel: "Open agents tab" },
     { key: "files", label: "Files", shortLabel: "Files", accessibilityLabel: "Open files tab" },
-    { key: "llms", label: "AI", shortLabel: "AI", accessibilityLabel: "Open LLM profiles tab" },
+    { key: "llms", label: "Nova", shortLabel: "Nova", accessibilityLabel: "Open Nova assistant and provider settings" },
     { key: "snippets", label: "Snippets", shortLabel: "Snips", accessibilityLabel: "Open snippets tab" },
     { key: "team", label: "Team", shortLabel: "Team", accessibilityLabel: "Open team tab" },
     { key: "vr", label: "VR", shortLabel: "VR", accessibilityLabel: "Open VR command center tab" },
   ];
-  const primaryTabKeys: RouteTab[] = ["terminals", "servers", "files", "llms"];
+  const primaryTabKeys: RouteTab[] = ["terminals", "servers", "agents", "files", "llms"];
   const tabs = useMemo(() => allTabs, [allTabs]);
   const activeTabLabel = useMemo(
     () => allTabs.find((tab) => tab.key === route)?.label || "Navigation",
@@ -89,7 +90,7 @@ export function TabBar({
   ));
 
   if (compactBottomNav) {
-    const quickOrder: RouteTab[] = ["terminals", "servers", "files", "llms"];
+    const quickOrder: RouteTab[] = ["terminals", "servers", "agents", "files", "llms"];
     const quickTabs = quickOrder
       .map((key) => tabs.find((tab) => tab.key === key))
       .filter((tab): tab is NonNullable<typeof tab> => Boolean(tab));

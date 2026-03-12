@@ -4,7 +4,9 @@ import * as SecureStore from "expo-secure-store";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
 import {
+  Alert,
   AppState,
+  BackHandler,
   Image,
   KeyboardAvoidingView,
   Platform,
@@ -24,6 +26,7 @@ import { LaunchIntro } from "./components/LaunchIntro";
 import { LockScreen } from "./components/LockScreen";
 import { DangerConfirmModal } from "./components/DangerConfirmModal";
 import { OnboardingModal } from "./components/OnboardingModal";
+import { NovaAssistantOverlay } from "./components/NovaAssistantOverlay";
 import { PageSlideMenu } from "./components/PageSlideMenu";
 import { PaywallModal } from "./components/PaywallModal";
 import { SessionPlaybackModal } from "./components/SessionPlaybackModal";
@@ -35,11 +38,13 @@ import { BRAND_LOGO } from "./branding";
 import {
   DEFAULT_CWD,
   DEFAULT_FLEET_WAIT_MS,
-  NOVA_AGENT_MONITORING_INTERVAL_MS,
+  NOVA_VOICE_CAPTURE_MS,
+  NOVA_VOICE_VAD_SILENCE_MS,
   DEFAULT_SPECTATE_TTL_SECONDS,
   DEFAULT_TERMINAL_BACKEND,
   FREE_SERVER_LIMIT,
   FREE_SESSION_LIMIT,
+  STORAGE_NOVA_VOICE_SETTINGS,
   STORAGE_WATCH_RULES_PREFIX,
   isLikelyAiSession,
 } from "./constants";
@@ -50,8 +55,14 @@ import { useCommandHistory } from "./hooks/useCommandHistory";
 import { commandQueueStatus, useCommandQueue } from "./hooks/useCommandQueue";
 import { useCollaboration } from "./hooks/useCollaboration";
 import { useConnectionPool } from "./hooks/useConnectionPool";
+import {
+  approveNovaAdaptBridgePlanAsync,
+  createNovaAdaptBridgePlan,
+  fetchNovaAdaptBridgeSnapshot,
+  rejectNovaAdaptBridgePlan,
+  resumeNovaAdaptBridgeWorkflow,
+} from "./hooks/useNovaAdaptBridge";
 import { useServerConnection } from "./hooks/useServerConnection";
-import { useNovaAgentRuntime } from "./hooks/useNovaAgentRuntime";
 import { useProcessManager } from "./hooks/useProcessManager";
 import { useSessionRecordings } from "./hooks/useSessionRecordings";
 import { useNotifications } from "./hooks/useNotifications";
@@ -79,29 +90,50 @@ import { useSharedProfiles } from "./hooks/useSharedProfiles";
 import { useTeamAuth } from "./hooks/useTeamAuth";
 import { useTerminalsViewModel } from "./hooks/useTerminalsViewModel";
 import { useTokenBroker } from "./hooks/useTokenBroker";
+import { useNovaAssistant } from "./hooks/useNovaAssistant";
 import {
   isFleetShellRunUnavailableError,
   resolveFleetTerminalApiBasePath,
   shouldAttemptFleetShellRun,
 } from "./fleetTerminalBasePath";
 import { findApprovedFleetApproval, findPendingFleetApproval } from "./fleetApproval";
+import { formatAssistantShellPath, resolveAssistantFolderTarget } from "./assistantPath";
+import { buildAgentRuntimeFallback } from "./agentFallback";
 import { FilesScreen } from "./screens/FilesScreen";
 import { LlmsScreen } from "./screens/LlmsScreen";
+import { AgentsScreen } from "./screens/AgentsScreen";
 import { ServersScreen } from "./screens/ServersScreen";
 import { SnippetsScreen } from "./screens/SnippetsScreen";
 import { TeamScreen } from "./screens/TeamScreen";
 import { GlassesModeScreen } from "./screens/GlassesModeScreen";
+import { SettingsScreen } from "./screens/SettingsScreen";
 import { TerminalsScreen } from "./screens/TerminalsScreen";
 import { VrCommandCenterScreen } from "./screens/VrCommandCenterScreen";
 import { styles } from "./theme/styles";
 import { buildTerminalAppearance } from "./theme/terminalTheme";
 import { evaluateCrossServerWatchAlerts } from "./crossServerWatchAlerts";
-import { findAgentIdsByName, hasExactAgentName } from "./agentMatching";
+import {
+  NovaAssistantAction,
+  NovaAssistantExecutionResult,
+  NovaAssistantRuntimeContext,
+  resolveAssistantServer,
+  resolveAssistantSession,
+} from "./novaAssistant";
+import {
+  DEFAULT_NOVA_CONVERSATION_IDLE_MS,
+  DEFAULT_NOVA_WAKE_PHRASE,
+  normalizeNovaConversationIdleMs,
+  normalizeNovaWakePhrase,
+  resolveNovaWakeCommand,
+} from "./novaVoice";
 import { findBlockedCommandPattern, resolveSessionTimeoutMs } from "./teamPolicy";
 import {
   AiEnginePreference,
   FleetRunResult,
+  NovaAdaptBridgePlan,
+  NovaAdaptBridgeWorkflow,
   ProcessSignal,
+  RemoteFileEntry,
   RecordingChunk,
   RouteTab,
   ServerProfile,
@@ -141,6 +173,41 @@ function uniqueServerIds(serverIds: string[]): string[] {
   return next;
 }
 
+function normalizeRemoteAgentName(value: string): string {
+  return value.trim().toLowerCase();
+}
+
+function remoteWorkflowMatchesAgentName(workflow: NovaAdaptBridgeWorkflow, name: string): boolean {
+  const normalizedName = normalizeRemoteAgentName(name);
+  if (!normalizedName) {
+    return false;
+  }
+  const contextName =
+    typeof workflow.context.agent_name === "string" ? normalizeRemoteAgentName(workflow.context.agent_name) : "";
+  if (contextName && contextName === normalizedName) {
+    return true;
+  }
+  const objective = normalizeRemoteAgentName(workflow.objective);
+  return objective.includes(normalizedName);
+}
+
+function remotePlanMatchesAgentName(plan: NovaAdaptBridgePlan, name: string): boolean {
+  const normalizedName = normalizeRemoteAgentName(name);
+  if (!normalizedName) {
+    return false;
+  }
+  return normalizeRemoteAgentName(plan.objective).includes(normalizedName);
+}
+
+function canApproveRemotePlanStatus(status: string): boolean {
+  return status.trim().toLowerCase() === "pending";
+}
+
+function canRejectRemotePlanStatus(status: string): boolean {
+  const normalized = status.trim().toLowerCase();
+  return normalized === "pending" || normalized === "approved";
+}
+
 function buildTeamServerSignature(servers: ServerProfile[]): string {
   return JSON.stringify(
     servers
@@ -155,6 +222,56 @@ function buildTeamServerSignature(servers: ServerProfile[]): string {
       }))
       .sort((a, b) => a.id.localeCompare(b.id))
   );
+}
+
+type SpeechOutputModule = {
+  speak: (text: string, options?: Record<string, unknown>) => void;
+  stop?: () => void;
+};
+
+let speechOutputModuleCache: SpeechOutputModule | null | undefined;
+
+function getSpeechOutputModule(): SpeechOutputModule | null {
+  if (speechOutputModuleCache !== undefined) {
+    return speechOutputModuleCache;
+  }
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const expoModulesCore = require("expo-modules-core") as {
+      requireOptionalNativeModule?: (moduleName: string) => unknown;
+    };
+    const nativeSpeechModule = expoModulesCore.requireOptionalNativeModule?.("ExpoSpeech");
+    if (!nativeSpeechModule) {
+      speechOutputModuleCache = null;
+      return null;
+    }
+    // Lazy require keeps older dev-client builds from crashing if the module
+    // has not been compiled into the installed binary yet.
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const speechModule = require("expo-speech") as SpeechOutputModule;
+    speechOutputModuleCache = speechModule;
+    return speechModule;
+  } catch {
+    speechOutputModuleCache = null;
+    return null;
+  }
+}
+
+function summarizeNovaReplyForSpeech(value: string): string {
+  const compact = value
+    .replace(/```[\s\S]*?```/g, " ")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!compact) {
+    return "";
+  }
+  const firstSentence = compact.split(/(?<=[.!?])\s+/)[0]?.trim();
+  const spoken = firstSentence && firstSentence.length >= 8 ? firstSentence : compact;
+  if (spoken.length <= 220) {
+    return spoken;
+  }
+  return `${spoken.slice(0, 217).trimEnd()}...`;
 }
 
 function countMatches(output: string, searchTerm: string): number {
@@ -325,6 +442,39 @@ function shellQuote(value: string): string {
   return `'${value.replace(/'/g, `'\\''`)}'`;
 }
 
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function stripAnsi(value: string): string {
+  return value.replace(/\u001b\[[0-9;?]*[ -/]*[@-~]/g, "");
+}
+
+function summarizeSessionDelta(after: string, before: string): string {
+  const delta = (after.startsWith(before) ? after.slice(before.length) : after).trim();
+  if (!delta) {
+    return "";
+  }
+  return stripAnsi(delta)
+    .replace(/\[LLM Prompt\][\s\S]*?(?=\[LLM Reply\]|\[LLM Prompt\]|$)/g, "")
+    .replace(/\[LLM Reply\]\s*/g, "")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 220);
+}
+
+function devNovaLog(...args: Array<unknown>) {
+  if (__DEV__) {
+    console.log("[Nova]", ...args);
+  }
+}
+
+function devVoiceUiLog(...args: Array<unknown>) {
+  if (__DEV__) {
+    console.log("[VoiceUI]", ...args);
+  }
+}
+
 function makeFleetSessionName(): string {
   const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
   const suffix = Math.random().toString(36).slice(2, 6);
@@ -483,6 +633,26 @@ function shouldRetryVoiceLoopError(message: string): boolean {
   return true;
 }
 
+function summarizeNovaVoiceError(message: string): string {
+  const normalized = message.trim().toLowerCase();
+  if (!normalized) {
+    return "Voice retrying";
+  }
+  if (/no speech|no transcript/.test(normalized)) {
+    return "Voice retrying: no speech";
+  }
+  if (/network|timeout|http \d+/.test(normalized)) {
+    return "Voice retrying: network";
+  }
+  if (/permission/.test(normalized)) {
+    return "Voice permission needed";
+  }
+  if (/unavailable in this build|unavailable on this device/.test(normalized)) {
+    return "Voice unavailable";
+  }
+  return "Voice retrying";
+}
+
 function adaptCommandForBackend(command: string, backend: TerminalBackendKind | undefined): string {
   const parts = command.split(/(\|\||&&|;|\|)/);
   if (parts.length > 1) {
@@ -620,10 +790,20 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
 
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
+  const [agentsAutoEnableFallbackServerId, setAgentsAutoEnableFallbackServerId] = useState<string | null>(null);
+  const [appStateStatus, setAppStateStatus] = useState(AppState.currentState);
   const simpleMode = true;
   const [homeHubVisible, setHomeHubVisible] = useState<boolean>(false);
   const [pageMenuVisible, setPageMenuVisible] = useState<boolean>(false);
   const [showLaunchIntro, setShowLaunchIntro] = useState<boolean>(true);
+  const [novaHandsFreeEnabled, setNovaHandsFreeEnabled] = useState<boolean>(false);
+  const [novaConversationModeEnabled, setNovaConversationModeEnabled] = useState<boolean>(false);
+  const [novaWakePhrase, setNovaWakePhrase] = useState<string>(DEFAULT_NOVA_WAKE_PHRASE);
+  const [novaConversationIdleMs, setNovaConversationIdleMs] = useState<number>(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
+  const [novaSpeakRepliesEnabled, setNovaSpeakRepliesEnabled] = useState<boolean>(true);
+  const [novaVoiceModeActive, setNovaVoiceModeActive] = useState<boolean>(false);
+  const [novaOpenRequestToken, setNovaOpenRequestToken] = useState<number>(0);
+  const [novaAlwaysListeningEnabled, setNovaAlwaysListeningEnabled] = useState<boolean>(false);
   const [status, setStatus] = useState<Status>({ text: "Booting", error: false });
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const [paywallVisible, setPaywallVisible] = useState<boolean>(false);
@@ -669,6 +849,21 @@ export default function AppShell() {
   const aliasGuessRef = useRef<Record<string, string>>({});
   const voiceLoopRetryCountRef = useRef<Record<string, number>>({});
   const voiceLoopRestartTimerRef = useRef<Record<string, ReturnType<typeof setTimeout> | null>>({});
+  const novaVoiceLoopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const novaVoiceStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const novaConversationIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const startNovaVoiceCaptureRef = useRef<(mode?: "wake" | "conversation" | "walkie") => void>(() => undefined);
+  const stopVoiceCaptureIntoNovaRef = useRef<() => Promise<boolean>>(async () => false);
+  const novaVoiceSettingsLoadedRef = useRef<boolean>(false);
+  const novaAlwaysListeningEnabledRef = useRef<boolean>(novaAlwaysListeningEnabled);
+  const novaHandsFreeEnabledRef = useRef<boolean>(novaHandsFreeEnabled);
+  const novaConversationModeEnabledRef = useRef<boolean>(novaConversationModeEnabled);
+  const novaWakePhraseRef = useRef<string>(novaWakePhrase);
+  const novaConversationIdleMsRef = useRef<number>(novaConversationIdleMs);
+  const novaSpeakRepliesEnabledRef = useRef<boolean>(novaSpeakRepliesEnabled);
+  const novaVoiceModeActiveRef = useRef<boolean>(novaVoiceModeActive);
+  const novaListeningModeRef = useRef<"wake" | "conversation" | "walkie">("wake");
+  const pendingNovaListenModeRef = useRef<"wake" | "conversation" | "walkie" | null>(null);
   const appOpenTrackedRef = useRef<boolean>(false);
   const crossServerWatchRulesRef = useRef<Record<string, Record<string, WatchRule>>>({});
   const lastActivityAtRef = useRef<number>(Date.now());
@@ -683,12 +878,113 @@ export default function AppShell() {
     setStatus({ text: message, error: true });
   }, []);
 
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadNovaVoiceSettings() {
+      try {
+        const raw = await SecureStore.getItemAsync(STORAGE_NOVA_VOICE_SETTINGS);
+        if (!mounted) {
+          return;
+        }
+        if (!raw) {
+          setNovaAlwaysListeningEnabled(false);
+          setNovaHandsFreeEnabled(false);
+          setNovaWakePhrase(DEFAULT_NOVA_WAKE_PHRASE);
+          setNovaConversationIdleMs(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
+          setNovaSpeakRepliesEnabled(true);
+          return;
+        }
+        const parsed = JSON.parse(raw) as Partial<{
+          alwaysListeningEnabled: boolean;
+          handsFreeEnabled: boolean;
+          wakePhrase: string;
+          conversationIdleMs: number;
+          speakRepliesEnabled: boolean;
+        }>;
+        setNovaAlwaysListeningEnabled(parsed.alwaysListeningEnabled !== false);
+        setNovaHandsFreeEnabled(Boolean(parsed.handsFreeEnabled));
+        setNovaWakePhrase(normalizeNovaWakePhrase(parsed.wakePhrase));
+        setNovaConversationIdleMs(normalizeNovaConversationIdleMs(parsed.conversationIdleMs));
+        setNovaSpeakRepliesEnabled(parsed.speakRepliesEnabled !== false);
+      } catch {
+        if (mounted) {
+          setNovaAlwaysListeningEnabled(false);
+          setNovaHandsFreeEnabled(false);
+          setNovaWakePhrase(DEFAULT_NOVA_WAKE_PHRASE);
+          setNovaConversationIdleMs(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
+          setNovaSpeakRepliesEnabled(true);
+        }
+      } finally {
+        if (mounted) {
+          novaVoiceSettingsLoadedRef.current = true;
+        }
+      }
+    }
+
+    void loadNovaVoiceSettings();
+
+    return () => {
+      mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!novaVoiceSettingsLoadedRef.current) {
+      return;
+    }
+    void SecureStore.setItemAsync(
+      STORAGE_NOVA_VOICE_SETTINGS,
+      JSON.stringify({
+        alwaysListeningEnabled: novaAlwaysListeningEnabled,
+        handsFreeEnabled: novaHandsFreeEnabled,
+        wakePhrase: normalizeNovaWakePhrase(novaWakePhrase),
+        conversationIdleMs: normalizeNovaConversationIdleMs(novaConversationIdleMs),
+        speakRepliesEnabled: novaSpeakRepliesEnabled,
+      })
+    );
+  }, [novaAlwaysListeningEnabled, novaConversationIdleMs, novaHandsFreeEnabled, novaSpeakRepliesEnabled, novaWakePhrase]);
+
+  useEffect(() => {
+    novaAlwaysListeningEnabledRef.current = novaAlwaysListeningEnabled;
+  }, [novaAlwaysListeningEnabled]);
+
+  useEffect(() => {
+    novaHandsFreeEnabledRef.current = novaHandsFreeEnabled;
+  }, [novaHandsFreeEnabled]);
+
+  useEffect(() => {
+    novaConversationModeEnabledRef.current = novaConversationModeEnabled;
+  }, [novaConversationModeEnabled]);
+
+  useEffect(() => {
+    novaWakePhraseRef.current = novaWakePhrase;
+  }, [novaWakePhrase]);
+
+  useEffect(() => {
+    novaConversationIdleMsRef.current = novaConversationIdleMs;
+  }, [novaConversationIdleMs]);
+
+  useEffect(() => {
+    novaSpeakRepliesEnabledRef.current = novaSpeakRepliesEnabled;
+  }, [novaSpeakRepliesEnabled]);
+
+  useEffect(() => {
+    novaVoiceModeActiveRef.current = novaVoiceModeActive;
+  }, [novaVoiceModeActive]);
+
   const markActivity = useCallback(() => {
     lastActivityAtRef.current = Date.now();
   }, []);
 
+  const requestNovaOverlayOpen = useCallback(() => {
+    setHomeHubVisible(false);
+    setPageMenuVisible(false);
+    setNovaOpenRequestToken((current) => current + 1);
+  }, []);
+
   const { loading: onboardingLoading, completed: onboardingCompleted, completeOnboarding } = useOnboarding();
-  const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock } = useBiometricLock();
+  const { loading: lockLoading, requireBiometric, unlocked, setRequireBiometric, unlock, lock, forceLock } = useBiometricLock();
   const { loading: tutorialLoading, done: tutorialDone, finish: finishTutorial } = useTutorial(onboardingCompleted && unlocked);
 
   useEffect(() => {
@@ -765,7 +1061,7 @@ export default function AppShell() {
     exportEncrypted,
     importEncrypted,
   } = useLlmProfiles();
-  const { sendPrompt, sendPromptDetailed } = useLlmClient();
+  const { sendPrompt, sendPromptDetailed, sendPromptStream } = useLlmClient();
 
   const {
     servers,
@@ -889,6 +1185,11 @@ export default function AppShell() {
     allConnectedServers,
     totalActiveStreams,
   } = pool;
+  const poolConnectionsRef = useRef(poolConnections);
+
+  useEffect(() => {
+    poolConnectionsRef.current = poolConnections;
+  }, [poolConnections]);
 
   useEffect(() => {
     if (!activeServerId) {
@@ -1480,21 +1781,50 @@ export default function AppShell() {
   const {
     recording: voiceRecording,
     busy: voiceBusy,
+    liveRecognitionActive: liveVoiceRecognitionActive,
     lastTranscript: voiceTranscript,
     lastError: voiceError,
     meteringDb: voiceMeteringDb,
     permissionStatus: voicePermissionStatus,
     requestCapturePermission: requestVoicePermission,
+    requestLiveRecognitionPermission,
     startCapture: startVoiceCapture,
+    startLiveRecognition,
     stopCapture: stopVoiceCapture,
+    stopLiveRecognition,
     stopAndTranscribe: stopVoiceCaptureAndTranscribe,
+    prepareSpeechOutput,
     setLastTranscript: setVoiceTranscript,
   } = useVoiceCapture({ activeServer, connected });
+  const voiceRecordingRef = useRef<boolean>(voiceRecording);
+  const voiceBusyRef = useRef<boolean>(voiceBusy);
+  const liveVoiceRecognitionActiveRef = useRef<boolean>(liveVoiceRecognitionActive);
+
+  useEffect(() => {
+    voiceRecordingRef.current = voiceRecording;
+  }, [voiceRecording]);
+
+  useEffect(() => {
+    voiceBusyRef.current = voiceBusy;
+  }, [voiceBusy]);
+
+  useEffect(() => {
+    liveVoiceRecognitionActiveRef.current = liveVoiceRecognitionActive;
+  }, [liveVoiceRecognitionActive]);
 
   const remoteOpenSessions = useMemo(
     () => openSessions.filter((session) => !localAiSessions.includes(session)),
     [localAiSessions, openSessions]
   );
+
+  const novaListeningActive =
+    unlocked &&
+    appStateStatus === "active" &&
+    route !== "glasses" &&
+    (liveVoiceRecognitionActive ||
+      voiceRecording ||
+      pendingNovaListenModeRef.current !== null ||
+      novaVoiceModeActive);
 
   const scopedServerId = focusedServerId ?? activeServerId;
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(scopedServerId);
@@ -1507,6 +1837,7 @@ export default function AppShell() {
     includeHidden,
     setIncludeHidden,
     entries: fileEntries,
+    setEntries: setFileEntries,
     selectedFilePath,
     selectedContent,
     setSelectedFilePath,
@@ -1836,12 +2167,19 @@ export default function AppShell() {
       }
 
       setPoolDrafts(serverId, (prev) => ({ ...prev, [session]: "" }));
-      const reply = await sendPrompt(activeProfile, cleanPrompt);
-      const nextBlock = `\\n\\n[LLM Prompt]\\n${cleanPrompt}\\n\\n[LLM Reply]\\n${reply}\\n`;
-      setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prev[session] || ""}${nextBlock}` }));
+      const baseTail = poolConnectionsRef.current.get(serverId)?.tails[session] || "";
+      const prefix = `${baseTail}\\n\\n[LLM Prompt]\\n${cleanPrompt}\\n\\n[LLM Reply]\\n`;
+      setPoolTails(serverId, (prev) => ({ ...prev, [session]: prefix }));
+
+      const result = await sendPromptStream(activeProfile, cleanPrompt, {
+        onTextDelta: (_delta, fullText) => {
+          setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prefix}${fullText}` }));
+        },
+      });
+      setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prefix}${result.text}\\n` }));
       return cleanPrompt;
     },
-    [activeProfile, sendPrompt, setPoolDrafts, setPoolTails]
+    [activeProfile, sendPromptStream, setPoolDrafts, setPoolTails]
   );
 
   const sendViaExternalLlm = useCallback(
@@ -2068,6 +2406,17 @@ export default function AppShell() {
       }
 
       const routeToExternal = mode === "ai" && (localSession || !targetConnection.capabilities.codex);
+      devNovaLog("sendTextToServerSession", {
+        serverId,
+        session,
+        mode,
+        clearDraft,
+        localSession,
+        routeToExternal,
+        connected: targetConnection.connected,
+        hasCodex: targetConnection.capabilities.codex,
+        commandPreview: trimmed.slice(0, 160),
+      });
       if (routeToExternal) {
         const sent = await sendViaExternalLlmToServer(serverId, session, trimmed);
         if (sent) {
@@ -2098,6 +2447,12 @@ export default function AppShell() {
       }
 
       await sendPoolCommand(serverId, session, trimmed, mode, false);
+      devNovaLog("sendTextToServerSession:sent", {
+        serverId,
+        session,
+        mode,
+        commandPreview: trimmed.slice(0, 160),
+      });
       if (focusedTarget) {
         await addCommand(session, trimmed);
       }
@@ -2185,6 +2540,50 @@ export default function AppShell() {
     [poolConnections, sendTextToServerSession]
   );
 
+  const waitForSessionOutput = useCallback(
+    async ({
+      serverId,
+      session,
+      beforeTail,
+      maxWaitMs = 5000,
+      pollRemote = true,
+    }: {
+      serverId: string;
+      session: string;
+      beforeTail: string;
+      maxWaitMs?: number;
+      pollRemote?: boolean;
+    }): Promise<string> => {
+      const deadline = Date.now() + maxWaitMs;
+
+      while (Date.now() < deadline) {
+        const connection = poolConnectionsRef.current.get(serverId);
+        if (!connection) {
+          break;
+        }
+
+        if (pollRemote && !connection.localAiSessions.includes(session)) {
+          try {
+            await fetchPoolTail(serverId, session, false);
+          } catch {
+            // Best-effort polling only.
+          }
+        }
+
+        await wait(150);
+        const latestTail = poolConnectionsRef.current.get(serverId)?.tails[session] || "";
+        if (latestTail !== beforeTail && latestTail.trim()) {
+          return latestTail;
+        }
+
+        await wait(250);
+      }
+
+      return poolConnectionsRef.current.get(serverId)?.tails[session] || beforeTail;
+    },
+    [fetchPoolTail]
+  );
+
   const stopServerSession = useCallback(
     async (serverId: string, session: string) => {
       const targetConnection = poolConnections.get(serverId);
@@ -2237,245 +2636,137 @@ export default function AppShell() {
     [assertServerWritable, markActivity, poolConnections, recordAuditEvent, scopedServerId, sendPoolControlChar, sessionReadOnly]
   );
 
-  const agentRuntimeServerId = focusedServerId;
   type AgentServerAction =
     | { kind: "approve" }
     | { kind: "deny" }
-    | { kind: "create"; name: string }
+    | { kind: "create"; name: string; goal?: string }
     | { kind: "remove"; name: string }
     | { kind: "set_status"; name: string; status: "idle" | "monitoring" | "executing" | "waiting_approval" }
     | { kind: "set_goal"; name: string; goal: string }
     | { kind: "queue_command"; name: string; command: string };
-  type PendingAgentServerAction = {
-    serverId: string;
-    action: AgentServerAction;
-    resolve: (agentIds: string[]) => void;
-    reject: (error: unknown) => void;
-  };
-  const pendingAgentServerActionsRef = useRef<PendingAgentServerAction[]>([]);
-  const dispatchFocusedServerAgentCommand = useCallback(
-    (session: string, command: string) => {
-      if (!agentRuntimeServerId) {
-        return;
-      }
-      void sendServerSessionCommand(agentRuntimeServerId, session, command, "shell").catch((error) => {
-        setError(error);
-      });
-    },
-    [agentRuntimeServerId, sendServerSessionCommand, setError]
-  );
-  const resolveFocusedServerAgentSession = useCallback((): string | null => {
-    if (!agentRuntimeServerId) {
-      return null;
-    }
-    const connection = poolConnections.get(agentRuntimeServerId);
-    if (!connection) {
-      return null;
-    }
-    const sessionCandidates = [...connection.openSessions, ...connection.allSessions];
-    const remoteSession = sessionCandidates.find((session) => !connection.localAiSessions.includes(session));
-    return remoteSession || null;
-  }, [agentRuntimeServerId, poolConnections]);
-  const {
-    agents: focusedServerAgents,
-    addRuntimeAgent: addFocusedServerRuntimeAgent,
-    removeRuntimeAgent: removeFocusedServerRuntimeAgent,
-    setRuntimeAgentStatus: setFocusedServerRuntimeAgentStatus,
-    setRuntimeAgentGoal: setFocusedServerRuntimeAgentGoal,
-    requestAgentApproval: requestFocusedServerAgentApproval,
-    approveReadyApprovals: approveReadyAgentsForFocusedServer,
-    denyAllPendingApprovals: denyAllPendingAgentsForFocusedServer,
-    runMonitoringCycle: runFocusedServerMonitoringCycle,
-  } = useNovaAgentRuntime({
-    serverId: agentRuntimeServerId,
-    onDispatchCommand: dispatchFocusedServerAgentCommand,
-    resolveDefaultSession: resolveFocusedServerAgentSession,
-  });
-  const hasFocusedMonitoringAgents = useMemo(
-    () => focusedServerAgents.some((agent) => agent.status === "monitoring"),
-    [focusedServerAgents]
-  );
-
-  useEffect(() => {
-    if (!connected || !agentRuntimeServerId || !hasFocusedMonitoringAgents) {
-      return;
-    }
-
-    const runCycle = () => {
-      try {
-        const cycle = runFocusedServerMonitoringCycle({
-          intervalMs: NOVA_AGENT_MONITORING_INTERVAL_MS,
-        });
-        if (cycle.requested.length === 0 && cycle.approved.length === 0) {
-          return;
-        }
-        const serverName = poolConnections.get(agentRuntimeServerId)?.server.name || "server";
-        setStatus({
-          text: `${serverName}: monitoring cycle queued ${cycle.requested.length}, dispatched ${cycle.approved.length}.`,
-          error: false,
-        });
-      } catch (error) {
-        setError(error);
-      }
-    };
-
-    runCycle();
-    const intervalId = setInterval(runCycle, 5000);
-    return () => clearInterval(intervalId);
-  }, [
-    agentRuntimeServerId,
-    connected,
-    hasFocusedMonitoringAgents,
-    poolConnections,
-    runFocusedServerMonitoringCycle,
-    setError,
-    setStatus,
-  ]);
-
-  const executeFocusedAgentServerAction = useCallback(
-    (action: AgentServerAction): string[] => {
-      if (action.kind === "approve") {
-        const approved = approveReadyAgentsForFocusedServer();
-        return Array.isArray(approved) ? approved : [];
-      }
-      if (action.kind === "deny") {
-        const denied = denyAllPendingAgentsForFocusedServer();
-        return Array.isArray(denied) ? denied : [];
-      }
-      if (action.kind === "create") {
-        const name = action.name.trim();
-        if (!name) {
-          return [];
-        }
-        if (hasExactAgentName(focusedServerAgents, name)) {
-          return [];
-        }
-        const created = addFocusedServerRuntimeAgent(name);
-        return created ? [created.agentId] : [];
-      }
-      if (action.kind === "remove") {
-        const name = action.name.trim();
-        if (!name) {
-          return [];
-        }
-        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-        matchingAgentIds.forEach((agentId) => {
-          removeFocusedServerRuntimeAgent(agentId);
-        });
-        return matchingAgentIds;
-      }
-      if (action.kind === "set_status") {
-        const name = action.name.trim();
-        if (!name) {
-          return [];
-        }
-        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-        matchingAgentIds.forEach((agentId) => {
-          setFocusedServerRuntimeAgentStatus(agentId, action.status);
-        });
-        return matchingAgentIds;
-      }
-      if (action.kind === "set_goal") {
-        const name = action.name.trim();
-        const goal = action.goal.trim();
-        if (!name || !goal) {
-          return [];
-        }
-        const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-        matchingAgentIds.forEach((agentId) => {
-          setFocusedServerRuntimeAgentGoal(agentId, goal);
-        });
-        return matchingAgentIds;
-      }
+  const buildRemoteAgentObjective = useCallback((action: AgentServerAction): string => {
+    if (action.kind === "create") {
       const name = action.name.trim();
-      const command = action.command.trim();
-      if (!name || !command) {
-        return [];
-      }
-      const matchingAgentIds = findAgentIdsByName(focusedServerAgents, name);
-      const resolvedAgentIds =
-        matchingAgentIds.length > 0
-          ? matchingAgentIds
-          : (() => {
-              const created = addFocusedServerRuntimeAgent(name);
-              return created ? [created.agentId] : [];
-            })();
-      if (resolvedAgentIds.length === 0) {
-        return [];
-      }
-      const agentRuntimeConnection = agentRuntimeServerId ? poolConnections.get(agentRuntimeServerId) : null;
-      const sessionCandidates = agentRuntimeConnection
-        ? [...agentRuntimeConnection.openSessions, ...agentRuntimeConnection.allSessions]
-        : [];
-      const remoteSession = sessionCandidates.find((session) => !(agentRuntimeConnection?.localAiSessions || []).includes(session));
-      if (!remoteSession) {
-        return [];
-      }
-
-      const queuedAgentIds: string[] = [];
-      resolvedAgentIds.forEach((agentId) => {
-        setFocusedServerRuntimeAgentGoal(agentId, command);
-        const queued = requestFocusedServerAgentApproval(agentId, {
-          command,
-          session: remoteSession,
-          summary: `Queued by voice route for ${remoteSession}`,
-        });
-        if (queued) {
-          queuedAgentIds.push(agentId);
-        }
-      });
-      return queuedAgentIds;
-    },
-    [
-      agentRuntimeServerId,
-      addFocusedServerRuntimeAgent,
-      approveReadyAgentsForFocusedServer,
-      denyAllPendingAgentsForFocusedServer,
-      focusedServerAgents,
-      poolConnections,
-      requestFocusedServerAgentApproval,
-      removeFocusedServerRuntimeAgent,
-      setFocusedServerRuntimeAgentStatus,
-      setFocusedServerRuntimeAgentGoal,
-    ]
-  );
-
-  const processPendingAgentServerActions = useCallback(() => {
-    while (pendingAgentServerActionsRef.current.length > 0) {
-      const current = pendingAgentServerActionsRef.current[0];
-      if (!servers.some((server) => server.id === current.serverId)) {
-        pendingAgentServerActionsRef.current.shift();
-        current.reject(new Error("Target server is no longer available."));
-        continue;
-      }
-
-      if (!focusedServerId || focusedServerId !== current.serverId) {
-        focusServer(current.serverId);
-        return;
-      }
-
-      pendingAgentServerActionsRef.current.shift();
-      try {
-        current.resolve(executeFocusedAgentServerAction(current.action));
-      } catch (error) {
-        current.reject(error);
-      }
+      const goal = action.goal?.trim() || "";
+      return goal ? `Create agent "${name}" with goal: ${goal}` : `Create agent "${name}"`;
     }
-  }, [executeFocusedAgentServerAction, focusServer, focusedServerId, servers]);
-
-  useEffect(() => {
-    processPendingAgentServerActions();
-  }, [focusedServerId, processPendingAgentServerActions]);
-
-  useEffect(() => {
-    return () => {
-      const error = new Error("Agent action was cancelled.");
-      while (pendingAgentServerActionsRef.current.length > 0) {
-        pendingAgentServerActionsRef.current.shift()?.reject(error);
-      }
-    };
+    if (action.kind === "remove") {
+      return `Remove agent "${action.name.trim()}"`;
+    }
+    if (action.kind === "set_status") {
+      return `Set agent "${action.name.trim()}" status to ${action.status}`;
+    }
+    if (action.kind === "set_goal") {
+      return `Update agent "${action.name.trim()}" goal to: ${action.goal.trim()}`;
+    }
+    if (action.kind === "queue_command") {
+      return `Run command for agent "${action.name.trim()}": ${action.command.trim()}`;
+    }
+    return "";
   }, []);
+  const executeRemoteAgentServerAction = useCallback(
+    async (serverId: string, action: AgentServerAction): Promise<string[] | null> => {
+      const targetServer = servers.find((server) => server.id === serverId) || null;
+      if (!targetServer) {
+        throw new Error("Target server is not available.");
+      }
 
+      const snapshot = await fetchNovaAdaptBridgeSnapshot(targetServer, {
+        planLimit: 50,
+        jobLimit: 25,
+        workflowLimit: 50,
+      });
+      if (!snapshot.supported || !snapshot.runtimeAvailable) {
+        return null;
+      }
+
+      if (action.kind === "approve") {
+        const pendingPlans = snapshot.plans.filter((plan) => canApproveRemotePlanStatus(plan.status));
+        if (pendingPlans.length === 0) {
+          return [];
+        }
+        for (const plan of pendingPlans) {
+          await approveNovaAdaptBridgePlanAsync(targetServer, plan.id);
+        }
+        return pendingPlans.map((plan) => plan.id);
+      }
+
+      if (action.kind === "deny") {
+        const pendingPlans = snapshot.plans.filter((plan) => canRejectRemotePlanStatus(plan.status));
+        if (pendingPlans.length === 0) {
+          return [];
+        }
+        for (const plan of pendingPlans) {
+          await rejectNovaAdaptBridgePlan(targetServer, plan.id, "Rejected from NovaRemote agent controls");
+        }
+        return pendingPlans.map((plan) => plan.id);
+      }
+
+      if (action.kind === "create") {
+        const created = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return created ? [created.id] : [];
+      }
+
+      if (action.kind === "remove") {
+        const matchingPendingPlans = snapshot.plans.filter(
+          (plan) => canRejectRemotePlanStatus(plan.status) && remotePlanMatchesAgentName(plan, action.name)
+        );
+        if (matchingPendingPlans.length > 0) {
+          for (const plan of matchingPendingPlans) {
+            await rejectNovaAdaptBridgePlan(targetServer, plan.id, `Removed agent ${action.name.trim()} from NovaRemote`);
+          }
+          return matchingPendingPlans.map((plan) => plan.id);
+        }
+        const removalPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return removalPlan ? [removalPlan.id] : [];
+      }
+
+      if (action.kind === "set_status") {
+        const matchingWorkflows = snapshot.workflows.filter((workflow) => remoteWorkflowMatchesAgentName(workflow, action.name));
+        if ((action.status === "executing" || action.status === "monitoring") && matchingWorkflows.length > 0) {
+          const resumed: string[] = [];
+          for (const workflow of matchingWorkflows) {
+            if (workflow.status.trim().toLowerCase() === "running") {
+              resumed.push(workflow.workflowId);
+              continue;
+            }
+            const ok = await resumeNovaAdaptBridgeWorkflow(targetServer, workflow.workflowId);
+            if (ok) {
+              resumed.push(workflow.workflowId);
+            }
+          }
+          if (resumed.length > 0) {
+            return resumed;
+          }
+        }
+        const statusPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return statusPlan ? [statusPlan.id] : [];
+      }
+
+      if (action.kind === "set_goal") {
+        const goalPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+          strategy: "single",
+        });
+        return goalPlan ? [goalPlan.id] : [];
+      }
+
+      const commandPlan = await createNovaAdaptBridgePlan(targetServer, buildRemoteAgentObjective(action), {
+        strategy: "single",
+      });
+      if (!commandPlan) {
+        return [];
+      }
+      await approveNovaAdaptBridgePlanAsync(targetServer, commandPlan.id);
+      return [commandPlan.id];
+    },
+    [buildRemoteAgentObjective, servers]
+  );
   const runAgentServerAction = useCallback(
     async (serverId: string, action: AgentServerAction): Promise<string[]> => {
       const targetServerId = serverId.trim();
@@ -2485,21 +2776,22 @@ export default function AppShell() {
       if (!servers.some((server) => server.id === targetServerId)) {
         throw new Error("Target server is not available.");
       }
-      if (focusedServerId === targetServerId) {
-        return executeFocusedAgentServerAction(action);
+      const remoteResult = await executeRemoteAgentServerAction(targetServerId, action);
+      if (remoteResult !== null) {
+        return remoteResult;
       }
-
-      return await new Promise<string[]>((resolve, reject) => {
-        pendingAgentServerActionsRef.current.push({
-          serverId: targetServerId,
-          action,
-          resolve,
-          reject,
-        });
-        processPendingAgentServerActions();
+      const fallback = buildAgentRuntimeFallback({
+        targetServerId,
+        focusedServerId,
       });
+      if (fallback.focusedServerId) {
+        setPoolFocusedServerId(fallback.focusedServerId);
+      }
+      setAgentsAutoEnableFallbackServerId(targetServerId);
+      setRoute(fallback.route);
+      throw new Error(fallback.message);
     },
-    [executeFocusedAgentServerAction, focusedServerId, processPendingAgentServerActions, servers]
+    [executeRemoteAgentServerAction, focusedServerId, servers, setPoolFocusedServerId]
   );
 
   const approveReadyAgentsForServer = useCallback(
@@ -2513,7 +2805,8 @@ export default function AppShell() {
   );
 
   const createAgentForServer = useCallback(
-    async (serverId: string, name: string): Promise<string[]> => await runAgentServerAction(serverId, { kind: "create", name }),
+    async (serverId: string, name: string, goal?: string): Promise<string[]> =>
+      await runAgentServerAction(serverId, { kind: "create", name, goal }),
     [runAgentServerAction]
   );
 
@@ -2569,10 +2862,10 @@ export default function AppShell() {
   );
 
   const createAgentForServers = useCallback(
-    async (serverIds: string[], name: string): Promise<string[]> => {
+    async (serverIds: string[], name: string, goal?: string): Promise<string[]> => {
       const created: string[] = [];
       for (const serverId of uniqueServerIds(serverIds)) {
-        const next = await createAgentForServer(serverId, name);
+        const next = await createAgentForServer(serverId, name, goal);
         created.push(...next);
       }
       return created;
@@ -2630,6 +2923,787 @@ export default function AppShell() {
       return queued;
     },
     [queueAgentCommandForServer]
+  );
+
+  const buildNovaAssistantContext = useCallback((): NovaAssistantRuntimeContext => {
+    return {
+      route,
+      focusedServerId,
+      focusedServerName: activeServer?.name || null,
+      focusedSession,
+      activeProfileName: activeProfile?.name || null,
+      files: {
+        currentPath: currentPath || activeServer?.defaultCwd || "",
+        includeHidden,
+        selectedFilePath,
+        selectedContentPreview: selectedContent.slice(0, 1200),
+        entries: fileEntries.slice(0, 30).map((entry) => ({
+          name: entry.name,
+          path: entry.path,
+          isDir: entry.is_dir,
+        })),
+      },
+      team: {
+        loggedIn: Boolean(teamIdentity),
+        teamName: teamIdentity?.teamName || null,
+        role: teamIdentity?.role || null,
+        cloudDashboardUrl: cloudDashboardUrl || null,
+        auditPendingCount: pendingAuditEvents,
+      },
+      processes: {
+        available: capabilities.processes,
+        busy: processesBusy,
+        items: processes.slice(0, 20).map((process) => ({
+          pid: process.pid,
+          name: process.name,
+          cpuPercent: process.cpu_percent,
+          memPercent: process.mem_percent,
+          command: process.command,
+        })),
+      },
+      servers: brokeredServers.map((server) => {
+        const connection = poolConnections.get(server.id);
+        const sessionNames = Array.from(new Set([...(connection?.openSessions || []), ...(connection?.allSessions || [])]));
+        return {
+          id: server.id,
+          name: server.name,
+          connected: Boolean(connection?.connected),
+          vmHost: server.vmHost,
+          vmType: server.vmType,
+          vmName: server.vmName,
+          vmId: server.vmId,
+          hasPortainerUrl: Boolean(server.portainerUrl),
+          hasProxmoxUrl: Boolean(server.proxmoxUrl),
+          hasGrafanaUrl: Boolean(server.grafanaUrl),
+          hasSshFallback: Boolean(server.sshHost),
+          sessions: sessionNames.map((session) => ({
+            session,
+            mode:
+              connection?.sendModes[session] ||
+              (connection?.localAiSessions.includes(session) || isLikelyAiSession(session) ? "ai" : "shell"),
+            localAi: Boolean(connection?.localAiSessions.includes(session)),
+            live: Boolean(connection?.streamLive[session]),
+          })),
+        };
+      }),
+      settings: {
+        glassesEnabled: glassesMode.enabled,
+        glassesVoiceAutoSend: glassesMode.voiceAutoSend,
+        glassesVoiceLoop: glassesMode.voiceLoop,
+        glassesWakePhraseEnabled: glassesMode.wakePhraseEnabled,
+        glassesMinimalMode: glassesMode.minimalMode,
+        glassesTextScale: glassesMode.textScale,
+        startAiEngine,
+        startKind,
+        poolPaused: poolLifecyclePaused,
+      },
+    };
+  }, [
+    activeProfile?.name,
+    activeServer?.name,
+    activeServer?.defaultCwd,
+    brokeredServers,
+    cloudDashboardUrl,
+    capabilities.processes,
+    currentPath,
+    fileEntries,
+    focusedServerId,
+    focusedSession,
+    glassesMode.enabled,
+    glassesMode.minimalMode,
+    glassesMode.textScale,
+    glassesMode.voiceAutoSend,
+    glassesMode.voiceLoop,
+    glassesMode.wakePhraseEnabled,
+    includeHidden,
+    pendingAuditEvents,
+    processes,
+    processesBusy,
+    poolConnections,
+    poolLifecyclePaused,
+    route,
+    selectedContent,
+    selectedFilePath,
+    startAiEngine,
+    startKind,
+    teamIdentity,
+  ]);
+
+  const executeNovaAssistantActions = useCallback(
+    async (actions: NovaAssistantAction[], context: NovaAssistantRuntimeContext): Promise<NovaAssistantExecutionResult[]> => {
+      const results: NovaAssistantExecutionResult[] = [];
+      const lastCreatedSessionByServerId = new Map<string, string>();
+      let assistantFileServerId = context.focusedServerId;
+      let assistantFilePath = context.files.currentPath;
+      let assistantFileIncludeHidden = context.files.includeHidden;
+      let assistantSelectedFilePath = context.files.selectedFilePath;
+
+      const resolveServerProfileOrThrow = (serverId: string): ServerProfile => {
+        const profile = brokeredServers.find((entry) => entry.id === serverId);
+        if (!profile) {
+          throw new Error("Could not load the target server profile.");
+        }
+        return profile;
+      };
+
+      const getActiveDirectoryForServer = (serverId: string): string => {
+        if (assistantFileServerId === serverId) {
+          return assistantFilePath;
+        }
+        return resolveServerProfileOrThrow(serverId).defaultCwd || "";
+      };
+
+      const getSelectedFileForServer = (serverId: string): string => {
+        if (assistantFileServerId === serverId && assistantSelectedFilePath) {
+          return assistantSelectedFilePath;
+        }
+        return "";
+      };
+
+      const countProcessEntries = (payload: unknown): number => {
+        if (Array.isArray(payload)) {
+          return payload.filter((entry) => entry && typeof entry === "object" && Number.isFinite(Number((entry as { pid?: unknown }).pid)))
+            .length;
+        }
+        if (payload && typeof payload === "object") {
+          const record = payload as { processes?: unknown[]; items?: unknown[] };
+          if (Array.isArray(record.processes)) {
+            return record.processes.length;
+          }
+          if (Array.isArray(record.items)) {
+            return record.items.length;
+          }
+        }
+        return 0;
+      };
+
+      const processListContainsPid = (payload: unknown, pid: number): boolean => {
+        if (Array.isArray(payload)) {
+          return payload.some((entry) => Number((entry as { pid?: unknown })?.pid) === pid);
+        }
+        if (payload && typeof payload === "object") {
+          const record = payload as { processes?: unknown[]; items?: unknown[] };
+          if (Array.isArray(record.processes)) {
+            return record.processes.some((entry) => Number((entry as { pid?: unknown })?.pid) === pid);
+          }
+          if (Array.isArray(record.items)) {
+            return record.items.some((entry) => Number((entry as { pid?: unknown })?.pid) === pid);
+          }
+        }
+        return false;
+      };
+
+      const setFilesSurfaceTarget = (serverId: string) => {
+        focusServer(serverId);
+        setHomeHubVisible(false);
+        setRoute("files");
+        assistantFileServerId = serverId;
+      };
+
+      for (const action of actions) {
+        devNovaLog("executeNovaAssistantAction", action);
+        try {
+          if (action.type === "navigate") {
+            setHomeHubVisible(false);
+            setRoute(action.route);
+            results.push({ action: action.type, ok: true, detail: `Opened ${action.route}` });
+            continue;
+          }
+
+          if (action.type === "set_pool_paused") {
+            markActivity();
+            if (action.paused) {
+              disconnectAllServers();
+              results.push({ action: action.type, ok: true, detail: "Paused the connection pool" });
+            } else {
+              connectAllServers();
+              results.push({ action: action.type, ok: true, detail: "Resumed the connection pool" });
+            }
+            continue;
+          }
+
+          if (action.type === "set_preference") {
+            if (action.key === "glasses.enabled") {
+              setGlassesEnabled(Boolean(action.value));
+            } else if (action.key === "glasses.voiceAutoSend") {
+              setGlassesVoiceAutoSend(Boolean(action.value));
+            } else if (action.key === "glasses.voiceLoop") {
+              setGlassesVoiceLoop(Boolean(action.value));
+            } else if (action.key === "glasses.wakePhraseEnabled") {
+              setGlassesWakePhraseEnabled(Boolean(action.value));
+            } else if (action.key === "glasses.minimalMode") {
+              setGlassesMinimalMode(Boolean(action.value));
+            } else if (action.key === "glasses.textScale") {
+              const next = Number.parseFloat(String(action.value));
+              if (!Number.isFinite(next)) {
+                throw new Error("Invalid glasses text scale.");
+              }
+              setGlassesTextScale(next);
+            } else if (action.key === "start.aiEngine") {
+              const next = String(action.value).trim().toLowerCase();
+              if (next !== "auto" && next !== "server" && next !== "external") {
+                throw new Error("Invalid start AI engine.");
+              }
+              setStartAiEngine(next as AiEnginePreference);
+            } else if (action.key === "start.kind") {
+              const next = String(action.value).trim().toLowerCase();
+              if (next !== "ai" && next !== "shell") {
+                throw new Error("Invalid start session kind.");
+              }
+              setStartKind(next as TerminalSendMode);
+            }
+            results.push({ action: action.type, ok: true, detail: `Updated ${action.key}` });
+            continue;
+          }
+
+          if (action.type === "team_refresh") {
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await refreshTeamContext();
+            results.push({ action: action.type, ok: true, detail: "Refreshed team context" });
+            continue;
+          }
+
+          if (action.type === "team_open_dashboard") {
+            if (!cloudDashboardUrl) {
+              throw new Error("No team cloud dashboard is configured.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await Linking.openURL(cloudDashboardUrl);
+            results.push({ action: action.type, ok: true, detail: "Opened the team dashboard" });
+            continue;
+          }
+
+          if (action.type === "team_sync_audit") {
+            if (!teamIdentity) {
+              throw new Error("Sign into a team account first.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await syncAuditNow();
+            results.push({ action: action.type, ok: true, detail: "Synced the audit log" });
+            continue;
+          }
+
+          if (action.type === "team_request_audit_export") {
+            if (!teamIdentity) {
+              throw new Error("Sign into a team account first.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await requestCloudAuditExport(action.format, action.rangeHours || 168);
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: `Requested a ${action.format.toUpperCase()} audit export`,
+            });
+            continue;
+          }
+
+          if (action.type === "team_refresh_audit_exports") {
+            if (!teamIdentity) {
+              throw new Error("Sign into a team account first.");
+            }
+            setHomeHubVisible(false);
+            setRoute("team");
+            markActivity();
+            await refreshCloudAuditExports(20);
+            results.push({ action: action.type, ok: true, detail: "Refreshed cloud audit exports" });
+            continue;
+          }
+
+          const server = resolveAssistantServer(context, action.serverRef);
+          if (!server) {
+            throw new Error("Could not resolve the target server.");
+          }
+          const serverProfile = resolveServerProfileOrThrow(server.id);
+
+          const resolveSessionOrThrow = (sessionRef?: string | null) => {
+            const resolved = resolveAssistantSession(
+              context,
+              server,
+              sessionRef,
+              lastCreatedSessionByServerId.get(server.id) || null
+            );
+            if (!resolved) {
+              throw new Error(`Could not resolve a session on ${server.name}.`);
+            }
+            return resolved;
+          };
+
+          if (action.type === "focus_server") {
+            focusServer(server.id);
+            results.push({ action: action.type, ok: true, detail: `Focused ${server.name}` });
+            continue;
+          }
+
+          if (action.type === "focus_session") {
+            const session = resolveSessionOrThrow(action.sessionRef);
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            setFocusedSession(session.session);
+            results.push({ action: action.type, ok: true, detail: `Focused ${server.name} / ${session.session}` });
+            continue;
+          }
+
+          if (action.type === "create_session") {
+            const session = await createSessionForServer(server.id, action.kind, action.prompt || "");
+            lastCreatedSessionByServerId.set(server.id, session);
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            setFocusedSession(session);
+            results.push({ action: action.type, ok: true, detail: `Created ${action.kind} session ${session} on ${server.name}` });
+            continue;
+          }
+
+          if (action.type === "send_command") {
+            const requestedMode = action.mode || "shell";
+            let session = action.sessionRef
+              ? resolveAssistantSession(context, server, action.sessionRef, lastCreatedSessionByServerId.get(server.id) || null)
+              : null;
+            const shouldUseShellSession = requestedMode === "shell";
+            if (session && shouldUseShellSession && session.mode !== "shell") {
+              session = null;
+            }
+            if (!session && (action.createIfMissing || shouldUseShellSession)) {
+              const created = await createSessionForServer(server.id, action.createKind || requestedMode || "shell");
+              lastCreatedSessionByServerId.set(server.id, created);
+              session = {
+                session: created,
+                mode: action.createKind || requestedMode || "shell",
+                localAi: false,
+                live: false,
+              };
+            }
+            if (!session) {
+              throw new Error(`No session matched on ${server.name}.`);
+            }
+            const effectiveMode = requestedMode || session.mode;
+            const beforeTail = poolConnectionsRef.current.get(server.id)?.tails[session.session] || "";
+            await sendServerSessionCommand(server.id, session.session, action.command, effectiveMode);
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            setFocusedSession(session.session);
+            const observedTail = await waitForSessionOutput({
+              serverId: server.id,
+              session: session.session,
+              beforeTail,
+              pollRemote: effectiveMode === "shell",
+            });
+            const observation = summarizeSessionDelta(observedTail, beforeTail);
+            const detailPrefix =
+              effectiveMode === "ai"
+                ? `Delivered request to ${server.name} / ${session.session}`
+                : `Ran command in ${server.name} / ${session.session}`;
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: observation ? `${detailPrefix}; observed output: ${observation}` : `${detailPrefix}; waiting for additional output.`,
+            });
+            continue;
+          }
+
+          if (action.type === "set_draft") {
+            const session = resolveSessionOrThrow(action.sessionRef);
+            setServerSessionDraft(server.id, session.session, action.text);
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            setFocusedSession(session.session);
+            results.push({ action: action.type, ok: true, detail: `Updated draft for ${server.name} / ${session.session}` });
+            continue;
+          }
+
+          if (action.type === "stop_session") {
+            const session = resolveSessionOrThrow(action.sessionRef);
+            await stopServerSession(server.id, session.session);
+            results.push({ action: action.type, ok: true, detail: `Stopped ${server.name} / ${session.session}` });
+            continue;
+          }
+
+          if (action.type === "list_files") {
+            const nextIncludeHidden = action.includeHidden ?? assistantFileIncludeHidden;
+            const targetPath = (action.path || getActiveDirectoryForServer(server.id)).trim();
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            const query = new URLSearchParams();
+            if (targetPath) {
+              query.set("path", targetPath);
+            }
+            if (nextIncludeHidden) {
+              query.set("hidden", "true");
+            }
+            const suffix = query.toString() ? `?${query.toString()}` : "";
+            const data = await apiRequest<{ path: string; entries: RemoteFileEntry[] }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/list${suffix}`
+            );
+            assistantFileIncludeHidden = nextIncludeHidden;
+            assistantFilePath = data.path;
+            assistantSelectedFilePath = null;
+            setIncludeHidden(nextIncludeHidden);
+            setCurrentPath(data.path);
+            setFileEntries(data.entries || []);
+            setSelectedFilePath(null);
+            setSelectedContent("");
+            results.push({ action: action.type, ok: true, detail: `Listed files for ${server.name} at ${data.path}` });
+            continue;
+          }
+
+          if (action.type === "open_file") {
+            const targetPath = (action.path || getSelectedFileForServer(server.id)).trim();
+            if (!targetPath) {
+              throw new Error(`Pick a file path on ${server.name} first.`);
+            }
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            const data = await apiRequest<{ path: string; content: string }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/read?path=${encodeURIComponent(targetPath)}`
+            );
+            assistantSelectedFilePath = data.path;
+            setSelectedFilePath(data.path);
+            setSelectedContent(data.content || "");
+            results.push({ action: action.type, ok: true, detail: `Opened ${data.path} on ${server.name}` });
+            continue;
+          }
+
+          if (action.type === "tail_file") {
+            const targetPath = (action.path || getSelectedFileForServer(server.id)).trim();
+            if (!targetPath) {
+              throw new Error(`Pick a file path on ${server.name} first.`);
+            }
+            const lines = Math.max(1, Math.min(action.lines || Number.parseInt(tailLines, 10) || 200, 5000));
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            const data = await apiRequest<{ path: string; content: string; lines: number }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/tail?path=${encodeURIComponent(targetPath)}&lines=${lines}`
+            );
+            assistantSelectedFilePath = data.path;
+            setSelectedFilePath(data.path);
+            setSelectedContent(data.content || "");
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: `Loaded the last ${lines} lines from ${data.path} on ${server.name}`,
+            });
+            continue;
+          }
+
+          if (action.type === "create_folder") {
+            const requestedPath = action.path.trim();
+            if (!requestedPath) {
+              throw new Error("A folder path is required.");
+            }
+            const baseDirectory = getActiveDirectoryForServer(server.id).trim();
+            const target = resolveAssistantFolderTarget(requestedPath, baseDirectory);
+            let session = resolveAssistantSession(
+              context,
+              server,
+              "$focused_session",
+              lastCreatedSessionByServerId.get(server.id) || null
+            );
+            if (!session || session.mode !== "shell") {
+              const created = await createSessionForServer(server.id, "shell");
+              lastCreatedSessionByServerId.set(server.id, created);
+              session = {
+                session: created,
+                mode: "shell",
+                localAi: false,
+                live: false,
+              };
+            }
+            const markerSeed = `${Date.now()}${Math.floor(Math.random() * 10000)}`;
+            const successMarker = `__NOVA_DIR_OK_${markerSeed}__`;
+            const failureMarker = `__NOVA_DIR_FAIL_${markerSeed}__`;
+            const quotedCommandPath = formatAssistantShellPath(target.commandPath, target.shellExpandable);
+            const beforeTail = poolConnectionsRef.current.get(server.id)?.tails[session.session] || "";
+            await sendServerSessionCommand(
+              server.id,
+              session.session,
+              `mkdir -p -- ${quotedCommandPath} && if [ -d ${quotedCommandPath} ]; then printf '%s\\n' ${shellQuote(successMarker)}; else printf '%s\\n' ${shellQuote(
+                failureMarker
+              )}; fi`,
+              "shell"
+            );
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            setFocusedSession(session.session);
+            const observedTail = await waitForSessionOutput({
+              serverId: server.id,
+              session: session.session,
+              beforeTail,
+              pollRemote: true,
+              maxWaitMs: 6000,
+            });
+            const verifiedByShell = observedTail.includes(successMarker) && !observedTail.includes(failureMarker);
+            let verified = verifiedByShell;
+
+            if (capabilities.files && target.parentPath) {
+              try {
+                const data = await apiRequest<{ path: string; entries: RemoteFileEntry[] }>(
+                  serverProfile.baseUrl,
+                  serverProfile.token,
+                  `/files/list?path=${encodeURIComponent(target.parentPath)}${assistantFileIncludeHidden ? "&hidden=true" : ""}`
+                );
+                setFilesSurfaceTarget(server.id);
+                assistantFilePath = data.path;
+                setCurrentPath(data.path);
+                setFileEntries(data.entries || []);
+                const normalizedTargetName = target.commandPath.replace(/\/+$/, "").split("/").pop();
+                if (
+                  normalizedTargetName &&
+                  data.entries.some((entry) => entry.is_dir && entry.name === normalizedTargetName)
+                ) {
+                  verified = true;
+                }
+              } catch {
+                // Folder creation still succeeded even if the file index refresh failed.
+              }
+            }
+
+            results.push({
+              action: action.type,
+              ok: verified,
+              detail: verified
+                ? `Created folder ${target.displayPath} on ${server.name} and verified it exists.`
+                : `Sent the folder creation command for ${target.displayPath} on ${server.name}, but could not verify the result yet.`,
+            });
+            continue;
+          }
+
+          if (action.type === "save_file") {
+            const targetPath = action.path.trim();
+            if (!targetPath) {
+              throw new Error("A file path is required.");
+            }
+            setFilesSurfaceTarget(server.id);
+            markActivity();
+            assertServerWritable(server.id, "Write file");
+            const savedContent = typeof action.content === "string" ? action.content : "";
+            await apiRequest<{ ok?: boolean; path?: string; bytes?: number }>(serverProfile.baseUrl, serverProfile.token, "/files/write", {
+              method: "POST",
+              body: JSON.stringify({
+                path: targetPath,
+                content: savedContent,
+              }),
+            });
+            const verification = await apiRequest<{ path: string; content: string }>(
+              serverProfile.baseUrl,
+              serverProfile.token,
+              `/files/read?path=${encodeURIComponent(targetPath)}`
+            );
+            assistantSelectedFilePath = targetPath;
+            setSelectedFilePath(targetPath);
+            setSelectedContent(verification.content || "");
+            recordAuditEvent({
+              action: "file_written",
+              serverId: server.id,
+              serverName: server.name,
+              session: "",
+              detail: `path=${targetPath}`,
+            });
+            const verified = verification.content === savedContent;
+            results.push({
+              action: action.type,
+              ok: verified,
+              detail: verified
+                ? `Saved ${targetPath} on ${server.name} and verified the updated content.`
+                : `Saved ${targetPath} on ${server.name}, but the verification readback did not match.`,
+            });
+            continue;
+          }
+
+          if (action.type === "refresh_processes") {
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            markActivity();
+            if (server.id === focusedServerId) {
+              await refreshProcesses();
+              results.push({ action: action.type, ok: true, detail: `Refreshed processes on ${server.name}` });
+              continue;
+            }
+            const payload = await apiRequest<unknown>(serverProfile.baseUrl, serverProfile.token, "/proc/list");
+            const count = countProcessEntries(payload);
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: count > 0 ? `Found ${count} processes on ${server.name}` : `No processes returned from ${server.name}`,
+            });
+            continue;
+          }
+
+          if (action.type === "kill_process") {
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("terminals");
+            markActivity();
+            assertServerWritable(server.id, "Kill process");
+            await apiRequest(serverProfile.baseUrl, serverProfile.token, "/proc/kill", {
+              method: "POST",
+              body: JSON.stringify({
+                pid: action.pid,
+                signal: action.signal || "TERM",
+              }),
+            });
+            const verificationPayload = await apiRequest<unknown>(serverProfile.baseUrl, serverProfile.token, "/proc/list");
+            const stillRunning = processListContainsPid(verificationPayload, action.pid);
+            if (server.id === focusedServerId) {
+              await refreshProcesses();
+            }
+            recordAuditEvent({
+              action: "process_killed",
+              serverId: server.id,
+              serverName: server.name,
+              session: "",
+              detail: `pid=${action.pid} signal=${action.signal || "TERM"}`,
+            });
+            results.push({
+              action: action.type,
+              ok: !stillRunning,
+              detail: stillRunning
+                ? `Sent ${action.signal || "TERM"} to PID ${action.pid} on ${server.name}, but it still appears in the process list.`
+                : `Sent ${action.signal || "TERM"} to PID ${action.pid} on ${server.name} and verified it exited.`,
+            });
+            continue;
+          }
+
+          if (action.type === "open_server_link") {
+            focusServer(server.id);
+            setHomeHubVisible(false);
+            setRoute("servers");
+            markActivity();
+            if (action.target === "ssh") {
+              await openSshFallback(serverProfile);
+            } else {
+              const targetUrl =
+                action.target === "portainer"
+                  ? serverProfile.portainerUrl
+                  : action.target === "proxmox"
+                    ? serverProfile.proxmoxUrl
+                    : serverProfile.grafanaUrl;
+              if (!targetUrl) {
+                throw new Error(`${server.name} does not have a ${action.target} URL configured.`);
+              }
+              await Linking.openURL(targetUrl);
+            }
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: `Opened ${action.target} for ${server.name}`,
+            });
+            continue;
+          }
+
+          if (action.type === "create_agent") {
+            await createAgentForServer(server.id, action.name, action.goal);
+            results.push({ action: action.type, ok: true, detail: `Created agent ${action.name} on ${server.name}` });
+            continue;
+          }
+
+          if (action.type === "update_agent") {
+            if (action.status) {
+              await setAgentStatusForServer(server.id, action.name, action.status);
+            }
+            if (action.goal) {
+              await setAgentGoalForServer(server.id, action.name, action.goal);
+            }
+            if (action.queuedCommand) {
+              await queueAgentCommandForServer(server.id, action.name, action.queuedCommand);
+            }
+            results.push({ action: action.type, ok: true, detail: `Updated agent ${action.name} on ${server.name}` });
+            continue;
+          }
+
+          if (action.type === "approve_agents") {
+            const approved = await approveReadyAgentsForServer(server.id);
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: approved.length > 0 ? `Approved ${approved.length} agent(s) on ${server.name}` : `No pending agents on ${server.name}`,
+            });
+            continue;
+          }
+
+          if (action.type === "deny_agents") {
+            const denied = await denyAllPendingAgentsForServer(server.id);
+            results.push({
+              action: action.type,
+              ok: true,
+              detail: denied.length > 0 ? `Denied ${denied.length} agent(s) on ${server.name}` : `No pending agents on ${server.name}`,
+            });
+            continue;
+          }
+        } catch (error) {
+          results.push({
+            action: action.type,
+            ok: false,
+            detail: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+
+      return results;
+    },
+    [
+      approveReadyAgentsForServer,
+      assertServerWritable,
+      connectAllServers,
+      cloudDashboardUrl,
+      createAgentForServer,
+      createSessionForServer,
+      denyAllPendingAgentsForServer,
+      disconnectAllServers,
+      focusServer,
+      focusedServerId,
+      brokeredServers,
+      markActivity,
+      openSshFallback,
+      refreshProcesses,
+      queueAgentCommandForServer,
+      recordAuditEvent,
+      refreshCloudAuditExports,
+      refreshTeamContext,
+      requestCloudAuditExport,
+      setAgentGoalForServer,
+      setAgentStatusForServer,
+      setCurrentPath,
+      setFileEntries,
+      setFocusedSession,
+      setGlassesEnabled,
+      setGlassesMinimalMode,
+      setGlassesTextScale,
+      setGlassesVoiceAutoSend,
+      setGlassesVoiceLoop,
+      setGlassesWakePhraseEnabled,
+      setHomeHubVisible,
+      setIncludeHidden,
+      setRoute,
+      setSelectedContent,
+      setSelectedFilePath,
+      setServerSessionDraft,
+      setStartAiEngine,
+      setStartKind,
+      sendServerSessionCommand,
+      syncAuditNow,
+      tailLines,
+      teamIdentity,
+      stopServerSession,
+    ]
   );
 
   const sendControlToSession = useCallback(
@@ -2800,6 +3874,572 @@ export default function AppShell() {
     [sendVoiceTranscriptToSession]
   );
 
+  const clearNovaVoiceLoopRestart = useCallback(() => {
+    const timer = novaVoiceLoopTimerRef.current;
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    novaVoiceLoopTimerRef.current = null;
+  }, []);
+
+  const clearNovaVoiceStopTimer = useCallback(() => {
+    const timer = novaVoiceStopTimerRef.current;
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    novaVoiceStopTimerRef.current = null;
+  }, []);
+
+  const clearNovaConversationIdleTimer = useCallback(() => {
+    const timer = novaConversationIdleTimerRef.current;
+    if (!timer) {
+      return;
+    }
+    clearTimeout(timer);
+    novaConversationIdleTimerRef.current = null;
+  }, []);
+
+  useEffect(() => {
+    if (!novaVoiceSettingsLoadedRef.current) {
+      return;
+    }
+    if (novaAlwaysListeningEnabled || novaHandsFreeEnabled || novaConversationModeEnabled) {
+      return;
+    }
+
+    pendingNovaListenModeRef.current = null;
+    clearNovaVoiceLoopRestart();
+    clearNovaConversationIdleTimer();
+
+    if (novaListeningModeRef.current !== "walkie") {
+      if (liveVoiceRecognitionActiveRef.current) {
+        void stopLiveRecognition("abort");
+      }
+      if (voiceRecordingRef.current) {
+        void stopVoiceCapture();
+      }
+      setNovaVoiceModeActive(false);
+    }
+  }, [
+    clearNovaConversationIdleTimer,
+    clearNovaVoiceLoopRestart,
+    novaAlwaysListeningEnabled,
+    novaConversationModeEnabled,
+    novaHandsFreeEnabled,
+    stopLiveRecognition,
+    stopVoiceCapture,
+  ]);
+
+  const resolveDefaultNovaListeningMode = useCallback((): "wake" | "conversation" | null => {
+    if (novaHandsFreeEnabledRef.current || novaConversationModeEnabledRef.current) {
+      return "conversation";
+    }
+    if (novaAlwaysListeningEnabledRef.current) {
+      return "wake";
+    }
+    return null;
+  }, []);
+
+  const queueNovaListeningMode = useCallback(
+    (mode: "wake" | "conversation" | "walkie" | null, delayMs: number = 0) => {
+      if (!mode) {
+        pendingNovaListenModeRef.current = null;
+        clearNovaVoiceLoopRestart();
+        return;
+      }
+      const schedule = (nextMode: "wake" | "conversation" | "walkie", nextDelay: number) => {
+        const voiceRouteAvailable = route !== "glasses";
+        pendingNovaListenModeRef.current = nextMode;
+        clearNovaVoiceLoopRestart();
+        if (!voiceRouteAvailable || !unlocked || appStateStatus !== "active") {
+          return;
+        }
+        novaVoiceLoopTimerRef.current = setTimeout(() => {
+          novaVoiceLoopTimerRef.current = null;
+          const queuedMode = pendingNovaListenModeRef.current;
+          pendingNovaListenModeRef.current = null;
+          if (!queuedMode || !voiceRouteAvailable || !unlocked || appStateStatus !== "active") {
+            return;
+          }
+          if (voiceBusyRef.current) {
+            schedule(queuedMode, 320);
+            return;
+          }
+          if (liveVoiceRecognitionActiveRef.current) {
+            void stopLiveRecognition("abort");
+            schedule(queuedMode, 180);
+            return;
+          }
+          if (voiceRecordingRef.current) {
+            void stopVoiceCapture();
+            schedule(queuedMode, 180);
+            return;
+          }
+          setNovaVoiceModeActive(true);
+          startNovaVoiceCaptureRef.current(queuedMode);
+        }, Math.max(0, Math.min(nextDelay, 15000)));
+      };
+
+      schedule(mode, delayMs);
+    },
+    [appStateStatus, clearNovaVoiceLoopRestart, route, stopLiveRecognition, stopVoiceCapture, unlocked]
+  );
+
+  const endNovaConversationSession = useCallback(
+    (reason: "idle" | "manual") => {
+      clearNovaConversationIdleTimer();
+      pendingNovaListenModeRef.current = null;
+      novaConversationModeEnabledRef.current = false;
+      setNovaConversationModeEnabled(false);
+      getSpeechOutputModule()?.stop?.();
+      if (liveVoiceRecognitionActiveRef.current) {
+        void stopLiveRecognition("abort");
+      }
+      if (voiceRecordingRef.current) {
+        void stopVoiceCapture();
+      }
+      setNovaVoiceModeActive(false);
+      const nextMode = resolveDefaultNovaListeningMode();
+      if (reason === "idle") {
+        setStatus({
+          text: nextMode === "conversation" ? "Hands-Free listening..." : nextMode === "wake" ? "Wake phrase standby." : "Ready",
+          error: false,
+        });
+      } else {
+        setStatus({
+          text: nextMode === "conversation" ? "Nova voice paused." : nextMode === "wake" ? "Wake phrase standby." : "Nova voice paused.",
+          error: false,
+        });
+      }
+      queueNovaListeningMode(nextMode, 200);
+    },
+    [clearNovaConversationIdleTimer, queueNovaListeningMode, resolveDefaultNovaListeningMode, setStatus, stopLiveRecognition, stopVoiceCapture]
+  );
+
+  const resetNovaConversationIdleTimer = useCallback(() => {
+    clearNovaConversationIdleTimer();
+    novaConversationIdleTimerRef.current = setTimeout(() => {
+      novaConversationIdleTimerRef.current = null;
+      endNovaConversationSession("idle");
+    }, novaConversationIdleMsRef.current);
+  }, [clearNovaConversationIdleTimer, endNovaConversationSession]);
+
+  const applyNovaAlwaysListeningEnabled = useCallback(
+    (value: boolean) => {
+      novaAlwaysListeningEnabledRef.current = value;
+      setNovaAlwaysListeningEnabled(value);
+      if (value) {
+        if (!novaHandsFreeEnabledRef.current && !novaConversationModeEnabledRef.current) {
+          setStatus({ text: "Wake phrase standby.", error: false });
+          queueNovaListeningMode("wake", 0);
+        }
+        return;
+      }
+      if (!novaHandsFreeEnabledRef.current && !novaConversationModeEnabledRef.current) {
+        pendingNovaListenModeRef.current = null;
+        clearNovaVoiceLoopRestart();
+        if (novaListeningModeRef.current === "wake" && liveVoiceRecognitionActiveRef.current) {
+          void stopLiveRecognition("abort");
+        }
+        if (novaListeningModeRef.current === "wake" && voiceRecordingRef.current) {
+          void stopVoiceCapture();
+        }
+        setNovaVoiceModeActive(false);
+        setStatus({ text: "Wake phrase standby off.", error: false });
+      }
+    },
+    [clearNovaVoiceLoopRestart, queueNovaListeningMode, setStatus, stopLiveRecognition, stopVoiceCapture]
+  );
+
+  const applyNovaHandsFreeEnabled = useCallback(
+    (value: boolean) => {
+      novaHandsFreeEnabledRef.current = value;
+      setNovaHandsFreeEnabled(value);
+      if (value) {
+        requestNovaOverlayOpen();
+        novaConversationModeEnabledRef.current = true;
+        setNovaConversationModeEnabled(true);
+        setStatus({ text: "Hands-Free listening...", error: false });
+        void requestLiveRecognitionPermission().catch(() => undefined);
+        queueNovaListeningMode("conversation", 0);
+        return;
+      }
+      endNovaConversationSession("manual");
+    },
+    [endNovaConversationSession, queueNovaListeningMode, requestLiveRecognitionPermission, requestNovaOverlayOpen, setStatus]
+  );
+
+  const handleNovaAssistantReply = useCallback(
+    async (reply: string) => {
+      const nextMode = resolveDefaultNovaListeningMode();
+      const spoken = summarizeNovaReplyForSpeech(reply);
+      const resumeConversation = () => {
+        if (nextMode === "conversation") {
+          resetNovaConversationIdleTimer();
+        }
+        queueNovaListeningMode(nextMode, 220);
+      };
+
+      if (!spoken || !novaSpeakRepliesEnabledRef.current) {
+        resumeConversation();
+        return;
+      }
+
+      const speechModule = getSpeechOutputModule();
+      if (!speechModule) {
+        devVoiceUiLog("novaSpeech:moduleUnavailable");
+        resumeConversation();
+        return;
+      }
+
+      try {
+        await prepareSpeechOutput();
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        speechModule.stop?.();
+        devVoiceUiLog("novaSpeech:start", { spokenPreview: spoken.slice(0, 160) });
+        await new Promise<void>((resolve) => {
+          let settled = false;
+          const finish = () => {
+            if (settled) {
+              return;
+            }
+            settled = true;
+            resolve();
+          };
+
+          speechModule.speak(spoken, {
+            language: "en-US",
+            pitch: 1,
+            rate: 0.96,
+            volume: 1,
+            onDone: finish,
+            onStopped: finish,
+            onError: finish,
+          });
+
+          setTimeout(finish, Math.max(3500, Math.min(9000, spoken.length * 55)));
+        });
+      } catch {
+        // best effort
+      }
+
+      resumeConversation();
+    },
+    [prepareSpeechOutput, queueNovaListeningMode, resetNovaConversationIdleTimer, resolveDefaultNovaListeningMode]
+  );
+
+  const novaAssistant = useNovaAssistant({
+    activeProfile,
+    sendPromptDetailed,
+    buildContext: buildNovaAssistantContext,
+    executeActions: executeNovaAssistantActions,
+    onAssistantReply: handleNovaAssistantReply,
+  });
+
+  const testNovaSpeechOutput = useCallback(() => {
+    const speechModule = getSpeechOutputModule();
+    if (!speechModule) {
+      setStatus({ text: "Nova voice unavailable in this build.", error: true });
+      return;
+    }
+
+    void (async () => {
+      try {
+        await prepareSpeechOutput();
+        await new Promise((resolve) => setTimeout(resolve, 180));
+        speechModule.stop?.();
+        devVoiceUiLog("novaSpeech:testStart");
+        speechModule.speak("Nova voice is active.", {
+          language: "en-US",
+          pitch: 1,
+          rate: 0.96,
+          volume: 1,
+        });
+        setStatus({ text: "Testing Nova voice...", error: false });
+      } catch (error) {
+        setStatus({ text: error instanceof Error ? error.message : String(error), error: true });
+      }
+    })();
+  }, [prepareSpeechOutput, setStatus]);
+
+  const scheduleNovaVoiceStop = useCallback(
+    (delayMs: number = NOVA_VOICE_CAPTURE_MS) => {
+      clearNovaVoiceStopTimer();
+      novaVoiceStopTimerRef.current = setTimeout(() => {
+        novaVoiceStopTimerRef.current = null;
+        if (!voiceRecordingRef.current && !liveVoiceRecognitionActiveRef.current && !novaVoiceModeActiveRef.current) {
+          return;
+        }
+        if (liveVoiceRecognitionActiveRef.current) {
+          void stopLiveRecognition("stop");
+          return;
+        }
+        void stopVoiceCaptureIntoNovaRef.current();
+      }, Math.max(1200, Math.min(delayMs, 15000)));
+    },
+    [clearNovaVoiceStopTimer, stopLiveRecognition]
+  );
+
+  const handleNovaTranscript = useCallback(
+    async (rawTranscript: string, mode: "wake" | "conversation" | "walkie"): Promise<boolean> => {
+      const transcript = rawTranscript.trim();
+      const activeWakePhrase = normalizeNovaWakePhrase(novaWakePhraseRef.current);
+
+      if (!transcript) {
+        return false;
+      }
+
+      if (mode === "wake") {
+        const wake = resolveNovaWakeCommand(transcript, activeWakePhrase);
+        if (!wake.heardWakePhrase) {
+          queueNovaListeningMode("wake", 160);
+          return false;
+        }
+        requestNovaOverlayOpen();
+        novaConversationModeEnabledRef.current = true;
+        setNovaConversationModeEnabled(true);
+        resetNovaConversationIdleTimer();
+
+        if (!wake.command.trim()) {
+          setStatus({ text: "Nova is listening.", error: false });
+          queueNovaListeningMode("conversation", 180);
+          return true;
+        }
+
+        const sent = await novaAssistant.submitTranscript(wake.command.trim(), { autoSend: true });
+        if (!sent) {
+          throw new Error("Nova could not submit the wake command.");
+        }
+        return true;
+      }
+
+      if (mode === "conversation") {
+        requestNovaOverlayOpen();
+        novaConversationModeEnabledRef.current = true;
+        setNovaConversationModeEnabled(true);
+        resetNovaConversationIdleTimer();
+        const sent = await novaAssistant.submitTranscript(transcript, { autoSend: true });
+        if (!sent) {
+          throw new Error("Nova could not submit the transcript.");
+        }
+        return true;
+      }
+
+      requestNovaOverlayOpen();
+      const sent = await novaAssistant.submitTranscript(transcript, { autoSend: true });
+      if (!sent) {
+        throw new Error("Nova could not submit the transcript.");
+      }
+      return true;
+    },
+    [novaAssistant, queueNovaListeningMode, requestNovaOverlayOpen, resetNovaConversationIdleTimer, setStatus]
+  );
+
+  const handleNovaVoiceNoSpeech = useCallback(
+    (mode: "wake" | "conversation" | "walkie") => {
+      const nextMode =
+        mode === "wake"
+          ? "wake"
+          : novaHandsFreeEnabledRef.current || novaConversationModeEnabledRef.current
+            ? "conversation"
+            : resolveDefaultNovaListeningMode();
+
+      if (mode !== "wake") {
+        setStatus({
+          text:
+            nextMode === "conversation"
+              ? novaHandsFreeEnabledRef.current
+                ? "Hands-Free listening..."
+                : "Nova is listening."
+              : nextMode === "wake"
+                ? "Wake phrase standby."
+                : "Ready",
+          error: false,
+        });
+      }
+      queueNovaListeningMode(nextMode, mode === "walkie" ? 260 : 180);
+    },
+    [queueNovaListeningMode, resolveDefaultNovaListeningMode, setStatus]
+  );
+
+  const handleNovaVoiceError = useCallback(
+    (mode: "wake" | "conversation" | "walkie", message: string): boolean => {
+      const nextMode =
+        mode === "wake"
+          ? "wake"
+          : novaHandsFreeEnabledRef.current || novaConversationModeEnabledRef.current
+            ? "conversation"
+            : resolveDefaultNovaListeningMode();
+
+      if (shouldRetryVoiceLoopError(message)) {
+        setStatus({ text: summarizeNovaVoiceError(message), error: /permission|unavailable/.test(message.toLowerCase()) });
+        queueNovaListeningMode(nextMode, /no speech|no transcript/i.test(message) ? 260 : 1200);
+        return false;
+      }
+      setNovaVoiceModeActive(false);
+      setStatus({ text: summarizeNovaVoiceError(message), error: true });
+      return false;
+    },
+    [queueNovaListeningMode, resolveDefaultNovaListeningMode, setStatus]
+  );
+
+  const stopVoiceCaptureIntoNova = useCallback(async (): Promise<boolean> => {
+    clearNovaVoiceStopTimer();
+    const mode = novaListeningModeRef.current;
+    try {
+      const rawTranscript = (
+        await stopVoiceCaptureAndTranscribe({
+          wakePhrase: novaWakePhraseRef.current,
+          requireWakePhrase: mode === "wake",
+          vadEnabled: true,
+          vadSilenceMs: NOVA_VOICE_VAD_SILENCE_MS,
+        })
+      ).trim();
+      if (!rawTranscript) {
+        handleNovaVoiceNoSpeech(mode);
+        return false;
+      }
+      return await handleNovaTranscript(rawTranscript, mode);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return handleNovaVoiceError(mode, message);
+    }
+  }, [
+    clearNovaVoiceStopTimer,
+    handleNovaTranscript,
+    handleNovaVoiceError,
+    handleNovaVoiceNoSpeech,
+    stopVoiceCaptureAndTranscribe,
+  ]);
+
+  useEffect(() => {
+    stopVoiceCaptureIntoNovaRef.current = stopVoiceCaptureIntoNova;
+  }, [stopVoiceCaptureIntoNova]);
+
+  const startNovaVoiceCapture = useCallback(
+    (mode: "wake" | "conversation" | "walkie" = "conversation") => {
+      const activeWakePhrase = normalizeNovaWakePhrase(novaWakePhraseRef.current);
+      if (voiceBusyRef.current) {
+        return;
+      }
+      if (liveVoiceRecognitionActiveRef.current || voiceRecordingRef.current) {
+        queueNovaListeningMode(mode, 120);
+        if (liveVoiceRecognitionActiveRef.current) {
+          void stopLiveRecognition("abort");
+        }
+        if (voiceRecordingRef.current) {
+          void stopVoiceCapture();
+        }
+        return;
+      }
+
+      novaListeningModeRef.current = mode;
+      pendingNovaListenModeRef.current = null;
+      clearNovaVoiceStopTimer();
+      clearNovaVoiceLoopRestart();
+      setNovaVoiceModeActive(true);
+
+      if (mode !== "wake") {
+        setStatus({
+          text:
+            mode === "walkie"
+              ? "Listening... release to send."
+              : novaHandsFreeEnabledRef.current
+                ? "Hands-Free listening..."
+                : "Nova is listening.",
+          error: false,
+        });
+      }
+
+      devVoiceUiLog("startNovaVoiceCapture", { mode });
+      void startLiveRecognition({
+        contextualStrings: [
+          "nova",
+          "hey nova",
+          activeWakePhrase,
+          "open terminals",
+          "open servers",
+          "open files",
+          "open snippets",
+          "open settings",
+          "open team",
+          "open vr",
+          "tell codex",
+        ],
+        onTranscript: async (transcript) => {
+          await handleNovaTranscript(transcript.trim(), mode);
+        },
+        onNoSpeech: async () => {
+          handleNovaVoiceNoSpeech(mode);
+        },
+        onError: async (message) => {
+          handleNovaVoiceError(mode, message);
+        },
+      })
+        .catch((error) => {
+          devVoiceUiLog("startNovaVoiceCapture:liveError", error instanceof Error ? error.message : String(error));
+          void startVoiceCapture()
+            .then(() => {
+              scheduleNovaVoiceStop(mode === "walkie" ? 15000 : NOVA_VOICE_CAPTURE_MS);
+            })
+            .catch((fallbackError) => {
+              const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
+              setNovaVoiceModeActive(false);
+              devVoiceUiLog("startNovaVoiceCapture:error", message);
+              handleNovaVoiceError(mode, message);
+            });
+        });
+    },
+    [
+      clearNovaVoiceLoopRestart,
+      clearNovaVoiceStopTimer,
+      handleNovaTranscript,
+      handleNovaVoiceError,
+      handleNovaVoiceNoSpeech,
+      queueNovaListeningMode,
+      scheduleNovaVoiceStop,
+      setStatus,
+      startLiveRecognition,
+      startVoiceCapture,
+      stopLiveRecognition,
+      stopVoiceCapture,
+    ]
+  );
+
+  useEffect(() => {
+    startNovaVoiceCaptureRef.current = startNovaVoiceCapture;
+  }, [startNovaVoiceCapture]);
+
+  useEffect(() => {
+    if (voiceRecording || liveVoiceRecognitionActive) {
+      return;
+    }
+    if (
+      route === "glasses" ||
+      !unlocked ||
+      appStateStatus !== "active" ||
+      voiceBusy ||
+      novaVoiceModeActive
+    ) {
+      return;
+    }
+    queueNovaListeningMode(resolveDefaultNovaListeningMode(), 120);
+  }, [
+    appStateStatus,
+    liveVoiceRecognitionActive,
+    novaConversationModeEnabled,
+    novaHandsFreeEnabled,
+    novaVoiceModeActive,
+    queueNovaListeningMode,
+    resolveDefaultNovaListeningMode,
+    route,
+    unlocked,
+    voiceBusy,
+    voiceRecording,
+  ]);
+
   const openPlayback = useCallback(
     (session: string) => {
       const recording = recordings[session];
@@ -2848,7 +4488,20 @@ export default function AppShell() {
 
   useEffect(() => {
     const sub = AppState.addEventListener("change", (state) => {
+      setAppStateStatus(state);
       if (state !== "active") {
+        clearNovaVoiceLoopRestart();
+        clearNovaConversationIdleTimer();
+        if (liveVoiceRecognitionActive && novaVoiceModeActive) {
+          void stopLiveRecognition("abort");
+        }
+        if (voiceRecording && novaVoiceModeActive) {
+          void stopVoiceCapture();
+        }
+        const speechModule = getSpeechOutputModule();
+        speechModule?.stop?.();
+        setNovaConversationModeEnabled(false);
+        setNovaVoiceModeActive(false);
         disconnectPoolAll();
         lock();
         return;
@@ -2861,7 +4514,19 @@ export default function AppShell() {
     return () => {
       sub.remove();
     };
-  }, [connectPoolAll, disconnectPoolAll, lock, unlocked]);
+  }, [
+    clearNovaVoiceLoopRestart,
+    clearNovaConversationIdleTimer,
+    connectPoolAll,
+    disconnectPoolAll,
+    liveVoiceRecognitionActive,
+    lock,
+    novaVoiceModeActive,
+    stopLiveRecognition,
+    stopVoiceCapture,
+    unlocked,
+    voiceRecording,
+  ]);
 
   useEffect(() => {
     if (!unlocked) {
@@ -2926,10 +4591,48 @@ export default function AppShell() {
   }, []);
 
   useEffect(() => {
+    return () => {
+      clearNovaVoiceStopTimer();
+      if (novaVoiceLoopTimerRef.current) {
+        clearTimeout(novaVoiceLoopTimerRef.current);
+        novaVoiceLoopTimerRef.current = null;
+      }
+    };
+  }, [clearNovaVoiceStopTimer]);
+
+  useEffect(() => {
     if (route === "glasses" && !glassesMode.enabled) {
       setRoute("terminals");
     }
   }, [glassesMode.enabled, route]);
+
+  useEffect(() => {
+    if (route !== "glasses") {
+      return;
+    }
+    clearNovaVoiceLoopRestart();
+    clearNovaVoiceStopTimer();
+    clearNovaConversationIdleTimer();
+    if (liveVoiceRecognitionActive && novaVoiceModeActive) {
+      void stopLiveRecognition("abort");
+    }
+    if (voiceRecording && novaVoiceModeActive) {
+      void stopVoiceCapture();
+    }
+    getSpeechOutputModule()?.stop?.();
+    setNovaConversationModeEnabled(false);
+    setNovaVoiceModeActive(false);
+  }, [
+    clearNovaConversationIdleTimer,
+    clearNovaVoiceLoopRestart,
+    clearNovaVoiceStopTimer,
+    liveVoiceRecognitionActive,
+    novaVoiceModeActive,
+    route,
+    stopLiveRecognition,
+    stopVoiceCapture,
+    voiceRecording,
+  ]);
 
   useEffect(() => {
     if (route === "glasses") {
@@ -2942,11 +4645,14 @@ export default function AppShell() {
     });
     voiceLoopRestartTimerRef.current = {};
     voiceLoopRetryCountRef.current = {};
-    if (!voiceRecording) {
+    if (liveVoiceRecognitionActive && !novaVoiceModeActive) {
+      void stopLiveRecognition("abort");
+    }
+    if (!voiceRecording || novaVoiceModeActive) {
       return;
     }
     void stopVoiceCapture();
-  }, [route, stopVoiceCapture, voiceRecording]);
+  }, [liveVoiceRecognitionActive, novaVoiceModeActive, route, stopLiveRecognition, stopVoiceCapture, voiceRecording]);
 
   useEffect(() => {
     async function handleLink(url: string | null) {
@@ -3381,8 +5087,6 @@ export default function AppShell() {
     removeAgentForServers,
     queueAgentCommandForServer,
     queueAgentCommandForServers,
-    approveReadyAgentsForFocusedServer,
-    denyAllPendingAgentsForFocusedServer,
     approveReadyAgentsForServer,
     denyAllPendingAgentsForServer,
     approveReadyAgentsForServers,
@@ -3560,9 +5264,11 @@ export default function AppShell() {
   const routeLabel: Record<RouteTab, string> = {
     terminals: "Terminals",
     servers: "Servers",
+    agents: "Agents",
     snippets: "Snippets",
     files: "Files",
-    llms: "AI",
+    llms: "Nova",
+    settings: "Settings",
     team: "Team",
     glasses: "Glasses",
     vr: "VR",
@@ -3579,7 +5285,13 @@ export default function AppShell() {
   if (lockLoading || onboardingLoading || tutorialLoading || safetyLoading) {
     return (
       <SafeAreaView style={styles.safeArea}>
-        <StatusBar style="light" />
+        <View pointerEvents="none" style={styles.shellBackdrop}>
+          <View style={styles.shellBackdropRibbon} />
+          <View style={styles.shellBackdropRibbonGlow} />
+          <View style={styles.shellBackdropTopGlow} />
+          <View style={styles.shellBackdropOrb} />
+        </View>
+        <StatusBar style="light" hidden={showLaunchIntro} />
       </SafeAreaView>
     );
   }
@@ -3598,7 +5310,13 @@ export default function AppShell() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar style="light" />
+      <View pointerEvents="none" style={styles.shellBackdrop}>
+        <View style={styles.shellBackdropRibbon} />
+        <View style={styles.shellBackdropRibbonGlow} />
+        <View style={styles.shellBackdropTopGlow} />
+        <View style={styles.shellBackdropOrb} />
+      </View>
+      <StatusBar style="light" hidden={showLaunchIntro} />
 
       <KeyboardAvoidingView
         style={styles.flex}
@@ -3625,7 +5343,6 @@ export default function AppShell() {
             <HomeNavHub
               onOpenRoute={openRouteFromHomeHub}
               activeServerName={activeServerName}
-              statusText={status.text}
             />
           ) : (
             <>
@@ -3649,7 +5366,7 @@ export default function AppShell() {
                       setPageMenuVisible(false);
                     }}
                   >
-                    <Image source={BRAND_LOGO} style={styles.shellHeaderLogo} resizeMode="cover" />
+                    <Image source={BRAND_LOGO} style={styles.shellHeaderLogo} resizeMode="contain" />
                     <View style={styles.flex}>
                       <Text style={styles.shellHeaderBrandTitle}>{activeRouteLabel}</Text>
                       <Text numberOfLines={1} style={styles.shellHeaderBrandMeta}>
@@ -3891,6 +5608,15 @@ export default function AppShell() {
             </AppProvider>
           ) : null}
 
+          {route === "agents" ? (
+            <AppProvider value={{ terminals: terminalsViewModel }}>
+              <AgentsScreen
+                autoEnableFallback={agentsAutoEnableFallbackServerId === focusedServerId}
+                onAutoEnableFallbackHandled={() => setAgentsAutoEnableFallbackServerId(null)}
+              />
+            </AppProvider>
+          ) : null}
+
           {route === "glasses" ? (
             <AppProvider value={{ terminals: terminalsViewModel }}>
               <GlassesModeScreen />
@@ -4114,6 +5840,12 @@ export default function AppShell() {
                     const output = trace
                       ? `${result.text}\n\n[Tool Calls]\n${trace}`
                       : result.text;
+                    const timingFlags = result.timings
+                      ? [
+                          result.timings.streamed ? `first token ${result.timings.firstTokenMs ?? "n/a"} ms` : "",
+                          `total ${result.timings.totalMs} ms`,
+                        ].filter(Boolean)
+                      : [`${elapsed} ms`];
                     const flags = [
                       result.usedVision ? "vision" : "",
                       result.usedTools ? `${result.toolCalls.length} tool call(s)` : "",
@@ -4121,7 +5853,7 @@ export default function AppShell() {
                       .filter(Boolean)
                       .join(" • ");
                     setLlmTestSummary(
-                      `${profile.kind} • ${profile.model} • ${elapsed} ms${flags ? ` • ${flags}` : ""}`
+                      `${profile.kind} • ${profile.model} • ${timingFlags.join(" • ")}${flags ? ` • ${flags}` : ""}`
                     );
                     setLlmTestOutput(output);
                   } catch (error) {
@@ -4149,6 +5881,27 @@ export default function AppShell() {
                   const summary = await importEncrypted(payload, passphrase);
                   setLlmTransferStatus(`Imported ${summary.imported} profile(s). Total configured: ${summary.total}.`);
                 });
+              }}
+            />
+          ) : null}
+
+          {route === "settings" ? (
+            <SettingsScreen
+              alwaysListeningEnabled={novaAlwaysListeningEnabled}
+              handsFreeEnabled={novaHandsFreeEnabled}
+              speakRepliesEnabled={novaSpeakRepliesEnabled}
+              wakePhrase={novaWakePhrase}
+              conversationIdleMs={novaConversationIdleMs}
+              speechOutputAvailable={Boolean(getSpeechOutputModule())}
+              onTestSpeakReplies={testNovaSpeechOutput}
+              onSetAlwaysListeningEnabled={applyNovaAlwaysListeningEnabled}
+              onSetHandsFreeEnabled={applyNovaHandsFreeEnabled}
+              onSetSpeakRepliesEnabled={setNovaSpeakRepliesEnabled}
+              onSetWakePhrase={(value) => {
+                setNovaWakePhrase(normalizeNovaWakePhrase(value));
+              }}
+              onSetConversationIdleMs={(value) => {
+                setNovaConversationIdleMs(normalizeNovaConversationIdleMs(value));
               }}
             />
           ) : null}
@@ -4440,6 +6193,39 @@ export default function AppShell() {
           route={route}
           onClose={() => setPageMenuVisible(false)}
           onGoHome={() => setHomeHubVisible(true)}
+          onOpenSettings={() => {
+            setPageMenuVisible(false);
+            setHomeHubVisible(false);
+            setRoute("settings");
+          }}
+          onLogOff={() => {
+            Alert.alert(
+              Platform.OS === "ios" ? "Log off?" : "Close NovaRemote?",
+              Platform.OS === "ios"
+                ? "iPhone apps cannot close themselves. Continue to log off and return to the lock screen?"
+                : "Are you sure you want to log off and close NovaRemote?",
+              [
+                {
+                  text: "Cancel",
+                  style: "cancel",
+                },
+                {
+                  text: Platform.OS === "ios" ? "Log Off" : "Close App",
+                  style: "destructive",
+                  onPress: () => {
+                    void runWithStatus(Platform.OS === "ios" ? "Logging off" : "Closing NovaRemote", async () => {
+                      setPageMenuVisible(false);
+                      if (Platform.OS === "android") {
+                        BackHandler.exitApp();
+                        return;
+                      }
+                      forceLock();
+                    });
+                  },
+                },
+              ]
+            );
+          }}
           onNavigate={openRouteFromMenu}
           poolLifecyclePaused={poolLifecyclePaused}
           onTogglePoolLifecycle={togglePoolLifecycleFromMenu}
@@ -4453,6 +6239,64 @@ export default function AppShell() {
           onToggleIncludeHidden={setIncludeHidden}
           tailLines={tailLines}
           onSetTailLines={setTailLines}
+        />
+        <NovaAssistantOverlay
+          messages={novaAssistant.messages}
+          draft={novaAssistant.draft}
+          busy={novaAssistant.busy}
+          lastError={novaAssistant.lastError}
+          activeProfileName={activeProfile?.name || null}
+          canSend={novaAssistant.canSend}
+          voiceRecording={(liveVoiceRecognitionActive || voiceRecording) && novaVoiceModeActive}
+          voiceBusy={voiceBusy}
+          listeningActive={novaListeningActive}
+          handsFreeEnabled={novaHandsFreeEnabled}
+          voiceModeEnabled={novaConversationModeEnabled}
+          wakePhrase={novaWakePhrase}
+          openRequestToken={novaOpenRequestToken}
+          onSetDraft={novaAssistant.setDraft}
+          onSend={() => {
+            void novaAssistant.submitDraft();
+          }}
+          onClose={() => {
+            if (novaConversationModeEnabled && !novaHandsFreeEnabled) {
+              endNovaConversationSession("manual");
+            }
+          }}
+          onClearConversation={novaAssistant.clearConversation}
+          onOpenProviders={() => {
+            setHomeHubVisible(false);
+            setRoute("llms");
+          }}
+          onSetHandsFreeEnabled={(value) => {
+            applyNovaHandsFreeEnabled(value);
+          }}
+          onToggleVoiceMode={() => {
+            if (novaConversationModeEnabled) {
+              endNovaConversationSession("manual");
+              setStatus({ text: "Nova voice mode disabled.", error: false });
+              return;
+            }
+            requestNovaOverlayOpen();
+            novaConversationModeEnabledRef.current = true;
+            setNovaConversationModeEnabled(true);
+            resetNovaConversationIdleTimer();
+            setStatus({ text: "Nova voice mode enabled. Speak naturally.", error: false });
+            queueNovaListeningMode("conversation", 0);
+          }}
+          onVoiceHoldStart={() => {
+            requestNovaOverlayOpen();
+            startNovaVoiceCaptureRef.current("walkie");
+          }}
+          onVoiceHoldEnd={() => {
+            if (liveVoiceRecognitionActive) {
+              void stopLiveRecognition("stop");
+              return;
+            }
+            if (voiceRecording) {
+              void stopVoiceCaptureIntoNova();
+            }
+          }}
         />
       </KeyboardAvoidingView>
 

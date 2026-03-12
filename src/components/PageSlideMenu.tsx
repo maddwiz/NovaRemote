@@ -1,8 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
+import * as Haptics from "expo-haptics";
 import {
   Animated,
   Modal,
   Pressable,
+  ScrollView,
   Switch,
   Text,
   View,
@@ -23,6 +25,8 @@ type PageSlideMenuProps = {
   route: RouteTab;
   onClose: () => void;
   onGoHome: () => void;
+  onLogOff: () => void;
+  onOpenSettings: () => void;
   onNavigate: (route: RouteTab) => void;
   poolLifecyclePaused: boolean;
   onTogglePoolLifecycle: () => void;
@@ -42,9 +46,11 @@ function routeTitle(route: RouteTab): string {
   const titles: Record<RouteTab, string> = {
     terminals: "Terminals",
     servers: "Servers",
+    agents: "Agents",
     snippets: "Snippets",
     files: "Files",
-    llms: "AI",
+    llms: "Nova",
+    settings: "Settings",
     team: "Team",
     glasses: "Glasses",
     vr: "VR",
@@ -52,11 +58,29 @@ function routeTitle(route: RouteTab): string {
   return titles[route];
 }
 
+function routeDescription(route: RouteTab): string {
+  const descriptions: Record<RouteTab, string> = {
+    terminals: "Launch sessions, manage the pool, and move fast without opening utility clutter.",
+    servers: "Tune connection security, switch targets, and control your remote machine lane.",
+    agents: "Monitor the live NovaAdapt runtime, review plans, and handle approvals from one dedicated surface.",
+    snippets: "Keep reusable flows and quick actions close without crowding the main screen.",
+    files: "Browse remote code, tail output, and adjust file visibility from one focused surface.",
+    llms: "Configure Nova, providers, and assistant behavior from a calmer control panel.",
+    settings: "Tune wake phrase, reply voice, and hands-free behavior without leaving the app shell.",
+    team: "Manage shared access, policy, and audit controls without leaving the current route.",
+    glasses: "Adjust the wearable command surface and voice-first controls.",
+    vr: "Shape the spatial command center and immersive execution surfaces.",
+  };
+  return descriptions[route];
+}
+
 export function PageSlideMenu({
   visible,
   route,
   onClose,
   onGoHome,
+  onLogOff,
+  onOpenSettings,
   onNavigate,
   poolLifecyclePaused,
   onTogglePoolLifecycle,
@@ -74,6 +98,14 @@ export function PageSlideMenu({
   const [mounted, setMounted] = useState<boolean>(visible);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null);
   const translateX = useRef(new Animated.Value(-360)).current;
+
+  const fireSelectionHaptic = () => {
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
+
+  const fireMediumHaptic = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+  };
 
   useEffect(() => {
     if (visible) {
@@ -108,8 +140,10 @@ export function PageSlideMenu({
           {[
             { key: "terminals" as RouteTab, label: "Terminals" },
             { key: "servers" as RouteTab, label: "Servers" },
+            { key: "agents" as RouteTab, label: "Agents" },
             { key: "files" as RouteTab, label: "Files" },
-            { key: "llms" as RouteTab, label: "AI" },
+            { key: "llms" as RouteTab, label: "Nova" },
+            { key: "settings" as RouteTab, label: "Settings" },
             { key: "team" as RouteTab, label: "Team" },
             { key: "vr" as RouteTab, label: "VR" },
           ].map((entry) => (
@@ -119,6 +153,7 @@ export function PageSlideMenu({
               accessibilityLabel={`Open ${entry.label}`}
               style={styles.pageMenuActionButton}
               onPress={() => {
+                fireSelectionHaptic();
                 onClose();
                 onNavigate(entry.key);
               }}
@@ -143,6 +178,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Create a new shell session"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onCreateShell();
                 }}
@@ -154,6 +190,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Create a new AI session"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onCreateAi();
                 }}
@@ -174,6 +211,7 @@ export function PageSlideMenu({
                 accessibilityLabel={poolLifecyclePaused ? "Resume connection pool" : "Pause connection pool"}
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onTogglePoolLifecycle();
                 }}
@@ -185,6 +223,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Refresh all servers"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onRefreshAll();
                 }}
@@ -196,6 +235,7 @@ export function PageSlideMenu({
                 accessibilityLabel="Reconnect all servers"
                 style={styles.pageMenuActionButton}
                 onPress={() => {
+                  fireSelectionHaptic();
                   onClose();
                   onReconnectAll();
                 }}
@@ -220,7 +260,10 @@ export function PageSlideMenu({
               <Text style={styles.pageMenuSwitchLabel}>{tokenMasked ? "Token hidden" : "Token visible"}</Text>
               <Switch
                 value={tokenMasked}
-                onValueChange={() => onToggleTokenMask()}
+                onValueChange={() => {
+                  fireSelectionHaptic();
+                  onToggleTokenMask();
+                }}
                 trackColor={{ false: "#4d5272", true: "#1586b3" }}
                 thumbColor={tokenMasked ? "#ccf6ff" : "#d7def2"}
               />
@@ -243,7 +286,10 @@ export function PageSlideMenu({
                 <Text style={styles.pageMenuSwitchLabel}>{includeHidden ? "Showing hidden files" : "Hidden files off"}</Text>
                 <Switch
                   value={includeHidden}
-                  onValueChange={onToggleIncludeHidden}
+                  onValueChange={(next) => {
+                    fireSelectionHaptic();
+                    onToggleIncludeHidden(next);
+                  }}
                   trackColor={{ false: "#4d5272", true: "#1586b3" }}
                   thumbColor={includeHidden ? "#ccf6ff" : "#d7def2"}
                 />
@@ -256,6 +302,7 @@ export function PageSlideMenu({
                       accessibilityLabel="Decrease tail lines"
                       style={styles.pageMenuStepperButton}
                       onPress={() => {
+                        fireSelectionHaptic();
                         const parsed = Math.max(10, Number.parseInt(tailLines, 10) || 200);
                         onSetTailLines(String(Math.max(10, parsed - 50)));
                       }}
@@ -267,6 +314,7 @@ export function PageSlideMenu({
                       accessibilityLabel="Increase tail lines"
                       style={styles.pageMenuStepperButton}
                       onPress={() => {
+                        fireSelectionHaptic();
                         const parsed = Math.max(10, Number.parseInt(tailLines, 10) || 200);
                         onSetTailLines(String(Math.min(1000, parsed + 50)));
                       }}
@@ -312,13 +360,90 @@ export function PageSlideMenu({
       <View style={styles.pageMenuRoot}>
         <Pressable style={styles.pageMenuBackdrop} onPress={onClose} />
         <Animated.View style={[styles.pageMenuPanel, { transform: [{ translateX }] }]}>
-          <View style={styles.pageMenuHeader}>
-            <Text style={styles.pageMenuTitle}>{routeTitle(route)}</Text>
+          <ScrollView
+            style={styles.pageMenuScroll}
+            contentContainerStyle={styles.pageMenuScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+          >
+            <View style={styles.pageMenuHeroCard}>
+              <Text style={styles.pageMenuEyebrow}>Control surface</Text>
+              <Text style={styles.pageMenuTitle}>{routeTitle(route)}</Text>
+              <Text style={styles.pageMenuLead}>
+                {activeSection ? activeSection.description : routeDescription(route)}
+              </Text>
+            </View>
+
+            {activeSection ? (
+              <View style={styles.pageMenuSectionWrap}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Back to menu sections"
+                  style={styles.pageMenuBackButton}
+                  onPress={() => {
+                    fireSelectionHaptic();
+                    setActiveSectionId(null);
+                  }}
+                >
+                  <Text style={styles.pageMenuBackText}>Back</Text>
+                </Pressable>
+                <Text style={styles.pageMenuSectionTitle}>{activeSection.title}</Text>
+                <Text style={styles.pageMenuSectionDescription}>{activeSection.description}</Text>
+                <View style={styles.pageMenuSectionBody}>{activeSection.render()}</View>
+              </View>
+            ) : (
+              <View style={styles.pageMenuSectionList}>
+                {sections.map((section) => (
+                  <Pressable
+                    key={section.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Open ${section.title}`}
+                    style={styles.pageMenuSectionCard}
+                    onPress={() => {
+                      fireSelectionHaptic();
+                      setActiveSectionId(section.id);
+                    }}
+                  >
+                    <Text style={styles.pageMenuSectionCardTitle}>{section.title}</Text>
+                    <Text style={styles.pageMenuSectionCardDescription}>{section.description}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <View style={styles.pageMenuUtilityRow}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Open settings"
+                style={styles.pageMenuUtilityButton}
+                onPress={() => {
+                  fireSelectionHaptic();
+                  onClose();
+                  onOpenSettings();
+                }}
+              >
+                <Text style={styles.pageMenuUtilityText}>Settings</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Log off and return to the lock screen"
+                style={styles.pageMenuUtilityButton}
+                onPress={() => {
+                  fireMediumHaptic();
+                  onClose();
+                  onLogOff();
+                }}
+              >
+                <Text style={styles.pageMenuUtilityText}>Log Off</Text>
+              </Pressable>
+            </View>
+          </ScrollView>
+          <View style={styles.pageMenuFooterActions}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Return to home hub"
-              style={styles.pageMenuHomeButton}
+              style={[styles.pageMenuHomeButton, styles.pageMenuHomeButtonFooter]}
               onPress={() => {
+                fireSelectionHaptic();
                 onClose();
                 onGoHome();
               }}
@@ -326,37 +451,6 @@ export function PageSlideMenu({
               <Text style={styles.pageMenuHomeText}>Home</Text>
             </Pressable>
           </View>
-
-          {activeSection ? (
-            <View style={styles.pageMenuSectionWrap}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Back to menu sections"
-                style={styles.pageMenuBackButton}
-                onPress={() => setActiveSectionId(null)}
-              >
-                <Text style={styles.pageMenuBackText}>Back</Text>
-              </Pressable>
-              <Text style={styles.pageMenuSectionTitle}>{activeSection.title}</Text>
-              <Text style={styles.pageMenuSectionDescription}>{activeSection.description}</Text>
-              <View style={styles.pageMenuSectionBody}>{activeSection.render()}</View>
-            </View>
-          ) : (
-            <View style={styles.pageMenuSectionList}>
-              {sections.map((section) => (
-                <Pressable
-                  key={section.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Open ${section.title}`}
-                  style={styles.pageMenuSectionCard}
-                  onPress={() => setActiveSectionId(section.id)}
-                >
-                  <Text style={styles.pageMenuSectionCardTitle}>{section.title}</Text>
-                  <Text style={styles.pageMenuSectionCardDescription}>{section.description}</Text>
-                </Pressable>
-              ))}
-            </View>
-          )}
         </Animated.View>
       </View>
     </Modal>

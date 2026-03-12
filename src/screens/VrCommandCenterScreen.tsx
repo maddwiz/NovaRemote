@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 
+import { PageHeroCard } from "../components/PageHeroCard";
 import { useAppContext } from "../context/AppContext";
 import { resolveGlassesScopeRoute } from "../glassesScopeRouting";
 import { useSharedWorkspaces } from "../hooks/useSharedWorkspaces";
@@ -542,8 +543,24 @@ export function VrCommandCenterScreen() {
       return next;
     });
   }, []);
+  const heroStats = useMemo(
+    () => [
+      { label: "Focused", value: focusedServerId || "None" },
+      { label: "Panels", value: `${visiblePanels.length}` },
+      { label: "Preset", value: runtime.workspace.preset.toUpperCase() },
+    ],
+    [focusedServerId, runtime.workspace.preset, visiblePanels.length]
+  );
 
   return (
+    <>
+      <PageHeroCard
+        eyebrow="Spatial Command"
+        title="Coordinate panels, presets, voice, and agents."
+        summary="Control workspace layout, route commands by voice, and manage panel or NovaAdapt actions."
+        tone="pink"
+        stats={heroStats}
+      />
     <View style={styles.panel}>
       <Text style={styles.panelLabel}>VR Command Center (Preview)</Text>
       <Text style={styles.serverSubtitle}>
@@ -1239,5 +1256,6 @@ export function VrCommandCenterScreen() {
         ) : null}
       </View>
     </View>
+    </>
   );
 }

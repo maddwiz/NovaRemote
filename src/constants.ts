@@ -41,6 +41,7 @@ export const STORAGE_TEAM_IDENTITY = "novaremote.team.identity.v1";
 export const STORAGE_TOKEN_BROKER_CACHE = "novaremote.team.token_broker.v1";
 export const STORAGE_AUDIT_LOG_QUEUE = "novaremote.audit.queue.v1";
 export const STORAGE_AUDIT_DEVICE_ID = "novaremote.audit.device_id.v1";
+export const STORAGE_NOVA_VOICE_SETTINGS = "novaremote.nova.voice.v1";
 
 export const DEFAULT_BASE_URL = "";
 export const DEFAULT_CWD = "";
@@ -71,6 +72,9 @@ export const TEAM_AUDIT_SYNC_INTERVAL_MS = 60 * 1000;
 export const NOVA_CLOUD_DEFAULT_URL = "https://api.novaremote.dev";
 export const COLLAB_POLL_INTERVAL_MS = 7000;
 export const NOVA_AGENT_MONITORING_INTERVAL_MS = 60 * 1000;
+export const NOVA_VOICE_CAPTURE_MS = 7000;
+export const NOVA_VOICE_VAD_SILENCE_MS = 1200;
+export const NOVA_VOICE_CONVERSATION_IDLE_MS = 10 * 1000;
 export const HISTORY_MAX_ITEMS = 50;
 export const FREE_SERVER_LIMIT = 1;
 export const FREE_SESSION_LIMIT = 2;

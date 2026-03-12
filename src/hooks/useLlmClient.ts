@@ -1,6 +1,13 @@
 import { useCallback } from "react";
 
-import { LlmProfile, LlmSendOptions, LlmSendResult, LlmToolExecution } from "../types";
+import {
+  LlmProfile,
+  LlmSendOptions,
+  LlmSendResult,
+  LlmTimingMetrics,
+  LlmToolDefinition,
+  LlmToolExecution,
+} from "../types";
 
 type OpenAiChatMessage = {
   content?: string | Array<{ type?: string; text?: string }>;
@@ -50,12 +57,25 @@ type GeminiResponse = {
   };
 };
 
-type BuiltInTool = {
-  name: string;
-  description: string;
-  parameters: Record<string, unknown>;
-  run: (args: Record<string, unknown>, context: Record<string, string>) => string;
+type OpenAiStreamingDelta = {
+  choices?: Array<{
+    delta?: {
+      content?: string | Array<{ type?: string; text?: string }>;
+    };
+  }>;
 };
+
+type AnthropicStreamingDelta = {
+  type?: string;
+  delta?: {
+    text?: string;
+  };
+  content_block?: {
+    text?: string;
+  };
+};
+
+type BuiltInTool = LlmToolDefinition;
 
 type ParsedToolCall = {
   id: string;
@@ -66,6 +86,10 @@ type ParsedToolCall = {
 
 function normalizeUrl(url: string): string {
   return url.trim().replace(/\/+$/, "");
+}
+
+function supportsBodyStreaming(body: ReadableStream<Uint8Array> | null | undefined): body is ReadableStream<Uint8Array> {
+  return Boolean(body && typeof body.getReader === "function");
 }
 
 function resolveRequestUrl(baseUrl: string, path: string | undefined, fallbackPath: string): string {
@@ -127,6 +151,127 @@ function toText(content: unknown): string {
       .trim();
   }
   return "";
+}
+
+function splitStreamBuffer(buffer: string) {
+  const normalized = buffer.replace(/\r/g, "");
+  const parts = normalized.split("\n");
+  const remainder = parts.pop() || "";
+  return {
+    lines: parts.map((line) => line.trim()).filter(Boolean),
+    remainder,
+  };
+}
+
+function extractOpenAiStreamText(line: string): string {
+  if (!line.startsWith("data:")) {
+    return "";
+  }
+  const payload = line.slice(5).trim();
+  if (!payload || payload === "[DONE]") {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(payload) as OpenAiStreamingDelta;
+    return toText(parsed.choices?.[0]?.delta?.content || "");
+  } catch {
+    return "";
+  }
+}
+
+function extractAnthropicStreamText(line: string): string {
+  if (!line.startsWith("data:")) {
+    return "";
+  }
+  const payload = line.slice(5).trim();
+  if (!payload) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(payload) as AnthropicStreamingDelta;
+    return parsed.delta?.text || parsed.content_block?.text || "";
+  } catch {
+    return "";
+  }
+}
+
+function extractOllamaStreamText(line: string): string {
+  if (!line) {
+    return "";
+  }
+  try {
+    const parsed = JSON.parse(line) as OllamaGenerateResponse & { done?: boolean };
+    if (parsed.done) {
+      return "";
+    }
+    return parsed.response || parsed.message?.content || "";
+  } catch {
+    return "";
+  }
+}
+
+function buildTimingMetrics(startedAt: number, firstTokenAt: number | null, streamed: boolean): LlmTimingMetrics {
+  const completedAt = Date.now();
+  return {
+    streamed,
+    totalMs: Math.max(0, completedAt - startedAt),
+    firstTokenMs: firstTokenAt ? Math.max(0, firstTokenAt - startedAt) : null,
+  };
+}
+
+async function streamDelimitedText(
+  response: Response,
+  parseLine: (line: string) => string,
+  onTextDelta?: (delta: string, fullText: string) => void
+): Promise<{ text: string; firstTokenAt: number | null }> {
+  if (!supportsBodyStreaming(response.body)) {
+    throw new Error("Streaming not supported in this runtime.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8");
+  let buffer = "";
+  let text = "";
+  let firstTokenAt: number | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    buffer += decoder.decode(value, { stream: true });
+    const next = splitStreamBuffer(buffer);
+    buffer = next.remainder;
+    next.lines.forEach((line) => {
+      const delta = parseLine(line);
+      if (!delta) {
+        return;
+      }
+      if (firstTokenAt === null) {
+        firstTokenAt = Date.now();
+      }
+      text += delta;
+      onTextDelta?.(delta, text);
+    });
+  }
+
+  const trailing = `${buffer}${decoder.decode()}`.trim();
+  if (trailing) {
+    const delta = parseLine(trailing);
+    if (delta) {
+      if (firstTokenAt === null) {
+        firstTokenAt = Date.now();
+      }
+      text += delta;
+      onTextDelta?.(delta, text);
+    }
+  }
+
+  return { text: text.trim(), firstTokenAt };
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
 }
 
 function asStringRecord(input: Record<string, string> | undefined): Record<string, string> {
@@ -388,16 +533,40 @@ async function executeToolCalls(
 }
 
 function normalizeOptions(options?: LlmSendOptions) {
+  const customTools = Array.isArray(options?.customTools)
+    ? options.customTools.filter(
+        (tool): tool is LlmToolDefinition =>
+          Boolean(
+            tool &&
+              typeof tool.name === "string" &&
+              tool.name.trim() &&
+              typeof tool.description === "string" &&
+              tool.description.trim() &&
+              tool.parameters &&
+              typeof tool.parameters === "object" &&
+              typeof tool.run === "function"
+          )
+      )
+    : [];
   return {
     imageUrl: options?.imageUrl?.trim() || "",
     enableBuiltInTools: Boolean(options?.enableBuiltInTools),
+    customTools,
     toolContext: asStringRecord(options?.toolContext),
     maxToolRounds: Math.max(1, Math.min(Math.round(options?.maxToolRounds || 3), 5)),
+    responseFormat: options?.responseFormat === "json" ? "json" : "text",
+    onTextDelta: typeof options?.onTextDelta === "function" ? options.onTextDelta : undefined,
+    signal: options?.signal,
   };
 }
 
 export const llmClientTestUtils = {
+  buildTimingMetrics,
+  extractAnthropicStreamText,
+  extractOllamaStreamText,
+  extractOpenAiStreamText,
   parseExtraHeaders,
+  splitStreamBuffer,
   mapCommandToBackend,
   normalizeOptions,
 };
@@ -413,7 +582,7 @@ export function useLlmClient() {
       const normalizedOptions = normalizeOptions(options);
       const useVision = Boolean(normalizedOptions.imageUrl);
       const wantedTools = normalizedOptions.enableBuiltInTools;
-      const tools = wantedTools ? builtInTools() : [];
+      const tools = [...(wantedTools ? builtInTools() : []), ...normalizedOptions.customTools];
 
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
@@ -745,6 +914,7 @@ export function useLlmClient() {
           prompt: enrichedPrompt,
           system: profile.systemPrompt || undefined,
           stream: false,
+          format: normalizedOptions.responseFormat === "json" ? "json" : undefined,
         };
 
         const response = await fetch(`${baseUrl}/api/generate`, {
@@ -764,6 +934,7 @@ export function useLlmClient() {
                 ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
                 { role: "user", content: enrichedPrompt },
               ],
+              format: normalizedOptions.responseFormat === "json" ? "json" : undefined,
             }),
           });
 
@@ -912,6 +1083,213 @@ export function useLlmClient() {
     []
   );
 
+  const sendPromptStream = useCallback(
+    async (profile: LlmProfile, prompt: string, options?: LlmSendOptions): Promise<LlmSendResult> => {
+      const cleanPrompt = prompt.trim();
+      if (!cleanPrompt) {
+        throw new Error("Prompt is required.");
+      }
+
+      const startedAt = Date.now();
+      const normalizedOptions = normalizeOptions(options);
+      const useVision = Boolean(normalizedOptions.imageUrl);
+      const hasTools = Boolean(normalizedOptions.enableBuiltInTools) || normalizedOptions.customTools.length > 0;
+      const canStream = !useVision && !hasTools && normalizedOptions.responseFormat === "text";
+
+      if (!canStream) {
+        return await sendPromptDetailed(profile, cleanPrompt, options);
+      }
+
+      const fallbackToDetailed = async (runner: () => Promise<LlmSendResult>) => {
+        try {
+          return await runner();
+        } catch (error) {
+          if (isAbortError(error)) {
+            throw error;
+          }
+          return await sendPromptDetailed(profile, cleanPrompt, options);
+        }
+      };
+
+      const headers: Record<string, string> = {
+        "Content-Type": "application/json",
+      };
+      if (profile.apiKey.trim() && profile.kind !== "gemini" && profile.kind !== "azure_openai") {
+        headers.Authorization = `Bearer ${profile.apiKey}`;
+      }
+      Object.assign(headers, parseExtraHeaders(profile.extraHeaders));
+
+      if (profile.kind === "openai_compatible") {
+        const baseUrl = normalizeUrl(profile.baseUrl || "https://api.openai.com/v1");
+        const requestPath = profile.requestPath?.trim() || "";
+        const requestedResponsesPath = Boolean(requestPath && /(^|\/)responses(\?|$)/i.test(requestPath));
+        if (requestedResponsesPath) {
+          return await sendPromptDetailed(profile, cleanPrompt, options);
+        }
+        return await fallbackToDetailed(async () => {
+          const url = resolveRequestUrl(baseUrl, "/chat/completions", "/chat/completions");
+          const response = await fetch(url, {
+            method: "POST",
+            headers,
+            signal: normalizedOptions.signal,
+            body: JSON.stringify({
+              model: profile.model,
+              messages: [
+                ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
+                { role: "user", content: cleanPrompt },
+              ],
+              temperature: 0.2,
+              stream: true,
+            }),
+          });
+          if (!response.ok) {
+            return await sendPromptDetailed(profile, cleanPrompt, options);
+          }
+          const streamed = await streamDelimitedText(response, extractOpenAiStreamText, normalizedOptions.onTextDelta);
+          if (!streamed.text) {
+            throw new Error("LLM response was empty.");
+          }
+          return {
+            text: streamed.text,
+            toolCalls: [],
+            usedVision: false,
+            usedTools: false,
+            timings: buildTimingMetrics(startedAt, streamed.firstTokenAt, true),
+          };
+        });
+      }
+
+      if (profile.kind === "azure_openai") {
+        if (!profile.apiKey.trim()) {
+          throw new Error("Azure OpenAI API key is required.");
+        }
+        const apiVersion = profile.azureApiVersion?.trim() || "2024-10-21";
+        const deployment = profile.azureDeployment?.trim() || "";
+        const azureBase = normalizeUrl(profile.baseUrl || "https://YOUR-RESOURCE.openai.azure.com");
+        const deploymentBase =
+          deployment && !/\/openai\/deployments\/[^/]+$/i.test(azureBase)
+            ? `${azureBase}/openai/deployments/${encodeURIComponent(deployment)}`
+            : azureBase;
+        if (!/\/openai\/deployments\/[^/]+$/i.test(deploymentBase)) {
+          throw new Error("Azure OpenAI deployment is required. Set deployment name or include it in base URL.");
+        }
+        let url = resolveRequestUrl(deploymentBase, "/chat/completions", "/chat/completions");
+        if (!/[?&]api-version=/i.test(url)) {
+          url = appendQueryParam(url, "api-version", apiVersion);
+        }
+        const azureHeaders: Record<string, string> = {
+          ...headers,
+          "api-key": profile.apiKey,
+        };
+        delete azureHeaders.Authorization;
+
+        return await fallbackToDetailed(async () => {
+          const response = await fetch(url, {
+            method: "POST",
+            headers: azureHeaders,
+            signal: normalizedOptions.signal,
+            body: JSON.stringify({
+              model: profile.model,
+              messages: [
+                ...(profile.systemPrompt ? [{ role: "system", content: profile.systemPrompt }] : []),
+                { role: "user", content: cleanPrompt },
+              ],
+              temperature: 0.2,
+              stream: true,
+            }),
+          });
+          if (!response.ok) {
+            return await sendPromptDetailed(profile, cleanPrompt, options);
+          }
+          const streamed = await streamDelimitedText(response, extractOpenAiStreamText, normalizedOptions.onTextDelta);
+          if (!streamed.text) {
+            throw new Error("LLM response was empty.");
+          }
+          return {
+            text: streamed.text,
+            toolCalls: [],
+            usedVision: false,
+            usedTools: false,
+            timings: buildTimingMetrics(startedAt, streamed.firstTokenAt, true),
+          };
+        });
+      }
+
+      if (profile.kind === "ollama") {
+        const baseUrl = normalizeUrl(profile.baseUrl || "http://localhost:11434");
+        return await fallbackToDetailed(async () => {
+          const response = await fetch(`${baseUrl}/api/generate`, {
+            method: "POST",
+            headers,
+            signal: normalizedOptions.signal,
+            body: JSON.stringify({
+              model: profile.model,
+              prompt: cleanPrompt,
+              system: profile.systemPrompt || undefined,
+              stream: true,
+            }),
+          });
+          if (!response.ok) {
+            return await sendPromptDetailed(profile, cleanPrompt, options);
+          }
+          const streamed = await streamDelimitedText(response, extractOllamaStreamText, normalizedOptions.onTextDelta);
+          if (!streamed.text) {
+            throw new Error("LLM response was empty.");
+          }
+          return {
+            text: streamed.text,
+            toolCalls: [],
+            usedVision: false,
+            usedTools: false,
+            timings: buildTimingMetrics(startedAt, streamed.firstTokenAt, true),
+          };
+        });
+      }
+
+      if (profile.kind === "anthropic") {
+        if (!profile.apiKey.trim()) {
+          throw new Error("Anthropic API key is required.");
+        }
+        const baseUrl = normalizeUrl(profile.baseUrl || "https://api.anthropic.com");
+        return await fallbackToDetailed(async () => {
+          const response = await fetch(`${baseUrl}/v1/messages`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": profile.apiKey,
+              "anthropic-version": "2023-06-01",
+            },
+            signal: normalizedOptions.signal,
+            body: JSON.stringify({
+              model: profile.model,
+              max_tokens: 1024,
+              stream: true,
+              system: profile.systemPrompt || undefined,
+              messages: [{ role: "user", content: cleanPrompt }],
+            }),
+          });
+          if (!response.ok) {
+            return await sendPromptDetailed(profile, cleanPrompt, options);
+          }
+          const streamed = await streamDelimitedText(response, extractAnthropicStreamText, normalizedOptions.onTextDelta);
+          if (!streamed.text) {
+            throw new Error("LLM response was empty.");
+          }
+          return {
+            text: streamed.text,
+            toolCalls: [],
+            usedVision: false,
+            usedTools: false,
+            timings: buildTimingMetrics(startedAt, streamed.firstTokenAt, true),
+          };
+        });
+      }
+
+      return await sendPromptDetailed(profile, cleanPrompt, options);
+    },
+    [sendPromptDetailed]
+  );
+
   const sendPrompt = useCallback(
     async (profile: LlmProfile, prompt: string, options?: LlmSendOptions): Promise<string> => {
       const response = await sendPromptDetailed(profile, prompt, options);
@@ -923,5 +1301,6 @@ export function useLlmClient() {
   return {
     sendPrompt,
     sendPromptDetailed,
+    sendPromptStream,
   };
 }

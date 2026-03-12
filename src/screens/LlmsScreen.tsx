@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
+import { PageHeroCard } from "../components/PageHeroCard";
 import { styles } from "../theme/styles";
 import { LlmProfile, LlmProviderKind, LlmSendOptions } from "../types";
 
@@ -166,12 +167,29 @@ export function LlmsScreen({
     () => profiles.find((profile) => profile.id === activeProfileId) || profiles[0] || null,
     [activeProfileId, profiles]
   );
+  const heroStats = useMemo(
+    () => [
+      { label: "Active", value: activeProfile?.name || "None" },
+      { label: "Profiles", value: `${profiles.length}` },
+      { label: "Transfer", value: transferStatus ? "Ready" : "Idle" },
+    ],
+    [activeProfile?.name, profiles.length, transferStatus]
+  );
 
   return (
     <>
+      <PageHeroCard
+        eyebrow="Nova Runtime"
+        title="Configure providers, routing, testing, and transfer."
+        summary="Choose the active phone-side model for Nova, test prompts, and manage encrypted profile import or export."
+        tone="pink"
+        stats={heroStats}
+      />
       <View style={styles.panel}>
-        <Text style={styles.panelLabel}>LLM Profiles</Text>
-        <Text style={styles.serverSubtitle}>Configure providers for OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, or native Ollama.</Text>
+        <Text style={styles.panelLabel}>AI Providers</Text>
+        <Text style={styles.serverSubtitle}>
+          Nova uses the active provider here for phone-side conversation, planning, and app control. Configure OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, or Ollama.
+        </Text>
         {loading ? <Text style={styles.emptyText}>Loading provider profiles...</Text> : null}
 
         <View style={styles.actionsWrap}>

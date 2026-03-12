@@ -14,6 +14,10 @@ const requiredEntries = [
     key: "NSMicrophoneUsageDescription",
     value: "NovaRemote uses the microphone for voice commands and glasses mode hands-free control.",
   },
+  {
+    key: "NSSpeechRecognitionUsageDescription",
+    value: "NovaRemote uses speech recognition to transcribe hands-free commands into Nova actions.",
+  },
 ];
 
 if (!fs.existsSync(infoPlistPath)) {
