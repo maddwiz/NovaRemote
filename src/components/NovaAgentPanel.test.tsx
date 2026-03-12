@@ -8,6 +8,20 @@ const { useNovaAgentRuntimeMock } = vi.hoisted(() => ({
 const { useNovaAdaptBridgeMock } = vi.hoisted(() => ({
   useNovaAdaptBridgeMock: vi.fn(),
 }));
+const { openUrlMock } = vi.hoisted(() => ({
+  openUrlMock: vi.fn(),
+}));
+
+vi.mock("react-native", async () => {
+  const actual = await vi.importActual<typeof import("react-native")>("react-native");
+  return {
+    ...actual,
+    Linking: {
+      ...(actual.Linking ?? {}),
+      openURL: openUrlMock,
+    },
+  };
+});
 
 vi.mock("../hooks/useNovaAgentRuntime", () => ({
   useNovaAgentRuntime: (...args: unknown[]) => useNovaAgentRuntimeMock(...args),
@@ -23,6 +37,8 @@ let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 beforeEach(() => {
   useNovaAgentRuntimeMock.mockReset();
   useNovaAdaptBridgeMock.mockReset();
+  openUrlMock.mockReset();
+  openUrlMock.mockResolvedValue(undefined);
   const defaultRuntime = {
     agents: [],
     loading: false,
@@ -324,6 +340,20 @@ describe("NovaAgentPanel", () => {
     expect(() => renderer.root.findByProps({ children: "Control Artifacts" })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "Browser" })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "Inspect logs" })).not.toThrow();
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Preview artifact artifact-1" }).props.onPress();
+      renderer.root.findByProps({ accessibilityLabel: "Open details for artifact artifact-1" }).props.onPress();
+    });
+
+    expect(openUrlMock).toHaveBeenNthCalledWith(
+      1,
+      "https://dgx.novaremote.test/control/artifacts/artifact-1/preview"
+    );
+    expect(openUrlMock).toHaveBeenNthCalledWith(
+      2,
+      "https://dgx.novaremote.test/control/artifacts/artifact-1"
+    );
 
     await act(async () => {
       renderer.root.findByProps({ accessibilityLabel: "Approve plan plan-1" }).props.onPress();

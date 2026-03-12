@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Linking, Pressable, Text, TextInput, View } from "react-native";
 
 import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
 import { NovaDeviceFallbackPanel } from "./NovaDeviceFallbackPanel";
@@ -248,6 +248,25 @@ function summarizeControlArtifact(artifact: NovaAdaptBridgeControlArtifact): str
   return parts.join(" • ");
 }
 
+function buildArtifactUrl(serverBaseUrl: string | null, path: string | null | undefined): string | null {
+  if (!path) {
+    return null;
+  }
+  const trimmed = path.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (!serverBaseUrl) {
+    return null;
+  }
+  const normalizedBase = serverBaseUrl.replace(/\/+$/, "");
+  const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
 function buildCompatibilityWarning(
   capabilities: NovaAdaptBridgeCapabilities,
   health: NovaAdaptBridgeHealth | null
@@ -318,6 +337,7 @@ function RemoteBridgeSection({
   mutationPlanId,
   mutationWorkflowId,
   governanceBusy,
+  serverBaseUrl,
   onRefresh,
   onApprovePlan,
   onRejectPlan,
@@ -355,6 +375,7 @@ function RemoteBridgeSection({
   mutationPlanId: string | null;
   mutationWorkflowId: string | null;
   governanceBusy: boolean;
+  serverBaseUrl: string | null;
   onRefresh: () => void;
   onApprovePlan: (planId: string) => void;
   onRejectPlan: (planId: string) => void;
@@ -610,21 +631,55 @@ function RemoteBridgeSection({
               </Text>
             ) : (
               controlArtifacts.slice(0, 4).map((artifact) => (
-                <View key={`bridge-artifact-${artifact.artifactId}`} style={styles.terminalCard}>
-                  <View style={styles.terminalNameRow}>
-                    <Text style={styles.terminalName}>{artifact.goal || artifact.artifactId}</Text>
-                    <Text style={[styles.modePill, modePillForStatus(artifact.status)]}>
-                      {bridgeStatusLabel(artifact.status)}
-                    </Text>
-                  </View>
-                  <Text style={styles.serverSubtitle}>{summarizeControlArtifact(artifact)}</Text>
-                  <Text style={styles.emptyText}>
-                    {artifact.outputPreview ||
-                      artifact.target ||
-                      artifact.model ||
-                      `Artifact ${artifact.artifactId}`}
-                  </Text>
-                </View>
+                (() => {
+                  const previewUrl = buildArtifactUrl(serverBaseUrl, artifact.previewPath);
+                  const detailUrl = buildArtifactUrl(serverBaseUrl, artifact.detailPath);
+                  return (
+                    <View key={`bridge-artifact-${artifact.artifactId}`} style={styles.terminalCard}>
+                      <View style={styles.terminalNameRow}>
+                        <Text style={styles.terminalName}>{artifact.goal || artifact.artifactId}</Text>
+                        <Text style={[styles.modePill, modePillForStatus(artifact.status)]}>
+                          {bridgeStatusLabel(artifact.status)}
+                        </Text>
+                      </View>
+                      <Text style={styles.serverSubtitle}>{summarizeControlArtifact(artifact)}</Text>
+                      <Text style={styles.emptyText}>
+                        {artifact.outputPreview ||
+                          artifact.target ||
+                          artifact.model ||
+                          `Artifact ${artifact.artifactId}`}
+                      </Text>
+                      {previewUrl || detailUrl ? (
+                        <View style={styles.actionsWrap}>
+                          {previewUrl ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Preview artifact ${artifact.artifactId}`}
+                              style={styles.actionButton}
+                              onPress={() => {
+                                void Linking.openURL(previewUrl);
+                              }}
+                            >
+                              <Text style={styles.actionButtonText}>Preview</Text>
+                            </Pressable>
+                          ) : null}
+                          {detailUrl ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel={`Open details for artifact ${artifact.artifactId}`}
+                              style={styles.actionButton}
+                              onPress={() => {
+                                void Linking.openURL(detailUrl);
+                              }}
+                            >
+                              <Text style={styles.actionButtonText}>Details</Text>
+                            </Pressable>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
+                  );
+                })()
               ))
             )}
           </View>
@@ -979,6 +1034,7 @@ export function NovaAgentPanel({
         mutationPlanId={remoteMutationPlanId}
         mutationWorkflowId={remoteMutationWorkflowId}
         governanceBusy={governanceBusy}
+        serverBaseUrl={server?.baseUrl ?? null}
         onRefresh={() => {
           void refreshBridge({ quiet: true });
         }}
