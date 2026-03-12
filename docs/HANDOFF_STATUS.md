@@ -235,3 +235,4 @@ Updated: 2026-03-11
 
 
 - Live companion validation now passes for `/health`, `/agents/health`, and `/agents/capabilities` on the installed macOS sidecar stack.
+- Frozen NovaAdapt integration target `cfb8983` (`novaadapt-integration-freeze-cfb8983`) now passes the companion contract validator via `codex_remote/scripts/validate_nova_sidecars.py --compose-only --novaadapt-contract-check`.

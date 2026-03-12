@@ -54,3 +54,4 @@ Updated: 2026-03-11
 
 
 - Live companion validation now passes for `/health`, `/agents/health`, and `/agents/capabilities` on the installed macOS sidecar stack.
+- The frozen NovaAdapt upgrade target `cfb8983` is now contract-validated against the companion sidecar boundary, so server-runtime rollout can proceed without merging that branch to `main` yet.
