@@ -89,6 +89,7 @@ beforeEach(() => {
     homeAssistantStatus: null,
     mqttStatus: null,
     controlArtifacts: [],
+    loadControlArtifact: vi.fn(async () => null),
     refresh: vi.fn(),
     createPlan: vi.fn(async () => null),
     startWorkflow: vi.fn(async () => null),
@@ -218,6 +219,28 @@ describe("NovaAgentPanel", () => {
     const pauseRuntime = vi.fn(async () => true);
     const resetGovernanceUsage = vi.fn(async () => true);
     const cancelAllJobs = vi.fn(async () => true);
+    const loadControlArtifact = vi.fn(async () => ({
+      artifactId: "artifact-1",
+      createdAt: null,
+      controlType: "vision",
+      status: "completed",
+      dangerous: false,
+      goal: "Inspect logs",
+      platform: "ios",
+      transport: "appium",
+      outputPreview: "Captured diagnostics",
+      actionType: null,
+      target: null,
+      model: null,
+      modelId: null,
+      previewAvailable: true,
+      previewPath: "/control/artifacts/artifact-1/preview",
+      detailPath: "/control/artifacts/artifact-1",
+      output: "Detailed artifact output",
+      action: { type: "tap", target: "Deploy" },
+      data: { screenshot: "artifact-1.png" },
+      metadata: { attempt: 1, mime_type: "image/png" },
+    }));
     useNovaAdaptBridgeMock.mockReturnValue({
       loading: false,
       refreshing: false,
@@ -298,6 +321,7 @@ describe("NovaAgentPanel", () => {
           detailPath: "/control/artifacts/artifact-1",
         },
       ],
+      loadControlArtifact,
       refresh: vi.fn(),
       createPlan: vi.fn(async () => null),
       startWorkflow: vi.fn(async () => null),
@@ -343,6 +367,13 @@ describe("NovaAgentPanel", () => {
 
     expect(() => renderer.root.findByProps({ children: "Artifact Preview" })).not.toThrow();
     expect(renderer.root.findAllByProps({ children: "Captured diagnostics" }).length).toBeGreaterThan(0);
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(loadControlArtifact).toHaveBeenCalledWith("artifact-1");
+    expect(() =>
+      renderer.root.findByProps({ accessibilityLabel: "Inline preview for artifact artifact-1" })
+    ).not.toThrow();
 
     await act(async () => {
       renderer.root.findByProps({ accessibilityLabel: "Open preview url for artifact artifact-1" }).props.onPress();
@@ -358,9 +389,10 @@ describe("NovaAgentPanel", () => {
     });
 
     expect(() => renderer.root.findByProps({ children: "Artifact Details" })).not.toThrow();
-    expect(() =>
-      renderer.root.findByProps({ children: "No additional detail fields were returned for this artifact." })
-    ).not.toThrow();
+    expect(JSON.stringify(renderer.toJSON())).toContain("Detailed artifact output");
+    expect(() => renderer.root.findByProps({ children: "Action" })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Data" })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Metadata" })).not.toThrow();
 
     await act(async () => {
       renderer.root.findByProps({ accessibilityLabel: "Open detail url for artifact artifact-1" }).props.onPress();

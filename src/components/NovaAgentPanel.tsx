@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Linking, Pressable, Text, TextInput, View } from "react-native";
+import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
 
 import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
 import { NovaDeviceFallbackPanel } from "./NovaDeviceFallbackPanel";
 import {
   NovaAdaptBridgeCapabilities,
   NovaAdaptBridgeControlArtifact,
+  NovaAdaptBridgeControlArtifactDetail,
   NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
@@ -290,6 +291,39 @@ function buildArtifactUrl(serverBaseUrl: string | null, path: string | null | un
   return `${normalizedBase}${normalizedPath}`;
 }
 
+function formatArtifactPayload(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized || null;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function recordString(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function artifactMimeType(detail: NovaAdaptBridgeControlArtifactDetail | null): string | null {
+  return (
+    recordString(detail?.metadata ?? null, "mime_type") ||
+    recordString(detail?.metadata ?? null, "content_type") ||
+    recordString(detail?.data ?? null, "mime_type") ||
+    recordString(detail?.data ?? null, "content_type")
+  );
+}
+
+function isImageMimeType(value: string | null): boolean {
+  return typeof value === "string" && /^image\//i.test(value);
+}
+
 function buildCompatibilityWarning(
   capabilities: NovaAdaptBridgeCapabilities,
   health: NovaAdaptBridgeHealth | null
@@ -361,6 +395,7 @@ function RemoteBridgeSection({
   mutationWorkflowId,
   governanceBusy,
   serverBaseUrl,
+  serverToken,
   onRefresh,
   onApprovePlan,
   onRejectPlan,
@@ -372,6 +407,7 @@ function RemoteBridgeSection({
   onResetGovernanceUsage,
   onCancelAllJobs,
   onLaunchTemplate,
+  onLoadControlArtifact,
 }: {
   loading: boolean;
   refreshing: boolean;
@@ -399,6 +435,7 @@ function RemoteBridgeSection({
   mutationWorkflowId: string | null;
   governanceBusy: boolean;
   serverBaseUrl: string | null;
+  serverToken: string | null;
   onRefresh: () => void;
   onApprovePlan: (planId: string) => void;
   onRejectPlan: (planId: string) => void;
@@ -410,10 +447,14 @@ function RemoteBridgeSection({
   onResetGovernanceUsage: () => void;
   onCancelAllJobs: () => void;
   onLaunchTemplate: (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => void;
+  onLoadControlArtifact: (artifactId: string) => Promise<NovaAdaptBridgeControlArtifactDetail | null>;
 }) {
   const compatibilityWarning = buildCompatibilityWarning(capabilities, health);
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
   const [artifactViewMode, setArtifactViewMode] = useState<"preview" | "details">("preview");
+  const [selectedArtifactDetail, setSelectedArtifactDetail] = useState<NovaAdaptBridgeControlArtifactDetail | null>(null);
+  const [artifactDetailLoading, setArtifactDetailLoading] = useState(false);
+  const [artifactDetailError, setArtifactDetailError] = useState<string | null>(null);
   const controlSurfaces = [
     { key: "browser", title: "Browser", enabled: capabilities.browserStatus, status: browserStatus },
     { key: "voice", title: "Voice", enabled: capabilities.voiceStatus, status: voiceStatus },
@@ -429,6 +470,51 @@ function RemoteBridgeSection({
   const selectedPreviewUrl = selectedArtifact ? buildArtifactUrl(serverBaseUrl, selectedArtifact.previewPath) : null;
   const selectedDetailUrl = selectedArtifact ? buildArtifactUrl(serverBaseUrl, selectedArtifact.detailPath) : null;
   const selectedArtifactDetails = selectedArtifact ? describeControlArtifact(selectedArtifact) : [];
+  const selectedArtifactOutput =
+    (selectedArtifactDetail?.output && selectedArtifactDetail.output.trim()) || selectedArtifact?.outputPreview || null;
+  const selectedArtifactAction = formatArtifactPayload(selectedArtifactDetail?.action);
+  const selectedArtifactData = formatArtifactPayload(selectedArtifactDetail?.data);
+  const selectedArtifactMetadata = formatArtifactPayload(selectedArtifactDetail?.metadata);
+  const selectedArtifactMimeType = artifactMimeType(selectedArtifactDetail);
+  const selectedArtifactIsImage = isImageMimeType(selectedArtifactMimeType) && Boolean(selectedPreviewUrl);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedArtifact) {
+      setSelectedArtifactDetail(null);
+      setArtifactDetailError(null);
+      setArtifactDetailLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    setArtifactDetailLoading(true);
+    setArtifactDetailError(null);
+    setSelectedArtifactDetail(null);
+    void onLoadControlArtifact(selectedArtifact.artifactId)
+      .then((detail) => {
+        if (!active) {
+          return;
+        }
+        setSelectedArtifactDetail(detail);
+      })
+      .catch((nextError) => {
+        if (!active) {
+          return;
+        }
+        const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
+        setArtifactDetailError(detail);
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+        setArtifactDetailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [onLoadControlArtifact, selectedArtifact]);
 
   return (
     <View style={styles.panel}>
@@ -746,10 +832,37 @@ function RemoteBridgeSection({
                       ) : null}
                     </View>
                     {artifactViewMode === "preview" ? (
-                      <Text style={styles.emptyText}>
-                        {selectedArtifact.outputPreview ||
-                          "No inline preview text was returned for this artifact. Use Open Preview for the server-rendered view."}
-                      </Text>
+                      <>
+                        {artifactDetailLoading ? <Text style={styles.emptyText}>Loading artifact preview...</Text> : null}
+                        {selectedArtifactIsImage && selectedPreviewUrl ? (
+                          <Image
+                            accessibilityLabel={`Inline preview for artifact ${selectedArtifact.artifactId}`}
+                            source={{
+                              uri: selectedPreviewUrl,
+                              ...(serverToken ? { headers: { Authorization: `Bearer ${serverToken}` } } : {}),
+                            }}
+                            style={{
+                              width: "100%",
+                              height: 180,
+                              borderRadius: 20,
+                              marginTop: 8,
+                              marginBottom: 8,
+                              backgroundColor: "rgba(7, 10, 24, 0.95)",
+                            }}
+                            resizeMode="cover"
+                          />
+                        ) : null}
+                        {selectedArtifactOutput ? (
+                          <View style={styles.terminalView}>
+                            <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                          </View>
+                        ) : artifactDetailLoading ? null : (
+                          <Text style={styles.emptyText}>
+                            No inline preview text was returned for this artifact. Use Open Preview for the server-rendered view.
+                          </Text>
+                        )}
+                        {artifactDetailError ? <Text style={styles.emptyText}>{`Artifact detail error: ${artifactDetailError}`}</Text> : null}
+                      </>
                     ) : (
                       <>
                         <Text style={styles.emptyText}>{summarizeControlArtifact(selectedArtifact)}</Text>
@@ -758,7 +871,46 @@ function RemoteBridgeSection({
                             {detail}
                           </Text>
                         ))}
-                        {!selectedArtifactDetails.length ? (
+                        {artifactDetailLoading ? <Text style={styles.emptyText}>Loading artifact details...</Text> : null}
+                        {selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Output</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactAction ? (
+                          <>
+                            <Text style={styles.panelLabel}>Action</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactAction}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactData ? (
+                          <>
+                            <Text style={styles.panelLabel}>Data</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactData}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactMetadata ? (
+                          <>
+                            <Text style={styles.panelLabel}>Metadata</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactMetadata}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {artifactDetailError ? <Text style={styles.emptyText}>{`Artifact detail error: ${artifactDetailError}`}</Text> : null}
+                        {!selectedArtifactDetails.length &&
+                        !selectedArtifactOutput &&
+                        !selectedArtifactAction &&
+                        !selectedArtifactData &&
+                        !selectedArtifactMetadata &&
+                        !artifactDetailLoading ? (
                           <Text style={styles.emptyText}>No additional detail fields were returned for this artifact.</Text>
                         ) : null}
                       </>
@@ -915,6 +1067,7 @@ export function NovaAgentPanel({
     homeAssistantStatus,
     mqttStatus,
     controlArtifacts,
+    loadControlArtifact,
     governance,
     plans: bridgePlans,
     jobs: bridgeJobs,
@@ -1120,6 +1273,7 @@ export function NovaAgentPanel({
         mutationWorkflowId={remoteMutationWorkflowId}
         governanceBusy={governanceBusy}
         serverBaseUrl={server?.baseUrl ?? null}
+        serverToken={server?.token ?? null}
         onRefresh={() => {
           void refreshBridge({ quiet: true });
         }}
@@ -1155,6 +1309,7 @@ export function NovaAgentPanel({
         onLaunchTemplate={(template, mode) => {
           void runTemplateLaunch(template, mode);
         }}
+        onLoadControlArtifact={loadControlArtifact}
       />
 
       {showRemoteCreateControls ? (

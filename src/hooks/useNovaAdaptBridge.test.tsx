@@ -228,6 +228,25 @@ describe("useNovaAdaptBridge", () => {
           },
         ]);
       }
+      if (url.endsWith("/agents/control/artifacts/artifact-1")) {
+        return responseOf(200, {
+          artifact_id: "artifact-1",
+          control_type: "vision",
+          status: "completed",
+          goal: "Inspect logs",
+          dangerous: false,
+          platform: "ios",
+          transport: "appium",
+          output_preview: "Captured diagnostics",
+          preview_available: true,
+          preview_path: "/control/artifacts/artifact-1/preview",
+          detail_path: "/control/artifacts/artifact-1",
+          output: "Detailed artifact output",
+          action: { type: "tap", target: "Deploy" },
+          data: { screenshot: "artifact-1.png" },
+          metadata: { attempt: 1 },
+        });
+      }
       if (url.includes("/agents/events/stream")) {
         return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
       }
@@ -327,6 +346,17 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).homeAssistantStatus).toMatchObject({ transport: "homeassistant" });
     expect(latestOrThrow(latest).mqttStatus).toMatchObject({ transport: "mqtt" });
     expect(latestOrThrow(latest).controlArtifacts[0]).toMatchObject({ artifactId: "artifact-1", goal: "Inspect logs" });
+
+    await act(async () => {
+      const detail = await latestOrThrow(latest).loadControlArtifact("artifact-1");
+      expect(detail).toMatchObject({
+        artifactId: "artifact-1",
+        output: "Detailed artifact output",
+        action: { type: "tap", target: "Deploy" },
+        data: { screenshot: "artifact-1.png" },
+        metadata: { attempt: 1 },
+      });
+    });
 
     await act(async () => {
       await latestOrThrow(latest).approvePlanAsync("plan-1");

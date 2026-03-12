@@ -436,6 +436,13 @@ export type NovaAdaptBridgeControlArtifact = {
   detailPath: string | null;
 };
 
+export type NovaAdaptBridgeControlArtifactDetail = NovaAdaptBridgeControlArtifact & {
+  output: string | null;
+  action: Record<string, unknown> | null;
+  data: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
+};
+
 export type NovaAdaptBridgePlan = {
   id: string;
   objective: string;

@@ -4,6 +4,7 @@ import { apiRequest, normalizeBaseUrl } from "../api/client";
 import {
   NovaAdaptBridgeCapabilities,
   NovaAdaptBridgeControlArtifact,
+  NovaAdaptBridgeControlArtifactDetail,
   NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
@@ -47,6 +48,7 @@ export type UseNovaAdaptBridgeResult = {
   workflows: NovaAdaptBridgeWorkflow[];
   templates: NovaAdaptBridgeTemplate[];
   galleryTemplates: NovaAdaptBridgeTemplate[];
+  loadControlArtifact: (artifactId: string) => Promise<NovaAdaptBridgeControlArtifactDetail | null>;
   refresh: (options?: RefreshOptions) => Promise<void>;
   createPlan: (objective: string, options?: { strategy?: string }) => Promise<NovaAdaptBridgePlan | null>;
   startWorkflow: (
@@ -185,6 +187,10 @@ type RawBridgeControlArtifact = {
   preview_available?: unknown;
   preview_path?: unknown;
   detail_path?: unknown;
+  output?: unknown;
+  action?: unknown;
+  data?: unknown;
+  metadata?: unknown;
 };
 
 const DEFAULT_REFRESH_INTERVAL_MS = 15_000;
@@ -327,6 +333,28 @@ function normalizeControlArtifact(value: unknown): NovaAdaptBridgeControlArtifac
     previewAvailable: Boolean(raw?.preview_available),
     previewPath: asNullableString(raw?.preview_path),
     detailPath: asNullableString(raw?.detail_path),
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return { ...(value as Record<string, unknown>) };
+}
+
+function normalizeControlArtifactDetail(value: unknown): NovaAdaptBridgeControlArtifactDetail | null {
+  const artifact = normalizeControlArtifact(value);
+  if (!artifact) {
+    return null;
+  }
+  const raw = value as RawBridgeControlArtifact | null;
+  return {
+    ...artifact,
+    output: asNullableString(raw?.output),
+    action: asRecord(raw?.action),
+    data: asRecord(raw?.data),
+    metadata: asRecord(raw?.metadata),
   };
 }
 
@@ -948,6 +976,25 @@ async function postNovaAdaptBridgeJson<T>(
     method: "POST",
     body: body ? JSON.stringify(body) : undefined,
   });
+}
+
+async function fetchNovaAdaptBridgeControlArtifact(
+  server: ServerProfile | null,
+  artifactId: string
+): Promise<NovaAdaptBridgeControlArtifactDetail | null> {
+  if (!hasBridgeCredentials(server)) {
+    return null;
+  }
+  const normalizedArtifactId = artifactId.trim();
+  if (!normalizedArtifactId) {
+    return null;
+  }
+  const response = await apiRequest<unknown>(
+    server.baseUrl,
+    server.token,
+    `/agents/control/artifacts/${encodeURIComponent(normalizedArtifactId)}`
+  );
+  return normalizeControlArtifactDetail(response);
 }
 
 export async function createNovaAdaptBridgePlan(
@@ -1680,6 +1727,20 @@ export function useNovaAdaptBridge({
     [capabilities.governance, refresh, server]
   );
 
+  const loadControlArtifact = useCallback(
+    async (artifactId: string) => {
+      try {
+        return await fetchNovaAdaptBridgeControlArtifact(server, artifactId);
+      } catch (nextError) {
+        if (isMissingRouteError(nextError) || isBridgeUnavailableError(nextError)) {
+          return null;
+        }
+        throw nextError;
+      }
+    },
+    [server]
+  );
+
   return useMemo(
     () => ({
       loading,
@@ -1703,6 +1764,7 @@ export function useNovaAdaptBridge({
       workflows,
       templates,
       galleryTemplates,
+      loadControlArtifact,
       refresh,
       createPlan,
       startWorkflow,
@@ -1728,6 +1790,7 @@ export function useNovaAdaptBridge({
       homeAssistantStatus,
       jobs,
       loading,
+      loadControlArtifact,
       galleryTemplates,
       capabilities,
       browserStatus,
