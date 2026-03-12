@@ -339,17 +339,33 @@ describe("NovaAgentPanel", () => {
     expect(() => renderer.root.findByProps({ children: "Control Surfaces" })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "Control Artifacts" })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "Browser" })).not.toThrow();
-    expect(() => renderer.root.findByProps({ children: "Inspect logs" })).not.toThrow();
+    expect(renderer.root.findAllByProps({ children: "Inspect logs" }).length).toBeGreaterThan(0);
+
+    expect(() => renderer.root.findByProps({ children: "Artifact Preview" })).not.toThrow();
+    expect(renderer.root.findAllByProps({ children: "Captured diagnostics" }).length).toBeGreaterThan(0);
 
     await act(async () => {
-      renderer.root.findByProps({ accessibilityLabel: "Preview artifact artifact-1" }).props.onPress();
-      renderer.root.findByProps({ accessibilityLabel: "Open details for artifact artifact-1" }).props.onPress();
+      renderer.root.findByProps({ accessibilityLabel: "Open preview url for artifact artifact-1" }).props.onPress();
     });
 
     expect(openUrlMock).toHaveBeenNthCalledWith(
       1,
       "https://dgx.novaremote.test/control/artifacts/artifact-1/preview"
     );
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Show details for artifact artifact-1" }).props.onPress();
+    });
+
+    expect(() => renderer.root.findByProps({ children: "Artifact Details" })).not.toThrow();
+    expect(() =>
+      renderer.root.findByProps({ children: "No additional detail fields were returned for this artifact." })
+    ).not.toThrow();
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Open detail url for artifact artifact-1" }).props.onPress();
+    });
+
     expect(openUrlMock).toHaveBeenNthCalledWith(
       2,
       "https://dgx.novaremote.test/control/artifacts/artifact-1"

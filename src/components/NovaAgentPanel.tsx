@@ -248,6 +248,29 @@ function summarizeControlArtifact(artifact: NovaAdaptBridgeControlArtifact): str
   return parts.join(" • ");
 }
 
+function describeControlArtifact(artifact: NovaAdaptBridgeControlArtifact): string[] {
+  const details: string[] = [];
+  if (artifact.target) {
+    details.push(`Target ${artifact.target}`);
+  }
+  if (artifact.model) {
+    details.push(`Model ${artifact.model}`);
+  }
+  if (artifact.modelId) {
+    details.push(`Model ID ${artifact.modelId}`);
+  }
+  if (artifact.createdAt) {
+    const createdAt = formatBridgeDate(artifact.createdAt);
+    if (createdAt) {
+      details.push(`Created ${createdAt}`);
+    }
+  }
+  if (artifact.dangerous) {
+    details.push("Marked dangerous");
+  }
+  return details;
+}
+
 function buildArtifactUrl(serverBaseUrl: string | null, path: string | null | undefined): string | null {
   if (!path) {
     return null;
@@ -389,6 +412,8 @@ function RemoteBridgeSection({
   onLaunchTemplate: (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => void;
 }) {
   const compatibilityWarning = buildCompatibilityWarning(capabilities, health);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  const [artifactViewMode, setArtifactViewMode] = useState<"preview" | "details">("preview");
   const controlSurfaces = [
     { key: "browser", title: "Browser", enabled: capabilities.browserStatus, status: browserStatus },
     { key: "voice", title: "Voice", enabled: capabilities.voiceStatus, status: voiceStatus },
@@ -398,6 +423,12 @@ function RemoteBridgeSection({
     { key: "mqtt", title: "MQTT", enabled: capabilities.mqttStatus, status: mqttStatus },
   ];
   const visibleControlSurfaces = controlSurfaces.filter((surface) => surface.enabled || surface.status);
+  const visibleArtifacts = controlArtifacts.slice(0, 4);
+  const selectedArtifact =
+    visibleArtifacts.find((artifact) => artifact.artifactId === selectedArtifactId) || visibleArtifacts[0] || null;
+  const selectedPreviewUrl = selectedArtifact ? buildArtifactUrl(serverBaseUrl, selectedArtifact.previewPath) : null;
+  const selectedDetailUrl = selectedArtifact ? buildArtifactUrl(serverBaseUrl, selectedArtifact.detailPath) : null;
+  const selectedArtifactDetails = selectedArtifact ? describeControlArtifact(selectedArtifact) : [];
 
   return (
     <View style={styles.panel}>
@@ -623,64 +654,118 @@ function RemoteBridgeSection({
 
           <View style={styles.panel}>
             <Text style={styles.panelLabel}>Control Artifacts</Text>
-            {controlArtifacts.length === 0 ? (
+            {visibleArtifacts.length === 0 ? (
               <Text style={styles.emptyText}>
                 {capabilities.controlArtifacts
                   ? "No recent control artifacts yet."
                   : "This server runtime does not expose control artifacts yet."}
               </Text>
             ) : (
-              controlArtifacts.slice(0, 4).map((artifact) => (
-                (() => {
-                  const previewUrl = buildArtifactUrl(serverBaseUrl, artifact.previewPath);
-                  const detailUrl = buildArtifactUrl(serverBaseUrl, artifact.detailPath);
-                  return (
-                    <View key={`bridge-artifact-${artifact.artifactId}`} style={styles.terminalCard}>
-                      <View style={styles.terminalNameRow}>
-                        <Text style={styles.terminalName}>{artifact.goal || artifact.artifactId}</Text>
-                        <Text style={[styles.modePill, modePillForStatus(artifact.status)]}>
-                          {bridgeStatusLabel(artifact.status)}
-                        </Text>
-                      </View>
-                      <Text style={styles.serverSubtitle}>{summarizeControlArtifact(artifact)}</Text>
-                      <Text style={styles.emptyText}>
-                        {artifact.outputPreview ||
-                          artifact.target ||
-                          artifact.model ||
-                          `Artifact ${artifact.artifactId}`}
+              <>
+                {visibleArtifacts.map((artifact) => (
+                  <Pressable
+                    key={`bridge-artifact-${artifact.artifactId}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select artifact ${artifact.artifactId}`}
+                    style={[
+                      styles.terminalCard,
+                      artifact.artifactId === selectedArtifact?.artifactId ? styles.chipActive : null,
+                    ]}
+                    onPress={() => {
+                      setSelectedArtifactId(artifact.artifactId);
+                    }}
+                  >
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{artifact.goal || artifact.artifactId}</Text>
+                      <Text style={[styles.modePill, modePillForStatus(artifact.status)]}>
+                        {bridgeStatusLabel(artifact.status)}
                       </Text>
-                      {previewUrl || detailUrl ? (
-                        <View style={styles.actionsWrap}>
-                          {previewUrl ? (
-                            <Pressable
-                              accessibilityRole="button"
-                              accessibilityLabel={`Preview artifact ${artifact.artifactId}`}
-                              style={styles.actionButton}
-                              onPress={() => {
-                                void Linking.openURL(previewUrl);
-                              }}
-                            >
-                              <Text style={styles.actionButtonText}>Preview</Text>
-                            </Pressable>
-                          ) : null}
-                          {detailUrl ? (
-                            <Pressable
-                              accessibilityRole="button"
-                              accessibilityLabel={`Open details for artifact ${artifact.artifactId}`}
-                              style={styles.actionButton}
-                              onPress={() => {
-                                void Linking.openURL(detailUrl);
-                              }}
-                            >
-                              <Text style={styles.actionButtonText}>Details</Text>
-                            </Pressable>
-                          ) : null}
-                        </View>
+                    </View>
+                    <Text style={styles.serverSubtitle}>{summarizeControlArtifact(artifact)}</Text>
+                    <Text style={styles.emptyText}>
+                      {artifact.outputPreview ||
+                        artifact.target ||
+                        artifact.model ||
+                        `Artifact ${artifact.artifactId}`}
+                    </Text>
+                  </Pressable>
+                ))}
+                {selectedArtifact ? (
+                  <View style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>
+                        {artifactViewMode === "preview" ? "Artifact Preview" : "Artifact Details"}
+                      </Text>
+                      <Text style={[styles.modePill, modePillForStatus(selectedArtifact.status)]}>
+                        {bridgeStatusLabel(selectedArtifact.status)}
+                      </Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>
+                      {selectedArtifact.goal || selectedArtifact.artifactId}
+                    </Text>
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show preview for artifact ${selectedArtifact.artifactId}`}
+                        style={[styles.actionButton, artifactViewMode === "preview" ? styles.chipActive : null]}
+                        onPress={() => setArtifactViewMode("preview")}
+                      >
+                        <Text style={styles.actionButtonText}>Preview</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show details for artifact ${selectedArtifact.artifactId}`}
+                        style={[styles.actionButton, artifactViewMode === "details" ? styles.chipActive : null]}
+                        onPress={() => setArtifactViewMode("details")}
+                      >
+                        <Text style={styles.actionButtonText}>Details</Text>
+                      </Pressable>
+                      {artifactViewMode === "preview" && selectedPreviewUrl ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open preview url for artifact ${selectedArtifact.artifactId}`}
+                          style={styles.actionButton}
+                          onPress={() => {
+                            void Linking.openURL(selectedPreviewUrl);
+                          }}
+                        >
+                          <Text style={styles.actionButtonText}>Open Preview</Text>
+                        </Pressable>
+                      ) : null}
+                      {artifactViewMode === "details" && selectedDetailUrl ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open detail url for artifact ${selectedArtifact.artifactId}`}
+                          style={styles.actionButton}
+                          onPress={() => {
+                            void Linking.openURL(selectedDetailUrl);
+                          }}
+                        >
+                          <Text style={styles.actionButtonText}>Open Details</Text>
+                        </Pressable>
                       ) : null}
                     </View>
-                  );
-                })()
-              ))
+                    {artifactViewMode === "preview" ? (
+                      <Text style={styles.emptyText}>
+                        {selectedArtifact.outputPreview ||
+                          "No inline preview text was returned for this artifact. Use Open Preview for the server-rendered view."}
+                      </Text>
+                    ) : (
+                      <>
+                        <Text style={styles.emptyText}>{summarizeControlArtifact(selectedArtifact)}</Text>
+                        {selectedArtifactDetails.map((detail) => (
+                          <Text key={`${selectedArtifact.artifactId}-${detail}`} style={styles.emptyText}>
+                            {detail}
+                          </Text>
+                        ))}
+                        {!selectedArtifactDetails.length ? (
+                          <Text style={styles.emptyText}>No additional detail fields were returned for this artifact.</Text>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                ) : null}
+              </>
             )}
           </View>
 
