@@ -35,7 +35,7 @@ Updated: 2026-03-11
 
 ### Still pending
 
-- move the last remaining non-bridge agent CRUD/update paths from phone runtime to server runtime
+- decide whether the explicit `NovaDeviceFallbackPanel` should remain as a long-term operator escape hatch or be removed after the server runtime proves stable in release
 - finish release-hardening around the validated sidecar packaging/runbooks for `codex_remote + NovaAdapt + NovaSpine`
 - add richer runtime event transport if NovaAdapt grows beyond plan/job SSE
 - clean auth/protocol surface and publish the companion server openly

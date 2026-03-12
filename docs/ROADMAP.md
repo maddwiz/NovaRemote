@@ -51,7 +51,7 @@ Updated: 2026-03-11
   - codex_remote now includes repeatable sidecar lifecycle scripts so the NovaAdapt/NovaSpine stack can be started and stopped without copying compose commands out of the runbook
   - the server-runtime UI now preserves the companion protocol/agent-contract versions and warns when the installed companion contract drifts from the mobile client expectation
   - remaining release-hardening / protocol cleanup before companion-server open-sourcing
-  - dedicated runtime-governance controls are now part of the server-backed bridge surface
+  - runtime-governance routes are allowlisted in the companion for the server-backed bridge surface, but the currently pinned NovaAdapt runtime still returns `404` for those endpoints
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).
 
 
