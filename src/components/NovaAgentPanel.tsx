@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
 
 import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
@@ -29,6 +29,8 @@ type NovaAgentPanelProps = {
   onShowPaywall: () => void;
   onQueueCommand: (session: string, command: string) => void;
   onOpenAgents?: () => void;
+  autoEnableLocalFallback?: boolean;
+  onAutoEnableLocalFallbackHandled?: () => void;
   surface?: "preview" | "panel" | "screen";
 };
 
@@ -837,6 +839,8 @@ export function NovaAgentPanel({
   onShowPaywall,
   onQueueCommand,
   onOpenAgents,
+  autoEnableLocalFallback = false,
+  onAutoEnableLocalFallbackHandled,
   surface = "preview",
 }: NovaAgentPanelProps) {
   const [newAgentName, setNewAgentName] = useState<string>("");
@@ -882,6 +886,17 @@ export function NovaAgentPanel({
   const showLocalPreview =
     surface === "preview" || (surface === "screen" && (!bridgeSupported || !bridgeRuntimeAvailable) && localFallbackEnabled);
   const showRemoteCreateControls = surface === "screen" && bridgeSupported && bridgeRuntimeAvailable;
+  const runtimeUnavailable = !bridgeSupported || !bridgeRuntimeAvailable;
+
+  useEffect(() => {
+    if (!autoEnableLocalFallback || surface !== "screen") {
+      return;
+    }
+    if (runtimeUnavailable) {
+      setLocalFallbackEnabled(true);
+    }
+    onAutoEnableLocalFallbackHandled?.();
+  }, [autoEnableLocalFallback, onAutoEnableLocalFallbackHandled, runtimeUnavailable, surface]);
 
   const runRemotePlanAction = useCallback(
     async (planId: string, action: (targetPlanId: string) => Promise<boolean>) => {
@@ -1000,8 +1015,6 @@ export function NovaAgentPanel({
     },
     [bridgeTemplates, importTemplate, launchTemplate]
   );
-
-  const runtimeUnavailable = !bridgeSupported || !bridgeRuntimeAvailable;
 
   if (!serverId) {
     return (

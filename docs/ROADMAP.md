@@ -39,6 +39,7 @@ Updated: 2026-03-11
   - non-focused local agent fallback no longer auto-focuses and queues hidden phone-runtime work; when the bridge runtime is down, the local fallback is now explicit to the currently focused server only
   - generic `AppShell` agent actions now stop at the server-runtime boundary and direct users to the dedicated `Agents` screen for any explicit local fallback
   - when a server-runtime action misses, `AppShell` now focuses that server and routes straight into the dedicated `Agents` screen before showing the device-fallback message
+  - that redirected `Agents` path now auto-enables device fallback for the target server, removing the extra manual toggle after a runtime miss
   - the dedicated `Agents` screen now surfaces server-backed saved templates and gallery imports, allowing direct plan/workflow launches from NovaAdapt templates
   - the bridge runtime surface now detects optional route support per capability, so missing memory/governance/workflow/template endpoints degrade cleanly instead of making the runtime look fully offline
   - workflow creation and template workflow-launch controls are now capability-gated, so the app no longer offers dead workflow actions when the companion reports `workflows: false`

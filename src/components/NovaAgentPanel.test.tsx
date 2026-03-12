@@ -757,6 +757,78 @@ describe("NovaAgentPanel", () => {
     });
   });
 
+  it("auto-enables device fallback on the dedicated screen when requested", async () => {
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: false,
+      runtimeAvailable: false,
+      capabilities: {
+        memoryStatus: false,
+        governance: false,
+        workflows: false,
+        templates: false,
+        templateGallery: false,
+      },
+      error: "Runtime unavailable",
+      health: { ok: false },
+      memoryStatus: null,
+      governance: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      templates: [],
+      galleryTemplates: [],
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
+    });
+    const handled = vi.fn();
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: ["main"],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+          autoEnableLocalFallback: true,
+          onAutoEnableLocalFallbackHandled: handled,
+          surface: "screen",
+        })
+      );
+    });
+
+    expect(handled).toHaveBeenCalledTimes(1);
+    expect(useNovaAgentRuntimeMock).toHaveBeenCalled();
+    expect(() => renderer.root.findByProps({ accessibilityLabel: "Add NovaAdapt agent" })).not.toThrow();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("keeps the terminals panel server-first even when the bridge runtime is unavailable", async () => {
     useNovaAdaptBridgeMock.mockReturnValue({
       loading: false,

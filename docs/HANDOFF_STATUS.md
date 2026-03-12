@@ -220,6 +220,7 @@ Updated: 2026-03-11
   - capability-aware optional bridge controls that hide or replace unsupported memory/governance/workflow/template surfaces instead of surfacing dead actions when a sidecar route is not available yet
   - workflow creation and template workflow-launch actions are now capability-gated, so the mobile surface stops offering dead workflow actions when the companion reports `workflows: false`
   - companion-provided `/agents/capabilities` support flags that let the mobile bridge skip unsupported optional route fetches instead of relearning support through repeated 404s
+  - runtime-miss redirects into the dedicated `Agents` screen now auto-open device fallback for the target server instead of forcing a second manual toggle
   - validated companion sidecar routing for `codex_remote + NovaAdapt + NovaSpine`, including host `/agents/workflows/*` forwarding
   - codex_remote sidecar validation is now scriptable for both package and live stack checks via `scripts/validate_nova_sidecars.py`
   - codex_remote live sidecar validation now tolerates a missing `.env.nova-sidecars` file, so operators can validate an already-running stack directly against host/runtime state

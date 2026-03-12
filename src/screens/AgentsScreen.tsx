@@ -6,7 +6,12 @@ import { NovaAgentPanel } from "../components/NovaAgentPanel";
 import { PageHeroCard } from "../components/PageHeroCard";
 import { styles } from "../theme/styles";
 
-export function AgentsScreen() {
+type AgentsScreenProps = {
+  autoEnableFallback?: boolean;
+  onAutoEnableFallbackHandled?: () => void;
+};
+
+export function AgentsScreen({ autoEnableFallback = false, onAutoEnableFallbackHandled }: AgentsScreenProps) {
   const { terminals } = useAppContext();
   const {
     activeServer,
@@ -63,6 +68,8 @@ export function AgentsScreen() {
           }
           onSendServerSessionCommand(focusedServerId, session, command, "shell");
         }}
+        autoEnableLocalFallback={autoEnableFallback}
+        onAutoEnableLocalFallbackHandled={onAutoEnableFallbackHandled}
         surface="screen"
       />
     </>

@@ -790,6 +790,7 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
 
 export default function AppShell() {
   const [route, setRoute] = useState<RouteTab>("terminals");
+  const [agentsAutoEnableFallbackServerId, setAgentsAutoEnableFallbackServerId] = useState<string | null>(null);
   const [appStateStatus, setAppStateStatus] = useState(AppState.currentState);
   const simpleMode = true;
   const [homeHubVisible, setHomeHubVisible] = useState<boolean>(false);
@@ -2786,6 +2787,7 @@ export default function AppShell() {
       if (fallback.focusedServerId) {
         setPoolFocusedServerId(fallback.focusedServerId);
       }
+      setAgentsAutoEnableFallbackServerId(targetServerId);
       setRoute(fallback.route);
       throw new Error(fallback.message);
     },
@@ -5608,7 +5610,10 @@ export default function AppShell() {
 
           {route === "agents" ? (
             <AppProvider value={{ terminals: terminalsViewModel }}>
-              <AgentsScreen />
+              <AgentsScreen
+                autoEnableFallback={agentsAutoEnableFallbackServerId === focusedServerId}
+                onAutoEnableFallbackHandled={() => setAgentsAutoEnableFallbackServerId(null)}
+              />
             </AppProvider>
           ) : null}
 
