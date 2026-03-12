@@ -5,11 +5,13 @@ import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
 import { NovaDeviceFallbackPanel } from "./NovaDeviceFallbackPanel";
 import {
   NovaAdaptBridgeCapabilities,
+  NovaAdaptBridgeControlArtifact,
   NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
   NovaAdaptBridgeMemoryStatus,
   NovaAdaptBridgePlan,
+  NovaAdaptBridgeSurfaceStatus,
   NovaAdaptBridgeTemplate,
   NovaAdaptBridgeWorkflow,
   ServerProfile,
@@ -169,6 +171,27 @@ function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): strin
   if (capabilities.governance) {
     available.push("governance");
   }
+  if (capabilities.browserStatus) {
+    available.push("browser");
+  }
+  if (capabilities.voiceStatus) {
+    available.push("voice");
+  }
+  if (capabilities.canvasStatus) {
+    available.push("canvas");
+  }
+  if (capabilities.mobileStatus) {
+    available.push("mobile");
+  }
+  if (capabilities.homeAssistantStatus) {
+    available.push("home assistant");
+  }
+  if (capabilities.mqttStatus) {
+    available.push("mqtt");
+  }
+  if (capabilities.controlArtifacts) {
+    available.push("artifacts");
+  }
   const versions = [capabilities.protocolVersion, capabilities.agentContractVersion].filter(Boolean);
   if (available.length === 0) {
     return versions.length > 0 ? `Companion capabilities unavailable • ${versions.join(" / ")}` : "Companion capabilities unavailable.";
@@ -176,6 +199,53 @@ function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): strin
   return versions.length > 0
     ? `Companion capabilities: ${available.join(", ")} • ${versions.join(" / ")}`
     : `Companion capabilities: ${available.join(", ")}`;
+}
+
+function summarizeSurfaceStatus(label: string, status: NovaAdaptBridgeSurfaceStatus | null): string {
+  if (!status) {
+    return `${label} unavailable`;
+  }
+  if (status.error) {
+    return status.error;
+  }
+  const parts: string[] = [];
+  if (typeof status.enabled === "boolean") {
+    parts.push(status.enabled ? "enabled" : "disabled");
+  } else if (status.ok) {
+    parts.push("ready");
+  } else {
+    parts.push("unavailable");
+  }
+  if (typeof status.configured === "boolean") {
+    parts.push(status.configured ? "configured" : "not configured");
+  }
+  if (status.transport) {
+    parts.push(status.transport);
+  }
+  if (status.platform) {
+    parts.push(status.platform);
+  }
+  if (status.backend) {
+    parts.push(status.backend);
+  }
+  if (status.context) {
+    parts.push(status.context);
+  }
+  return parts.join(" • ");
+}
+
+function summarizeControlArtifact(artifact: NovaAdaptBridgeControlArtifact): string {
+  const parts = [artifact.controlType];
+  if (artifact.transport) {
+    parts.push(artifact.transport);
+  }
+  if (artifact.platform) {
+    parts.push(artifact.platform);
+  }
+  if (artifact.actionType) {
+    parts.push(artifact.actionType);
+  }
+  return parts.join(" • ");
 }
 
 function buildCompatibilityWarning(
@@ -231,6 +301,13 @@ function RemoteBridgeSection({
   error,
   health,
   memoryStatus,
+  browserStatus,
+  voiceStatus,
+  canvasStatus,
+  mobileStatus,
+  homeAssistantStatus,
+  mqttStatus,
+  controlArtifacts,
   governance,
   plans,
   jobs,
@@ -261,6 +338,13 @@ function RemoteBridgeSection({
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  browserStatus: NovaAdaptBridgeSurfaceStatus | null;
+  voiceStatus: NovaAdaptBridgeSurfaceStatus | null;
+  canvasStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mobileStatus: NovaAdaptBridgeSurfaceStatus | null;
+  homeAssistantStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mqttStatus: NovaAdaptBridgeSurfaceStatus | null;
+  controlArtifacts: NovaAdaptBridgeControlArtifact[];
   governance: NovaAdaptBridgeGovernance | null;
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
@@ -284,6 +368,15 @@ function RemoteBridgeSection({
   onLaunchTemplate: (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => void;
 }) {
   const compatibilityWarning = buildCompatibilityWarning(capabilities, health);
+  const controlSurfaces = [
+    { key: "browser", title: "Browser", enabled: capabilities.browserStatus, status: browserStatus },
+    { key: "voice", title: "Voice", enabled: capabilities.voiceStatus, status: voiceStatus },
+    { key: "canvas", title: "Canvas", enabled: capabilities.canvasStatus, status: canvasStatus },
+    { key: "mobile", title: "Mobile", enabled: capabilities.mobileStatus, status: mobileStatus },
+    { key: "homeassistant", title: "Home Assistant", enabled: capabilities.homeAssistantStatus, status: homeAssistantStatus },
+    { key: "mqtt", title: "MQTT", enabled: capabilities.mqttStatus, status: mqttStatus },
+  ];
+  const visibleControlSurfaces = controlSurfaces.filter((surface) => surface.enabled || surface.status);
 
   return (
     <View style={styles.panel}>
@@ -311,6 +404,25 @@ function RemoteBridgeSection({
             {capabilities.memoryStatus ? `Memory ${summarizeMemoryStatus(memoryStatus)}` : "Memory status unavailable on this runtime."}
           </Text>
           {error ? <Text style={styles.emptyText}>{`Runtime error: ${error}`}</Text> : null}
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Control Surfaces</Text>
+            {visibleControlSurfaces.length === 0 ? (
+              <Text style={styles.emptyText}>This server runtime does not expose control surfaces yet.</Text>
+            ) : (
+              visibleControlSurfaces.map((surface) => (
+                <View key={`bridge-surface-${surface.key}`} style={styles.terminalCard}>
+                  <View style={styles.terminalNameRow}>
+                    <Text style={styles.terminalName}>{surface.title}</Text>
+                    <Text style={[styles.modePill, surface.status?.ok ? styles.modePillShell : styles.modePillAi]}>
+                      {surface.status?.ok ? "READY" : "LIMITED"}
+                    </Text>
+                  </View>
+                  <Text style={styles.serverSubtitle}>{summarizeSurfaceStatus(surface.title, surface.status)}</Text>
+                </View>
+              ))
+            )}
+          </View>
 
           {!capabilities.governance ? (
             <View style={styles.panel}>
@@ -488,6 +600,35 @@ function RemoteBridgeSection({
             )}
           </View>
 
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Control Artifacts</Text>
+            {controlArtifacts.length === 0 ? (
+              <Text style={styles.emptyText}>
+                {capabilities.controlArtifacts
+                  ? "No recent control artifacts yet."
+                  : "This server runtime does not expose control artifacts yet."}
+              </Text>
+            ) : (
+              controlArtifacts.slice(0, 4).map((artifact) => (
+                <View key={`bridge-artifact-${artifact.artifactId}`} style={styles.terminalCard}>
+                  <View style={styles.terminalNameRow}>
+                    <Text style={styles.terminalName}>{artifact.goal || artifact.artifactId}</Text>
+                    <Text style={[styles.modePill, modePillForStatus(artifact.status)]}>
+                      {bridgeStatusLabel(artifact.status)}
+                    </Text>
+                  </View>
+                  <Text style={styles.serverSubtitle}>{summarizeControlArtifact(artifact)}</Text>
+                  <Text style={styles.emptyText}>
+                    {artifact.outputPreview ||
+                      artifact.target ||
+                      artifact.model ||
+                      `Artifact ${artifact.artifactId}`}
+                  </Text>
+                </View>
+              ))
+            )}
+          </View>
+
           {!capabilities.templates ? (
             <View style={styles.panel}>
               <Text style={styles.panelLabel}>Saved Templates</Text>
@@ -627,6 +768,13 @@ export function NovaAgentPanel({
     error: bridgeError,
     health: bridgeHealth,
     memoryStatus: bridgeMemoryStatus,
+    browserStatus,
+    voiceStatus,
+    canvasStatus,
+    mobileStatus,
+    homeAssistantStatus,
+    mqttStatus,
+    controlArtifacts,
     governance,
     plans: bridgePlans,
     jobs: bridgeJobs,
@@ -814,6 +962,13 @@ export function NovaAgentPanel({
         error={bridgeError}
         health={bridgeHealth}
         memoryStatus={bridgeMemoryStatus}
+        browserStatus={browserStatus}
+        voiceStatus={voiceStatus}
+        canvasStatus={canvasStatus}
+        mobileStatus={mobileStatus}
+        homeAssistantStatus={homeAssistantStatus}
+        mqttStatus={mqttStatus}
+        controlArtifacts={controlArtifacts}
         governance={governance}
         plans={bridgePlans}
         jobs={bridgeJobs}
