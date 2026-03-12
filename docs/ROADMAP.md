@@ -55,5 +55,5 @@ Updated: 2026-03-11
 - Implementation detail and per-item completion are tracked in [docs/HANDOFF_STATUS.md](./HANDOFF_STATUS.md).
 
 
-- Live companion validation now passes for `/health`, `/agents/health`, and `/agents/capabilities` on the installed macOS sidecar stack.
 - The frozen NovaAdapt upgrade target `cfb8983` is now contract-validated against the companion sidecar boundary, so server-runtime rollout can proceed without merging that branch to `main` yet.
+- Live sidecar validation is still pending because the local Docker Desktop backend and sidecar services are currently unhealthy; Codex Remote reaches `/health`, but its NovaAdapt and NovaSpine upstream checks are still resetting.

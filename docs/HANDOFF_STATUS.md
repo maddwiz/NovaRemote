@@ -236,5 +236,5 @@ Updated: 2026-03-11
 - GitHub Actions CI status should be evaluated against that feature branch until it is merged to `main`.
 
 
-- Live companion validation now passes for `/health`, `/agents/health`, and `/agents/capabilities` on the installed macOS sidecar stack.
 - Frozen NovaAdapt integration target `cfb8983` (`novaadapt-integration-freeze-cfb8983`) now passes the companion contract validator via `codex_remote/scripts/validate_nova_sidecars.py --compose-only --novaadapt-contract-check`.
+- Live companion validation remains pending until the local Docker Desktop backend and sidecar processes recover; current runtime checks reach Codex Remote `/health` but still see NovaAdapt/NovaSpine upstream resets.
