@@ -2,6 +2,8 @@
 
 Updated: 2026-03-11
 
+> Note: companion-server milestones that mention `codex_remote` refer to the separate companion repository and its validated sidecar stack, while NovaRemote continues to own the mobile app, contracts, and bootstrap tooling.
+
 ## Milestones
 
 | Version | Track | Scope | Status |

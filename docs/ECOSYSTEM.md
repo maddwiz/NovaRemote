@@ -2,6 +2,8 @@
 
 This guide covers companion-server distribution, desktop/web usage, and advanced external LLM capabilities.
 
+> Note: `codex_remote` is intentionally a separate companion-server repository. This repo tracks the NovaRemote mobile app plus the bootstrap/contracts/docs needed to integrate with that companion stack.
+
 ## 1) Companion Server Distribution
 
 NovaRemote works best when the companion server is publicly available and easy to install on any host.

@@ -478,7 +478,7 @@ Guidelines:
 
 ## Quick Start (Codex Remote Reference Server)
 
-If you are using the included `codex_remote` server from the parent workspace:
+If you are using a sibling `codex_remote` companion-server checkout from the parent workspace:
 
 ```bash
 cd ../codex_remote

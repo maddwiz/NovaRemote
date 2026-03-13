@@ -2,6 +2,8 @@
 
 Updated: 2026-03-11
 
+> Note: references to `codex_remote` in this document refer to the separate companion-server repository or a locally bootstrapped sibling checkout, not a directory inside this NovaRemote mobile-app repo.
+
 ## Current Progress
 
 ### Completed in app

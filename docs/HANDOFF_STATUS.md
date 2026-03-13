@@ -2,6 +2,8 @@
 
 Updated: 2026-03-11
 
+> Note: companion-side `codex_remote` references below point to the external companion repository / sibling checkout used for sidecar validation, not a folder expected to exist inside this app repository.
+
 ## v1.2 Connection Pool + Switcher
 
 - [x] `useConnectionPool` reducer/state with per-server sessions, tails, drafts, stream metadata, health
