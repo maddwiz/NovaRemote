@@ -567,6 +567,36 @@ function RemoteBridgeSection({
   const selectedArtifactJson =
     tryFormatJsonString(selectedArtifactOutput) ||
     (selectedArtifactDetail?.data ? formatArtifactPayload(selectedArtifactDetail.data) : null);
+  const runtimeNotes: string[] = [];
+  if (!capabilities.memoryStatus) {
+    runtimeNotes.push("Memory status unavailable on this runtime.");
+  }
+  if (!capabilities.governance) {
+    runtimeNotes.push("This server runtime does not expose governance controls yet.");
+  }
+  if (!capabilities.workflows) {
+    runtimeNotes.push("Workflow controls unavailable on this runtime.");
+  } else if (workflows.length === 0) {
+    runtimeNotes.push("No server workflows yet.");
+  }
+  if (jobs.length === 0) {
+    runtimeNotes.push("No server jobs yet.");
+  }
+  if (!capabilities.controlArtifacts) {
+    runtimeNotes.push("Control artifacts unavailable on this runtime.");
+  } else if (visibleArtifacts.length === 0) {
+    runtimeNotes.push("No recent control artifacts yet.");
+  }
+  if (!capabilities.templates) {
+    runtimeNotes.push("Saved templates unavailable on this runtime.");
+  } else if (templates.length === 0) {
+    runtimeNotes.push("No saved server templates yet.");
+  }
+  if (!capabilities.templateGallery) {
+    runtimeNotes.push("Template gallery unavailable on this runtime.");
+  } else if (galleryTemplates.length === 0) {
+    runtimeNotes.push("No built-in templates exposed by this runtime.");
+  }
 
   useEffect(() => {
     let active = true;
@@ -628,9 +658,9 @@ function RemoteBridgeSection({
         <>
           <Text style={styles.serverSubtitle}>{summarizeBridgeHealth(health, runtimeAvailable)}</Text>
           {compatibilityWarning ? <Text style={styles.emptyText}>{compatibilityWarning}</Text> : null}
-          <Text style={styles.emptyText}>
-            {capabilities.memoryStatus ? `Memory ${summarizeMemoryStatus(memoryStatus)}` : "Memory status unavailable on this runtime."}
-          </Text>
+          {capabilities.memoryStatus ? (
+            <Text style={styles.emptyText}>{`Memory ${summarizeMemoryStatus(memoryStatus)}`}</Text>
+          ) : null}
           {error ? <Text style={styles.emptyText}>{`Runtime error: ${error}`}</Text> : null}
 
           <View style={styles.panel}>
@@ -652,12 +682,7 @@ function RemoteBridgeSection({
             )}
           </View>
 
-          {!capabilities.governance ? (
-            <View style={styles.panel}>
-              <Text style={styles.panelLabel}>Runtime Governance</Text>
-              <Text style={styles.emptyText}>This server runtime does not expose governance controls yet.</Text>
-            </View>
-          ) : governance ? (
+          {capabilities.governance && governance ? (
             <View style={styles.panel}>
               <Text style={styles.panelLabel}>Runtime Governance</Text>
               <Text style={styles.serverSubtitle}>{summarizeGovernance(governance)}</Text>
@@ -764,56 +789,58 @@ function RemoteBridgeSection({
             )}
           </View>
 
-          {capabilities.workflows ? (
+          {runtimeNotes.length > 0 ? (
             <View style={styles.panel}>
-              <Text style={styles.panelLabel}>Workflows</Text>
-              {workflows.length === 0 ? (
-                <Text style={styles.emptyText}>No server workflows yet.</Text>
-              ) : (
-                workflows.slice(0, 4).map((workflow) => (
-                  <View key={`bridge-workflow-${workflow.workflowId}`} style={styles.terminalCard}>
-                    <View style={styles.terminalNameRow}>
-                      <Text style={styles.terminalName}>{workflow.objective}</Text>
-                      <Text style={[styles.modePill, modePillForStatus(workflow.status)]}>{bridgeStatusLabel(workflow.status)}</Text>
-                    </View>
-                    <Text style={styles.serverSubtitle}>{`Workflow ${workflow.workflowId}`}</Text>
-                    <Text style={styles.emptyText}>{formatBridgeDate(workflow.updatedAt) ? `Updated ${formatBridgeDate(workflow.updatedAt)}` : "Awaiting activity"}</Text>
-                    {workflow.lastError ? <Text style={styles.emptyText}>{`Error ${workflow.lastError}`}</Text> : null}
-                    <View style={styles.actionsWrap}>
-                      <Pressable
-                        accessibilityRole="button"
-                        accessibilityLabel={`Resume workflow ${workflow.workflowId}`}
-                        style={[
-                          styles.actionButton,
-                          !canResumeWorkflow(workflow.status) || mutationWorkflowId === workflow.workflowId
-                            ? styles.buttonDisabled
-                            : null,
-                        ]}
-                        disabled={!canResumeWorkflow(workflow.status) || mutationWorkflowId === workflow.workflowId}
-                        onPress={() => onResumeWorkflow(workflow.workflowId)}
-                      >
-                        <Text style={styles.actionButtonText}>
-                          {mutationWorkflowId === workflow.workflowId ? "Resuming..." : "Resume"}
-                        </Text>
-                      </Pressable>
-                    </View>
-                  </View>
-                ))
-              )}
+              <Text style={styles.panelLabel}>Runtime Notes</Text>
+              {runtimeNotes.map((note) => (
+                <Text key={note} style={styles.emptyText}>
+                  {note}
+                </Text>
+              ))}
             </View>
-          ) : (
-            <View style={styles.panel}>
-              <Text style={styles.panelLabel}>Workflows</Text>
-              <Text style={styles.emptyText}>This server runtime does not expose workflow controls yet.</Text>
-            </View>
-          )}
+          ) : null}
 
-          <View style={styles.panel}>
-            <Text style={styles.panelLabel}>Jobs</Text>
-            {jobs.length === 0 ? (
-              <Text style={styles.emptyText}>No server jobs yet.</Text>
-            ) : (
-              jobs.slice(0, 4).map((job) => (
+          {capabilities.workflows && workflows.length > 0 ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Workflows</Text>
+              {workflows.slice(0, 4).map((workflow) => (
+                <View key={`bridge-workflow-${workflow.workflowId}`} style={styles.terminalCard}>
+                  <View style={styles.terminalNameRow}>
+                    <Text style={styles.terminalName}>{workflow.objective}</Text>
+                    <Text style={[styles.modePill, modePillForStatus(workflow.status)]}>{bridgeStatusLabel(workflow.status)}</Text>
+                  </View>
+                  <Text style={styles.serverSubtitle}>{`Workflow ${workflow.workflowId}`}</Text>
+                  <Text style={styles.emptyText}>
+                    {formatBridgeDate(workflow.updatedAt) ? `Updated ${formatBridgeDate(workflow.updatedAt)}` : "Awaiting activity"}
+                  </Text>
+                  {workflow.lastError ? <Text style={styles.emptyText}>{`Error ${workflow.lastError}`}</Text> : null}
+                  <View style={styles.actionsWrap}>
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Resume workflow ${workflow.workflowId}`}
+                      style={[
+                        styles.actionButton,
+                        !canResumeWorkflow(workflow.status) || mutationWorkflowId === workflow.workflowId
+                          ? styles.buttonDisabled
+                          : null,
+                      ]}
+                      disabled={!canResumeWorkflow(workflow.status) || mutationWorkflowId === workflow.workflowId}
+                      onPress={() => onResumeWorkflow(workflow.workflowId)}
+                    >
+                      <Text style={styles.actionButtonText}>
+                        {mutationWorkflowId === workflow.workflowId ? "Resuming..." : "Resume"}
+                      </Text>
+                    </Pressable>
+                  </View>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          {jobs.length > 0 ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Jobs</Text>
+              {jobs.slice(0, 4).map((job) => (
                 <View key={`bridge-job-${job.id}`} style={styles.terminalCard}>
                   <View style={styles.terminalNameRow}>
                     <Text style={styles.terminalName}>{job.id}</Text>
@@ -824,19 +851,13 @@ function RemoteBridgeSection({
                   </Text>
                   {job.error ? <Text style={styles.emptyText}>{`Error ${job.error}`}</Text> : null}
                 </View>
-              ))
-            )}
-          </View>
+              ))}
+            </View>
+          ) : null}
 
-          <View style={styles.panel}>
-            <Text style={styles.panelLabel}>Control Artifacts</Text>
-            {visibleArtifacts.length === 0 ? (
-              <Text style={styles.emptyText}>
-                {capabilities.controlArtifacts
-                  ? "No recent control artifacts yet."
-                  : "This server runtime does not expose control artifacts yet."}
-              </Text>
-            ) : (
+          {capabilities.controlArtifacts && visibleArtifacts.length > 0 ? (
+            <View style={styles.panel}>
+              <Text style={styles.panelLabel}>Control Artifacts</Text>
               <>
                 {visibleArtifacts.map((artifact) => (
                   <Pressable
@@ -1095,114 +1116,96 @@ function RemoteBridgeSection({
                   </View>
                 ) : null}
               </>
-            )}
-          </View>
+            </View>
+          ) : null}
 
-          {!capabilities.templates ? (
+          {capabilities.templates && templates.length > 0 ? (
             <View style={styles.panel}>
               <Text style={styles.panelLabel}>Saved Templates</Text>
-              <Text style={styles.emptyText}>This bridge does not expose saved template routes yet.</Text>
-            </View>
-          ) : (
-            <View style={styles.panel}>
-              <Text style={styles.panelLabel}>Saved Templates</Text>
-              {templates.length === 0 ? (
-                <Text style={styles.emptyText}>No saved server templates yet.</Text>
-              ) : (
-                templates.slice(0, 4).map((template) => {
-                  const busy = templateMutationKey === `${template.templateId}:saved`;
-                  return (
-                    <View key={`bridge-template-${template.templateId}`} style={styles.terminalCard}>
-                      <View style={styles.terminalNameRow}>
-                        <Text style={styles.terminalName}>{template.name}</Text>
-                        <Text style={[styles.modePill, styles.modePillShell]}>{template.strategy.toUpperCase()}</Text>
-                      </View>
-                      <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
-                      <Text style={styles.emptyText}>{template.description || template.objective}</Text>
-                      <View style={styles.actionsWrap}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Launch ${template.name} as approval plan`}
-                          style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
-                          disabled={busy}
-                          onPress={() => onLaunchTemplate(template, "plan")}
-                        >
-                          <Text style={styles.actionButtonText}>{busy ? "Launching..." : "Launch Plan"}</Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Launch ${template.name} as workflow`}
-                          style={[
-                            styles.actionButton,
-                            busy || !capabilities.workflows ? styles.buttonDisabled : null,
-                          ]}
-                          disabled={busy || !capabilities.workflows}
-                          onPress={() => onLaunchTemplate(template, "workflow")}
-                        >
-                          <Text style={styles.actionButtonText}>
-                            {busy ? "Launching..." : capabilities.workflows ? "Start Workflow" : "Workflow Unavailable"}
-                          </Text>
-                        </Pressable>
-                      </View>
+              {templates.slice(0, 4).map((template) => {
+                const busy = templateMutationKey === `${template.templateId}:saved`;
+                return (
+                  <View key={`bridge-template-${template.templateId}`} style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{template.name}</Text>
+                      <Text style={[styles.modePill, styles.modePillShell]}>{template.strategy.toUpperCase()}</Text>
                     </View>
-                  );
-                })
-              )}
+                    <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
+                    <Text style={styles.emptyText}>{template.description || template.objective}</Text>
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Launch ${template.name} as approval plan`}
+                        style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                        disabled={busy}
+                        onPress={() => onLaunchTemplate(template, "plan")}
+                      >
+                        <Text style={styles.actionButtonText}>{busy ? "Launching..." : "Launch Plan"}</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Launch ${template.name} as workflow`}
+                        style={[
+                          styles.actionButton,
+                          busy || !capabilities.workflows ? styles.buttonDisabled : null,
+                        ]}
+                        disabled={busy || !capabilities.workflows}
+                        onPress={() => onLaunchTemplate(template, "workflow")}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {busy ? "Launching..." : capabilities.workflows ? "Start Workflow" : "Workflow Unavailable"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
-          )}
+          ) : null}
 
-          {!capabilities.templateGallery ? (
+          {capabilities.templateGallery && galleryTemplates.length > 0 ? (
             <View style={styles.panel}>
               <Text style={styles.panelLabel}>Template Gallery</Text>
-              <Text style={styles.emptyText}>This bridge does not expose gallery import routes yet.</Text>
-            </View>
-          ) : (
-            <View style={styles.panel}>
-              <Text style={styles.panelLabel}>Template Gallery</Text>
-              {galleryTemplates.length === 0 ? (
-                <Text style={styles.emptyText}>No built-in templates exposed by this runtime.</Text>
-              ) : (
-                galleryTemplates.slice(0, 4).map((template) => {
-                  const busy = templateMutationKey === `${template.templateId}:gallery`;
-                  return (
-                    <View key={`bridge-gallery-${template.templateId}`} style={styles.terminalCard}>
-                      <View style={styles.terminalNameRow}>
-                        <Text style={styles.terminalName}>{template.name}</Text>
-                        <Text style={[styles.modePill, styles.modePillAi]}>{template.source.toUpperCase()}</Text>
-                      </View>
-                      <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
-                      <Text style={styles.emptyText}>{template.description || template.objective}</Text>
-                      <View style={styles.actionsWrap}>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Import and launch ${template.name} as approval plan`}
-                          style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
-                          disabled={busy}
-                          onPress={() => onLaunchTemplate(template, "plan")}
-                        >
-                          <Text style={styles.actionButtonText}>{busy ? "Importing..." : "Import + Plan"}</Text>
-                        </Pressable>
-                        <Pressable
-                          accessibilityRole="button"
-                          accessibilityLabel={`Import and launch ${template.name} as workflow`}
-                          style={[
-                            styles.actionButton,
-                            busy || !capabilities.workflows ? styles.buttonDisabled : null,
-                          ]}
-                          disabled={busy || !capabilities.workflows}
-                          onPress={() => onLaunchTemplate(template, "workflow")}
-                        >
-                          <Text style={styles.actionButtonText}>
-                            {busy ? "Importing..." : capabilities.workflows ? "Import + Workflow" : "Workflow Unavailable"}
-                          </Text>
-                        </Pressable>
-                      </View>
+              {galleryTemplates.slice(0, 4).map((template) => {
+                const busy = templateMutationKey === `${template.templateId}:gallery`;
+                return (
+                  <View key={`bridge-gallery-${template.templateId}`} style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{template.name}</Text>
+                      <Text style={[styles.modePill, styles.modePillAi]}>{template.source.toUpperCase()}</Text>
                     </View>
-                  );
-                })
-              )}
+                    <Text style={styles.serverSubtitle}>{summarizeTemplate(template)}</Text>
+                    <Text style={styles.emptyText}>{template.description || template.objective}</Text>
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Import and launch ${template.name} as approval plan`}
+                        style={[styles.actionButton, busy ? styles.buttonDisabled : null]}
+                        disabled={busy}
+                        onPress={() => onLaunchTemplate(template, "plan")}
+                      >
+                        <Text style={styles.actionButtonText}>{busy ? "Importing..." : "Import + Plan"}</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Import and launch ${template.name} as workflow`}
+                        style={[
+                          styles.actionButton,
+                          busy || !capabilities.workflows ? styles.buttonDisabled : null,
+                        ]}
+                        disabled={busy || !capabilities.workflows}
+                        onPress={() => onLaunchTemplate(template, "workflow")}
+                      >
+                        <Text style={styles.actionButtonText}>
+                          {busy ? "Importing..." : capabilities.workflows ? "Import + Workflow" : "Workflow Unavailable"}
+                        </Text>
+                      </Pressable>
+                    </View>
+                  </View>
+                );
+              })}
             </View>
-          )}
+          ) : null}
         </>
       )}
     </View>

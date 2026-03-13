@@ -1542,9 +1542,10 @@ describe("NovaAgentPanel", () => {
 
     expect(() => renderer.root.findByProps({ children: "Memory status unavailable on this runtime." })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "This server runtime does not expose governance controls yet." })).not.toThrow();
-    expect(() => renderer.root.findByProps({ children: "This server runtime does not expose workflow controls yet." })).not.toThrow();
-    expect(() => renderer.root.findByProps({ children: "This bridge does not expose saved template routes yet." })).not.toThrow();
-    expect(() => renderer.root.findByProps({ children: "This bridge does not expose gallery import routes yet." })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Runtime Notes" })).not.toThrow();
+    expect(JSON.stringify(renderer.toJSON())).toContain("Workflow controls unavailable on this runtime.");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Saved templates unavailable on this runtime.");
+    expect(JSON.stringify(renderer.toJSON())).toContain("Template gallery unavailable on this runtime.");
 
     await act(async () => {
       renderer.unmount();
