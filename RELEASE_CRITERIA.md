@@ -3,6 +3,7 @@
 Updated: 2026-03-13
 
 ## Repo-Side Gates
+- `npm run release:verify` passes
 - `npm run ci` passes
 - No unresolved typecheck failures
 - No unresolved unit/integration test failures

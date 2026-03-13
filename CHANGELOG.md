@@ -4,6 +4,7 @@ Updated: 2026-03-13
 
 ## Current Branch Highlights
 - Added final continuation handoff artifacts
+- Added a release-readiness verification script and GitHub workflow to gate docs + CI + scaffold artifacts together
 - Completed pooled multi-server architecture and unread/server switching UX
 - Completed AR/VR preview control surfaces and voice/panel routing layers in-repo
 - Completed app-side Team/Enterprise foundation: auth, token broker, audit, exports, policy enforcement, paywall tiering

@@ -6,6 +6,7 @@ Updated: 2026-03-13
 ```bash
 cd '/Users/desmondpottle/Documents/New project/NovaRemote'
 npm run ci
+npm run release:verify
 ```
 
 ## iOS Simulator
