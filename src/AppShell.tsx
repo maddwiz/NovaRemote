@@ -130,6 +130,7 @@ import { findBlockedCommandPattern, resolveSessionTimeoutMs } from "./teamPolicy
 import {
   AiEnginePreference,
   FleetRunResult,
+  LlmProfile,
   NovaAdaptBridgePlan,
   NovaAdaptBridgeWorkflow,
   ProcessSignal,
@@ -222,6 +223,42 @@ function buildTeamServerSignature(servers: ServerProfile[]): string {
       }))
       .sort((a, b) => a.id.localeCompare(b.id))
   );
+}
+
+function isLocalRuntimeHost(hostname: string): boolean {
+  const normalized = hostname.trim().toLowerCase();
+  return (
+    normalized === "localhost" ||
+    normalized === "127.0.0.1" ||
+    normalized === "0.0.0.0" ||
+    normalized === "::1"
+  );
+}
+
+function resolveRuntimeLlmProfile(
+  profile: LlmProfile | null,
+  server: ServerProfile | null
+): LlmProfile | null {
+  if (!profile || profile.kind !== "ollama" || !server?.baseUrl) {
+    return profile;
+  }
+  try {
+    const profileUrl = new URL(normalizeBaseUrl(profile.baseUrl || "http://localhost:11434"));
+    if (!isLocalRuntimeHost(profileUrl.hostname)) {
+      return profile;
+    }
+    const serverUrl = new URL(normalizeBaseUrl(server.baseUrl));
+    const nextUrl = new URL(profileUrl.toString());
+    nextUrl.protocol = serverUrl.protocol;
+    nextUrl.hostname = serverUrl.hostname;
+    nextUrl.port = profileUrl.port || "11434";
+    return {
+      ...profile,
+      baseUrl: nextUrl.toString().replace(/\/$/, ""),
+    };
+  } catch {
+    return profile;
+  }
 }
 
 type SpeechOutputModule = {
@@ -1204,6 +1241,10 @@ export default function AppShell() {
   const focusedServerId = poolFocusedServerId ?? activeServerId ?? null;
   const focusedConnection = useServerConnection(pool, focusedServerId) ?? poolFocusedConnection;
   const activeServer = focusedConnection?.server ?? selectedServer ?? null;
+  const runtimeActiveProfile = useMemo(
+    () => resolveRuntimeLlmProfile(activeProfile, activeServer),
+    [activeProfile, activeServer]
+  );
   const connected = focusedConnection?.connected ?? Boolean(activeServer && normalizeBaseUrl(activeServer.baseUrl) && activeServer.token.trim());
   const defaultCapabilities = useMemo(
     () => ({
@@ -2162,7 +2203,7 @@ export default function AppShell() {
         return "";
       }
 
-      if (!activeProfile) {
+      if (!runtimeActiveProfile) {
         throw new Error("No active LLM profile selected. Configure one in the LLMs tab.");
       }
 
@@ -2171,7 +2212,7 @@ export default function AppShell() {
       const prefix = `${baseTail}\\n\\n[LLM Prompt]\\n${cleanPrompt}\\n\\n[LLM Reply]\\n`;
       setPoolTails(serverId, (prev) => ({ ...prev, [session]: prefix }));
 
-      const result = await sendPromptStream(activeProfile, cleanPrompt, {
+      const result = await sendPromptStream(runtimeActiveProfile, cleanPrompt, {
         onTextDelta: (_delta, fullText) => {
           setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prefix}${fullText}` }));
         },
@@ -2179,7 +2220,7 @@ export default function AppShell() {
       setPoolTails(serverId, (prev) => ({ ...prev, [session]: `${prefix}${result.text}\\n` }));
       return cleanPrompt;
     },
-    [activeProfile, sendPromptStream, setPoolDrafts, setPoolTails]
+    [runtimeActiveProfile, sendPromptStream, setPoolDrafts, setPoolTails]
   );
 
   const sendViaExternalLlm = useCallback(
@@ -2203,7 +2244,7 @@ export default function AppShell() {
     explainSessionError,
     suggestSessionErrorFixes,
   } = useAiAssist({
-    activeProfile,
+    activeProfile: runtimeActiveProfile,
     sendPrompt,
     allSessions,
     tails,
@@ -4131,7 +4172,7 @@ export default function AppShell() {
   );
 
   const novaAssistant = useNovaAssistant({
-    activeProfile,
+    activeProfile: runtimeActiveProfile,
     sendPromptDetailed,
     buildContext: buildNovaAssistantContext,
     executeActions: executeNovaAssistantActions,
