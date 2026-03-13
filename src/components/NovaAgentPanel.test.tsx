@@ -560,6 +560,139 @@ describe("NovaAgentPanel", () => {
     });
   });
 
+  it("renders log artifacts inline with details metadata", async () => {
+    const loadControlArtifact = vi.fn(async () => ({
+      artifactId: "artifact-log",
+      createdAt: null,
+      controlType: "browser",
+      status: "completed",
+      dangerous: false,
+      goal: "Tail deploy logs",
+      platform: "linux",
+      transport: "pty",
+      outputPreview: "2026-03-12 18:22:31 INFO deploy ready",
+      actionType: null,
+      target: null,
+      model: null,
+      modelId: null,
+      previewAvailable: true,
+      previewPath: "/control/artifacts/artifact-log/preview",
+      detailPath: "/control/artifacts/artifact-log",
+      output: "2026-03-12 18:22:31 INFO deploy ready\n2026-03-12 18:22:32 WARN slow healthcheck",
+      action: { type: "tail" },
+      data: null,
+      metadata: { mime_type: "text/plain" },
+    }));
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: true,
+        governance: false,
+        workflows: false,
+        templates: false,
+        templateGallery: false,
+        browserStatus: false,
+        voiceStatus: false,
+        canvasStatus: false,
+        mobileStatus: false,
+        homeAssistantStatus: false,
+        mqttStatus: false,
+        controlArtifacts: true,
+      },
+      error: null,
+      health: { ok: true },
+      memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      templates: [],
+      galleryTemplates: [],
+      browserStatus: null,
+      voiceStatus: null,
+      canvasStatus: null,
+      mobileStatus: null,
+      homeAssistantStatus: null,
+      mqttStatus: null,
+      controlArtifacts: [
+        {
+          artifactId: "artifact-log",
+          createdAt: null,
+          controlType: "browser",
+          status: "completed",
+          dangerous: false,
+          goal: "Tail deploy logs",
+          platform: "linux",
+          transport: "pty",
+          outputPreview: "2026-03-12 18:22:31 INFO deploy ready",
+          actionType: null,
+          target: null,
+          model: null,
+          modelId: null,
+          previewAvailable: true,
+          previewPath: "/control/artifacts/artifact-log/preview",
+          detailPath: "/control/artifacts/artifact-log",
+        },
+      ],
+      loadControlArtifact,
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: [],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+        })
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(loadControlArtifact).toHaveBeenCalledWith("artifact-log");
+    expect(JSON.stringify(renderer.toJSON())).toContain("deploy ready");
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Show details for artifact artifact-log" }).props.onPress();
+    });
+
+    expect(() => renderer.root.findByProps({ children: "Type text/plain" })).not.toThrow();
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
   it("shows a compatibility warning when the companion protocol drifts", async () => {
     useNovaAdaptBridgeMock.mockReturnValue({
       loading: false,

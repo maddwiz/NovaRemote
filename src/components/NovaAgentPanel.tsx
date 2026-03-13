@@ -335,6 +335,30 @@ function isTextMimeType(value: string | null): boolean {
   );
 }
 
+function isCodeMimeType(value: string | null): boolean {
+  return (
+    typeof value === "string" &&
+    /(javascript|typescript|python|x-python|java|x-java|go|x-go|rust|x-rust|shell|x-shellscript|jsonc|toml|yaml|x-yaml|xml|html|css|x-csrc|x-c\+\+src|x-ruby)/i.test(
+      value
+    )
+  );
+}
+
+function isLogMimeType(value: string | null): boolean {
+  return typeof value === "string" && /(x-log|logfile|journal|syslog|event-stream)/i.test(value);
+}
+
+function looksLikeLogOutput(value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+  const sample = value.trim();
+  if (!sample) {
+    return false;
+  }
+  return /(\d{4}-\d{2}-\d{2}|\bINFO\b|\bWARN\b|\bERROR\b|\bDEBUG\b|\bTRACE\b|\blog\b)/i.test(sample);
+}
+
 function tryFormatJsonString(value: string | null): string | null {
   if (!value) {
     return null;
@@ -350,7 +374,7 @@ function tryFormatJsonString(value: string | null): string | null {
   }
 }
 
-type ArtifactRenderKind = "image" | "json" | "text" | "binary" | "empty";
+type ArtifactRenderKind = "image" | "json" | "code" | "log" | "text" | "binary" | "empty";
 
 function artifactRenderKind(args: {
   mimeType: string | null;
@@ -364,6 +388,12 @@ function artifactRenderKind(args: {
   }
   if (isJsonMimeType(args.mimeType) || tryFormatJsonString(args.output) || typeof args.detail?.data === "object") {
     return "json";
+  }
+  if (isCodeMimeType(args.mimeType) || (/```/.test(args.output ?? "") && !!args.output)) {
+    return "code";
+  }
+  if (isLogMimeType(args.mimeType) || looksLikeLogOutput(args.output)) {
+    return "log";
   }
   if (isTextMimeType(args.mimeType) || args.output) {
     return "text";
@@ -920,10 +950,29 @@ function RemoteBridgeSection({
                             </View>
                           </>
                         ) : null}
+                        {selectedArtifactRenderType === "code" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Code Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "log" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Log Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
                         {selectedArtifactRenderType === "text" && selectedArtifactOutput ? (
-                          <View style={styles.terminalView}>
-                            <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
-                          </View>
+                          <>
+                            <Text style={styles.panelLabel}>Text Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
                         ) : null}
                         {selectedArtifactRenderType === "binary" && !artifactDetailLoading ? (
                           <Text style={styles.emptyText}>
@@ -975,6 +1024,22 @@ function RemoteBridgeSection({
                             <Text style={styles.panelLabel}>JSON</Text>
                             <View style={styles.terminalView}>
                               <Text style={styles.terminalText}>{selectedArtifactJson}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "code" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Code</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "log" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Log Output</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
                             </View>
                           </>
                         ) : null}
