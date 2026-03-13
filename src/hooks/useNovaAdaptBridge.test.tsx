@@ -106,6 +106,13 @@ describe("useNovaAdaptBridge", () => {
             workflows: true,
             templates: true,
             templateGallery: true,
+            browserStatus: true,
+            voiceStatus: true,
+            canvasStatus: true,
+            mobileStatus: true,
+            homeAssistantStatus: true,
+            mqttStatus: true,
+            controlArtifacts: true,
           },
         });
       }
@@ -186,6 +193,60 @@ describe("useNovaAdaptBridge", () => {
           ],
         });
       }
+      if (url.endsWith("/agents/browser/status")) {
+        return responseOf(200, { ok: true, transport: "playwright" });
+      }
+      if (url.endsWith("/agents/voice/status")) {
+        return responseOf(200, { ok: true, enabled: true, context: "api", configured: true, backend: "expo" });
+      }
+      if (url.endsWith("/agents/canvas/status")) {
+        return responseOf(200, { ok: true, enabled: true, context: "render" });
+      }
+      if (url.endsWith("/agents/mobile/status")) {
+        return responseOf(200, { ok: true, transport: "appium", platform: "ios" });
+      }
+      if (url.endsWith("/agents/iot/homeassistant/status")) {
+        return responseOf(200, { ok: true, configured: true, transport: "homeassistant" });
+      }
+      if (url.endsWith("/agents/iot/mqtt/status")) {
+        return responseOf(200, { ok: true, configured: true, transport: "mqtt" });
+      }
+      if (url.endsWith("/agents/control/artifacts?limit=6")) {
+        return responseOf(200, [
+          {
+            artifact_id: "artifact-1",
+            control_type: "vision",
+            status: "completed",
+            goal: "Inspect logs",
+            dangerous: false,
+            platform: "ios",
+            transport: "appium",
+            output_preview: "Captured diagnostics",
+            preview_available: true,
+            preview_path: "/control/artifacts/artifact-1/preview",
+            detail_path: "/control/artifacts/artifact-1",
+          },
+        ]);
+      }
+      if (url.endsWith("/agents/control/artifacts/artifact-1")) {
+        return responseOf(200, {
+          artifact_id: "artifact-1",
+          control_type: "vision",
+          status: "completed",
+          goal: "Inspect logs",
+          dangerous: false,
+          platform: "ios",
+          transport: "appium",
+          output_preview: "Captured diagnostics",
+          preview_available: true,
+          preview_path: "/control/artifacts/artifact-1/preview",
+          detail_path: "/control/artifacts/artifact-1",
+          output: "Detailed artifact output",
+          action: { type: "tap", target: "Deploy" },
+          data: { screenshot: "artifact-1.png" },
+          metadata: { attempt: 1 },
+        });
+      }
       if (url.includes("/agents/events/stream")) {
         return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
       }
@@ -255,6 +316,13 @@ describe("useNovaAdaptBridge", () => {
       workflows: true,
       templates: true,
       templateGallery: true,
+      browserStatus: true,
+      voiceStatus: true,
+      canvasStatus: true,
+      mobileStatus: true,
+      homeAssistantStatus: true,
+      mqttStatus: true,
+      controlArtifacts: true,
     });
     expect(latestOrThrow(latest).health).toMatchObject({
       protocolVersion: "2026-03-11.1",
@@ -271,6 +339,24 @@ describe("useNovaAdaptBridge", () => {
     expect(latestOrThrow(latest).workflows[0]).toMatchObject({ workflowId: "wf-1", status: "queued" });
     expect(latestOrThrow(latest).templates[0]).toMatchObject({ templateId: "saved-1", name: "Cluster Watch" });
     expect(latestOrThrow(latest).galleryTemplates[0]).toMatchObject({ templateId: "gallery-1", source: "gallery" });
+    expect(latestOrThrow(latest).browserStatus).toMatchObject({ transport: "playwright" });
+    expect(latestOrThrow(latest).voiceStatus).toMatchObject({ enabled: true });
+    expect(latestOrThrow(latest).canvasStatus).toMatchObject({ ok: true });
+    expect(latestOrThrow(latest).mobileStatus).toMatchObject({ platform: "ios" });
+    expect(latestOrThrow(latest).homeAssistantStatus).toMatchObject({ transport: "homeassistant" });
+    expect(latestOrThrow(latest).mqttStatus).toMatchObject({ transport: "mqtt" });
+    expect(latestOrThrow(latest).controlArtifacts[0]).toMatchObject({ artifactId: "artifact-1", goal: "Inspect logs" });
+
+    await act(async () => {
+      const detail = await latestOrThrow(latest).loadControlArtifact("artifact-1");
+      expect(detail).toMatchObject({
+        artifactId: "artifact-1",
+        output: "Detailed artifact output",
+        action: { type: "tap", target: "Deploy" },
+        data: { screenshot: "artifact-1.png" },
+        metadata: { attempt: 1 },
+      });
+    });
 
     await act(async () => {
       await latestOrThrow(latest).approvePlanAsync("plan-1");
@@ -316,6 +402,25 @@ describe("useNovaAdaptBridge", () => {
       const url = String(input);
       if (url.endsWith("/agents/health?deep=1")) {
         return responseOf(200, { ok: true, features: { agents: true } });
+      }
+      if (url.endsWith("/agents/capabilities")) {
+        return responseOf(200, {
+          ok: true,
+          capabilities: {
+            memoryStatus: true,
+            governance: true,
+            workflows: true,
+            templates: true,
+            templateGallery: true,
+            browserStatus: false,
+            voiceStatus: false,
+            canvasStatus: false,
+            mobileStatus: false,
+            homeAssistantStatus: false,
+            mqttStatus: false,
+            controlArtifacts: false,
+          },
+        });
       }
       if (url.endsWith("/agents/plans?limit=12")) {
         plansFetchCount += 1;
@@ -407,6 +512,13 @@ describe("useNovaAdaptBridge", () => {
             workflows: true,
             templates: false,
             templateGallery: false,
+            browserStatus: false,
+            voiceStatus: false,
+            canvasStatus: false,
+            mobileStatus: false,
+            homeAssistantStatus: false,
+            mqttStatus: false,
+            controlArtifacts: false,
           },
         });
       }
@@ -446,12 +558,26 @@ describe("useNovaAdaptBridge", () => {
       workflows: true,
       templates: false,
       templateGallery: false,
+      browserStatus: false,
+      voiceStatus: false,
+      canvasStatus: false,
+      mobileStatus: false,
+      homeAssistantStatus: false,
+      mqttStatus: false,
+      controlArtifacts: false,
     });
     const calledUrls = fetchMock.mock.calls.map(([input]) => String(input));
     expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/memory/status");
     expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/runtime/governance");
     expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/templates?limit=12");
     expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/gallery");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/browser/status");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/voice/status");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/canvas/status");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/mobile/status");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/iot/homeassistant/status");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/iot/mqtt/status");
+    expect(calledUrls).not.toContain("https://dgx.novaremote.test/agents/control/artifacts?limit=6");
 
     await act(async () => {
       renderer?.unmount();
@@ -486,6 +612,13 @@ describe("useNovaAdaptBridge", () => {
       workflows: false,
       templates: false,
       templateGallery: false,
+      browserStatus: false,
+      voiceStatus: false,
+      canvasStatus: false,
+      mobileStatus: false,
+      homeAssistantStatus: false,
+      mqttStatus: false,
+      controlArtifacts: false,
     });
     expect(latestOrThrow(latest).error).toBeNull();
     expect(latestOrThrow(latest).governance).toBeNull();
@@ -524,6 +657,27 @@ describe("useNovaAdaptBridge", () => {
       if (url.endsWith("/agents/gallery")) {
         return responseOf(404, { detail: "not found" }, "Not Found");
       }
+      if (url.endsWith("/agents/browser/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/voice/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/canvas/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/mobile/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/iot/homeassistant/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/iot/mqtt/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/control/artifacts?limit=6")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
       if (url.includes("/agents/events/stream")) {
         return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
       }
@@ -554,6 +708,13 @@ describe("useNovaAdaptBridge", () => {
       workflows: false,
       templates: false,
       templateGallery: false,
+      browserStatus: false,
+      voiceStatus: false,
+      canvasStatus: false,
+      mobileStatus: false,
+      homeAssistantStatus: false,
+      mqttStatus: false,
+      controlArtifacts: false,
     });
 
     await act(async () => {
@@ -585,6 +746,25 @@ describe("useNovaAdaptBridge", () => {
       if (url.endsWith("/agents/health?deep=1")) {
         return responseOf(200, { ok: true, features: { agents: true } });
       }
+      if (url.endsWith("/agents/capabilities")) {
+        return responseOf(200, {
+          ok: true,
+          capabilities: {
+            memoryStatus: true,
+            governance: true,
+            workflows: true,
+            templates: true,
+            templateGallery: true,
+            browserStatus: false,
+            voiceStatus: false,
+            canvasStatus: false,
+            mobileStatus: false,
+            homeAssistantStatus: false,
+            mqttStatus: false,
+            controlArtifacts: false,
+          },
+        });
+      }
       if (url.endsWith("/agents/plans?limit=12")) {
         return responseOf(200, []);
       }
@@ -602,6 +782,27 @@ describe("useNovaAdaptBridge", () => {
       }
       if (url.endsWith("/agents/gallery")) {
         return responseOf(200, { templates: [] });
+      }
+      if (url.endsWith("/agents/browser/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/voice/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/canvas/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/mobile/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/iot/homeassistant/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/iot/mqtt/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/control/artifacts?limit=6")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
       }
       if (url.includes("/agents/events/stream")) {
         return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');
@@ -675,6 +876,25 @@ describe("useNovaAdaptBridge", () => {
       if (url.endsWith("/agents/health?deep=1")) {
         return responseOf(200, { ok: true, features: { agents: true } });
       }
+      if (url.endsWith("/agents/capabilities")) {
+        return responseOf(200, {
+          ok: true,
+          capabilities: {
+            memoryStatus: true,
+            governance: true,
+            workflows: true,
+            templates: true,
+            templateGallery: true,
+            browserStatus: false,
+            voiceStatus: false,
+            canvasStatus: false,
+            mobileStatus: false,
+            homeAssistantStatus: false,
+            mqttStatus: false,
+            controlArtifacts: false,
+          },
+        });
+      }
       if (url.endsWith("/agents/plans?limit=12")) {
         return responseOf(200, []);
       }
@@ -707,6 +927,27 @@ describe("useNovaAdaptBridge", () => {
             },
           ],
         });
+      }
+      if (url.endsWith("/agents/browser/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/voice/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/canvas/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/mobile/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/iot/homeassistant/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/iot/mqtt/status")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
+      }
+      if (url.endsWith("/agents/control/artifacts?limit=6")) {
+        return responseOf(404, { detail: "not found" }, "Not Found");
       }
       if (url.includes("/agents/events/stream")) {
         return streamResponse('event: timeout\ndata: {"request_id":"test"}\n\n');

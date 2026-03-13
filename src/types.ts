@@ -388,6 +388,18 @@ export type NovaAdaptBridgeMemoryStatus = {
   [key: string]: unknown;
 };
 
+export type NovaAdaptBridgeSurfaceStatus = {
+  ok: boolean;
+  enabled?: boolean;
+  configured?: boolean;
+  transport?: string | null;
+  platform?: string | null;
+  context?: string | null;
+  backend?: string | null;
+  error?: string | null;
+  details: Record<string, unknown>;
+};
+
 export type NovaAdaptBridgeCapabilities = {
   protocolVersion?: string | null;
   agentContractVersion?: string | null;
@@ -396,6 +408,39 @@ export type NovaAdaptBridgeCapabilities = {
   workflows: boolean;
   templates: boolean;
   templateGallery: boolean;
+  browserStatus?: boolean;
+  voiceStatus?: boolean;
+  canvasStatus?: boolean;
+  mobileStatus?: boolean;
+  homeAssistantStatus?: boolean;
+  mqttStatus?: boolean;
+  controlArtifacts?: boolean;
+};
+
+export type NovaAdaptBridgeControlArtifact = {
+  artifactId: string;
+  createdAt: string | null;
+  controlType: string;
+  status: string;
+  dangerous: boolean;
+  goal: string;
+  platform: string | null;
+  transport: string | null;
+  outputPreview: string | null;
+  actionType: string | null;
+  target: string | null;
+  model: string | null;
+  modelId: string | null;
+  previewAvailable: boolean;
+  previewPath: string | null;
+  detailPath: string | null;
+};
+
+export type NovaAdaptBridgeControlArtifactDetail = NovaAdaptBridgeControlArtifact & {
+  output: string | null;
+  action: Record<string, unknown> | null;
+  data: Record<string, unknown> | null;
+  metadata: Record<string, unknown> | null;
 };
 
 export type NovaAdaptBridgePlan = {

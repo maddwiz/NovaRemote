@@ -3,11 +3,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { apiRequest, normalizeBaseUrl } from "../api/client";
 import {
   NovaAdaptBridgeCapabilities,
+  NovaAdaptBridgeControlArtifact,
+  NovaAdaptBridgeControlArtifactDetail,
   NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
   NovaAdaptBridgeMemoryStatus,
   NovaAdaptBridgePlan,
+  NovaAdaptBridgeSurfaceStatus,
   NovaAdaptBridgeTemplate,
   NovaAdaptBridgeWorkflow,
   ServerProfile,
@@ -32,12 +35,20 @@ export type UseNovaAdaptBridgeResult = {
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  browserStatus: NovaAdaptBridgeSurfaceStatus | null;
+  voiceStatus: NovaAdaptBridgeSurfaceStatus | null;
+  canvasStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mobileStatus: NovaAdaptBridgeSurfaceStatus | null;
+  homeAssistantStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mqttStatus: NovaAdaptBridgeSurfaceStatus | null;
+  controlArtifacts: NovaAdaptBridgeControlArtifact[];
   governance: NovaAdaptBridgeGovernance | null;
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
   workflows: NovaAdaptBridgeWorkflow[];
   templates: NovaAdaptBridgeTemplate[];
   galleryTemplates: NovaAdaptBridgeTemplate[];
+  loadControlArtifact: (artifactId: string) => Promise<NovaAdaptBridgeControlArtifactDetail | null>;
   refresh: (options?: RefreshOptions) => Promise<void>;
   createPlan: (objective: string, options?: { strategy?: string }) => Promise<NovaAdaptBridgePlan | null>;
   startWorkflow: (
@@ -157,6 +168,31 @@ type RawBridgeGovernance = {
   jobs?: unknown;
 };
 
+type RawBridgeSurfaceStatus = Record<string, unknown> | null;
+
+type RawBridgeControlArtifact = {
+  artifact_id?: unknown;
+  created_at?: unknown;
+  control_type?: unknown;
+  status?: unknown;
+  dangerous?: unknown;
+  goal?: unknown;
+  platform?: unknown;
+  transport?: unknown;
+  output_preview?: unknown;
+  action_type?: unknown;
+  target?: unknown;
+  model?: unknown;
+  model_id?: unknown;
+  preview_available?: unknown;
+  preview_path?: unknown;
+  detail_path?: unknown;
+  output?: unknown;
+  action?: unknown;
+  data?: unknown;
+  metadata?: unknown;
+};
+
 const DEFAULT_REFRESH_INTERVAL_MS = 15_000;
 const STREAM_TIMEOUT_SECONDS = 300;
 const STREAM_INTERVAL_SECONDS = 0.25;
@@ -234,6 +270,13 @@ function normalizeCapabilities(value: unknown): NovaAdaptBridgeCapabilities {
     workflows: Boolean(raw?.workflows),
     templates: Boolean(raw?.templates),
     templateGallery: Boolean(raw?.templateGallery),
+    browserStatus: Boolean(raw?.browserStatus),
+    voiceStatus: Boolean(raw?.voiceStatus),
+    canvasStatus: Boolean(raw?.canvasStatus),
+    mobileStatus: Boolean(raw?.mobileStatus),
+    homeAssistantStatus: Boolean(raw?.homeAssistantStatus),
+    mqttStatus: Boolean(raw?.mqttStatus),
+    controlArtifacts: Boolean(raw?.controlArtifacts),
   };
 }
 
@@ -244,6 +287,74 @@ function normalizeHealth(value: unknown): NovaAdaptBridgeHealth {
     ok: Boolean(raw.ok),
     protocolVersion: asNullableString(raw.protocolVersion ?? raw.protocol_version),
     agentContractVersion: asNullableString(raw.agentContractVersion ?? raw.agent_contract_version),
+  };
+}
+
+function normalizeSurfaceStatus(value: unknown): NovaAdaptBridgeSurfaceStatus | null {
+  const raw = value as RawBridgeSurfaceStatus;
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  return {
+    ok: Boolean(raw.ok),
+    enabled: typeof raw.enabled === "boolean" ? raw.enabled : undefined,
+    configured: typeof raw.configured === "boolean" ? raw.configured : undefined,
+    transport: asNullableString(raw.transport),
+    platform: asNullableString(raw.platform),
+    context: asNullableString(raw.context),
+    backend: asNullableString(raw.backend),
+    error: asNullableString(raw.error),
+    details: { ...raw },
+  };
+}
+
+function normalizeControlArtifact(value: unknown): NovaAdaptBridgeControlArtifact | null {
+  const raw = value as RawBridgeControlArtifact | null;
+  const artifactId = asString(raw?.artifact_id).trim();
+  const controlType = asString(raw?.control_type).trim();
+  const status = asString(raw?.status).trim();
+  if (!artifactId || !controlType || !status) {
+    return null;
+  }
+  return {
+    artifactId,
+    createdAt: asNullableString(raw?.created_at),
+    controlType,
+    status,
+    dangerous: Boolean(raw?.dangerous),
+    goal: asString(raw?.goal).trim(),
+    platform: asNullableString(raw?.platform),
+    transport: asNullableString(raw?.transport),
+    outputPreview: asNullableString(raw?.output_preview),
+    actionType: asNullableString(raw?.action_type),
+    target: asNullableString(raw?.target),
+    model: asNullableString(raw?.model),
+    modelId: asNullableString(raw?.model_id),
+    previewAvailable: Boolean(raw?.preview_available),
+    previewPath: asNullableString(raw?.preview_path),
+    detailPath: asNullableString(raw?.detail_path),
+  };
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  return { ...(value as Record<string, unknown>) };
+}
+
+function normalizeControlArtifactDetail(value: unknown): NovaAdaptBridgeControlArtifactDetail | null {
+  const artifact = normalizeControlArtifact(value);
+  if (!artifact) {
+    return null;
+  }
+  const raw = value as RawBridgeControlArtifact | null;
+  return {
+    ...artifact,
+    output: asNullableString(raw?.output),
+    action: asRecord(raw?.action),
+    data: asRecord(raw?.data),
+    metadata: asRecord(raw?.metadata),
   };
 }
 
@@ -419,6 +530,13 @@ const DEFAULT_BRIDGE_CAPABILITIES: NovaAdaptBridgeCapabilities = {
   workflows: false,
   templates: false,
   templateGallery: false,
+  browserStatus: false,
+  voiceStatus: false,
+  canvasStatus: false,
+  mobileStatus: false,
+  homeAssistantStatus: false,
+  mqttStatus: false,
+  controlArtifacts: false,
 };
 
 function extractSseEvents(lines: string[]): SseEvent[] {
@@ -474,7 +592,13 @@ function isRelevantBridgeAuditEvent(value: unknown): boolean {
   if (category === "plans" || category === "jobs" || category === "memory") {
     return true;
   }
+  if (category === "control" || category === "artifacts") {
+    return true;
+  }
   if (entityType === "plan" || entityType === "job" || entityType === "memory") {
+    return true;
+  }
+  if (entityType === "artifact" || entityType === "surface") {
     return true;
   }
   if (action === "approve" || action === "approve_async" || action === "retry_failed" || action === "retry_failed_async") {
@@ -512,6 +636,13 @@ export type NovaAdaptBridgeSnapshot = {
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  browserStatus: NovaAdaptBridgeSurfaceStatus | null;
+  voiceStatus: NovaAdaptBridgeSurfaceStatus | null;
+  canvasStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mobileStatus: NovaAdaptBridgeSurfaceStatus | null;
+  homeAssistantStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mqttStatus: NovaAdaptBridgeSurfaceStatus | null;
+  controlArtifacts: NovaAdaptBridgeControlArtifact[];
   governance: NovaAdaptBridgeGovernance | null;
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
@@ -542,6 +673,13 @@ export async function fetchNovaAdaptBridgeSnapshot(
       error: null,
       health: null,
       memoryStatus: null,
+      browserStatus: null,
+      voiceStatus: null,
+      canvasStatus: null,
+      mobileStatus: null,
+      homeAssistantStatus: null,
+      mqttStatus: null,
+      controlArtifacts: [],
       governance: null,
       plans: [],
       jobs: [],
@@ -559,6 +697,7 @@ export async function fetchNovaAdaptBridgeSnapshot(
     const healthResponse = await apiRequest<RawBridgeHealth>(server.baseUrl, server.token, "/agents/health?deep=1");
     const nextHealth = normalizeHealth(healthResponse);
     let bridgeCapabilities: NovaAdaptBridgeCapabilities | null = null;
+    let capabilityPresence: Partial<Record<keyof NovaAdaptBridgeCapabilities, boolean>> = {};
     try {
       const capabilitiesResponse = await apiRequest<RawCapabilitiesResponse>(
         server.baseUrl,
@@ -574,6 +713,25 @@ export async function fetchNovaAdaptBridgeSnapshot(
                 capabilitiesResponse.agentContractVersion ?? capabilitiesResponse.agent_contract_version,
             }
           : capabilitiesResponse;
+      if (capabilityPayload && typeof capabilityPayload === "object") {
+        const rawCapabilityPayload = capabilityPayload as Record<string, unknown>;
+        capabilityPresence = {
+          protocolVersion: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "protocolVersion"),
+          agentContractVersion: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "agentContractVersion"),
+          memoryStatus: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "memoryStatus"),
+          governance: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "governance"),
+          workflows: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "workflows"),
+          templates: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "templates"),
+          templateGallery: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "templateGallery"),
+          browserStatus: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "browserStatus"),
+          voiceStatus: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "voiceStatus"),
+          canvasStatus: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "canvasStatus"),
+          mobileStatus: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "mobileStatus"),
+          homeAssistantStatus: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "homeAssistantStatus"),
+          mqttStatus: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "mqttStatus"),
+          controlArtifacts: Object.prototype.hasOwnProperty.call(rawCapabilityPayload, "controlArtifacts"),
+        };
+      }
       bridgeCapabilities = normalizeCapabilities(capabilityPayload);
     } catch (capabilitiesError) {
       if (!isMissingRouteError(capabilitiesError) && !isBridgeUnavailableError(capabilitiesError)) {
@@ -585,6 +743,13 @@ export async function fetchNovaAdaptBridgeSnapshot(
       plansResult,
       jobsResult,
       memoryResult,
+      browserStatusResult,
+      voiceStatusResult,
+      canvasStatusResult,
+      mobileStatusResult,
+      homeAssistantStatusResult,
+      mqttStatusResult,
+      controlArtifactsResult,
       workflowsResult,
       governanceResult,
       templatesResult,
@@ -592,38 +757,103 @@ export async function fetchNovaAdaptBridgeSnapshot(
     ] = await Promise.allSettled([
       apiRequest<unknown>(server.baseUrl, server.token, `/agents/plans?limit=${planLimit}`),
       apiRequest<unknown>(server.baseUrl, server.token, `/agents/jobs?limit=${jobLimit}`),
-      bridgeCapabilities && !bridgeCapabilities.memoryStatus
+      bridgeCapabilities && capabilityPresence.memoryStatus && !bridgeCapabilities.memoryStatus
         ? Promise.resolve(null)
         : apiRequest<NovaAdaptBridgeMemoryStatus>(server.baseUrl, server.token, "/agents/memory/status"),
-      bridgeCapabilities && !bridgeCapabilities.workflows
+      bridgeCapabilities && capabilityPresence.browserStatus && !bridgeCapabilities.browserStatus
+        ? Promise.resolve(null)
+        : apiRequest<RawBridgeSurfaceStatus>(server.baseUrl, server.token, "/agents/browser/status"),
+      bridgeCapabilities && capabilityPresence.voiceStatus && !bridgeCapabilities.voiceStatus
+        ? Promise.resolve(null)
+        : apiRequest<RawBridgeSurfaceStatus>(server.baseUrl, server.token, "/agents/voice/status"),
+      bridgeCapabilities && capabilityPresence.canvasStatus && !bridgeCapabilities.canvasStatus
+        ? Promise.resolve(null)
+        : apiRequest<RawBridgeSurfaceStatus>(server.baseUrl, server.token, "/agents/canvas/status"),
+      bridgeCapabilities && capabilityPresence.mobileStatus && !bridgeCapabilities.mobileStatus
+        ? Promise.resolve(null)
+        : apiRequest<RawBridgeSurfaceStatus>(server.baseUrl, server.token, "/agents/mobile/status"),
+      bridgeCapabilities && capabilityPresence.homeAssistantStatus && !bridgeCapabilities.homeAssistantStatus
+        ? Promise.resolve(null)
+        : apiRequest<RawBridgeSurfaceStatus>(server.baseUrl, server.token, "/agents/iot/homeassistant/status"),
+      bridgeCapabilities && capabilityPresence.mqttStatus && !bridgeCapabilities.mqttStatus
+        ? Promise.resolve(null)
+        : apiRequest<RawBridgeSurfaceStatus>(server.baseUrl, server.token, "/agents/iot/mqtt/status"),
+      bridgeCapabilities && capabilityPresence.controlArtifacts && !bridgeCapabilities.controlArtifacts
+        ? Promise.resolve(null)
+        : apiRequest<unknown>(server.baseUrl, server.token, "/agents/control/artifacts?limit=6"),
+      bridgeCapabilities && capabilityPresence.workflows && !bridgeCapabilities.workflows
         ? Promise.resolve(null)
         : apiRequest<RawWorkflowsResponse>(
             server.baseUrl,
             server.token,
             `/agents/workflows/list?limit=${workflowLimit}&context=api`
           ),
-      bridgeCapabilities && !bridgeCapabilities.governance
+      bridgeCapabilities && capabilityPresence.governance && !bridgeCapabilities.governance
         ? Promise.resolve(null)
         : apiRequest<unknown>(server.baseUrl, server.token, "/agents/runtime/governance"),
-      bridgeCapabilities && !bridgeCapabilities.templates
+      bridgeCapabilities && capabilityPresence.templates && !bridgeCapabilities.templates
         ? Promise.resolve(null)
         : apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/templates?limit=12"),
-      bridgeCapabilities && !bridgeCapabilities.templateGallery
+      bridgeCapabilities && capabilityPresence.templateGallery && !bridgeCapabilities.templateGallery
         ? Promise.resolve(null)
         : apiRequest<RawTemplatesResponse>(server.baseUrl, server.token, "/agents/gallery"),
     ]);
 
+    const inferredCapabilities = {
+      protocolVersion: bridgeCapabilities?.protocolVersion ?? null,
+      agentContractVersion: bridgeCapabilities?.agentContractVersion ?? null,
+      memoryStatus:
+        capabilityPresence.memoryStatus && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.memoryStatus)
+          : capabilityFromSettled(memoryResult),
+      governance:
+        capabilityPresence.governance && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.governance)
+          : capabilityFromSettled(governanceResult),
+      workflows:
+        capabilityPresence.workflows && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.workflows)
+          : capabilityFromSettled(workflowsResult),
+      templates:
+        capabilityPresence.templates && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.templates)
+          : capabilityFromSettled(templatesResult),
+      templateGallery:
+        capabilityPresence.templateGallery && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.templateGallery)
+          : capabilityFromSettled(galleryResult),
+      browserStatus:
+        capabilityPresence.browserStatus && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.browserStatus)
+          : capabilityFromSettled(browserStatusResult),
+      voiceStatus:
+        capabilityPresence.voiceStatus && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.voiceStatus)
+          : capabilityFromSettled(voiceStatusResult),
+      canvasStatus:
+        capabilityPresence.canvasStatus && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.canvasStatus)
+          : capabilityFromSettled(canvasStatusResult),
+      mobileStatus:
+        capabilityPresence.mobileStatus && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.mobileStatus)
+          : capabilityFromSettled(mobileStatusResult),
+      homeAssistantStatus:
+        capabilityPresence.homeAssistantStatus && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.homeAssistantStatus)
+          : capabilityFromSettled(homeAssistantStatusResult),
+      mqttStatus:
+        capabilityPresence.mqttStatus && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.mqttStatus)
+          : capabilityFromSettled(mqttStatusResult),
+      controlArtifacts:
+        capabilityPresence.controlArtifacts && bridgeCapabilities
+          ? Boolean(bridgeCapabilities.controlArtifacts)
+          : capabilityFromSettled(controlArtifactsResult),
+    } satisfies NovaAdaptBridgeCapabilities;
+
     const effectiveCapabilities =
-      bridgeCapabilities ??
-      ({
-        protocolVersion: null,
-        agentContractVersion: null,
-        memoryStatus: capabilityFromSettled(memoryResult),
-        governance: capabilityFromSettled(governanceResult),
-        workflows: capabilityFromSettled(workflowsResult),
-        templates: capabilityFromSettled(templatesResult),
-        templateGallery: capabilityFromSettled(galleryResult),
-      } satisfies NovaAdaptBridgeCapabilities);
+      bridgeCapabilities ? { ...bridgeCapabilities, ...inferredCapabilities } : inferredCapabilities;
 
     return {
       supported: true,
@@ -632,6 +862,28 @@ export async function fetchNovaAdaptBridgeSnapshot(
       error: null,
       health: nextHealth,
       memoryStatus: memoryResult.status === "fulfilled" ? memoryResult.value : null,
+      browserStatus:
+        browserStatusResult.status === "fulfilled" ? normalizeSurfaceStatus(browserStatusResult.value) : null,
+      voiceStatus:
+        voiceStatusResult.status === "fulfilled" ? normalizeSurfaceStatus(voiceStatusResult.value) : null,
+      canvasStatus:
+        canvasStatusResult.status === "fulfilled" ? normalizeSurfaceStatus(canvasStatusResult.value) : null,
+      mobileStatus:
+        mobileStatusResult.status === "fulfilled" ? normalizeSurfaceStatus(mobileStatusResult.value) : null,
+      homeAssistantStatus:
+        homeAssistantStatusResult.status === "fulfilled"
+          ? normalizeSurfaceStatus(homeAssistantStatusResult.value)
+          : null,
+      mqttStatus:
+        mqttStatusResult.status === "fulfilled" ? normalizeSurfaceStatus(mqttStatusResult.value) : null,
+      controlArtifacts:
+        controlArtifactsResult.status === "fulfilled" && Array.isArray(controlArtifactsResult.value)
+          ? sortNewest(
+              controlArtifactsResult.value
+                .map(normalizeControlArtifact)
+                .filter((item): item is NovaAdaptBridgeControlArtifact => Boolean(item))
+            ).slice(0, 6)
+          : [],
       governance: governanceResult.status === "fulfilled" ? normalizeGovernance(governanceResult.value) : null,
       plans:
         plansResult.status === "fulfilled" && Array.isArray(plansResult.value)
@@ -673,6 +925,13 @@ export async function fetchNovaAdaptBridgeSnapshot(
         error: null,
         health: null,
         memoryStatus: null,
+        browserStatus: null,
+        voiceStatus: null,
+        canvasStatus: null,
+        mobileStatus: null,
+        homeAssistantStatus: null,
+        mqttStatus: null,
+        controlArtifacts: [],
         governance: null,
         plans: [],
         jobs: [],
@@ -688,6 +947,13 @@ export async function fetchNovaAdaptBridgeSnapshot(
       error: nextError instanceof Error ? nextError.message : String(nextError || "Unknown error"),
       health: null,
       memoryStatus: null,
+      browserStatus: null,
+      voiceStatus: null,
+      canvasStatus: null,
+      mobileStatus: null,
+      homeAssistantStatus: null,
+      mqttStatus: null,
+      controlArtifacts: [],
       governance: null,
       plans: [],
       jobs: [],
@@ -710,6 +976,25 @@ async function postNovaAdaptBridgeJson<T>(
     method: "POST",
     body: body ? JSON.stringify(body) : undefined,
   });
+}
+
+async function fetchNovaAdaptBridgeControlArtifact(
+  server: ServerProfile | null,
+  artifactId: string
+): Promise<NovaAdaptBridgeControlArtifactDetail | null> {
+  if (!hasBridgeCredentials(server)) {
+    return null;
+  }
+  const normalizedArtifactId = artifactId.trim();
+  if (!normalizedArtifactId) {
+    return null;
+  }
+  const response = await apiRequest<unknown>(
+    server.baseUrl,
+    server.token,
+    `/agents/control/artifacts/${encodeURIComponent(normalizedArtifactId)}`
+  );
+  return normalizeControlArtifactDetail(response);
 }
 
 export async function createNovaAdaptBridgePlan(
@@ -890,6 +1175,13 @@ export function useNovaAdaptBridge({
   const [error, setError] = useState<string | null>(null);
   const [health, setHealth] = useState<NovaAdaptBridgeHealth | null>(null);
   const [memoryStatus, setMemoryStatus] = useState<NovaAdaptBridgeMemoryStatus | null>(null);
+  const [browserStatus, setBrowserStatus] = useState<NovaAdaptBridgeSurfaceStatus | null>(null);
+  const [voiceStatus, setVoiceStatus] = useState<NovaAdaptBridgeSurfaceStatus | null>(null);
+  const [canvasStatus, setCanvasStatus] = useState<NovaAdaptBridgeSurfaceStatus | null>(null);
+  const [mobileStatus, setMobileStatus] = useState<NovaAdaptBridgeSurfaceStatus | null>(null);
+  const [homeAssistantStatus, setHomeAssistantStatus] = useState<NovaAdaptBridgeSurfaceStatus | null>(null);
+  const [mqttStatus, setMqttStatus] = useState<NovaAdaptBridgeSurfaceStatus | null>(null);
+  const [controlArtifacts, setControlArtifacts] = useState<NovaAdaptBridgeControlArtifact[]>([]);
   const [governance, setGovernance] = useState<NovaAdaptBridgeGovernance | null>(null);
   const [plans, setPlans] = useState<NovaAdaptBridgePlan[]>([]);
   const [jobs, setJobs] = useState<NovaAdaptBridgeJob[]>([]);
@@ -922,6 +1214,13 @@ export function useNovaAdaptBridge({
         setError(null);
         setHealth(null);
         setMemoryStatus(null);
+        setBrowserStatus(null);
+        setVoiceStatus(null);
+        setCanvasStatus(null);
+        setMobileStatus(null);
+        setHomeAssistantStatus(null);
+        setMqttStatus(null);
+        setControlArtifacts([]);
         setGovernance(null);
         setPlans([]);
         setJobs([]);
@@ -945,6 +1244,13 @@ export function useNovaAdaptBridge({
         setError(snapshot.error);
         setHealth(snapshot.health);
         setMemoryStatus(snapshot.memoryStatus);
+        setBrowserStatus(snapshot.browserStatus);
+        setVoiceStatus(snapshot.voiceStatus);
+        setCanvasStatus(snapshot.canvasStatus);
+        setMobileStatus(snapshot.mobileStatus);
+        setHomeAssistantStatus(snapshot.homeAssistantStatus);
+        setMqttStatus(snapshot.mqttStatus);
+        setControlArtifacts(snapshot.controlArtifacts);
         setGovernance(snapshot.governance);
         setPlans(snapshot.plans);
         setJobs(snapshot.jobs);
@@ -957,7 +1263,21 @@ export function useNovaAdaptBridge({
         setRuntimeAvailable(false);
         setCapabilities(DEFAULT_BRIDGE_CAPABILITIES);
         setError(detail);
+        setHealth(null);
+        setMemoryStatus(null);
+        setBrowserStatus(null);
+        setVoiceStatus(null);
+        setCanvasStatus(null);
+        setMobileStatus(null);
+        setHomeAssistantStatus(null);
+        setMqttStatus(null);
+        setControlArtifacts([]);
         setGovernance(null);
+        setPlans([]);
+        setJobs([]);
+        setWorkflows([]);
+        setTemplates([]);
+        setGalleryTemplates([]);
       } finally {
         setLoading(false);
         setRefreshing(false);
@@ -1407,6 +1727,20 @@ export function useNovaAdaptBridge({
     [capabilities.governance, refresh, server]
   );
 
+  const loadControlArtifact = useCallback(
+    async (artifactId: string) => {
+      try {
+        return await fetchNovaAdaptBridgeControlArtifact(server, artifactId);
+      } catch (nextError) {
+        if (isMissingRouteError(nextError) || isBridgeUnavailableError(nextError)) {
+          return null;
+        }
+        throw nextError;
+      }
+    },
+    [server]
+  );
+
   return useMemo(
     () => ({
       loading,
@@ -1417,12 +1751,20 @@ export function useNovaAdaptBridge({
       error,
       health,
       memoryStatus,
+      browserStatus,
+      voiceStatus,
+      canvasStatus,
+      mobileStatus,
+      homeAssistantStatus,
+      mqttStatus,
+      controlArtifacts,
       governance,
       plans,
       jobs,
       workflows,
       templates,
       galleryTemplates,
+      loadControlArtifact,
       refresh,
       createPlan,
       startWorkflow,
@@ -1445,11 +1787,18 @@ export function useNovaAdaptBridge({
       error,
       governance,
       health,
+      homeAssistantStatus,
       jobs,
       loading,
+      loadControlArtifact,
       galleryTemplates,
       capabilities,
+      browserStatus,
+      canvasStatus,
+      controlArtifacts,
       memoryStatus,
+      mobileStatus,
+      mqttStatus,
       plans,
       refresh,
       refreshing,
@@ -1464,6 +1813,7 @@ export function useNovaAdaptBridge({
       templates,
       undoPlan,
       pauseRuntime,
+      voiceStatus,
       workflows,
       importTemplate,
       launchTemplate,

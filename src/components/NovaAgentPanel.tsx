@@ -1,15 +1,18 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
 
 import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
 import { NovaDeviceFallbackPanel } from "./NovaDeviceFallbackPanel";
 import {
   NovaAdaptBridgeCapabilities,
+  NovaAdaptBridgeControlArtifact,
+  NovaAdaptBridgeControlArtifactDetail,
   NovaAdaptBridgeGovernance,
   NovaAdaptBridgeHealth,
   NovaAdaptBridgeJob,
   NovaAdaptBridgeMemoryStatus,
   NovaAdaptBridgePlan,
+  NovaAdaptBridgeSurfaceStatus,
   NovaAdaptBridgeTemplate,
   NovaAdaptBridgeWorkflow,
   ServerProfile,
@@ -169,6 +172,27 @@ function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): strin
   if (capabilities.governance) {
     available.push("governance");
   }
+  if (capabilities.browserStatus) {
+    available.push("browser");
+  }
+  if (capabilities.voiceStatus) {
+    available.push("voice");
+  }
+  if (capabilities.canvasStatus) {
+    available.push("canvas");
+  }
+  if (capabilities.mobileStatus) {
+    available.push("mobile");
+  }
+  if (capabilities.homeAssistantStatus) {
+    available.push("home assistant");
+  }
+  if (capabilities.mqttStatus) {
+    available.push("mqtt");
+  }
+  if (capabilities.controlArtifacts) {
+    available.push("artifacts");
+  }
   const versions = [capabilities.protocolVersion, capabilities.agentContractVersion].filter(Boolean);
   if (available.length === 0) {
     return versions.length > 0 ? `Companion capabilities unavailable • ${versions.join(" / ")}` : "Companion capabilities unavailable.";
@@ -176,6 +200,208 @@ function summarizeCapabilities(capabilities: NovaAdaptBridgeCapabilities): strin
   return versions.length > 0
     ? `Companion capabilities: ${available.join(", ")} • ${versions.join(" / ")}`
     : `Companion capabilities: ${available.join(", ")}`;
+}
+
+function summarizeSurfaceStatus(label: string, status: NovaAdaptBridgeSurfaceStatus | null): string {
+  if (!status) {
+    return `${label} unavailable`;
+  }
+  if (status.error) {
+    return status.error;
+  }
+  const parts: string[] = [];
+  if (typeof status.enabled === "boolean") {
+    parts.push(status.enabled ? "enabled" : "disabled");
+  } else if (status.ok) {
+    parts.push("ready");
+  } else {
+    parts.push("unavailable");
+  }
+  if (typeof status.configured === "boolean") {
+    parts.push(status.configured ? "configured" : "not configured");
+  }
+  if (status.transport) {
+    parts.push(status.transport);
+  }
+  if (status.platform) {
+    parts.push(status.platform);
+  }
+  if (status.backend) {
+    parts.push(status.backend);
+  }
+  if (status.context) {
+    parts.push(status.context);
+  }
+  return parts.join(" • ");
+}
+
+function summarizeControlArtifact(artifact: NovaAdaptBridgeControlArtifact): string {
+  const parts = [artifact.controlType];
+  if (artifact.transport) {
+    parts.push(artifact.transport);
+  }
+  if (artifact.platform) {
+    parts.push(artifact.platform);
+  }
+  if (artifact.actionType) {
+    parts.push(artifact.actionType);
+  }
+  return parts.join(" • ");
+}
+
+function describeControlArtifact(artifact: NovaAdaptBridgeControlArtifact): string[] {
+  const details: string[] = [];
+  if (artifact.target) {
+    details.push(`Target ${artifact.target}`);
+  }
+  if (artifact.model) {
+    details.push(`Model ${artifact.model}`);
+  }
+  if (artifact.modelId) {
+    details.push(`Model ID ${artifact.modelId}`);
+  }
+  if (artifact.createdAt) {
+    const createdAt = formatBridgeDate(artifact.createdAt);
+    if (createdAt) {
+      details.push(`Created ${createdAt}`);
+    }
+  }
+  if (artifact.dangerous) {
+    details.push("Marked dangerous");
+  }
+  return details;
+}
+
+function buildArtifactUrl(serverBaseUrl: string | null, path: string | null | undefined): string | null {
+  if (!path) {
+    return null;
+  }
+  const trimmed = path.trim();
+  if (!trimmed) {
+    return null;
+  }
+  if (/^https?:\/\//i.test(trimmed)) {
+    return trimmed;
+  }
+  if (!serverBaseUrl) {
+    return null;
+  }
+  const normalizedBase = serverBaseUrl.replace(/\/+$/, "");
+  const normalizedPath = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
+  return `${normalizedBase}${normalizedPath}`;
+}
+
+function formatArtifactPayload(value: unknown): string | null {
+  if (value === null || value === undefined) {
+    return null;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim();
+    return normalized || null;
+  }
+  try {
+    return JSON.stringify(value, null, 2);
+  } catch {
+    return String(value);
+  }
+}
+
+function recordString(record: Record<string, unknown> | null, key: string): string | null {
+  const value = record?.[key];
+  return typeof value === "string" && value.trim() ? value.trim() : null;
+}
+
+function artifactMimeType(detail: NovaAdaptBridgeControlArtifactDetail | null): string | null {
+  return (
+    recordString(detail?.metadata ?? null, "mime_type") ||
+    recordString(detail?.metadata ?? null, "content_type") ||
+    recordString(detail?.data ?? null, "mime_type") ||
+    recordString(detail?.data ?? null, "content_type")
+  );
+}
+
+function isImageMimeType(value: string | null): boolean {
+  return typeof value === "string" && /^image\//i.test(value);
+}
+
+function isJsonMimeType(value: string | null): boolean {
+  return typeof value === "string" && /(\/|\\b)(json|ndjson)(;|$)/i.test(value);
+}
+
+function isTextMimeType(value: string | null): boolean {
+  return (
+    typeof value === "string" &&
+    (/^text\//i.test(value) || /(xml|yaml|csv|html|javascript|typescript|markdown|plain)/i.test(value))
+  );
+}
+
+function isCodeMimeType(value: string | null): boolean {
+  return (
+    typeof value === "string" &&
+    /(javascript|typescript|python|x-python|java|x-java|go|x-go|rust|x-rust|shell|x-shellscript|jsonc|toml|yaml|x-yaml|xml|html|css|x-csrc|x-c\+\+src|x-ruby)/i.test(
+      value
+    )
+  );
+}
+
+function isLogMimeType(value: string | null): boolean {
+  return typeof value === "string" && /(x-log|logfile|journal|syslog|event-stream)/i.test(value);
+}
+
+function looksLikeLogOutput(value: string | null): boolean {
+  if (!value) {
+    return false;
+  }
+  const sample = value.trim();
+  if (!sample) {
+    return false;
+  }
+  return /(\d{4}-\d{2}-\d{2}|\bINFO\b|\bWARN\b|\bERROR\b|\bDEBUG\b|\bTRACE\b|\blog\b)/i.test(sample);
+}
+
+function tryFormatJsonString(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return null;
+  }
+}
+
+type ArtifactRenderKind = "image" | "json" | "code" | "log" | "text" | "binary" | "empty";
+
+function artifactRenderKind(args: {
+  mimeType: string | null;
+  hasImagePreview: boolean;
+  output: string | null;
+  detail: NovaAdaptBridgeControlArtifactDetail | null;
+  previewUrl: string | null;
+}): ArtifactRenderKind {
+  if (args.hasImagePreview) {
+    return "image";
+  }
+  if (isJsonMimeType(args.mimeType) || tryFormatJsonString(args.output) || typeof args.detail?.data === "object") {
+    return "json";
+  }
+  if (isCodeMimeType(args.mimeType) || (/```/.test(args.output ?? "") && !!args.output)) {
+    return "code";
+  }
+  if (isLogMimeType(args.mimeType) || looksLikeLogOutput(args.output)) {
+    return "log";
+  }
+  if (isTextMimeType(args.mimeType) || args.output) {
+    return "text";
+  }
+  if (args.previewUrl) {
+    return "binary";
+  }
+  return "empty";
 }
 
 function buildCompatibilityWarning(
@@ -231,6 +457,13 @@ function RemoteBridgeSection({
   error,
   health,
   memoryStatus,
+  browserStatus,
+  voiceStatus,
+  canvasStatus,
+  mobileStatus,
+  homeAssistantStatus,
+  mqttStatus,
+  controlArtifacts,
   governance,
   plans,
   jobs,
@@ -241,6 +474,8 @@ function RemoteBridgeSection({
   mutationPlanId,
   mutationWorkflowId,
   governanceBusy,
+  serverBaseUrl,
+  serverToken,
   onRefresh,
   onApprovePlan,
   onRejectPlan,
@@ -252,6 +487,7 @@ function RemoteBridgeSection({
   onResetGovernanceUsage,
   onCancelAllJobs,
   onLaunchTemplate,
+  onLoadControlArtifact,
 }: {
   loading: boolean;
   refreshing: boolean;
@@ -261,6 +497,13 @@ function RemoteBridgeSection({
   error: string | null;
   health: NovaAdaptBridgeHealth | null;
   memoryStatus: NovaAdaptBridgeMemoryStatus | null;
+  browserStatus: NovaAdaptBridgeSurfaceStatus | null;
+  voiceStatus: NovaAdaptBridgeSurfaceStatus | null;
+  canvasStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mobileStatus: NovaAdaptBridgeSurfaceStatus | null;
+  homeAssistantStatus: NovaAdaptBridgeSurfaceStatus | null;
+  mqttStatus: NovaAdaptBridgeSurfaceStatus | null;
+  controlArtifacts: NovaAdaptBridgeControlArtifact[];
   governance: NovaAdaptBridgeGovernance | null;
   plans: NovaAdaptBridgePlan[];
   jobs: NovaAdaptBridgeJob[];
@@ -271,6 +514,8 @@ function RemoteBridgeSection({
   mutationPlanId: string | null;
   mutationWorkflowId: string | null;
   governanceBusy: boolean;
+  serverBaseUrl: string | null;
+  serverToken: string | null;
   onRefresh: () => void;
   onApprovePlan: (planId: string) => void;
   onRejectPlan: (planId: string) => void;
@@ -282,8 +527,84 @@ function RemoteBridgeSection({
   onResetGovernanceUsage: () => void;
   onCancelAllJobs: () => void;
   onLaunchTemplate: (template: NovaAdaptBridgeTemplate, mode: "plan" | "workflow") => void;
+  onLoadControlArtifact: (artifactId: string) => Promise<NovaAdaptBridgeControlArtifactDetail | null>;
 }) {
   const compatibilityWarning = buildCompatibilityWarning(capabilities, health);
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | null>(null);
+  const [artifactViewMode, setArtifactViewMode] = useState<"preview" | "details">("preview");
+  const [selectedArtifactDetail, setSelectedArtifactDetail] = useState<NovaAdaptBridgeControlArtifactDetail | null>(null);
+  const [artifactDetailLoading, setArtifactDetailLoading] = useState(false);
+  const [artifactDetailError, setArtifactDetailError] = useState<string | null>(null);
+  const controlSurfaces = [
+    { key: "browser", title: "Browser", enabled: capabilities.browserStatus, status: browserStatus },
+    { key: "voice", title: "Voice", enabled: capabilities.voiceStatus, status: voiceStatus },
+    { key: "canvas", title: "Canvas", enabled: capabilities.canvasStatus, status: canvasStatus },
+    { key: "mobile", title: "Mobile", enabled: capabilities.mobileStatus, status: mobileStatus },
+    { key: "homeassistant", title: "Home Assistant", enabled: capabilities.homeAssistantStatus, status: homeAssistantStatus },
+    { key: "mqtt", title: "MQTT", enabled: capabilities.mqttStatus, status: mqttStatus },
+  ];
+  const visibleControlSurfaces = controlSurfaces.filter((surface) => surface.enabled || surface.status);
+  const visibleArtifacts = controlArtifacts.slice(0, 4);
+  const selectedArtifact =
+    visibleArtifacts.find((artifact) => artifact.artifactId === selectedArtifactId) || visibleArtifacts[0] || null;
+  const selectedPreviewUrl = selectedArtifact ? buildArtifactUrl(serverBaseUrl, selectedArtifact.previewPath) : null;
+  const selectedDetailUrl = selectedArtifact ? buildArtifactUrl(serverBaseUrl, selectedArtifact.detailPath) : null;
+  const selectedArtifactDetails = selectedArtifact ? describeControlArtifact(selectedArtifact) : [];
+  const selectedArtifactOutput =
+    (selectedArtifactDetail?.output && selectedArtifactDetail.output.trim()) || selectedArtifact?.outputPreview || null;
+  const selectedArtifactAction = formatArtifactPayload(selectedArtifactDetail?.action);
+  const selectedArtifactData = formatArtifactPayload(selectedArtifactDetail?.data);
+  const selectedArtifactMetadata = formatArtifactPayload(selectedArtifactDetail?.metadata);
+  const selectedArtifactMimeType = artifactMimeType(selectedArtifactDetail);
+  const selectedArtifactIsImage = isImageMimeType(selectedArtifactMimeType) && Boolean(selectedPreviewUrl);
+  const selectedArtifactRenderType = artifactRenderKind({
+    mimeType: selectedArtifactMimeType,
+    hasImagePreview: selectedArtifactIsImage,
+    output: selectedArtifactOutput,
+    detail: selectedArtifactDetail,
+    previewUrl: selectedPreviewUrl,
+  });
+  const selectedArtifactJson =
+    tryFormatJsonString(selectedArtifactOutput) ||
+    (selectedArtifactDetail?.data ? formatArtifactPayload(selectedArtifactDetail.data) : null);
+
+  useEffect(() => {
+    let active = true;
+    if (!selectedArtifact) {
+      setSelectedArtifactDetail(null);
+      setArtifactDetailError(null);
+      setArtifactDetailLoading(false);
+      return () => {
+        active = false;
+      };
+    }
+    setArtifactDetailLoading(true);
+    setArtifactDetailError(null);
+    setSelectedArtifactDetail(null);
+    void onLoadControlArtifact(selectedArtifact.artifactId)
+      .then((detail) => {
+        if (!active) {
+          return;
+        }
+        setSelectedArtifactDetail(detail);
+      })
+      .catch((nextError) => {
+        if (!active) {
+          return;
+        }
+        const detail = nextError instanceof Error ? nextError.message : String(nextError || "Unknown error");
+        setArtifactDetailError(detail);
+      })
+      .finally(() => {
+        if (!active) {
+          return;
+        }
+        setArtifactDetailLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [onLoadControlArtifact, selectedArtifact]);
 
   return (
     <View style={styles.panel}>
@@ -311,6 +632,25 @@ function RemoteBridgeSection({
             {capabilities.memoryStatus ? `Memory ${summarizeMemoryStatus(memoryStatus)}` : "Memory status unavailable on this runtime."}
           </Text>
           {error ? <Text style={styles.emptyText}>{`Runtime error: ${error}`}</Text> : null}
+
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Control Surfaces</Text>
+            {visibleControlSurfaces.length === 0 ? (
+              <Text style={styles.emptyText}>This server runtime does not expose control surfaces yet.</Text>
+            ) : (
+              visibleControlSurfaces.map((surface) => (
+                <View key={`bridge-surface-${surface.key}`} style={styles.terminalCard}>
+                  <View style={styles.terminalNameRow}>
+                    <Text style={styles.terminalName}>{surface.title}</Text>
+                    <Text style={[styles.modePill, surface.status?.ok ? styles.modePillShell : styles.modePillAi]}>
+                      {surface.status?.ok ? "READY" : "LIMITED"}
+                    </Text>
+                  </View>
+                  <Text style={styles.serverSubtitle}>{summarizeSurfaceStatus(surface.title, surface.status)}</Text>
+                </View>
+              ))
+            )}
+          </View>
 
           {!capabilities.governance ? (
             <View style={styles.panel}>
@@ -488,6 +828,276 @@ function RemoteBridgeSection({
             )}
           </View>
 
+          <View style={styles.panel}>
+            <Text style={styles.panelLabel}>Control Artifacts</Text>
+            {visibleArtifacts.length === 0 ? (
+              <Text style={styles.emptyText}>
+                {capabilities.controlArtifacts
+                  ? "No recent control artifacts yet."
+                  : "This server runtime does not expose control artifacts yet."}
+              </Text>
+            ) : (
+              <>
+                {visibleArtifacts.map((artifact) => (
+                  <Pressable
+                    key={`bridge-artifact-${artifact.artifactId}`}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Select artifact ${artifact.artifactId}`}
+                    style={[
+                      styles.terminalCard,
+                      artifact.artifactId === selectedArtifact?.artifactId ? styles.chipActive : null,
+                    ]}
+                    onPress={() => {
+                      setSelectedArtifactId(artifact.artifactId);
+                    }}
+                  >
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>{artifact.goal || artifact.artifactId}</Text>
+                      <Text style={[styles.modePill, modePillForStatus(artifact.status)]}>
+                        {bridgeStatusLabel(artifact.status)}
+                      </Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>{summarizeControlArtifact(artifact)}</Text>
+                    <Text style={styles.emptyText}>
+                      {artifact.outputPreview ||
+                        artifact.target ||
+                        artifact.model ||
+                        `Artifact ${artifact.artifactId}`}
+                    </Text>
+                  </Pressable>
+                ))}
+                {selectedArtifact ? (
+                  <View style={styles.terminalCard}>
+                    <View style={styles.terminalNameRow}>
+                      <Text style={styles.terminalName}>
+                        {artifactViewMode === "preview" ? "Artifact Preview" : "Artifact Details"}
+                      </Text>
+                      <Text style={[styles.modePill, modePillForStatus(selectedArtifact.status)]}>
+                        {bridgeStatusLabel(selectedArtifact.status)}
+                      </Text>
+                    </View>
+                    <Text style={styles.serverSubtitle}>
+                      {selectedArtifact.goal || selectedArtifact.artifactId}
+                    </Text>
+                    <View style={styles.actionsWrap}>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show preview for artifact ${selectedArtifact.artifactId}`}
+                        style={[styles.actionButton, artifactViewMode === "preview" ? styles.chipActive : null]}
+                        onPress={() => setArtifactViewMode("preview")}
+                      >
+                        <Text style={styles.actionButtonText}>Preview</Text>
+                      </Pressable>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Show details for artifact ${selectedArtifact.artifactId}`}
+                        style={[styles.actionButton, artifactViewMode === "details" ? styles.chipActive : null]}
+                        onPress={() => setArtifactViewMode("details")}
+                      >
+                        <Text style={styles.actionButtonText}>Details</Text>
+                      </Pressable>
+                      {artifactViewMode === "preview" && selectedPreviewUrl ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open preview url for artifact ${selectedArtifact.artifactId}`}
+                          style={styles.actionButton}
+                          onPress={() => {
+                            void Linking.openURL(selectedPreviewUrl);
+                          }}
+                        >
+                          <Text style={styles.actionButtonText}>Open Preview</Text>
+                        </Pressable>
+                      ) : null}
+                      {artifactViewMode === "details" && selectedDetailUrl ? (
+                        <Pressable
+                          accessibilityRole="button"
+                          accessibilityLabel={`Open detail url for artifact ${selectedArtifact.artifactId}`}
+                          style={styles.actionButton}
+                          onPress={() => {
+                            void Linking.openURL(selectedDetailUrl);
+                          }}
+                        >
+                          <Text style={styles.actionButtonText}>Open Details</Text>
+                        </Pressable>
+                      ) : null}
+                    </View>
+                    {artifactViewMode === "preview" ? (
+                      <>
+                        {artifactDetailLoading ? <Text style={styles.emptyText}>Loading artifact preview...</Text> : null}
+                        {selectedArtifactRenderType === "image" && selectedPreviewUrl ? (
+                          <Image
+                            accessibilityLabel={`Inline preview for artifact ${selectedArtifact.artifactId}`}
+                            source={{
+                              uri: selectedPreviewUrl,
+                              ...(serverToken ? { headers: { Authorization: `Bearer ${serverToken}` } } : {}),
+                            }}
+                            style={{
+                              width: "100%",
+                              height: 180,
+                              borderRadius: 20,
+                              marginTop: 8,
+                              marginBottom: 8,
+                              backgroundColor: "rgba(7, 10, 24, 0.95)",
+                            }}
+                            resizeMode="cover"
+                          />
+                        ) : null}
+                        {selectedArtifactRenderType === "json" && selectedArtifactJson ? (
+                          <>
+                            <Text style={styles.panelLabel}>JSON Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactJson}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "code" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Code Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "log" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Log Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "text" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Text Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "binary" && !artifactDetailLoading ? (
+                          <Text style={styles.emptyText}>
+                            Binary artifact preview is available from the companion endpoint. Use Open Preview for the rendered view.
+                          </Text>
+                        ) : null}
+                        {selectedArtifactRenderType === "empty" && !artifactDetailLoading ? (
+                          <Text style={styles.emptyText}>
+                            No inline preview text was returned for this artifact. Use Open Preview for the server-rendered view.
+                          </Text>
+                        ) : null}
+                        {artifactDetailError ? <Text style={styles.emptyText}>{`Artifact detail error: ${artifactDetailError}`}</Text> : null}
+                      </>
+                    ) : (
+                      <>
+                        <Text style={styles.emptyText}>{summarizeControlArtifact(selectedArtifact)}</Text>
+                        {selectedArtifactDetails.map((detail) => (
+                          <Text key={`${selectedArtifact.artifactId}-${detail}`} style={styles.emptyText}>
+                            {detail}
+                          </Text>
+                        ))}
+                        {selectedArtifactMimeType ? (
+                          <Text style={styles.emptyText}>{`Type ${selectedArtifactMimeType}`}</Text>
+                        ) : null}
+                        {artifactDetailLoading ? <Text style={styles.emptyText}>Loading artifact details...</Text> : null}
+                        {selectedArtifactRenderType === "image" && selectedPreviewUrl ? (
+                          <>
+                            <Text style={styles.panelLabel}>Image</Text>
+                            <Image
+                              accessibilityLabel={`Detailed image for artifact ${selectedArtifact.artifactId}`}
+                              source={{
+                                uri: selectedPreviewUrl,
+                                ...(serverToken ? { headers: { Authorization: `Bearer ${serverToken}` } } : {}),
+                              }}
+                              style={{
+                                width: "100%",
+                                height: 180,
+                                borderRadius: 20,
+                                marginTop: 8,
+                                marginBottom: 8,
+                                backgroundColor: "rgba(7, 10, 24, 0.95)",
+                              }}
+                              resizeMode="cover"
+                            />
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "json" && selectedArtifactJson ? (
+                          <>
+                            <Text style={styles.panelLabel}>JSON</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactJson}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "code" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Code</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "log" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Log Output</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "text" && selectedArtifactOutput ? (
+                          <>
+                            <Text style={styles.panelLabel}>Output</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "binary" ? (
+                          <Text style={styles.emptyText}>
+                            Binary artifact metadata is available below. Use Open Details or Open Preview for the full payload.
+                          </Text>
+                        ) : null}
+                        {selectedArtifactAction ? (
+                          <>
+                            <Text style={styles.panelLabel}>Action</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactAction}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactData ? (
+                          <>
+                            <Text style={styles.panelLabel}>Data</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactData}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactMetadata ? (
+                          <>
+                            <Text style={styles.panelLabel}>Metadata</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactMetadata}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {artifactDetailError ? <Text style={styles.emptyText}>{`Artifact detail error: ${artifactDetailError}`}</Text> : null}
+                        {!selectedArtifactDetails.length &&
+                        !selectedArtifactOutput &&
+                        !selectedArtifactJson &&
+                        !selectedArtifactAction &&
+                        !selectedArtifactData &&
+                        !selectedArtifactMetadata &&
+                        !artifactDetailLoading ? (
+                          <Text style={styles.emptyText}>No additional detail fields were returned for this artifact.</Text>
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                ) : null}
+              </>
+            )}
+          </View>
+
           {!capabilities.templates ? (
             <View style={styles.panel}>
               <Text style={styles.panelLabel}>Saved Templates</Text>
@@ -627,6 +1237,14 @@ export function NovaAgentPanel({
     error: bridgeError,
     health: bridgeHealth,
     memoryStatus: bridgeMemoryStatus,
+    browserStatus,
+    voiceStatus,
+    canvasStatus,
+    mobileStatus,
+    homeAssistantStatus,
+    mqttStatus,
+    controlArtifacts,
+    loadControlArtifact,
     governance,
     plans: bridgePlans,
     jobs: bridgeJobs,
@@ -814,6 +1432,13 @@ export function NovaAgentPanel({
         error={bridgeError}
         health={bridgeHealth}
         memoryStatus={bridgeMemoryStatus}
+        browserStatus={browserStatus}
+        voiceStatus={voiceStatus}
+        canvasStatus={canvasStatus}
+        mobileStatus={mobileStatus}
+        homeAssistantStatus={homeAssistantStatus}
+        mqttStatus={mqttStatus}
+        controlArtifacts={controlArtifacts}
         governance={governance}
         plans={bridgePlans}
         jobs={bridgeJobs}
@@ -824,6 +1449,8 @@ export function NovaAgentPanel({
         mutationPlanId={remoteMutationPlanId}
         mutationWorkflowId={remoteMutationWorkflowId}
         governanceBusy={governanceBusy}
+        serverBaseUrl={server?.baseUrl ?? null}
+        serverToken={server?.token ?? null}
         onRefresh={() => {
           void refreshBridge({ quiet: true });
         }}
@@ -859,6 +1486,7 @@ export function NovaAgentPanel({
         onLaunchTemplate={(template, mode) => {
           void runTemplateLaunch(template, mode);
         }}
+        onLoadControlArtifact={loadControlArtifact}
       />
 
       {showRemoteCreateControls ? (
