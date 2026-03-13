@@ -1,0 +1,27 @@
+{
+  "updated": "2026-03-13",
+  "repo": "/Users/desmondpottle/Documents/New project/NovaRemote",
+  "branch": "feat/final-polish-and-remaining-work",
+  "remote_sync": {
+    "branch": "origin/feat/final-polish-and-remaining-work",
+    "ahead": 0,
+    "behind": 0
+  },
+  "unrelated_local_changes": [
+    "docs/APP_STORE_REVIEW_NOTES.md",
+    ".playwright-cli/"
+  ],
+  "primary_next_goal": "Finish temp-path iPhone build/install and validate Nova voice on the physical device.",
+  "open_issues": [
+    "expo run:ios --device stalled after entering xcodebuild",
+    "direct repo-path xcodebuild stalled before derived data creation",
+    "temp-path xcodebuild workaround progressed into real iphoneos compilation but final install status was not captured",
+    "Nova speech output has not been confirmed on a real device"
+  ],
+  "resume_order": [
+    "Read FINAL_HANDOFF.md",
+    "Verify git status and device state",
+    "Run temp-path build/install workflow to Dez iphone",
+    "Validate Test Nova Voice, chat Voice, hold-to-talk, Hey Nova, and Hands-Free on device"
+  ]
+}
