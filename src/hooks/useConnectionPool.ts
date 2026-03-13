@@ -1552,6 +1552,17 @@ export function useConnectionPool({
     return session;
   }, []);
 
+  const refreshCodexTail = useCallback(
+    (serverId: string, session: string, delays: number[] = [350, 1200, 3000]) => {
+      delays.forEach((delayMs) => {
+        setTimeout(() => {
+          void fetchTail(serverId, session, false);
+        }, delayMs);
+      });
+    },
+    [fetchTail]
+  );
+
   const createSession = useCallback(
     async (
       serverId: string,
@@ -1584,8 +1595,11 @@ export function useConnectionPool({
         const openSessions = prependUnique(session, stateRef.current[serverId]?.openSessions || []);
         dispatch({ type: "SET_SESSIONS", serverId, allSessions, openSessions });
         dispatch({ type: "SET_SEND_MODE", serverId, session, mode: "ai" });
-        if (data.tail) {
+        if (data.tail !== undefined) {
           dispatch({ type: "SET_TAIL", serverId, session, output: data.tail || "" });
+        }
+        if (prompt.trim() || !data.tail?.trim()) {
+          refreshCodexTail(serverId, session);
         }
 
         if (openOnMac && data.open_on_mac && !data.open_on_mac.opened) {
@@ -1623,7 +1637,7 @@ export function useConnectionPool({
 
       return session;
     },
-    []
+    [fetchTail, refreshCodexTail]
   );
 
   const sendCommand = useCallback(
@@ -1664,9 +1678,10 @@ export function useConnectionPool({
             method: "POST",
             body: JSON.stringify({ session, message: currentDraft }),
           });
-          if (data.tail) {
+          if (data.tail !== undefined) {
             dispatch({ type: "SET_TAIL", serverId, session, output: data.tail || "" });
           }
+          refreshCodexTail(serverId, session);
           return;
         }
 
@@ -1713,7 +1728,7 @@ export function useConnectionPool({
         dispatch({ type: "SET_SEND_BUSY", serverId, session, busy: false });
       }
     },
-    [shellRunWaitMs]
+    [refreshCodexTail, shellRunWaitMs]
   );
 
   const stopSession = useCallback(async (serverId: string, session: string) => {

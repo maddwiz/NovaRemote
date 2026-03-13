@@ -53,11 +53,11 @@ export function SettingsScreen({
       <PageHeroCard
         eyebrow="Nova Settings"
         title="Shape voice control and reply behavior."
-        summary="Tune wake phrase, conversation timeout, hands-free mode, and spoken replies."
+        summary="Tune wake phrase, silence timing, hands-free mode, and spoken replies."
         tone="violet"
         stats={[
           { label: "Wake", value: wakePhrase || "hey nova" },
-          { label: "Idle", value: `${timeoutSeconds}s` },
+          { label: "Silence", value: `${timeoutSeconds}s` },
           { label: "Standby", value: alwaysListeningEnabled ? "On" : "Off" },
         ]}
       />
@@ -101,26 +101,29 @@ export function SettingsScreen({
         />
 
         <View style={styles.pageMenuStepperRow}>
-          <Text style={styles.pageMenuSwitchLabel}>{`Conversation timeout: ${timeoutSeconds}s`}</Text>
+          <Text style={styles.pageMenuSwitchLabel}>{`Silence before Nova responds: ${timeoutSeconds}s`}</Text>
           <View style={styles.pageMenuStepperButtons}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Decrease Nova conversation timeout"
+              accessibilityLabel="Decrease Nova silence timeout"
               style={styles.pageMenuStepperButton}
-              onPress={() => onSetConversationIdleMs(Math.max(MIN_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs - 5000))}
+              onPress={() => onSetConversationIdleMs(Math.max(MIN_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs - 1000))}
             >
               <Text style={styles.pageMenuStepperText}>-</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Increase Nova conversation timeout"
+              accessibilityLabel="Increase Nova silence timeout"
               style={styles.pageMenuStepperButton}
-              onPress={() => onSetConversationIdleMs(Math.min(MAX_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs + 5000))}
+              onPress={() => onSetConversationIdleMs(Math.min(MAX_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs + 1000))}
             >
               <Text style={styles.pageMenuStepperText}>+</Text>
             </Pressable>
           </View>
         </View>
+        <Text style={styles.serverSubtitle}>
+          Nova will keep listening until you stop talking for this long before sending the reply.
+        </Text>
       </View>
 
       <View style={styles.panel}>

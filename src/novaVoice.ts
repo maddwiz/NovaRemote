@@ -1,7 +1,7 @@
 export const DEFAULT_NOVA_WAKE_PHRASE = "hey nova";
 export const DEFAULT_NOVA_CONVERSATION_IDLE_MS = 10 * 1000;
-export const MIN_NOVA_CONVERSATION_IDLE_MS = 5 * 1000;
-export const MAX_NOVA_CONVERSATION_IDLE_MS = 30 * 1000;
+export const MIN_NOVA_CONVERSATION_IDLE_MS = 1 * 1000;
+export const MAX_NOVA_CONVERSATION_IDLE_MS = 15 * 1000;
 
 export type NovaVoiceSettings = {
   alwaysListeningEnabled: boolean;

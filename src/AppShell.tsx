@@ -4218,7 +4218,7 @@ export default function AppShell() {
           return;
         }
         void stopVoiceCaptureIntoNovaRef.current();
-      }, Math.max(1200, Math.min(delayMs, 15000)));
+      }, Math.max(1500, Math.min(delayMs, 60000)));
     },
     [clearNovaVoiceStopTimer, stopLiveRecognition]
   );
@@ -4409,6 +4409,8 @@ export default function AppShell() {
           "open vr",
           "tell codex",
         ],
+        continuous: true,
+        silenceTimeoutMs: mode === "walkie" ? undefined : novaConversationIdleMsRef.current,
         onTranscript: async (transcript) => {
           await handleNovaTranscript(transcript.trim(), mode);
         },
@@ -4423,7 +4425,7 @@ export default function AppShell() {
           devVoiceUiLog("startNovaVoiceCapture:liveError", error instanceof Error ? error.message : String(error));
           void startVoiceCapture()
             .then(() => {
-              scheduleNovaVoiceStop(mode === "walkie" ? 15000 : NOVA_VOICE_CAPTURE_MS);
+              scheduleNovaVoiceStop(NOVA_VOICE_CAPTURE_MS);
             })
             .catch((fallbackError) => {
               const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
