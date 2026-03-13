@@ -27,13 +27,13 @@ Updated: 2026-03-11
 - audit-event SSE proxy route
 - validated sidecar stack with `codex_remote + NovaAdapt + NovaSpine`
 - validated live host contract for `/health`, `/agents/health`, and `/agents/capabilities` against the installed macOS companion service, including explicit protocol-version fields
-- validated the merged NovaAdapt `main` baseline `d7b2e1e` locally against the companion contract using `codex_remote/scripts/validate_nova_sidecars.py --compose-only --novaadapt-contract-check --novaadapt-repo-path <NovaAdapt>`
+- validated the merged NovaAdapt `main` baseline `0ce2c44` locally against the companion contract using `codex_remote/scripts/validate_nova_sidecars.py --compose-only --novaadapt-contract-check --novaadapt-repo-path <NovaAdapt>`
 - the pinned NovaAdapt compatibility baseline is now tracked explicitly in `codex_remote/compat/novaadapt_baseline.json`
 - repo-local sidecar validator in `codex_remote/scripts/validate_nova_sidecars.py` now supports both package checks and live runtime checks (`--live-check`)
 - repo-local lifecycle wrappers now exist for sidecar bring-up and teardown: `scripts/start_nova_sidecars.sh` and `scripts/stop_nova_sidecars.sh`
 - clean rollback/bootstrap verification now passes against the packaged sidecar helpers, and the bootstrap helper retries live validation while NovaSpine finishes its first package install
 - validated host forwarding for `/agents/workflows/status`, `/agents/workflows/list`, `/agents/workflows/item`, and `/agents/workflows/start`
-- note: runtime-governance proxy code is in place in `codex_remote`, but the currently running local sidecar stack must be rebuilt before those routes answer live
+- runtime-governance proxy routes are now validated live through the sidecar stack (`/agents/runtime/governance`, `/agents/runtime/jobs/cancel_all`)
 
 ### Still pending
 
