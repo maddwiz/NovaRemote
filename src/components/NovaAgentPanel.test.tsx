@@ -389,7 +389,8 @@ describe("NovaAgentPanel", () => {
     });
 
     expect(() => renderer.root.findByProps({ children: "Artifact Details" })).not.toThrow();
-    expect(JSON.stringify(renderer.toJSON())).toContain("Detailed artifact output");
+    expect(() => renderer.root.findByProps({ children: "Image" })).not.toThrow();
+    expect(() => renderer.root.findByProps({ children: "Type image/png" })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "Action" })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "Data" })).not.toThrow();
     expect(() => renderer.root.findByProps({ children: "Metadata" })).not.toThrow();
@@ -418,6 +419,141 @@ describe("NovaAgentPanel", () => {
     expect(pauseRuntime).toHaveBeenCalledWith("Paused from NovaRemote mobile panel");
     expect(resetGovernanceUsage).toHaveBeenCalledTimes(1);
     expect(cancelAllJobs).toHaveBeenCalledWith("Canceled from NovaRemote mobile panel");
+
+    await act(async () => {
+      renderer.unmount();
+    });
+  });
+
+  it("renders json artifacts with typed preview and details", async () => {
+    const loadControlArtifact = vi.fn(async () => ({
+      artifactId: "artifact-json",
+      createdAt: null,
+      controlType: "mobile",
+      status: "completed",
+      dangerous: false,
+      goal: "Collect device summary",
+      platform: "ios",
+      transport: "appium",
+      outputPreview: "{\"device\":\"iphone\"}",
+      actionType: null,
+      target: null,
+      model: null,
+      modelId: null,
+      previewAvailable: true,
+      previewPath: "/control/artifacts/artifact-json/preview",
+      detailPath: "/control/artifacts/artifact-json",
+      output: "{\"device\":\"iphone\",\"state\":\"ready\"}",
+      action: { type: "snapshot" },
+      data: { battery: 92 },
+      metadata: { mime_type: "application/json" },
+    }));
+    useNovaAdaptBridgeMock.mockReturnValue({
+      loading: false,
+      refreshing: false,
+      supported: true,
+      runtimeAvailable: true,
+      capabilities: {
+        memoryStatus: true,
+        governance: false,
+        workflows: false,
+        templates: false,
+        templateGallery: false,
+        browserStatus: false,
+        voiceStatus: false,
+        canvasStatus: false,
+        mobileStatus: false,
+        homeAssistantStatus: false,
+        mqttStatus: false,
+        controlArtifacts: true,
+      },
+      error: null,
+      health: { ok: true },
+      memoryStatus: { backend: "novaspine-http", enabled: true },
+      governance: null,
+      plans: [],
+      jobs: [],
+      workflows: [],
+      templates: [],
+      galleryTemplates: [],
+      browserStatus: null,
+      voiceStatus: null,
+      canvasStatus: null,
+      mobileStatus: null,
+      homeAssistantStatus: null,
+      mqttStatus: null,
+      controlArtifacts: [
+        {
+          artifactId: "artifact-json",
+          createdAt: null,
+          controlType: "mobile",
+          status: "completed",
+          dangerous: false,
+          goal: "Collect device summary",
+          platform: "ios",
+          transport: "appium",
+          outputPreview: "{\"device\":\"iphone\"}",
+          actionType: null,
+          target: null,
+          model: null,
+          modelId: null,
+          previewAvailable: true,
+          previewPath: "/control/artifacts/artifact-json/preview",
+          detailPath: "/control/artifacts/artifact-json",
+        },
+      ],
+      loadControlArtifact,
+      refresh: vi.fn(),
+      createPlan: vi.fn(async () => null),
+      startWorkflow: vi.fn(async () => null),
+      importTemplate: vi.fn(async () => null),
+      launchTemplate: vi.fn(async () => false),
+      resumeWorkflow: vi.fn(async () => true),
+      approvePlanAsync: vi.fn(async () => true),
+      rejectPlan: vi.fn(async () => true),
+      retryFailedPlanAsync: vi.fn(async () => true),
+      undoPlan: vi.fn(async () => true),
+      pauseRuntime: vi.fn(async () => true),
+      resumeRuntime: vi.fn(async () => true),
+      resetGovernanceUsage: vi.fn(async () => true),
+      cancelAllJobs: vi.fn(async () => true),
+    });
+
+    let renderer!: TestRenderer.ReactTestRenderer;
+    await act(async () => {
+      renderer = TestRenderer.create(
+        React.createElement(NovaAgentPanel, {
+          server: {
+            id: "dgx",
+            name: "DGX",
+            baseUrl: "https://dgx.novaremote.test",
+            token: "token",
+            defaultCwd: "/workspace",
+          },
+          serverId: "dgx",
+          serverName: "DGX",
+          sessions: [],
+          isPro: true,
+          onShowPaywall: vi.fn(),
+          onQueueCommand: vi.fn(),
+        })
+      );
+    });
+
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(loadControlArtifact).toHaveBeenCalledWith("artifact-json");
+    expect(() => renderer.root.findByProps({ children: "JSON Preview" })).not.toThrow();
+    expect(JSON.stringify(renderer.toJSON())).toContain("\\\"state\\\": \\\"ready\\\"");
+
+    await act(async () => {
+      renderer.root.findByProps({ accessibilityLabel: "Show details for artifact artifact-json" }).props.onPress();
+    });
+
+    expect(() => renderer.root.findByProps({ children: "JSON" })).not.toThrow();
+    expect(JSON.stringify(renderer.toJSON())).toContain("application/json");
 
     await act(async () => {
       renderer.unmount();

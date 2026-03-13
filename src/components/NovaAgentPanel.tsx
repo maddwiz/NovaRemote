@@ -324,6 +324,56 @@ function isImageMimeType(value: string | null): boolean {
   return typeof value === "string" && /^image\//i.test(value);
 }
 
+function isJsonMimeType(value: string | null): boolean {
+  return typeof value === "string" && /(\/|\\b)(json|ndjson)(;|$)/i.test(value);
+}
+
+function isTextMimeType(value: string | null): boolean {
+  return (
+    typeof value === "string" &&
+    (/^text\//i.test(value) || /(xml|yaml|csv|html|javascript|typescript|markdown|plain)/i.test(value))
+  );
+}
+
+function tryFormatJsonString(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return null;
+  }
+  try {
+    return JSON.stringify(JSON.parse(trimmed), null, 2);
+  } catch {
+    return null;
+  }
+}
+
+type ArtifactRenderKind = "image" | "json" | "text" | "binary" | "empty";
+
+function artifactRenderKind(args: {
+  mimeType: string | null;
+  hasImagePreview: boolean;
+  output: string | null;
+  detail: NovaAdaptBridgeControlArtifactDetail | null;
+  previewUrl: string | null;
+}): ArtifactRenderKind {
+  if (args.hasImagePreview) {
+    return "image";
+  }
+  if (isJsonMimeType(args.mimeType) || tryFormatJsonString(args.output) || typeof args.detail?.data === "object") {
+    return "json";
+  }
+  if (isTextMimeType(args.mimeType) || args.output) {
+    return "text";
+  }
+  if (args.previewUrl) {
+    return "binary";
+  }
+  return "empty";
+}
+
 function buildCompatibilityWarning(
   capabilities: NovaAdaptBridgeCapabilities,
   health: NovaAdaptBridgeHealth | null
@@ -477,6 +527,16 @@ function RemoteBridgeSection({
   const selectedArtifactMetadata = formatArtifactPayload(selectedArtifactDetail?.metadata);
   const selectedArtifactMimeType = artifactMimeType(selectedArtifactDetail);
   const selectedArtifactIsImage = isImageMimeType(selectedArtifactMimeType) && Boolean(selectedPreviewUrl);
+  const selectedArtifactRenderType = artifactRenderKind({
+    mimeType: selectedArtifactMimeType,
+    hasImagePreview: selectedArtifactIsImage,
+    output: selectedArtifactOutput,
+    detail: selectedArtifactDetail,
+    previewUrl: selectedPreviewUrl,
+  });
+  const selectedArtifactJson =
+    tryFormatJsonString(selectedArtifactOutput) ||
+    (selectedArtifactDetail?.data ? formatArtifactPayload(selectedArtifactDetail.data) : null);
 
   useEffect(() => {
     let active = true;
@@ -834,7 +894,7 @@ function RemoteBridgeSection({
                     {artifactViewMode === "preview" ? (
                       <>
                         {artifactDetailLoading ? <Text style={styles.emptyText}>Loading artifact preview...</Text> : null}
-                        {selectedArtifactIsImage && selectedPreviewUrl ? (
+                        {selectedArtifactRenderType === "image" && selectedPreviewUrl ? (
                           <Image
                             accessibilityLabel={`Inline preview for artifact ${selectedArtifact.artifactId}`}
                             source={{
@@ -852,15 +912,29 @@ function RemoteBridgeSection({
                             resizeMode="cover"
                           />
                         ) : null}
-                        {selectedArtifactOutput ? (
+                        {selectedArtifactRenderType === "json" && selectedArtifactJson ? (
+                          <>
+                            <Text style={styles.panelLabel}>JSON Preview</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactJson}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "text" && selectedArtifactOutput ? (
                           <View style={styles.terminalView}>
                             <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
                           </View>
-                        ) : artifactDetailLoading ? null : (
+                        ) : null}
+                        {selectedArtifactRenderType === "binary" && !artifactDetailLoading ? (
+                          <Text style={styles.emptyText}>
+                            Binary artifact preview is available from the companion endpoint. Use Open Preview for the rendered view.
+                          </Text>
+                        ) : null}
+                        {selectedArtifactRenderType === "empty" && !artifactDetailLoading ? (
                           <Text style={styles.emptyText}>
                             No inline preview text was returned for this artifact. Use Open Preview for the server-rendered view.
                           </Text>
-                        )}
+                        ) : null}
                         {artifactDetailError ? <Text style={styles.emptyText}>{`Artifact detail error: ${artifactDetailError}`}</Text> : null}
                       </>
                     ) : (
@@ -871,14 +945,51 @@ function RemoteBridgeSection({
                             {detail}
                           </Text>
                         ))}
+                        {selectedArtifactMimeType ? (
+                          <Text style={styles.emptyText}>{`Type ${selectedArtifactMimeType}`}</Text>
+                        ) : null}
                         {artifactDetailLoading ? <Text style={styles.emptyText}>Loading artifact details...</Text> : null}
-                        {selectedArtifactOutput ? (
+                        {selectedArtifactRenderType === "image" && selectedPreviewUrl ? (
+                          <>
+                            <Text style={styles.panelLabel}>Image</Text>
+                            <Image
+                              accessibilityLabel={`Detailed image for artifact ${selectedArtifact.artifactId}`}
+                              source={{
+                                uri: selectedPreviewUrl,
+                                ...(serverToken ? { headers: { Authorization: `Bearer ${serverToken}` } } : {}),
+                              }}
+                              style={{
+                                width: "100%",
+                                height: 180,
+                                borderRadius: 20,
+                                marginTop: 8,
+                                marginBottom: 8,
+                                backgroundColor: "rgba(7, 10, 24, 0.95)",
+                              }}
+                              resizeMode="cover"
+                            />
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "json" && selectedArtifactJson ? (
+                          <>
+                            <Text style={styles.panelLabel}>JSON</Text>
+                            <View style={styles.terminalView}>
+                              <Text style={styles.terminalText}>{selectedArtifactJson}</Text>
+                            </View>
+                          </>
+                        ) : null}
+                        {selectedArtifactRenderType === "text" && selectedArtifactOutput ? (
                           <>
                             <Text style={styles.panelLabel}>Output</Text>
                             <View style={styles.terminalView}>
                               <Text style={styles.terminalText}>{selectedArtifactOutput}</Text>
                             </View>
                           </>
+                        ) : null}
+                        {selectedArtifactRenderType === "binary" ? (
+                          <Text style={styles.emptyText}>
+                            Binary artifact metadata is available below. Use Open Details or Open Preview for the full payload.
+                          </Text>
                         ) : null}
                         {selectedArtifactAction ? (
                           <>
@@ -907,6 +1018,7 @@ function RemoteBridgeSection({
                         {artifactDetailError ? <Text style={styles.emptyText}>{`Artifact detail error: ${artifactDetailError}`}</Text> : null}
                         {!selectedArtifactDetails.length &&
                         !selectedArtifactOutput &&
+                        !selectedArtifactJson &&
                         !selectedArtifactAction &&
                         !selectedArtifactData &&
                         !selectedArtifactMetadata &&
