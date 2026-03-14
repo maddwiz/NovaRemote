@@ -100,7 +100,7 @@ export function PageSlideMenu({
   const translateX = useRef(new Animated.Value(-360)).current;
 
   const fireSelectionHaptic = () => {
-    void Haptics.selectionAsync().catch(() => undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   const fireMediumHaptic = () => {

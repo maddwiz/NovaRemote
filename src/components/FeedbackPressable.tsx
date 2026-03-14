@@ -59,7 +59,9 @@ export const FeedbackPressable = forwardRef<React.ElementRef<typeof ReactNativeP
   ) {
     const handlePressIn: PressableProps["onPressIn"] = (event) => {
       if (!disabled && feedbackHaptics) {
-        void Haptics.selectionAsync().catch(() => undefined);
+        void Haptics
+          .impactAsync(feedbackStrong ? Haptics.ImpactFeedbackStyle.Medium : Haptics.ImpactFeedbackStyle.Light)
+          .catch(() => undefined);
       }
       onPressIn?.(event);
     };
@@ -75,4 +77,3 @@ export const FeedbackPressable = forwardRef<React.ElementRef<typeof ReactNativeP
     return <ReactNativePressable ref={ref} disabled={disabled} onPressIn={handlePressIn} style={resolveStyle} {...props} />;
   }
 );
-

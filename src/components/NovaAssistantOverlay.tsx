@@ -210,7 +210,7 @@ export function NovaAssistantOverlay({
   const visibleMessages = messages.slice(-18);
 
   const fireSelectionHaptic = () => {
-    void Haptics.selectionAsync().catch(() => undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   const fireMediumHaptic = () => {

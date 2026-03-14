@@ -52,7 +52,7 @@ export function SettingsScreen({
   const timeoutSeconds = Math.round(conversationIdleMs / 1000);
 
   const fireSelectionHaptic = () => {
-    void Haptics.selectionAsync().catch(() => undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   const fireMediumHaptic = () => {

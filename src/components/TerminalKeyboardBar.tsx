@@ -237,7 +237,7 @@ export function TerminalKeyboardBar({
 
   const onPressKey = (key: KeyDef) => {
     if (Platform.OS !== "web") {
-      void Haptics.selectionAsync().catch(() => undefined);
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
     }
     if (key.id === "ctrl") {
       toggleCtrl();

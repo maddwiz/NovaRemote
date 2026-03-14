@@ -2559,7 +2559,7 @@ export default function AppShell() {
     allSessions,
     tails,
     onToggle: () => {
-      void Haptics.selectionAsync();
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     },
   });
   const teamSessionRecordingRequired = teamSettings.requireSessionRecording === true;
@@ -5495,7 +5495,7 @@ export default function AppShell() {
   const handleTabChange = useCallback(
     (next: RouteTab): boolean => {
       markActivity();
-      void Haptics.selectionAsync();
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (next === "snippets" && !isPro) {
         setPaywallVisible(true);
         return false;
@@ -6638,7 +6638,7 @@ export default function AppShell() {
           if (!focusedSession) {
             return;
           }
-          void Haptics.selectionAsync();
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           const nextMode: TerminalSendMode = focusedMode === "ai" ? "shell" : "ai";
           if (nextMode === "ai" && !capabilities.codex && !activeProfile) {
             setStatus({ text: "No server AI or external LLM is configured.", error: true });
@@ -6707,7 +6707,7 @@ export default function AppShell() {
           if (!focusedSession) {
             return;
           }
-          void Haptics.selectionAsync();
+          void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
           void sendControlToSession(focusedSession, char).catch((error) => {
             setError(error);
           });

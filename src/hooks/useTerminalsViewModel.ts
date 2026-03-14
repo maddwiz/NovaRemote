@@ -612,7 +612,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
         setPaywallVisible(true);
         return;
       }
-      void Haptics.selectionAsync();
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       toggleSessionVisible(session);
     },
     onSetSessionMode: (session, mode) => {
@@ -802,13 +802,13 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
       setStatus({ text: `Adapted command for ${activeServer?.terminalBackend || "auto"} backend.`, error: false });
     },
     onSendControlChar: (session, char) => {
-      void Haptics.selectionAsync();
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       void sendControlToSession(session, char).catch((error: unknown) => {
         setError(error);
       });
     },
     onSendServerSessionControlChar: (serverId, session, char) => {
-      void Haptics.selectionAsync();
+      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       if (typeof sendServerSessionControlChar === "function") {
         void sendServerSessionControlChar(serverId, session, char).catch((error: unknown) => {
           setError(error);
@@ -1118,7 +1118,7 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     },
     onVoiceStartCapture: () => {
       void runWithStatus("Starting voice capture", async () => {
-        await Haptics.selectionAsync();
+        await Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
         await startVoiceCapture();
       });
     },
