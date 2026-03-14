@@ -40,6 +40,38 @@ function patchPodfileProperties(filePath) {
   return { filePath, changed: true, skipped: false };
 }
 
+function ensureExpoModuleSymlinks(rootDir) {
+  const expoModulesRoot = path.join(rootDir, "node_modules", "expo", "node_modules");
+  const topLevelModulesRoot = path.join(rootDir, "node_modules");
+
+  if (!fs.existsSync(expoModulesRoot) || !fs.existsSync(topLevelModulesRoot)) {
+    return [];
+  }
+
+  const linked = [];
+  for (const entry of fs.readdirSync(topLevelModulesRoot)) {
+    if (!entry.startsWith("expo-")) {
+      continue;
+    }
+
+    const topLevelModulePath = path.join(topLevelModulesRoot, entry);
+    if (!fs.statSync(topLevelModulePath).isDirectory()) {
+      continue;
+    }
+
+    const nestedModulePath = path.join(expoModulesRoot, entry);
+    if (fs.existsSync(nestedModulePath)) {
+      continue;
+    }
+
+    const relativeTarget = path.relative(expoModulesRoot, topLevelModulePath);
+    fs.symlinkSync(relativeTarget, nestedModulePath, "dir");
+    linked.push(path.relative(rootDir, nestedModulePath));
+  }
+
+  return linked;
+}
+
 const root = process.cwd();
 const podfileProps = path.join(root, "ios", "Podfile.properties.json");
 const appPbxproj = path.join(root, "ios", "NovaRemote.xcodeproj", "project.pbxproj");
@@ -73,6 +105,7 @@ const podsResult = patchFile(podsPbxproj, (text) => {
 });
 
 const podfilePropsResult = patchPodfileProperties(podfileProps);
+const expoSymlinks = ensureExpoModuleSymlinks(root);
 const results = [podfilePropsResult, appResult, podsResult];
 for (const result of results) {
   const rel = path.relative(root, result.filePath);
@@ -83,4 +116,8 @@ for (const result of results) {
   } else {
     console.log(`ok: ${rel}`);
   }
+}
+
+for (const rel of expoSymlinks) {
+  console.log(`linked: ${rel}`);
 }
