@@ -211,12 +211,12 @@ export function TerminalCardHeader({
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Stop ${session}`}
+          accessibilityLabel={`Close ${session}`}
           style={[styles.actionDangerButton, !canStop || readOnly ? styles.buttonDisabled : null]}
           onPress={onStop}
           disabled={!canStop || readOnly}
         >
-          <Text style={styles.actionDangerText}>Stop</Text>
+          <Text style={styles.actionDangerText}>Close</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"

@@ -715,31 +715,31 @@ export function useTerminalsViewModel(args: Record<string, unknown>): TerminalsV
     onFocusSession: setFocusedSession,
     onStopSession: (session) => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      void runWithStatus(`Stopping ${session}`, async () => {
+      void runWithStatus(`Closing ${session}`, async () => {
         if (isLocalSession(session)) {
-          throw new Error("Local LLM sessions do not support Ctrl-C.");
+          throw new Error("Local LLM sessions cannot be closed from terminal cards.");
         }
         if (sessionReadOnly[session]) {
-          throw new Error(`${session} is read-only. Disable read-only before sending Ctrl-C.`);
+          throw new Error(`${session} is read-only. Disable read-only before closing it.`);
         }
         await handleStop(session);
       });
     },
     onStopServerSession: (serverId, session) => {
       void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-      void runWithStatus(`Stopping ${session}`, async () => {
+      void runWithStatus(`Closing ${session}`, async () => {
         if (typeof stopServerSession === "function") {
           await stopServerSession(serverId, session);
           return;
         }
         if (activeServer?.id !== serverId) {
-          throw new Error("Focus the target server before stopping sessions.");
+          throw new Error("Focus the target server before closing sessions.");
         }
         if (isLocalSession(session)) {
-          throw new Error("Local LLM sessions do not support Ctrl-C.");
+          throw new Error("Local LLM sessions cannot be closed from terminal cards.");
         }
         if (sessionReadOnly[session]) {
-          throw new Error(`${session} is read-only. Disable read-only before sending Ctrl-C.`);
+          throw new Error(`${session} is read-only. Disable read-only before closing it.`);
         }
         await handleStop(session);
       });

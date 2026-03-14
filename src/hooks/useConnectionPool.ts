@@ -1737,11 +1737,31 @@ export function useConnectionPool({
       throw new Error("Connect to a server first.");
     }
 
-    await apiRequest(connection.server.baseUrl, connection.server.token, `${connection.terminalApiBasePath}/ctrl`, {
-      method: "POST",
-      body: JSON.stringify({ session, key: "C-c" }),
-    });
-  }, []);
+    if (connection.localAiSessions.includes(session)) {
+      await apiRequest(connection.server.baseUrl, connection.server.token, "/codex/stop", {
+        method: "POST",
+        body: JSON.stringify({ session, kill_session: true }),
+      });
+    } else if (connection.terminalApiBasePath === "/terminal") {
+      await apiRequest(
+        connection.server.baseUrl,
+        connection.server.token,
+        `${connection.terminalApiBasePath}/sessions/${encodeURIComponent(session)}/close`,
+        {
+          method: "POST",
+        }
+      );
+    } else {
+      await apiRequest(connection.server.baseUrl, connection.server.token, `${connection.terminalApiBasePath}/close`, {
+        method: "POST",
+        body: JSON.stringify({ session }),
+      });
+    }
+
+    closeStream(serverId, session);
+    dispatch({ type: "REMOVE_SESSION", serverId, session });
+    void refreshSessions(serverId).catch(() => undefined);
+  }, [closeStream, refreshSessions]);
 
   const sendControlChar = useCallback(async (serverId: string, session: string, controlChar: string) => {
     const connection = stateRef.current[serverId];

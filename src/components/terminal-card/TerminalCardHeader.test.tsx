@@ -99,13 +99,13 @@ describe("TerminalCardHeader", () => {
       throw new Error("Renderer did not initialize.");
     }
     const root = (renderer as unknown as TestRenderer.ReactTestRenderer).root;
-    const stopButton = root.findByProps({ accessibilityLabel: "Stop main" });
+    const stopButton = root.findByProps({ accessibilityLabel: "Close main" });
     expect(stopButton.props.disabled).toBe(true);
 
     await act(async () => {
       renderer?.update(<TerminalCardHeader {...buildProps({ readOnly: false, canStop: true })} />);
     });
-    const enabledStop = root.findByProps({ accessibilityLabel: "Stop main" });
+    const enabledStop = root.findByProps({ accessibilityLabel: "Close main" });
     expect(enabledStop.props.disabled).toBe(false);
 
     await act(async () => {
@@ -113,4 +113,3 @@ describe("TerminalCardHeader", () => {
     });
   });
 });
-

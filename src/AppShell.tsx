@@ -889,6 +889,7 @@ export default function AppShell() {
   const novaVoiceLoopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaVoiceStopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaConversationIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const novaWalkieHoldActiveRef = useRef<boolean>(false);
   const startNovaVoiceCaptureRef = useRef<(mode?: "wake" | "conversation" | "walkie") => void>(() => undefined);
   const stopVoiceCaptureIntoNovaRef = useRef<() => Promise<boolean>>(async () => false);
   const novaVoiceSettingsLoadedRef = useRef<boolean>(false);
@@ -1719,14 +1720,14 @@ export default function AppShell() {
         throw new Error("Connect to a server first.");
       }
       markActivity();
-      assertServerWritable(focusedServerId, "Stop session");
+      assertServerWritable(focusedServerId, "Close session");
       await stopPoolSession(focusedServerId, session);
       recordAuditEvent({
         action: "command_sent",
         serverId: focusedServerId,
         serverName: activeServer?.name || "",
         session,
-        detail: "stop_session",
+        detail: "close_session",
       });
     },
     [activeServer?.name, assertServerWritable, focusedServerId, markActivity, recordAuditEvent, stopPoolSession]
@@ -1862,10 +1863,7 @@ export default function AppShell() {
     unlocked &&
     appStateStatus === "active" &&
     route !== "glasses" &&
-    (liveVoiceRecognitionActive ||
-      voiceRecording ||
-      pendingNovaListenModeRef.current !== null ||
-      novaVoiceModeActive);
+    (liveVoiceRecognitionActive || voiceRecording);
 
   const scopedServerId = focusedServerId ?? activeServerId;
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(scopedServerId);
@@ -2632,12 +2630,9 @@ export default function AppShell() {
         throw new Error("Target server is disconnected.");
       }
       markActivity();
-      assertServerWritable(serverId, "Stop session");
-      if (targetConnection.localAiSessions.includes(session)) {
-        throw new Error("Local LLM sessions cannot be stopped through server controls.");
-      }
+      assertServerWritable(serverId, "Close session");
       if (scopedServerId === serverId && sessionReadOnly[session]) {
-        throw new Error(`${session} is read-only. Disable read-only before stopping the session.`);
+        throw new Error(`${session} is read-only. Disable read-only before closing the session.`);
       }
       await stopPoolSession(serverId, session);
       recordAuditEvent({
@@ -2645,7 +2640,7 @@ export default function AppShell() {
         serverId,
         serverName: targetConnection.server.name,
         session,
-        detail: "stop_session",
+        detail: "close_session",
       });
     },
     [assertServerWritable, markActivity, poolConnections, recordAuditEvent, scopedServerId, sessionReadOnly, stopPoolSession]
@@ -3366,7 +3361,7 @@ export default function AppShell() {
           if (action.type === "stop_session") {
             const session = resolveSessionOrThrow(action.sessionRef);
             await stopServerSession(server.id, session.session);
-            results.push({ action: action.type, ok: true, detail: `Stopped ${server.name} / ${session.session}` });
+            results.push({ action: action.type, ok: true, detail: `Closed ${server.name} / ${session.session}` });
             continue;
           }
 
@@ -4269,6 +4264,7 @@ export default function AppShell() {
       }
 
       requestNovaOverlayOpen();
+      setNovaVoiceModeActive(false);
       const sent = await novaAssistant.submitTranscript(transcript, { autoSend: true });
       if (!sent) {
         throw new Error("Nova could not submit the transcript.");
@@ -4361,67 +4357,83 @@ export default function AppShell() {
 
   const startNovaVoiceCapture = useCallback(
     (mode: "wake" | "conversation" | "walkie" = "conversation") => {
-      const activeWakePhrase = normalizeNovaWakePhrase(novaWakePhraseRef.current);
-      if (voiceBusyRef.current) {
-        return;
-      }
-      if (liveVoiceRecognitionActiveRef.current || voiceRecordingRef.current) {
-        queueNovaListeningMode(mode, 120);
+      void (async () => {
+        const activeWakePhrase = normalizeNovaWakePhrase(novaWakePhraseRef.current);
+        if (voiceBusyRef.current) {
+          return;
+        }
+
+        pendingNovaListenModeRef.current = null;
+        clearNovaVoiceStopTimer();
+        clearNovaVoiceLoopRestart();
+
         if (liveVoiceRecognitionActiveRef.current) {
-          void stopLiveRecognition("abort");
+          await stopLiveRecognition("abort");
         }
         if (voiceRecordingRef.current) {
-          void stopVoiceCapture();
+          await stopVoiceCapture();
         }
-        return;
-      }
 
-      novaListeningModeRef.current = mode;
-      pendingNovaListenModeRef.current = null;
-      clearNovaVoiceStopTimer();
-      clearNovaVoiceLoopRestart();
-      setNovaVoiceModeActive(true);
+        novaListeningModeRef.current = mode;
+        setNovaVoiceModeActive(true);
 
-      if (mode !== "wake") {
-        setStatus({
-          text:
-            mode === "walkie"
-              ? "Listening... release to send."
-              : novaHandsFreeEnabledRef.current
-                ? "Hands-Free listening..."
-                : "Nova is listening.",
-          error: false,
-        });
-      }
+        if (mode !== "wake") {
+          setStatus({
+            text:
+              mode === "walkie"
+                ? "Listening... release to send."
+                : novaHandsFreeEnabledRef.current
+                  ? "Hands-Free listening..."
+                  : "Nova is listening.",
+            error: false,
+          });
+        }
 
-      devVoiceUiLog("startNovaVoiceCapture", { mode });
-      void startLiveRecognition({
-        contextualStrings: [
-          "nova",
-          "hey nova",
-          activeWakePhrase,
-          "open terminals",
-          "open servers",
-          "open files",
-          "open snippets",
-          "open settings",
-          "open team",
-          "open vr",
-          "tell codex",
-        ],
-        continuous: true,
-        silenceTimeoutMs: mode === "walkie" ? undefined : novaConversationIdleMsRef.current,
-        onTranscript: async (transcript) => {
-          await handleNovaTranscript(transcript.trim(), mode);
-        },
-        onNoSpeech: async () => {
-          handleNovaVoiceNoSpeech(mode);
-        },
-        onError: async (message) => {
-          handleNovaVoiceError(mode, message);
-        },
-      })
-        .catch((error) => {
+        devVoiceUiLog("startNovaVoiceCapture", { mode });
+
+        if (mode === "walkie") {
+          try {
+            await startVoiceCapture();
+            if (!novaWalkieHoldActiveRef.current) {
+              await stopVoiceCaptureIntoNovaRef.current();
+            }
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            setNovaVoiceModeActive(false);
+            devVoiceUiLog("startNovaVoiceCapture:walkieError", message);
+            handleNovaVoiceError(mode, message);
+          }
+          return;
+        }
+
+        try {
+          await startLiveRecognition({
+            contextualStrings: [
+              "nova",
+              "hey nova",
+              activeWakePhrase,
+              "open terminals",
+              "open servers",
+              "open files",
+              "open snippets",
+              "open settings",
+              "open team",
+              "open vr",
+              "tell codex",
+            ],
+            continuous: true,
+            silenceTimeoutMs: novaConversationIdleMsRef.current,
+            onTranscript: async (transcript) => {
+              await handleNovaTranscript(transcript.trim(), mode);
+            },
+            onNoSpeech: async () => {
+              handleNovaVoiceNoSpeech(mode);
+            },
+            onError: async (message) => {
+              handleNovaVoiceError(mode, message);
+            },
+          });
+        } catch (error) {
           devVoiceUiLog("startNovaVoiceCapture:liveError", error instanceof Error ? error.message : String(error));
           void startVoiceCapture()
             .then(() => {
@@ -4433,7 +4445,8 @@ export default function AppShell() {
               devVoiceUiLog("startNovaVoiceCapture:error", message);
               handleNovaVoiceError(mode, message);
             });
-        });
+        }
+      })();
     },
     [
       clearNovaVoiceLoopRestart,
@@ -6325,20 +6338,24 @@ export default function AppShell() {
             setNovaConversationModeEnabled(true);
             resetNovaConversationIdleTimer();
             setStatus({ text: "Nova voice mode enabled. Speak naturally.", error: false });
-            queueNovaListeningMode("conversation", 0);
+            startNovaVoiceCaptureRef.current("conversation");
           }}
           onVoiceHoldStart={() => {
             requestNovaOverlayOpen();
+            novaWalkieHoldActiveRef.current = true;
             startNovaVoiceCaptureRef.current("walkie");
           }}
           onVoiceHoldEnd={() => {
+            novaWalkieHoldActiveRef.current = false;
             if (liveVoiceRecognitionActive) {
               void stopLiveRecognition("stop");
               return;
             }
             if (voiceRecording) {
               void stopVoiceCaptureIntoNova();
+              return;
             }
+            setNovaVoiceModeActive(false);
           }}
         />
       </KeyboardAvoidingView>
@@ -6476,12 +6493,12 @@ export default function AppShell() {
             return;
           }
           void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-          void runWithStatus(`Stopping ${focusedSession}`, async () => {
+          void runWithStatus(`Closing ${focusedSession}`, async () => {
             if (isLocalSession(focusedSession)) {
-              throw new Error("Local LLM sessions do not support Ctrl-C.");
+              throw new Error("Local LLM sessions cannot be closed from fullscreen controls.");
             }
             if (sessionReadOnly[focusedSession]) {
-              throw new Error(`${focusedSession} is read-only. Disable read-only before sending Ctrl-C.`);
+              throw new Error(`${focusedSession} is read-only. Disable read-only before closing it.`);
             }
             await handleStop(focusedSession);
           });
