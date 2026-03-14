@@ -354,7 +354,13 @@ const FEMALE_NOVA_VOICE_HINTS = [
   "amelie",
   "paulina",
   "monica",
+  "zoe",
+  "kelly",
+  "sandy",
+  "salli",
   "siri voice 4",
+  "siri voice 3",
+  "siri voice 5",
   "siri female",
 ];
 
@@ -400,8 +406,32 @@ function scoreNovaVoice(voice: { name: string; language: string; quality?: strin
   } else if (/^en/.test(normalizedLanguage)) {
     score += 60;
   }
-  if (normalizedQuality === "enhanced") {
-    score += 80;
+  if (normalizedQuality === "premium") {
+    score += 260;
+  } else if (normalizedQuality === "enhanced") {
+    score += 190;
+  } else if (normalizedQuality === "default") {
+    score += 20;
+  }
+  if (/\bpremium\b/.test(normalizedName)) {
+    score += 220;
+  }
+  if (/\benhanced\b/.test(normalizedName)) {
+    score += 160;
+  }
+  if (/\bneural\b/.test(normalizedName) || /\bnatural\b/.test(normalizedName)) {
+    score += 110;
+  }
+  if (normalizedName.includes("siri voice")) {
+    score += 170;
+  } else if (/\bsiri\b/.test(normalizedName)) {
+    score += 120;
+  }
+  if (/\bcompact\b/.test(normalizedName)) {
+    score -= 140;
+  }
+  if (/\bdefault\b/.test(normalizedName)) {
+    score -= 30;
   }
 
   return score;
@@ -4336,8 +4366,8 @@ export default function AppShell() {
 
           speechModule.speak(spoken, {
             language: "en-US",
-            pitch: 1.03,
-            rate: Platform.OS === "ios" ? 0.92 : 0.96,
+            pitch: Platform.OS === "ios" ? 1.0 : 1.02,
+            rate: Platform.OS === "ios" ? 0.86 : 0.94,
             volume: 1,
             voice: novaSpeechVoiceIdRef.current || undefined,
             onDone: finish,
@@ -4379,8 +4409,8 @@ export default function AppShell() {
         devVoiceUiLog("novaSpeech:testStart");
         speechModule.speak("Nova voice is active.", {
           language: "en-US",
-          pitch: 1.03,
-          rate: Platform.OS === "ios" ? 0.92 : 0.96,
+          pitch: Platform.OS === "ios" ? 1.0 : 1.02,
+          rate: Platform.OS === "ios" ? 0.86 : 0.94,
           volume: 1,
           voice: novaSpeechVoiceIdRef.current || undefined,
         });

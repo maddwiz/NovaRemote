@@ -74,7 +74,9 @@ export function SettingsScreen({
 
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Activation</Text>
-        <Text style={styles.serverSubtitle}>Hold the Nova orb, tap Voice in chat, say the wake phrase, or keep Hands-Free on.</Text>
+        <Text style={styles.serverSubtitle}>
+          Hold the Nova orb, tap Voice in chat, turn on wake phrase standby, or keep Hands-Free on.
+        </Text>
 
         <View style={styles.settingsModeList}>
           <View style={styles.settingsModeCard}>
@@ -87,7 +89,9 @@ export function SettingsScreen({
           </View>
           <View style={styles.settingsModeCard}>
             <Text style={styles.settingsModeTitle}>Wake Phrase</Text>
-            <Text style={styles.settingsModeCopy}>Say the wake phrase to open a back-and-forth session even when Hands-Free is off.</Text>
+            <Text style={styles.settingsModeCopy}>
+              Say the wake phrase to open a back-and-forth session while wake phrase standby is on.
+            </Text>
           </View>
           <View style={styles.settingsModeCard}>
             <Text style={styles.settingsModeTitle}>Hands-Free</Text>
@@ -145,7 +149,7 @@ export function SettingsScreen({
       <View style={styles.panel}>
         <Text style={styles.panelLabel}>Voice Behavior</Text>
         <View style={styles.rowInlineSpace}>
-          <Text style={styles.switchLabel}>Always listen for wake phrase</Text>
+          <Text style={styles.switchLabel}>Wake phrase standby</Text>
           <Switch
             value={alwaysListeningEnabled}
             onValueChange={(value) => {
@@ -188,8 +192,8 @@ export function SettingsScreen({
         </Text>
         <Text style={styles.serverSubtitle}>
           {alwaysListeningEnabled
-            ? `Wake phrase standby is on. Say "${wakePhrase || "hey nova"}" to start a conversation.`
-            : "Wake phrase standby is off. Use walkie mode or the Voice button to talk to Nova."}
+            ? `Wake phrase standby is on. Say "${wakePhrase || "hey nova"}" while NovaRemote is open to start a conversation.`
+            : `Wake phrase standby is off. Turn it on if you want "${wakePhrase || "hey nova"}" to work without using Hands-Free.`}
         </Text>
         {speechOutputAvailable ? (
           <>
@@ -239,7 +243,10 @@ export function SettingsScreen({
             <Text style={styles.serverSubtitle}>
               {isPro
                 ? "Choose the voice that fits Nova best."
-                : "Voice selection is part of Pro. Nova will still use the best available default voice."}
+                : "Voice selection is part of Pro. Nova will still use the best installed Apple female voice it can find."}
+            </Text>
+            <Text style={styles.serverSubtitle}>
+              Best free quality comes from Apple Premium or Enhanced voices already installed on this iPhone.
             </Text>
             {!isPro ? (
               <Pressable
