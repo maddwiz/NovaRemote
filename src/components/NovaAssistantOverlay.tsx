@@ -1,6 +1,17 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
-import { Image, PanResponder, ScrollView, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
+import {
+  Image,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
+  PanResponder,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  useWindowDimensions,
+  View,
+} from "react-native";
 import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { BRAND_LOGO } from "../branding";
@@ -41,6 +52,7 @@ type Rect = {
 
 const BUTTON_SIZE = 56;
 const BUTTON_MARGIN = 18;
+const TRANSCRIPT_BOTTOM_THRESHOLD = 36;
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max);
@@ -97,6 +109,14 @@ export function NovaAssistantOverlay({
   const buttonOriginRef = useRef(buttonPosition);
   const panelOriginRef = useRef(panelRect);
   const resizeOriginRef = useRef(panelRect);
+  const transcriptRef = useRef<ScrollView | null>(null);
+  const transcriptInteractingRef = useRef<boolean>(false);
+  const transcriptAtBottomRef = useRef<boolean>(true);
+  const transcriptMetricsRef = useRef({
+    offsetY: 0,
+    viewportHeight: 0,
+    contentHeight: 0,
+  });
 
   useEffect(() => {
     buttonOriginRef.current = buttonPosition;
@@ -130,6 +150,22 @@ export function NovaAssistantOverlay({
     }
     setOpen(true);
   }, [openRequestToken]);
+
+  useEffect(() => {
+    if (!open) {
+      transcriptInteractingRef.current = false;
+      transcriptAtBottomRef.current = true;
+      transcriptMetricsRef.current = {
+        offsetY: 0,
+        viewportHeight: 0,
+        contentHeight: 0,
+      };
+      return;
+    }
+    requestAnimationFrame(() => {
+      transcriptRef.current?.scrollToEnd({ animated: false });
+    });
+  }, [open]);
 
   const buttonPanResponder = useMemo(
     () =>
@@ -215,6 +251,28 @@ export function NovaAssistantOverlay({
 
   const fireMediumHaptic = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+  };
+
+  const updateTranscriptBottomState = () => {
+    const { offsetY, viewportHeight, contentHeight } = transcriptMetricsRef.current;
+    const distanceFromBottom = contentHeight - (offsetY + viewportHeight);
+    transcriptAtBottomRef.current = distanceFromBottom <= TRANSCRIPT_BOTTOM_THRESHOLD;
+  };
+
+  const handleTranscriptScroll = (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+    transcriptMetricsRef.current.offsetY = event.nativeEvent.contentOffset.y;
+    transcriptMetricsRef.current.viewportHeight = event.nativeEvent.layoutMeasurement.height;
+    transcriptMetricsRef.current.contentHeight = event.nativeEvent.contentSize.height;
+    updateTranscriptBottomState();
+  };
+
+  const maybeScrollTranscriptToEnd = (animated: boolean, shouldFollowBottom = transcriptAtBottomRef.current) => {
+    if (!open || transcriptInteractingRef.current || !shouldFollowBottom) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      transcriptRef.current?.scrollToEnd({ animated });
+    });
   };
 
   return (
@@ -319,10 +377,39 @@ export function NovaAssistantOverlay({
             {lastError ? <Text style={styles.novaOverlayError}>{lastError}</Text> : null}
 
             <ScrollView
+              ref={transcriptRef}
               style={styles.novaOverlayTranscript}
               contentContainerStyle={styles.novaOverlayTranscriptContent}
               nestedScrollEnabled
               keyboardShouldPersistTaps="handled"
+              scrollEventThrottle={16}
+              onScroll={handleTranscriptScroll}
+              onScrollBeginDrag={() => {
+                transcriptInteractingRef.current = true;
+              }}
+              onScrollEndDrag={() => {
+                transcriptInteractingRef.current = false;
+                maybeScrollTranscriptToEnd(true);
+              }}
+              onMomentumScrollBegin={() => {
+                transcriptInteractingRef.current = true;
+              }}
+              onMomentumScrollEnd={() => {
+                transcriptInteractingRef.current = false;
+                maybeScrollTranscriptToEnd(true);
+              }}
+              onLayout={(event) => {
+                const wasAtBottom = transcriptAtBottomRef.current;
+                transcriptMetricsRef.current.viewportHeight = event.nativeEvent.layout.height;
+                updateTranscriptBottomState();
+                maybeScrollTranscriptToEnd(false, wasAtBottom || transcriptAtBottomRef.current);
+              }}
+              onContentSizeChange={(_width, height) => {
+                const wasAtBottom = transcriptAtBottomRef.current;
+                transcriptMetricsRef.current.contentHeight = height;
+                updateTranscriptBottomState();
+                maybeScrollTranscriptToEnd(true, wasAtBottom || transcriptAtBottomRef.current);
+              }}
             >
               {visibleMessages.map((message) => (
                 <View
