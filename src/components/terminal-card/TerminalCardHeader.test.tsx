@@ -4,6 +4,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TerminalCardHeader } from "./TerminalCardHeader";
 
+vi.mock("expo-haptics", () => ({
+  selectionAsync: vi.fn(async () => undefined),
+  impactAsync: vi.fn(async () => undefined),
+  ImpactFeedbackStyle: {
+    Light: "Light",
+    Medium: "Medium",
+  },
+}));
+
 let consoleErrorSpy: ReturnType<typeof vi.spyOn> | null = null;
 
 const noop = () => {};

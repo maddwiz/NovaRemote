@@ -248,7 +248,7 @@ export function NovaAssistantOverlay({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={fullscreen ? "Exit Nova fullscreen" : "Open Nova fullscreen"}
-                  style={styles.novaOverlayHeaderButton}
+                  style={({ pressed }) => [styles.novaOverlayHeaderButton, pressed ? styles.pressablePressed : null]}
                   onPress={() => {
                     fireSelectionHaptic();
                     if (fullscreen) {
@@ -264,7 +264,7 @@ export function NovaAssistantOverlay({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Close Nova assistant"
-                  style={styles.novaOverlayHeaderButton}
+                  style={({ pressed }) => [styles.novaOverlayHeaderButton, pressed ? styles.pressablePressed : null]}
                   onPress={() => {
                     fireSelectionHaptic();
                     setOpen(false);
@@ -292,7 +292,7 @@ export function NovaAssistantOverlay({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Open AI provider settings"
-                  style={styles.novaInlineButton}
+                  style={({ pressed }) => [styles.novaInlineButton, pressed ? styles.pressablePressed : null]}
                   onPress={() => {
                     fireSelectionHaptic();
                     onOpenProviders();
@@ -304,7 +304,7 @@ export function NovaAssistantOverlay({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Clear Nova conversation"
-                  style={styles.novaInlineButton}
+                  style={({ pressed }) => [styles.novaInlineButton, pressed ? styles.pressablePressed : null]}
                   onPress={() => {
                     fireSelectionHaptic();
                     onClearConversation();
@@ -351,10 +351,11 @@ export function NovaAssistantOverlay({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={voiceModeEnabled ? "Stop Nova voice mode" : "Start Nova voice mode"}
-                  style={[
+                  style={({ pressed }) => [
                     styles.novaComposerButton,
                     voiceModeEnabled ? styles.novaComposerButtonVoiceActive : null,
                     voiceBusy ? styles.buttonDisabled : null,
+                    pressed ? styles.pressablePressed : null,
                   ]}
                   disabled={voiceBusy}
                   onPress={() => {
@@ -367,10 +368,11 @@ export function NovaAssistantOverlay({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Send Nova prompt"
-                  style={[
+                  style={({ pressed }) => [
                     styles.novaComposerButton,
                     styles.novaComposerButtonPrimary,
                     busy || !draft.trim() || !canSend ? styles.buttonDisabled : null,
+                    pressed ? styles.pressablePressed : null,
                   ]}
                   disabled={busy || !draft.trim() || !canSend}
                   onPress={() => {
@@ -405,10 +407,11 @@ export function NovaAssistantOverlay({
           accessibilityHint="Tap to open Nova. Press and hold to talk."
           delayLongPress={420}
           hitSlop={10}
-          style={[
+          style={({ pressed }) => [
             styles.novaFloatingButton,
             open ? styles.novaFloatingButtonActive : null,
             voiceBusy ? styles.buttonDisabled : null,
+            pressed ? styles.pressablePressedStrong : null,
           ]}
           disabled={voiceBusy}
           onLongPress={() => {

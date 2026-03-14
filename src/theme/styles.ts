@@ -644,6 +644,14 @@ export const styles = StyleSheet.create({
   buttonDisabled: {
     opacity: 0.55,
   },
+  pressablePressed: {
+    opacity: 0.94,
+    transform: [{ scale: 0.975 }],
+  },
+  pressablePressedStrong: {
+    opacity: 0.9,
+    transform: [{ scale: 0.955 }],
+  },
   formDivider: {
     height: 1,
     backgroundColor: "#3c316d",

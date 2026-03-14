@@ -1,3 +1,4 @@
+import * as Haptics from "expo-haptics";
 import React from "react";
 import { Modal, Pressable, Text, View } from "react-native";
 
@@ -82,6 +83,12 @@ export function TerminalCardHeader({
   onHide,
 }: TerminalCardHeaderProps) {
   const [showMoreActions, setShowMoreActions] = React.useState<boolean>(false);
+  const fireSelectionHaptic = () => {
+    void Haptics.selectionAsync().catch(() => undefined);
+  };
+  const fireMediumHaptic = () => {
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
+  };
   const moreActions = [
     {
       key: "open-mac",
@@ -206,14 +213,29 @@ export function TerminalCardHeader({
       </View>
 
       <View style={styles.actionsWrap}>
-        <Pressable accessibilityRole="button" accessibilityLabel={`Open ${session} in fullscreen`} style={styles.actionButton} onPress={onFullscreen}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Open ${session} in fullscreen`}
+          style={({ pressed }) => [styles.actionButton, pressed ? styles.pressablePressed : null]}
+          onPress={() => {
+            fireSelectionHaptic();
+            onFullscreen();
+          }}
+        >
           <Text style={styles.actionButtonText}>Fullscreen</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Close ${session}`}
-          style={[styles.actionDangerButton, !canStop || readOnly ? styles.buttonDisabled : null]}
-          onPress={onStop}
+          style={({ pressed }) => [
+            styles.actionDangerButton,
+            !canStop || readOnly ? styles.buttonDisabled : null,
+            pressed ? styles.pressablePressed : null,
+          ]}
+          onPress={() => {
+            fireMediumHaptic();
+            onStop();
+          }}
           disabled={!canStop || readOnly}
         >
           <Text style={styles.actionDangerText}>Close</Text>
@@ -221,8 +243,11 @@ export function TerminalCardHeader({
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={`Open more actions for ${session}`}
-          style={styles.actionButton}
-          onPress={() => setShowMoreActions(true)}
+          style={({ pressed }) => [styles.actionButton, pressed ? styles.pressablePressed : null]}
+          onPress={() => {
+            fireSelectionHaptic();
+            setShowMoreActions(true);
+          }}
         >
           <Text style={styles.actionButtonText}>More</Text>
         </Pressable>
@@ -234,7 +259,7 @@ export function TerminalCardHeader({
         animationType="fade"
         onRequestClose={() => setShowMoreActions(false)}
       >
-        <Pressable style={styles.overlayBackdrop} onPress={() => setShowMoreActions(false)}>
+        <Pressable style={({ pressed }) => [styles.overlayBackdrop, pressed ? { opacity: 0.98 } : null]} onPress={() => setShowMoreActions(false)}>
           <Pressable
             style={styles.overlayCard}
             onPress={(event) => {
@@ -249,11 +274,16 @@ export function TerminalCardHeader({
                   key={entry.key}
                   accessibilityRole="button"
                   accessibilityLabel={`${entry.label} for ${session}`}
-                  style={[styles.actionButton, entry.disabled ? styles.buttonDisabled : null]}
+                  style={({ pressed }) => [
+                    styles.actionButton,
+                    entry.disabled ? styles.buttonDisabled : null,
+                    pressed ? styles.pressablePressed : null,
+                  ]}
                   onPress={() => {
                     if (entry.disabled) {
                       return;
                     }
+                    fireSelectionHaptic();
                     setShowMoreActions(false);
                     entry.onPress();
                   }}
@@ -265,8 +295,11 @@ export function TerminalCardHeader({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close session actions"
-                style={styles.buttonGhost}
-                onPress={() => setShowMoreActions(false)}
+                style={({ pressed }) => [styles.buttonGhost, pressed ? styles.pressablePressed : null]}
+                onPress={() => {
+                  fireSelectionHaptic();
+                  setShowMoreActions(false);
+                }}
               >
                 <Text style={styles.buttonGhostText}>Close</Text>
               </Pressable>

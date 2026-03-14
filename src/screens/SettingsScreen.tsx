@@ -10,33 +10,43 @@ import {
 import { styles } from "../theme/styles";
 
 type SettingsScreenProps = {
+  isPro: boolean;
   alwaysListeningEnabled: boolean;
   handsFreeEnabled: boolean;
   speakRepliesEnabled: boolean;
   wakePhrase: string;
   conversationIdleMs: number;
   speechOutputAvailable: boolean;
+  selectedSpeechVoiceLabel: string;
+  speechVoiceChoicesAvailable: boolean;
   onTestSpeakReplies: () => void;
+  onShowPaywall: () => void;
   onSetAlwaysListeningEnabled: (value: boolean) => void;
   onSetHandsFreeEnabled: (value: boolean) => void;
   onSetSpeakRepliesEnabled: (value: boolean) => void;
   onSetWakePhrase: (value: string) => void;
   onSetConversationIdleMs: (value: number) => void;
+  onCycleSpeechVoice: (direction: -1 | 1) => void;
 };
 
 export function SettingsScreen({
+  isPro,
   alwaysListeningEnabled,
   handsFreeEnabled,
   speakRepliesEnabled,
   wakePhrase,
   conversationIdleMs,
   speechOutputAvailable,
+  selectedSpeechVoiceLabel,
+  speechVoiceChoicesAvailable,
   onTestSpeakReplies,
+  onShowPaywall,
   onSetAlwaysListeningEnabled,
   onSetHandsFreeEnabled,
   onSetSpeakRepliesEnabled,
   onSetWakePhrase,
   onSetConversationIdleMs,
+  onCycleSpeechVoice,
 }: SettingsScreenProps) {
   const timeoutSeconds = Math.round(conversationIdleMs / 1000);
 
@@ -106,16 +116,22 @@ export function SettingsScreen({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Decrease Nova silence timeout"
-              style={styles.pageMenuStepperButton}
-              onPress={() => onSetConversationIdleMs(Math.max(MIN_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs - 1000))}
+              style={({ pressed }) => [styles.pageMenuStepperButton, pressed ? styles.pressablePressed : null]}
+              onPress={() => {
+                fireSelectionHaptic();
+                onSetConversationIdleMs(Math.max(MIN_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs - 1000));
+              }}
             >
               <Text style={styles.pageMenuStepperText}>-</Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Increase Nova silence timeout"
-              style={styles.pageMenuStepperButton}
-              onPress={() => onSetConversationIdleMs(Math.min(MAX_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs + 1000))}
+              style={({ pressed }) => [styles.pageMenuStepperButton, pressed ? styles.pressablePressed : null]}
+              onPress={() => {
+                fireSelectionHaptic();
+                onSetConversationIdleMs(Math.min(MAX_NOVA_CONVERSATION_IDLE_MS, conversationIdleMs + 1000));
+              }}
             >
               <Text style={styles.pageMenuStepperText}>+</Text>
             </Pressable>
@@ -175,12 +191,78 @@ export function SettingsScreen({
             ? `Wake phrase standby is on. Say "${wakePhrase || "hey nova"}" to start a conversation.`
             : "Wake phrase standby is off. Use walkie mode or the Voice button to talk to Nova."}
         </Text>
+        {speechOutputAvailable ? (
+          <>
+            <View style={styles.pageMenuStepperRow}>
+              <Text style={styles.pageMenuSwitchLabel}>{`Nova voice: ${selectedSpeechVoiceLabel}`}</Text>
+              <View style={styles.pageMenuStepperButtons}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={isPro ? "Select previous Nova voice" : "Unlock Pro to change Nova voice"}
+                  style={({ pressed }) => [
+                    styles.pageMenuStepperButton,
+                    (!speechVoiceChoicesAvailable || !isPro) ? styles.buttonDisabled : null,
+                    pressed ? styles.pressablePressed : null,
+                  ]}
+                  onPress={() => {
+                    fireSelectionHaptic();
+                    if (!isPro) {
+                      onShowPaywall();
+                      return;
+                    }
+                    onCycleSpeechVoice(-1);
+                  }}
+                >
+                  <Text style={styles.pageMenuStepperText}>-</Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={isPro ? "Select next Nova voice" : "Unlock Pro to change Nova voice"}
+                  style={({ pressed }) => [
+                    styles.pageMenuStepperButton,
+                    (!speechVoiceChoicesAvailable || !isPro) ? styles.buttonDisabled : null,
+                    pressed ? styles.pressablePressed : null,
+                  ]}
+                  onPress={() => {
+                    fireSelectionHaptic();
+                    if (!isPro) {
+                      onShowPaywall();
+                      return;
+                    }
+                    onCycleSpeechVoice(1);
+                  }}
+                >
+                  <Text style={styles.pageMenuStepperText}>+</Text>
+                </Pressable>
+              </View>
+            </View>
+            <Text style={styles.serverSubtitle}>
+              {isPro
+                ? "Choose the voice that fits Nova best."
+                : "Voice selection is part of Pro. Nova will still use the best available default voice."}
+            </Text>
+            {!isPro ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Unlock Pro voice options"
+                style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
+                onPress={() => {
+                  fireMediumHaptic();
+                  onShowPaywall();
+                }}
+              >
+                <Text style={styles.pageMenuActionText}>Unlock Pro Voices</Text>
+              </Pressable>
+            ) : null}
+          </>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Test Nova voice output"
-          style={[
+          style={({ pressed }) => [
             styles.pageMenuActionButton,
             !speechOutputAvailable ? styles.buttonDisabled : null,
+            pressed ? styles.pressablePressed : null,
           ]}
           disabled={!speechOutputAvailable}
           onPress={() => {

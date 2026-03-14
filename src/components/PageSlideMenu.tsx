@@ -143,7 +143,6 @@ export function PageSlideMenu({
             { key: "agents" as RouteTab, label: "Agents" },
             { key: "files" as RouteTab, label: "Files" },
             { key: "llms" as RouteTab, label: "Nova" },
-            { key: "settings" as RouteTab, label: "Settings" },
             { key: "team" as RouteTab, label: "Team" },
             { key: "vr" as RouteTab, label: "VR" },
           ].map((entry) => (
@@ -151,7 +150,7 @@ export function PageSlideMenu({
               key={`menu-nav-${entry.key}`}
               accessibilityRole="button"
               accessibilityLabel={`Open ${entry.label}`}
-              style={styles.pageMenuActionButton}
+              style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
               onPress={() => {
                 fireSelectionHaptic();
                 onClose();
@@ -176,7 +175,7 @@ export function PageSlideMenu({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Create a new shell session"
-                style={styles.pageMenuActionButton}
+                style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireSelectionHaptic();
                   onClose();
@@ -188,7 +187,7 @@ export function PageSlideMenu({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Create a new AI session"
-                style={styles.pageMenuActionButton}
+                style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireSelectionHaptic();
                   onClose();
@@ -209,7 +208,7 @@ export function PageSlideMenu({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel={poolLifecyclePaused ? "Resume connection pool" : "Pause connection pool"}
-                style={styles.pageMenuActionButton}
+                style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireSelectionHaptic();
                   onClose();
@@ -221,7 +220,7 @@ export function PageSlideMenu({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Refresh all servers"
-                style={styles.pageMenuActionButton}
+                style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireSelectionHaptic();
                   onClose();
@@ -233,7 +232,7 @@ export function PageSlideMenu({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Reconnect all servers"
-                style={styles.pageMenuActionButton}
+                style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireSelectionHaptic();
                   onClose();
@@ -358,7 +357,7 @@ export function PageSlideMenu({
   return (
     <Modal transparent visible animationType="none" onRequestClose={onClose}>
       <View style={styles.pageMenuRoot}>
-        <Pressable style={styles.pageMenuBackdrop} onPress={onClose} />
+        <Pressable style={({ pressed }) => [styles.pageMenuBackdrop, pressed ? { opacity: 0.92 } : null]} onPress={onClose} />
         <Animated.View style={[styles.pageMenuPanel, { transform: [{ translateX }] }]}>
           <ScrollView
             style={styles.pageMenuScroll}
@@ -379,7 +378,7 @@ export function PageSlideMenu({
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel="Back to menu sections"
-                  style={styles.pageMenuBackButton}
+                  style={({ pressed }) => [styles.pageMenuBackButton, pressed ? styles.pressablePressed : null]}
                   onPress={() => {
                     fireSelectionHaptic();
                     setActiveSectionId(null);
@@ -398,7 +397,7 @@ export function PageSlideMenu({
                     key={section.id}
                     accessibilityRole="button"
                     accessibilityLabel={`Open ${section.title}`}
-                    style={styles.pageMenuSectionCard}
+                    style={({ pressed }) => [styles.pageMenuSectionCard, pressed ? styles.pressablePressed : null]}
                     onPress={() => {
                       fireSelectionHaptic();
                       setActiveSectionId(section.id);
@@ -414,7 +413,7 @@ export function PageSlideMenu({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Open settings"
-                style={styles.pageMenuUtilityButton}
+                style={({ pressed }) => [styles.pageMenuUtilityButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireSelectionHaptic();
                   onClose();
@@ -426,7 +425,7 @@ export function PageSlideMenu({
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Log off and return to the lock screen"
-                style={styles.pageMenuUtilityButton}
+                style={({ pressed }) => [styles.pageMenuUtilityButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireMediumHaptic();
                   onClose();
@@ -441,7 +440,11 @@ export function PageSlideMenu({
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Return to home hub"
-              style={[styles.pageMenuHomeButton, styles.pageMenuHomeButtonFooter]}
+              style={({ pressed }) => [
+                styles.pageMenuHomeButton,
+                styles.pageMenuHomeButtonFooter,
+                pressed ? styles.pressablePressed : null,
+              ]}
               onPress={() => {
                 fireSelectionHaptic();
                 onClose();

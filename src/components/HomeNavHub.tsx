@@ -159,7 +159,7 @@ export function HomeNavHub({ onOpenRoute, activeServerName }: HomeNavHubProps) {
   const compact = width < 760;
 
   const triggerSelection = () => {
-    void Haptics.selectionAsync().catch(() => undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
   };
 
   return (
@@ -175,10 +175,11 @@ export function HomeNavHub({ onOpenRoute, activeServerName }: HomeNavHubProps) {
             key={item.key}
             accessibilityRole="button"
             accessibilityLabel={`Open ${item.title}`}
-            style={[
+            style={({ pressed }) => [
               styles.homeHubLaunchCard,
               compact ? styles.homeHubLaunchCardCompact : null,
               toneStyle(item.tone),
+              pressed ? styles.pressablePressed : null,
             ]}
             onPress={() => {
               triggerSelection();
