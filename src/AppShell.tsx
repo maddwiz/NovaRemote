@@ -356,40 +356,13 @@ function selectPreferredNovaVoice(
   return preferredVoice?.identifier || "";
 }
 
-const FEMALE_NOVA_VOICE_HINTS = [
-  "ava",
-  "samantha",
-  "allison",
-  "alva",
-  "ana",
+const ALLOWED_NOVA_VOICE_NAMES = [
   "anna",
-  "ellen",
-  "flo",
-  "susan",
-  "karen",
-  "katie",
-  "kathy",
-  "martha",
-  "moira",
-  "nicky",
+  "samantha",
   "tessa",
-  "victoria",
-  "fiona",
-  "veena",
-  "serena",
-  "joelle",
-  "nora",
-  "amelie",
-  "paulina",
-  "monica",
-  "zoe",
-  "kelly",
-  "salli",
-  "siri voice 4",
-  "siri voice 3",
-  "siri voice 5",
-  "siri female",
-];
+  "moira",
+  "karen",
+] as const;
 
 const LOW_QUALITY_NOVA_VOICE_HINTS = [
   "sandy",
@@ -412,9 +385,17 @@ function includesVoiceHint(name: string, hints: string[]): boolean {
   return hints.some((hint) => normalized.includes(hint));
 }
 
+function isAllowedNovaVoice(voice: { name: string }): boolean {
+  const normalizedName = voice.name.trim().toLowerCase();
+  return ALLOWED_NOVA_VOICE_NAMES.some((allowed) => {
+    const matcher = new RegExp(`(^|\\b)${allowed}(\\b|$)`, "i");
+    return matcher.test(normalizedName);
+  });
+}
+
 function isLikelyFemaleNovaVoice(voice: { name: string }): boolean {
   const normalizedName = voice.name.trim().toLowerCase();
-  return /\bfemale\b/.test(normalizedName) || includesVoiceHint(normalizedName, FEMALE_NOVA_VOICE_HINTS);
+  return isAllowedNovaVoice(voice) || /\bfemale\b/.test(normalizedName);
 }
 
 function isLowQualityNovaVoice(voice: { name: string }): boolean {
@@ -430,6 +411,9 @@ function scoreNovaVoice(voice: { name: string; language: string; quality?: strin
 
   if (isLikelyFemaleNovaVoice(voice)) {
     score += 240;
+  }
+  if (isAllowedNovaVoice(voice)) {
+    score += 500;
   }
   if (/\bfemale\b/.test(normalizedName)) {
     score += 120;
@@ -481,8 +465,8 @@ function filterNovaSpeechVoices(
 ): Array<{ identifier: string; name: string; language: string; quality?: string }> {
   const withoutLowQuality = voices.filter((voice) => !isLowQualityNovaVoice(voice));
   const candidatePool = withoutLowQuality.length ? withoutLowQuality : voices;
-  const femaleVoices = candidatePool.filter((voice) => isLikelyFemaleNovaVoice(voice));
-  return femaleVoices.length ? femaleVoices : candidatePool;
+  const allowedVoices = candidatePool.filter((voice) => isAllowedNovaVoice(voice));
+  return allowedVoices.length ? allowedVoices : [];
 }
 
 function countMatches(output: string, searchTerm: string): number {
