@@ -1,16 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import * as Haptics from "expo-haptics";
 import {
   Animated,
   Keyboard,
   PanResponder,
   Platform,
-  Pressable,
   ScrollView,
   Text,
   View,
 } from "react-native";
 
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 import { useTerminalKeyboard } from "../hooks/useTerminalKeyboard";
 import { styles } from "../theme/styles";
 
@@ -236,9 +235,6 @@ export function TerminalKeyboardBar({
   }, [currentLayer, layerAnimation]);
 
   const onPressKey = (key: KeyDef) => {
-    if (Platform.OS !== "web") {
-      void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
-    }
     if (key.id === "ctrl") {
       toggleCtrl();
       return;

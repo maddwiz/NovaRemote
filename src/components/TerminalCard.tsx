@@ -1,7 +1,6 @@
 import React, { useMemo, useRef } from "react";
 import {
   NativeSyntheticEvent,
-  Pressable,
   StyleProp,
   Text,
   TextInputKeyPressEventData,
@@ -23,6 +22,7 @@ import {
   TerminalSendMode,
 } from "../types";
 import { AnsiText } from "./AnsiText";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 import { TerminalCardCollaboration } from "./terminal-card/TerminalCardCollaboration";
 import { TerminalCardFooter } from "./terminal-card/TerminalCardFooter";
 import { TerminalCardHeader } from "./terminal-card/TerminalCardHeader";

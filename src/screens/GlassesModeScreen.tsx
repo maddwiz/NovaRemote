@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   NativeSyntheticEvent,
-  Pressable,
   ScrollView,
   Switch,
   Text,
@@ -10,6 +9,7 @@ import {
   View,
 } from "react-native";
 
+import { FeedbackPressable as Pressable } from "../components/FeedbackPressable";
 import { SpatialPanelPosition, SpatialTerminalLayout } from "../components/SpatialTerminalLayout";
 import { TerminalKeyboardBar } from "../components/TerminalKeyboardBar";
 import { useAppContext } from "../context/AppContext";

@@ -2,7 +2,6 @@ import React, { useRef } from "react";
 import {
   Modal,
   NativeSyntheticEvent,
-  Pressable,
   SafeAreaView,
   ScrollView,
   StyleProp,
@@ -18,6 +17,7 @@ import { TextEditingAction, useTextEditing } from "../hooks/useTextEditing";
 import { styles } from "../theme/styles";
 import { TerminalSendMode } from "../types";
 import { AnsiText } from "./AnsiText";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 import { TerminalKeyboardBar } from "./TerminalKeyboardBar";
 
 type FullscreenTerminalProps = {
