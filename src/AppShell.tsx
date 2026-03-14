@@ -1502,8 +1502,8 @@ export default function AppShell() {
     if (!activeServer) {
       return;
     }
-    setStartCwd(activeServer.defaultCwd || DEFAULT_CWD);
-  }, [activeServer?.defaultCwd, focusedServerId]);
+    setStartCwd(DEFAULT_CWD);
+  }, [focusedServerId]);
 
   const setTails = useCallback(
     (updater: React.SetStateAction<Record<string, string>>) => {
@@ -1650,7 +1650,7 @@ export default function AppShell() {
       }
       const session = await createPoolSession(
         serverId,
-        targetConnection.server.defaultCwd || DEFAULT_CWD,
+        DEFAULT_CWD,
         kind,
         trimmedPrompt,
         false

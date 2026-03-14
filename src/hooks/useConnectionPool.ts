@@ -1553,7 +1553,7 @@ export function useConnectionPool({
   }, []);
 
   const refreshCodexTail = useCallback(
-    (serverId: string, session: string, delays: number[] = [350, 1200, 3000]) => {
+    (serverId: string, session: string, delays: number[] = [500, 1500, 4000, 8000, 15000]) => {
       delays.forEach((delayMs) => {
         setTimeout(() => {
           void fetchTail(serverId, session, false);
@@ -1576,11 +1576,11 @@ export function useConnectionPool({
         throw new Error("Connect to a server first.");
       }
 
-      const resolvedCwd = cwd.trim() || connection.server.defaultCwd || DEFAULT_CWD;
+      const resolvedCwd = cwd.trim();
 
       if (kind === "ai") {
         const payload = {
-          cwd: resolvedCwd,
+          cwd: resolvedCwd || null,
           initial_prompt: prompt.trim() || null,
           open_on_mac: openOnMac,
         };
@@ -1612,7 +1612,7 @@ export function useConnectionPool({
       const session = makeShellSessionName();
       await apiRequest(connection.server.baseUrl, connection.server.token, `${connection.terminalApiBasePath}/session`, {
         method: "POST",
-        body: JSON.stringify({ session, cwd: resolvedCwd }),
+        body: JSON.stringify({ session, ...(resolvedCwd ? { cwd: resolvedCwd } : {}) }),
       });
 
       const initialCommand = prompt.trim();
