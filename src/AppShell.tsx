@@ -996,6 +996,7 @@ export default function AppShell() {
   const novaConversationIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaRecordingSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const novaWalkieHoldActiveRef = useRef<boolean>(false);
+  const novaConversationAutoCloseRef = useRef<boolean>(false);
   const startNovaVoiceCaptureRef = useRef<(mode?: "wake" | "conversation" | "walkie") => void>(() => undefined);
   const stopVoiceCaptureIntoNovaRef = useRef<() => Promise<boolean>>(async () => false);
   const novaVoiceSettingsLoadedRef = useRef<boolean>(false);
@@ -4209,6 +4210,7 @@ export default function AppShell() {
       clearNovaRecordingSilenceTimer();
       pendingNovaListenModeRef.current = null;
       novaConversationModeEnabledRef.current = false;
+      novaConversationAutoCloseRef.current = false;
       setNovaConversationModeEnabled(false);
       getSpeechOutputModule()?.stop?.();
       if (liveVoiceRecognitionActiveRef.current) {
@@ -4236,6 +4238,10 @@ export default function AppShell() {
   );
 
   const resetNovaConversationIdleTimer = useCallback(() => {
+    if (!novaConversationAutoCloseRef.current) {
+      clearNovaConversationIdleTimer();
+      return;
+    }
     clearNovaConversationIdleTimer();
     novaConversationIdleTimerRef.current = setTimeout(() => {
       novaConversationIdleTimerRef.current = null;
@@ -4277,6 +4283,7 @@ export default function AppShell() {
       if (value) {
         requestNovaOverlayOpen();
         novaConversationModeEnabledRef.current = true;
+        novaConversationAutoCloseRef.current = false;
         setNovaConversationModeEnabled(true);
         setStatus({ text: "Hands-Free listening...", error: false });
         void requestVoicePermission().catch(() => undefined);
@@ -4294,7 +4301,7 @@ export default function AppShell() {
       const spoken = summarizeNovaReplyForSpeech(reply);
       clearNovaConversationIdleTimer();
       const resumeConversation = () => {
-        if (nextMode === "conversation") {
+        if (nextMode === "conversation" && novaConversationAutoCloseRef.current) {
           resetNovaConversationIdleTimer();
         }
         queueNovaListeningMode(nextMode, 220);
@@ -4430,6 +4437,7 @@ export default function AppShell() {
         }
         requestNovaOverlayOpen();
         novaConversationModeEnabledRef.current = true;
+        novaConversationAutoCloseRef.current = true;
         setNovaConversationModeEnabled(true);
 
         if (!wake.command.trim()) {
@@ -4562,8 +4570,12 @@ export default function AppShell() {
   const startNovaLiveRecognition = useCallback(
     async (mode: "wake" | "conversation") => {
       await startLiveRecognition({
-        continuous: true,
+        continuous: false,
         silenceTimeoutMs: Math.max(1000, Math.min(novaConversationIdleMsRef.current, 15000)),
+        settleOnFinal: true,
+        iosTaskHint: mode === "wake" ? "confirmation" : "dictation",
+        iosVoiceProcessingEnabled: mode === "wake",
+        minTranscriptLength: mode === "wake" ? 1 : 4,
         contextualStrings:
           mode === "wake"
             ? Array.from(
@@ -6547,8 +6559,8 @@ export default function AppShell() {
             }
             requestNovaOverlayOpen();
             novaConversationModeEnabledRef.current = true;
+            novaConversationAutoCloseRef.current = false;
             setNovaConversationModeEnabled(true);
-            resetNovaConversationIdleTimer();
             setStatus({ text: "Nova voice mode enabled. Speak naturally.", error: false });
             startNovaVoiceCaptureRef.current("conversation");
           }}

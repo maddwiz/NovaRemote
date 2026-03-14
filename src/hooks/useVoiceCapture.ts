@@ -50,7 +50,7 @@ type SpeechRecognitionModule = {
   requestMicrophonePermissionsAsync?: () => Promise<{ granted: boolean }>;
   requestSpeechRecognizerPermissionsAsync?: () => Promise<{ granted: boolean }>;
   addListener: (
-    eventName: "result" | "error" | "end",
+    eventName: "result" | "error" | "end" | "speechstart" | "volumechange",
     listener: (event?: any) => void
   ) => { remove: () => void };
   start: (options: Record<string, unknown>) => void;
@@ -65,6 +65,10 @@ type VoiceLiveRecognitionOptions = {
   contextualStrings?: string[];
   continuous?: boolean;
   silenceTimeoutMs?: number;
+  settleOnFinal?: boolean;
+  iosTaskHint?: "unspecified" | "dictation" | "search" | "confirmation";
+  iosVoiceProcessingEnabled?: boolean;
+  minTranscriptLength?: number;
 };
 
 let speechRecognitionModuleOverride: SpeechRecognitionModule | null = null;
@@ -139,6 +143,10 @@ function readSpeechRecognitionTranscript(event: ExpoSpeechRecognitionResultEvent
     .filter((item) => item.trim().length > 0)
     .join("\n")
     .trim();
+}
+
+function normalizeLiveTranscript(value: string): string {
+  return value.replace(/\s+/g, " ").trim();
 }
 
 async function transcribeWithNativeSpeech(uri: string): Promise<string> {
@@ -382,7 +390,18 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
   );
 
   const startLiveRecognition = useCallback(
-    async ({ onTranscript, onNoSpeech, onError, contextualStrings, continuous = false, silenceTimeoutMs }: VoiceLiveRecognitionOptions) => {
+    async ({
+      onTranscript,
+      onNoSpeech,
+      onError,
+      contextualStrings,
+      continuous = false,
+      silenceTimeoutMs,
+      settleOnFinal = !continuous,
+      iosTaskHint = "unspecified",
+      iosVoiceProcessingEnabled = false,
+      minTranscriptLength = 2,
+    }: VoiceLiveRecognitionOptions) => {
       const speechRecognitionModule = getSpeechRecognitionModule();
       if (!speechRecognitionModule.isRecognitionAvailable()) {
         throw new Error("Native speech recognition is unavailable on this device.");
@@ -409,7 +428,12 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
       liveRecognitionRunRef.current = runId;
       let finished = false;
       let latestTranscript = "";
+      let lastMeaningfulTranscript = "";
+      let heardSpeech = false;
       let silenceTimer: ReturnType<typeof setTimeout> | null = null;
+      let initialNoSpeechTimer: ReturnType<typeof setTimeout> | null = null;
+      let stopFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+      let stopRequested = false;
 
       const clearSilenceTimer = () => {
         if (!silenceTimer) {
@@ -419,8 +443,24 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         silenceTimer = null;
       };
 
+      const clearInitialNoSpeechTimer = () => {
+        if (!initialNoSpeechTimer) {
+          return;
+        }
+        clearTimeout(initialNoSpeechTimer);
+        initialNoSpeechTimer = null;
+      };
+
+      const clearStopFallbackTimer = () => {
+        if (!stopFallbackTimer) {
+          return;
+        }
+        clearTimeout(stopFallbackTimer);
+        stopFallbackTimer = null;
+      };
+
       const resetSilenceTimer = () => {
-        if (!silenceTimeoutMs || silenceTimeoutMs <= 0) {
+        if (!heardSpeech || !silenceTimeoutMs || silenceTimeoutMs <= 0) {
           return;
         }
         clearSilenceTimer();
@@ -429,16 +469,22 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
             return;
           }
           devVoiceLog("liveRecognition:silenceTimeout", { silenceTimeoutMs });
-          try {
-            if (speechRecognitionModule.stop) {
-              speechRecognitionModule.stop();
-            } else {
-              speechRecognitionModule.abort();
-            }
-          } catch {
-            settle("nospeech");
-          }
+          requestStop();
         }, silenceTimeoutMs);
+      };
+
+      const armInitialNoSpeechTimer = () => {
+        if (!silenceTimeoutMs || silenceTimeoutMs <= 0) {
+          return;
+        }
+        clearInitialNoSpeechTimer();
+        initialNoSpeechTimer = setTimeout(() => {
+          if (finished || liveRecognitionRunRef.current !== runId || heardSpeech) {
+            return;
+          }
+          devVoiceLog("liveRecognition:initialNoSpeechTimeout", { silenceTimeoutMs });
+          requestStop();
+        }, Math.max(5000, silenceTimeoutMs * 2));
       };
 
       const settle = (kind: "transcript" | "nospeech" | "error", value?: string) => {
@@ -447,6 +493,8 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         }
         finished = true;
         clearSilenceTimer();
+        clearInitialNoSpeechTimer();
+        clearStopFallbackTimer();
         setLiveRecognitionActive(false);
         clearLiveRecognitionSubscriptions();
 
@@ -475,22 +523,59 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         void Promise.resolve(onError?.(message)).catch(() => undefined);
       };
 
+      const requestStop = () => {
+        if (finished || stopRequested || liveRecognitionRunRef.current !== runId) {
+          return;
+        }
+        stopRequested = true;
+        clearSilenceTimer();
+        clearInitialNoSpeechTimer();
+        try {
+          if (speechRecognitionModule.stop) {
+            speechRecognitionModule.stop();
+          } else {
+            speechRecognitionModule.abort();
+          }
+        } catch {
+          settle(lastMeaningfulTranscript ? "transcript" : "nospeech", lastMeaningfulTranscript);
+          return;
+        }
+        clearStopFallbackTimer();
+        stopFallbackTimer = setTimeout(() => {
+          if (finished || liveRecognitionRunRef.current !== runId) {
+            return;
+          }
+          settle(lastMeaningfulTranscript ? "transcript" : "nospeech", lastMeaningfulTranscript);
+        }, 1200);
+      };
+
       liveRecognitionSubscriptionsRef.current = [
         speechRecognitionModule.addListener("result", (event: ExpoSpeechRecognitionResultEvent) => {
-          const transcript = readSpeechRecognitionTranscript(event);
+          const transcript = normalizeLiveTranscript(readSpeechRecognitionTranscript(event));
           if (!transcript) {
             return;
           }
-          latestTranscript = transcript.trim();
+          latestTranscript = transcript;
           setLastTranscript(latestTranscript);
-          resetSilenceTimer();
+          if (latestTranscript.length >= minTranscriptLength && latestTranscript !== lastMeaningfulTranscript) {
+            heardSpeech = true;
+            lastMeaningfulTranscript = latestTranscript;
+            clearInitialNoSpeechTimer();
+            resetSilenceTimer();
+          }
           devVoiceLog("liveRecognition:result", {
             isFinal: event.isFinal,
             transcriptPreview: latestTranscript.slice(0, 160),
           });
-          if (!continuous && event.isFinal) {
+          if (settleOnFinal && event.isFinal) {
             settle("transcript", latestTranscript);
           }
+        }),
+        speechRecognitionModule.addListener("speechstart", () => {
+          heardSpeech = true;
+          clearInitialNoSpeechTimer();
+          resetSilenceTimer();
+          devVoiceLog("liveRecognition:speechstart");
         }),
         speechRecognitionModule.addListener("error", (event: ExpoSpeechRecognitionErrorEvent) => {
           devVoiceLog("liveRecognition:error", {
@@ -501,8 +586,12 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         }),
         speechRecognitionModule.addListener("end", () => {
           devVoiceLog("liveRecognition:end", {
-            transcriptPreview: latestTranscript.slice(0, 160),
+            transcriptPreview: (lastMeaningfulTranscript || latestTranscript).slice(0, 160),
           });
+          if (lastMeaningfulTranscript.trim()) {
+            settle("transcript", lastMeaningfulTranscript.trim());
+            return;
+          }
           if (latestTranscript.trim()) {
             settle("transcript", latestTranscript.trim());
             return;
@@ -516,8 +605,10 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         continuous,
         silenceTimeoutMs: silenceTimeoutMs ?? null,
         contextualStrings: contextualStrings?.slice(0, 8) || [],
+        iosTaskHint,
+        iosVoiceProcessingEnabled,
       });
-      resetSilenceTimer();
+      armInitialNoSpeechTimer();
       speechRecognitionModule.start({
         lang: "en-US",
         interimResults: true,
@@ -525,8 +616,12 @@ export function useVoiceCapture({ activeServer, connected }: UseVoiceCaptureArgs
         continuous,
         requiresOnDeviceRecognition: Platform.OS === "ios",
         addsPunctuation: true,
-        iosTaskHint: "confirmation",
-        iosVoiceProcessingEnabled: true,
+        iosTaskHint,
+        iosVoiceProcessingEnabled,
+        volumeChangeEventOptions: {
+          enabled: true,
+          intervalMillis: 180,
+        },
         contextualStrings: contextualStrings?.length ? contextualStrings : undefined,
       });
     },
