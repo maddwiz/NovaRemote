@@ -27,3 +27,11 @@ vi.mock("expo-haptics", () => ({
     Error: "error",
   },
 }));
+
+vi.mock("expo-audio", () => ({
+  createAudioPlayer: vi.fn(() => ({
+    volume: 0,
+    currentTime: 0,
+    play: vi.fn(),
+  })),
+}));

@@ -1,3 +1,4 @@
+import { createAudioPlayer, type AudioPlayer } from "expo-audio";
 import * as Haptics from "expo-haptics";
 import React, { forwardRef } from "react";
 import {
@@ -8,6 +9,7 @@ import {
   StyleSheet,
   type StyleProp,
   type ViewStyle,
+  Vibration,
 } from "react-native";
 
 type FeedbackPressableProps = PressableProps & {
@@ -18,6 +20,49 @@ type FeedbackPressableProps = PressableProps & {
 };
 
 const DEFAULT_GLOW_COLOR = "#ff2ea6";
+
+let buttonPressPlayer: AudioPlayer | null = null;
+let lastButtonFeedbackAt = 0;
+
+function resolveButtonPressSoundSource(): number | { uri: string } {
+  if (typeof process !== "undefined" && process.env.VITEST) {
+    return { uri: "button-tap.wav" };
+  }
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  return require("../../assets/ui/button-tap.wav");
+}
+
+function getButtonPressPlayer(): AudioPlayer {
+  if (!buttonPressPlayer) {
+    buttonPressPlayer = createAudioPlayer(resolveButtonPressSoundSource(), {
+      keepAudioSessionActive: false,
+    });
+    buttonPressPlayer.volume = 0.2;
+  }
+  return buttonPressPlayer;
+}
+
+function playButtonPressSound() {
+  if (Platform.OS === "web") {
+    return;
+  }
+  const now = Date.now();
+  if (now - lastButtonFeedbackAt < 48) {
+    return;
+  }
+  lastButtonFeedbackAt = now;
+  try {
+    const player = getButtonPressPlayer();
+    try {
+      player.currentTime = 0;
+    } catch {
+      // no-op
+    }
+    player.play();
+  } catch {
+    // no-op
+  }
+}
 
 function buildPressedStyle(
   baseStyle: StyleProp<ViewStyle>,
@@ -59,9 +104,11 @@ export const FeedbackPressable = forwardRef<React.ElementRef<typeof ReactNativeP
   ) {
     const handlePressIn: PressableProps["onPressIn"] = (event) => {
       if (!disabled && feedbackHaptics) {
+        Vibration.vibrate(12);
         void Haptics
           .impactAsync(feedbackStrong ? Haptics.ImpactFeedbackStyle.Heavy : Haptics.ImpactFeedbackStyle.Medium)
           .catch(() => undefined);
+        playButtonPressSound();
       }
       onPressIn?.(event);
     };
