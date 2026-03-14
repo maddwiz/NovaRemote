@@ -85,7 +85,7 @@ export function TerminalCardHeader({
 }: TerminalCardHeaderProps) {
   const [showMoreActions, setShowMoreActions] = React.useState<boolean>(false);
   const fireSelectionHaptic = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
   };
   const fireMediumHaptic = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);

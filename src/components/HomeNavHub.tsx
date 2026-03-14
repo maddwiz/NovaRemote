@@ -160,7 +160,7 @@ export function HomeNavHub({ onOpenRoute, activeServerName }: HomeNavHubProps) {
   const compact = width < 760;
 
   const triggerSelection = () => {
-    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => undefined);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
   };
 
   return (
