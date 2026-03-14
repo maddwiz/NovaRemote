@@ -1049,7 +1049,7 @@ export default function AppShell() {
           speakRepliesEnabled: boolean;
           speechVoiceId: string;
         }>;
-        setNovaAlwaysListeningEnabled(parsed.alwaysListeningEnabled !== false);
+        setNovaAlwaysListeningEnabled(Boolean(parsed.alwaysListeningEnabled));
         setNovaHandsFreeEnabled(Boolean(parsed.handsFreeEnabled));
         setNovaWakePhrase(normalizeNovaWakePhrase(parsed.wakePhrase));
         setNovaConversationIdleMs(normalizeNovaConversationIdleMs(parsed.conversationIdleMs));
@@ -1992,6 +1992,7 @@ export default function AppShell() {
     meteringDb: voiceMeteringDb,
     permissionStatus: voicePermissionStatus,
     requestCapturePermission: requestVoicePermission,
+    startLiveRecognition,
     startCapture: startVoiceCapture,
     stopCapture: stopVoiceCapture,
     stopLiveRecognition,
@@ -4471,6 +4472,9 @@ export default function AppShell() {
 
   const handleNovaVoiceNoSpeech = useCallback(
     (mode: "wake" | "conversation" | "walkie") => {
+      if (mode === "walkie") {
+        setNovaVoiceModeActive(false);
+      }
       const nextMode =
         mode === "wake"
           ? "wake"
@@ -4498,6 +4502,9 @@ export default function AppShell() {
 
   const handleNovaVoiceError = useCallback(
     (mode: "wake" | "conversation" | "walkie", message: string): boolean => {
+      if (mode === "walkie") {
+        setNovaVoiceModeActive(false);
+      }
       const nextMode =
         mode === "wake"
           ? "wake"
@@ -4552,6 +4559,31 @@ export default function AppShell() {
     stopVoiceCaptureIntoNovaRef.current = stopVoiceCaptureIntoNova;
   }, [stopVoiceCaptureIntoNova]);
 
+  const startNovaLiveRecognition = useCallback(
+    async (mode: "wake" | "conversation") => {
+      await startLiveRecognition({
+        continuous: true,
+        silenceTimeoutMs: Math.max(1000, Math.min(novaConversationIdleMsRef.current, 15000)),
+        contextualStrings:
+          mode === "wake"
+            ? Array.from(
+                new Set([novaWakePhraseRef.current, DEFAULT_NOVA_WAKE_PHRASE, "nova"].filter((value) => value.trim().length > 0))
+              )
+            : undefined,
+        onTranscript: async (transcript) => {
+          await handleNovaTranscript(transcript, mode);
+        },
+        onNoSpeech: async () => {
+          handleNovaVoiceNoSpeech(mode);
+        },
+        onError: async (message) => {
+          handleNovaVoiceError(mode, message);
+        },
+      });
+    },
+    [handleNovaTranscript, handleNovaVoiceError, handleNovaVoiceNoSpeech, startLiveRecognition]
+  );
+
   const startNovaVoiceCapture = useCallback(
     (mode: "wake" | "conversation" | "walkie" = "conversation") => {
       void (async () => {
@@ -4603,10 +4635,7 @@ export default function AppShell() {
         }
 
         try {
-          await startVoiceCapture();
-          resetNovaRecordingSilenceTimer(
-            mode === "wake" ? Math.max(1500, novaConversationIdleMsRef.current) : novaConversationIdleMsRef.current
-          );
+          await startNovaLiveRecognition(mode);
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           setNovaVoiceModeActive(false);
@@ -4620,8 +4649,8 @@ export default function AppShell() {
       clearNovaRecordingSilenceTimer,
       clearNovaVoiceStopTimer,
       handleNovaVoiceError,
-      resetNovaRecordingSilenceTimer,
       setStatus,
+      startNovaLiveRecognition,
       startVoiceCapture,
       stopLiveRecognition,
       stopVoiceCapture,
