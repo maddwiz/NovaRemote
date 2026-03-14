@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Modal, PanResponder, Text, View, useWindowDimensions } from "react-native";
+import { Modal, Text, View } from "react-native";
 import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { styles } from "../theme/styles";
@@ -20,8 +20,6 @@ export function TabBar({
   onToggleSimpleMode,
   compactBottomNav = false,
 }: TabBarProps) {
-  const { width } = useWindowDimensions();
-  const compact = width < 980;
   const [drawerOpen, setDrawerOpen] = useState<boolean>(false);
   const allTabs: Array<{ key: RouteTab; label: string; shortLabel: string; accessibilityLabel: string }> = [
     { key: "terminals", label: "Terminals", shortLabel: "Home", accessibilityLabel: "Open terminals tab" },
@@ -33,45 +31,11 @@ export function TabBar({
     { key: "team", label: "Team", shortLabel: "Team", accessibilityLabel: "Open team tab" },
     { key: "vr", label: "VR", shortLabel: "VR", accessibilityLabel: "Open VR command center tab" },
   ];
-  const primaryTabKeys: RouteTab[] = ["terminals", "servers", "agents", "files", "llms"];
   const tabs = useMemo(() => allTabs, [allTabs]);
   const activeTabLabel = useMemo(
     () => allTabs.find((tab) => tab.key === route)?.label || "Navigation",
     [route, allTabs]
   );
-  const swipeOrder = useMemo(
-    () => (simpleMode ? primaryTabKeys : tabs.map((tab) => tab.key)),
-    [simpleMode, tabs]
-  );
-  const swipeResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onMoveShouldSetPanResponder: (_event, gesture) =>
-          Math.abs(gesture.dx) > 20 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.2,
-        onPanResponderRelease: (_event, gesture) => {
-          if (Math.abs(gesture.dx) < 56) {
-            return;
-          }
-          const currentIndex = swipeOrder.indexOf(route);
-          if (currentIndex < 0) {
-            return;
-          }
-          if (gesture.dx < 0) {
-            const next = swipeOrder[currentIndex + 1];
-            if (next) {
-              onChange(next);
-            }
-            return;
-          }
-          const previous = swipeOrder[currentIndex - 1];
-          if (previous) {
-            onChange(previous);
-          }
-        },
-      }),
-    [onChange, route, swipeOrder]
-  );
-
   const tabButtons = tabs.map((tab) => (
     <Pressable
       key={tab.key}
@@ -101,7 +65,7 @@ export function TabBar({
 
     return (
       <>
-        <View style={styles.bottomQuickNav} {...swipeResponder.panHandlers}>
+        <View style={styles.bottomQuickNav}>
           {quickTabs.map((tab) => (
             <Pressable
               key={`quick-${tab.key}`}
@@ -194,7 +158,7 @@ export function TabBar({
 
   return (
     <>
-      <View style={styles.navCompactRow} {...swipeResponder.panHandlers}>
+      <View style={styles.navCompactRow}>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel="Open navigation menu"

@@ -16,12 +16,14 @@ import {
   BackHandler,
   Image,
   KeyboardAvoidingView,
+  PanResponder,
   Platform,
   RefreshControl,
   SafeAreaView,
   Share,
   ScrollView,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { FeedbackPressable as Pressable } from "./components/FeedbackPressable";
@@ -998,7 +1000,49 @@ function adaptCommandForBackend(command: string, backend: TerminalBackendKind | 
 }
 
 export default function AppShell() {
-  const [route, setRoute] = useState<RouteTab>("terminals");
+  const { width: windowWidth } = useWindowDimensions();
+  const [routeState, setRouteState] = useState<{
+    route: RouteTab;
+    history: RouteTab[];
+    historyIndex: number;
+  }>({
+    route: "terminals",
+    history: ["terminals"],
+    historyIndex: 0,
+  });
+  const route = routeState.route;
+  const routeHistory = routeState.history;
+  const routeHistoryIndex = routeState.historyIndex;
+  const setRoute = useCallback((next: RouteTab, options?: { replace?: boolean }) => {
+    setRouteState((current) => {
+      if (next === current.route) {
+        return current;
+      }
+      if (options?.replace) {
+        const nextHistory = [...current.history];
+        nextHistory[current.historyIndex] = next;
+        return {
+          route: next,
+          history: nextHistory,
+          historyIndex: current.historyIndex,
+        };
+      }
+      const baseHistory = current.history.slice(0, current.historyIndex + 1);
+      if (baseHistory[baseHistory.length - 1] === next) {
+        return {
+          route: next,
+          history: baseHistory,
+          historyIndex: baseHistory.length - 1,
+        };
+      }
+      const nextHistory = [...baseHistory, next];
+      return {
+        route: next,
+        history: nextHistory,
+        historyIndex: nextHistory.length - 1,
+      };
+    });
+  }, []);
   const [agentsAutoEnableFallbackServerId, setAgentsAutoEnableFallbackServerId] = useState<string | null>(null);
   const [appStateStatus, setAppStateStatus] = useState(AppState.currentState);
   const simpleMode = true;
@@ -5778,6 +5822,80 @@ export default function AppShell() {
     [capabilities.files, isPro, markActivity]
   );
 
+  const goBackRoute = useCallback((): boolean => {
+    if (routeHistoryIndex <= 0) {
+      return false;
+    }
+    markActivity();
+    setPageMenuVisible(false);
+    setHomeHubVisible(false);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRouteState((current) => {
+      if (current.historyIndex <= 0) {
+        return current;
+      }
+      const nextIndex = current.historyIndex - 1;
+      return {
+        route: current.history[nextIndex],
+        history: current.history,
+        historyIndex: nextIndex,
+      };
+    });
+    return true;
+  }, [markActivity, routeHistoryIndex]);
+
+  const goForwardRoute = useCallback((): boolean => {
+    if (routeHistoryIndex >= routeHistory.length - 1) {
+      return false;
+    }
+    markActivity();
+    setPageMenuVisible(false);
+    setHomeHubVisible(false);
+    void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    setRouteState((current) => {
+      if (current.historyIndex >= current.history.length - 1) {
+        return current;
+      }
+      const nextIndex = current.historyIndex + 1;
+      return {
+        route: current.history[nextIndex],
+        history: current.history,
+        historyIndex: nextIndex,
+      };
+    });
+    return true;
+  }, [markActivity, routeHistory, routeHistoryIndex]);
+
+  const edgeHistorySwipeResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gesture) => {
+          if (pageMenuVisible || route === "glasses") {
+            return false;
+          }
+          const fromLeftEdge = gesture.x0 <= 28;
+          const fromRightEdge = gesture.x0 >= windowWidth - 28;
+          if (!fromLeftEdge && !fromRightEdge) {
+            return false;
+          }
+          return Math.abs(gesture.dx) > 14 && Math.abs(gesture.dx) > Math.abs(gesture.dy) * 1.4;
+        },
+        onPanResponderRelease: (_event, gesture) => {
+          if (Math.abs(gesture.dy) > 96) {
+            return;
+          }
+          if (gesture.x0 <= 28 && gesture.dx >= 72) {
+            goBackRoute();
+            return;
+          }
+          if (gesture.x0 >= windowWidth - 28 && gesture.dx <= -72) {
+            goForwardRoute();
+          }
+        },
+      }),
+    [goBackRoute, goForwardRoute, pageMenuVisible, route, windowWidth]
+  );
+
   const openRouteFromHomeHub = useCallback(
     (next: RouteTab) => {
       const changed = handleTabChange(next);
@@ -5901,6 +6019,7 @@ export default function AppShell() {
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : undefined}
         keyboardVerticalOffset={12}
+        {...edgeHistorySwipeResponder.panHandlers}
       >
         <ScrollView
           style={styles.flex}
