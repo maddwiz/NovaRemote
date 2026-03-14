@@ -1,5 +1,6 @@
 import React from "react";
-import { Modal, Pressable, SafeAreaView, Share, Text, View } from "react-native";
+import { Modal, SafeAreaView, Share, Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 import QRCode from "react-native-qrcode-svg";
 
 import { styles } from "../theme/styles";

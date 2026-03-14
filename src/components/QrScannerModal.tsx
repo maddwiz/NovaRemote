@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
-import { ActivityIndicator, Modal, Pressable, SafeAreaView, Text, View } from "react-native";
+import { ActivityIndicator, Modal, SafeAreaView, Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 import { BarcodeScanningResult, CameraView, useCameraPermissions } from "expo-camera";
 
 import { styles } from "../theme/styles";

@@ -1,6 +1,7 @@
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { Modal, Pressable, Text, View } from "react-native";
+import { Modal, Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "../FeedbackPressable";
 
 import { styles } from "../../theme/styles";
 import { AiEnginePreference, TerminalSendMode } from "../../types";

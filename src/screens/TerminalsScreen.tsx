@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { Alert, Modal, NativeSyntheticEvent, Pressable, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
+import { Alert, Modal, NativeSyntheticEvent, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
+import { FeedbackPressable as Pressable } from "../components/FeedbackPressable";
 
 import { useAppContext } from "../context/AppContext";
 import { CWD_PLACEHOLDER, DEFAULT_SHELL_WAIT_MS, STORAGE_PROCESS_PANEL_PREFS_PREFIX, isLikelyAiSession } from "../constants";

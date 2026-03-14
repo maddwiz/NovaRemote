@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Modal, Pressable, SafeAreaView, Text, TextInput, View } from "react-native";
+import { Modal, SafeAreaView, Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { styles } from "../theme/styles";
 import { ProcessSignal } from "../types";

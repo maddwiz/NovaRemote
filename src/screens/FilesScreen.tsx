@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "../components/FeedbackPressable";
 
 import { AnsiText } from "../components/AnsiText";
 import { PageHeroCard } from "../components/PageHeroCard";

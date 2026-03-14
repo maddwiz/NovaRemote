@@ -1,7 +1,13 @@
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
 import * as SecureStore from "expo-secure-store";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import * as Haptics from "expo-haptics";
 import {
   Alert,
@@ -10,7 +16,6 @@ import {
   Image,
   KeyboardAvoidingView,
   Platform,
-  Pressable,
   RefreshControl,
   SafeAreaView,
   Share,
@@ -18,6 +23,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { FeedbackPressable as Pressable } from "./components/FeedbackPressable";
 
 import { apiRequest, normalizeBaseUrl } from "./api/client";
 import { FullscreenTerminal } from "./components/FullscreenTerminal";

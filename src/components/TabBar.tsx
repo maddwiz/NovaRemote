@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Modal, PanResponder, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Modal, PanResponder, Text, View, useWindowDimensions } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { styles } from "../theme/styles";
 import { RouteTab } from "../types";

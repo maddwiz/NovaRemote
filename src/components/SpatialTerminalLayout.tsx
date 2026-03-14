@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { PanResponder, Pressable, ScrollView, Text, View } from "react-native";
+import { PanResponder, ScrollView, Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { styles } from "../theme/styles";
 import { AnsiText } from "./AnsiText";

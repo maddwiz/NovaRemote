@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Modal, Pressable, SafeAreaView, Switch, Text, TextInput, View } from "react-native";
+import { Modal, SafeAreaView, Switch, Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";

@@ -1,5 +1,6 @@
 import React from "react";
-import { Alert, Pressable, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { Alert, ScrollView, Text, View, useWindowDimensions } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { useVmGroupPrefs } from "../hooks/useVmGroupPrefs";
 import { isTeamManagedServer } from "../teamServers";

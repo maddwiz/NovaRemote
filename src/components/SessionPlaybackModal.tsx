@@ -1,5 +1,6 @@
 import React, { useRef } from "react";
-import { Modal, Pressable, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { Modal, SafeAreaView, ScrollView, Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { styles } from "../theme/styles";
 import { AnsiText } from "./AnsiText";

@@ -1,5 +1,6 @@
 import React from "react";
-import { Modal, Pressable, Text, View } from "react-native";
+import { Modal, Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { canDeleteServerProfile, canEditServerProfile, isTeamManagedServer } from "../teamServers";
 import { styles } from "../theme/styles";

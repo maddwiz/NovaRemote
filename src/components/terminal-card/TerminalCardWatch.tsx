@@ -1,5 +1,6 @@
 import React from "react";
-import { Pressable, Text, TextInput, View } from "react-native";
+import { Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "../FeedbackPressable";
 
 import { styles } from "../../theme/styles";
 

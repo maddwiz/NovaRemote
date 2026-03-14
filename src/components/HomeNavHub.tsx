@@ -1,6 +1,7 @@
 import React from "react";
 import * as Haptics from "expo-haptics";
-import { Image, Pressable, Text, View, useWindowDimensions } from "react-native";
+import { Image, Text, View, useWindowDimensions } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 import Svg, { Circle, Ellipse, Line, Path, Rect } from "react-native-svg";
 
 import { BRAND_LOGO } from "../branding";

@@ -1,5 +1,6 @@
 import React from "react";
-import { Pressable, SafeAreaView, Text, View } from "react-native";
+import { SafeAreaView, Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { styles } from "../theme/styles";
 

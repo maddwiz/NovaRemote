@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import * as Haptics from "expo-haptics";
-import { Image, PanResponder, Pressable, ScrollView, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { Image, PanResponder, ScrollView, Switch, Text, TextInput, useWindowDimensions, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { BRAND_LOGO } from "../branding";
 import { NovaAssistantMessage } from "../novaAssistant";

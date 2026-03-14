@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from "react";
-import { Pressable, ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { useNovaAgentRuntime } from "../hooks/useNovaAgentRuntime";
 import {

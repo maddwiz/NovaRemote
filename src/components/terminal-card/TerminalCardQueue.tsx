@@ -1,5 +1,6 @@
 import React, { useMemo } from "react";
-import { Pressable, Text, View } from "react-native";
+import { Text, View } from "react-native";
+import { FeedbackPressable as Pressable } from "../FeedbackPressable";
 
 import { styles } from "../../theme/styles";
 import { QueuedCommand, QueuedCommandStatus } from "../../types";

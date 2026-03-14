@@ -1,6 +1,7 @@
 import React from "react";
 import * as Haptics from "expo-haptics";
-import { Pressable, Switch, Text, TextInput, View } from "react-native";
+import { Switch, Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "../components/FeedbackPressable";
 
 import { PageHeroCard } from "../components/PageHeroCard";
 import {

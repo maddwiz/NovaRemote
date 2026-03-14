@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { Image, Linking, Pressable, Text, TextInput, View } from "react-native";
+import { Image, Linking, Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "./FeedbackPressable";
 
 import { useNovaAdaptBridge } from "../hooks/useNovaAdaptBridge";
 import { NovaDeviceFallbackPanel } from "./NovaDeviceFallbackPanel";

@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { Pressable, ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { ScrollView, Switch, Text, TextInput, View } from "react-native";
+import { FeedbackPressable as Pressable } from "../components/FeedbackPressable";
 
 import { CWD_PLACEHOLDER, DEFAULT_SERVER_NAME, SERVER_URL_PLACEHOLDER, SSH_HOST_PLACEHOLDER, SSH_USER_PLACEHOLDER } from "../constants";
 import { styles } from "../theme/styles";
