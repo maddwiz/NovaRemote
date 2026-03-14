@@ -9,6 +9,7 @@ import {
   MIN_NOVA_CONVERSATION_IDLE_MS,
 } from "../novaVoice";
 import { styles } from "../theme/styles";
+import { NovaLinkedVoiceProvider } from "../voiceProviders";
 
 type SettingsScreenProps = {
   isPro: boolean;
@@ -20,6 +21,10 @@ type SettingsScreenProps = {
   speechOutputAvailable: boolean;
   selectedSpeechVoiceLabel: string;
   speechVoiceChoicesAvailable: boolean;
+  linkedVoiceProvider: NovaLinkedVoiceProvider;
+  linkedVoiceApiKey: string;
+  linkedVoiceBusy: boolean;
+  linkedVoiceStatus: string;
   onTestSpeakReplies: () => void;
   onShowPaywall: () => void;
   onSetAlwaysListeningEnabled: (value: boolean) => void;
@@ -27,6 +32,9 @@ type SettingsScreenProps = {
   onSetSpeakRepliesEnabled: (value: boolean) => void;
   onSetWakePhrase: (value: string) => void;
   onSetConversationIdleMs: (value: number) => void;
+  onSetLinkedVoiceProvider: (value: NovaLinkedVoiceProvider) => void;
+  onSetLinkedVoiceApiKey: (value: string) => void;
+  onRefreshLinkedVoices: () => void;
   onCycleSpeechVoice: (direction: -1 | 1) => void;
 };
 
@@ -40,6 +48,10 @@ export function SettingsScreen({
   speechOutputAvailable,
   selectedSpeechVoiceLabel,
   speechVoiceChoicesAvailable,
+  linkedVoiceProvider,
+  linkedVoiceApiKey,
+  linkedVoiceBusy,
+  linkedVoiceStatus,
   onTestSpeakReplies,
   onShowPaywall,
   onSetAlwaysListeningEnabled,
@@ -47,9 +59,15 @@ export function SettingsScreen({
   onSetSpeakRepliesEnabled,
   onSetWakePhrase,
   onSetConversationIdleMs,
+  onSetLinkedVoiceProvider,
+  onSetLinkedVoiceApiKey,
+  onRefreshLinkedVoices,
   onCycleSpeechVoice,
 }: SettingsScreenProps) {
   const timeoutSeconds = Math.round(conversationIdleMs / 1000);
+  const linkedVoiceSelected = linkedVoiceProvider === "elevenlabs";
+  const voiceCycleLockedByPro = !linkedVoiceSelected && !isPro;
+  const canCycleVoice = speechVoiceChoicesAvailable && !voiceCycleLockedByPro;
 
   const fireSelectionHaptic = () => {
     void Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => undefined);
@@ -196,6 +214,67 @@ export function SettingsScreen({
             ? `Wake phrase standby is on. Say "${wakePhrase || "hey nova"}" while NovaRemote is open to start a conversation.`
             : `Wake phrase standby is off. Turn it on if you want "${wakePhrase || "hey nova"}" to work without using Hands-Free.`}
         </Text>
+        <Text style={styles.serverSubtitle}>
+          Link your own voice subscription if you want higher-quality voices than the built-in free Apple voices.
+        </Text>
+        <View style={styles.pageMenuStepperRow}>
+          <Text style={styles.pageMenuSwitchLabel}>{`Voice source: ${linkedVoiceProvider === "elevenlabs" ? "Linked subscription" : "Apple built-in"}`}</Text>
+          <View style={styles.pageMenuStepperButtons}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use Apple built-in Nova voice"
+              style={({ pressed }) => [styles.pageMenuStepperButton, pressed ? styles.pressablePressed : null]}
+              onPress={() => {
+                fireSelectionHaptic();
+                onSetLinkedVoiceProvider("system");
+              }}
+            >
+              <Text style={styles.pageMenuStepperText}>Apple</Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use linked subscription voice"
+              style={({ pressed }) => [styles.pageMenuStepperButton, pressed ? styles.pressablePressed : null]}
+              onPress={() => {
+                fireSelectionHaptic();
+                onSetLinkedVoiceProvider("elevenlabs");
+              }}
+            >
+              <Text style={styles.pageMenuStepperText}>Linked</Text>
+            </Pressable>
+          </View>
+        </View>
+        <Text style={styles.serverSubtitle}>
+          First linked provider: ElevenLabs via your own API key. Apple voices remain the free fallback.
+        </Text>
+        <TextInput
+          accessibilityLabel="Linked voice provider API key"
+          value={linkedVoiceApiKey}
+          onChangeText={onSetLinkedVoiceApiKey}
+          placeholder="Paste your ElevenLabs API key"
+          placeholderTextColor="#6075a5"
+          style={styles.input}
+          secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
+        />
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Refresh linked subscription voices"
+          style={({ pressed }) => [
+            styles.pageMenuActionButton,
+            linkedVoiceBusy ? styles.buttonDisabled : null,
+            pressed ? styles.pressablePressed : null,
+          ]}
+          disabled={linkedVoiceBusy}
+          onPress={() => {
+            fireMediumHaptic();
+            onRefreshLinkedVoices();
+          }}
+        >
+          <Text style={styles.pageMenuActionText}>{linkedVoiceBusy ? "Loading Voices..." : "Refresh Linked Voices"}</Text>
+        </Pressable>
+        {linkedVoiceStatus ? <Text style={styles.serverSubtitle}>{linkedVoiceStatus}</Text> : null}
         {speechOutputAvailable ? (
           <>
             <View style={styles.pageMenuStepperRow}>
@@ -203,16 +282,19 @@ export function SettingsScreen({
               <View style={styles.pageMenuStepperButtons}>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={isPro ? "Select previous Nova voice" : "Unlock Pro to change Nova voice"}
+                  accessibilityLabel={voiceCycleLockedByPro ? "Unlock Pro to change Nova voice" : "Select previous Nova voice"}
                   style={({ pressed }) => [
                     styles.pageMenuStepperButton,
-                    (!speechVoiceChoicesAvailable || !isPro) ? styles.buttonDisabled : null,
+                    !canCycleVoice ? styles.buttonDisabled : null,
                     pressed ? styles.pressablePressed : null,
                   ]}
                   onPress={() => {
                     fireSelectionHaptic();
-                    if (!isPro) {
+                    if (voiceCycleLockedByPro) {
                       onShowPaywall();
+                      return;
+                    }
+                    if (!speechVoiceChoicesAvailable) {
                       return;
                     }
                     onCycleSpeechVoice(-1);
@@ -222,16 +304,19 @@ export function SettingsScreen({
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
-                  accessibilityLabel={isPro ? "Select next Nova voice" : "Unlock Pro to change Nova voice"}
+                  accessibilityLabel={voiceCycleLockedByPro ? "Unlock Pro to change Nova voice" : "Select next Nova voice"}
                   style={({ pressed }) => [
                     styles.pageMenuStepperButton,
-                    (!speechVoiceChoicesAvailable || !isPro) ? styles.buttonDisabled : null,
+                    !canCycleVoice ? styles.buttonDisabled : null,
                     pressed ? styles.pressablePressed : null,
                   ]}
                   onPress={() => {
                     fireSelectionHaptic();
-                    if (!isPro) {
+                    if (voiceCycleLockedByPro) {
                       onShowPaywall();
+                      return;
+                    }
+                    if (!speechVoiceChoicesAvailable) {
                       return;
                     }
                     onCycleSpeechVoice(1);
@@ -242,14 +327,18 @@ export function SettingsScreen({
               </View>
             </View>
             <Text style={styles.serverSubtitle}>
-              {isPro
-                ? "Choose the voice that fits Nova best."
-                : "Voice selection is part of Pro. Nova will still use the best installed Apple female voice it can find."}
+              {linkedVoiceProvider === "elevenlabs"
+                ? "Choose from the voices on your linked subscription."
+                : isPro
+                  ? "Choose the voice that fits Nova best."
+                  : "Voice selection is part of Pro. Nova will still use the best installed Apple female voice it can find."}
             </Text>
             <Text style={styles.serverSubtitle}>
-              Best free quality comes from Apple Premium or Enhanced voices already installed on this iPhone.
+              {linkedVoiceProvider === "elevenlabs"
+                ? "Linked voices use your own subscription. Apple voices remain available if you switch back."
+                : "Best free quality comes from Apple Premium or Enhanced voices already installed on this iPhone."}
             </Text>
-            {!isPro ? (
+            {!isPro && linkedVoiceProvider !== "elevenlabs" ? (
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Unlock Pro voice options"

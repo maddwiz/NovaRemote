@@ -1,4 +1,5 @@
 import { StatusBar } from "expo-status-bar";
+import { createAudioPlayer, type AudioPlayer, type AudioStatus } from "expo-audio";
 import * as Linking from "expo-linking";
 import * as SecureStore from "expo-secure-store";
 import React, {
@@ -132,6 +133,16 @@ import {
   normalizeNovaWakePhrase,
   resolveNovaWakeCommand,
 } from "./novaVoice";
+import {
+  fetchElevenLabsVoices,
+  normalizeExternalVoiceId,
+  normalizeNovaLinkedVoiceProvider,
+  type NovaExternalVoiceChoice,
+  type NovaLinkedVoiceProvider,
+  selectPreferredExternalVoice,
+  synthesizeElevenLabsSpeechToFile,
+  trimVoiceProviderApiKey,
+} from "./voiceProviders";
 import { findBlockedCommandPattern, resolveSessionTimeoutMs } from "./teamPolicy";
 import {
   AiEnginePreference,
@@ -1001,6 +1012,12 @@ export default function AppShell() {
   const [novaSpeakRepliesEnabled, setNovaSpeakRepliesEnabled] = useState<boolean>(true);
   const [novaSpeechVoiceId, setNovaSpeechVoiceId] = useState<string>("");
   const [novaSpeechVoices, setNovaSpeechVoices] = useState<Array<{ identifier: string; name: string; language: string; quality?: string }>>([]);
+  const [novaLinkedVoiceProvider, setNovaLinkedVoiceProvider] = useState<NovaLinkedVoiceProvider>("system");
+  const [novaLinkedVoiceApiKey, setNovaLinkedVoiceApiKey] = useState<string>("");
+  const [novaLinkedVoiceId, setNovaLinkedVoiceId] = useState<string>("");
+  const [novaLinkedVoiceChoices, setNovaLinkedVoiceChoices] = useState<NovaExternalVoiceChoice[]>([]);
+  const [novaLinkedVoiceBusy, setNovaLinkedVoiceBusy] = useState<boolean>(false);
+  const [novaLinkedVoiceStatus, setNovaLinkedVoiceStatus] = useState<string>("");
   const [novaVoiceModeActive, setNovaVoiceModeActive] = useState<boolean>(false);
   const [novaOpenRequestToken, setNovaOpenRequestToken] = useState<number>(0);
   const [novaAlwaysListeningEnabled, setNovaAlwaysListeningEnabled] = useState<boolean>(false);
@@ -1065,6 +1082,11 @@ export default function AppShell() {
   const novaConversationIdleMsRef = useRef<number>(novaConversationIdleMs);
   const novaSpeakRepliesEnabledRef = useRef<boolean>(novaSpeakRepliesEnabled);
   const novaSpeechVoiceIdRef = useRef<string>(novaSpeechVoiceId);
+  const novaLinkedVoiceProviderRef = useRef<NovaLinkedVoiceProvider>(novaLinkedVoiceProvider);
+  const novaLinkedVoiceApiKeyRef = useRef<string>(novaLinkedVoiceApiKey);
+  const novaLinkedVoiceIdRef = useRef<string>(novaLinkedVoiceId);
+  const linkedVoicePlayerRef = useRef<AudioPlayer | null>(null);
+  const linkedVoicePlaybackCleanupRef = useRef<(() => void) | null>(null);
   const novaVoiceModeActiveRef = useRef<boolean>(novaVoiceModeActive);
   const novaListeningModeRef = useRef<"wake" | "conversation" | "walkie">("wake");
   const pendingNovaListenModeRef = useRef<"wake" | "conversation" | "walkie" | null>(null);
@@ -1098,6 +1120,9 @@ export default function AppShell() {
           setNovaConversationIdleMs(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
           setNovaSpeakRepliesEnabled(true);
           setNovaSpeechVoiceId("");
+          setNovaLinkedVoiceProvider("system");
+          setNovaLinkedVoiceApiKey("");
+          setNovaLinkedVoiceId("");
           return;
         }
         const parsed = JSON.parse(raw) as Partial<{
@@ -1107,6 +1132,9 @@ export default function AppShell() {
           conversationIdleMs: number;
           speakRepliesEnabled: boolean;
           speechVoiceId: string;
+          linkedVoiceProvider: NovaLinkedVoiceProvider;
+          linkedVoiceApiKey: string;
+          linkedVoiceId: string;
         }>;
         setNovaAlwaysListeningEnabled(Boolean(parsed.alwaysListeningEnabled));
         setNovaHandsFreeEnabled(Boolean(parsed.handsFreeEnabled));
@@ -1114,6 +1142,9 @@ export default function AppShell() {
         setNovaConversationIdleMs(normalizeNovaConversationIdleMs(parsed.conversationIdleMs));
         setNovaSpeakRepliesEnabled(parsed.speakRepliesEnabled !== false);
         setNovaSpeechVoiceId(typeof parsed.speechVoiceId === "string" ? parsed.speechVoiceId.trim() : "");
+        setNovaLinkedVoiceProvider(normalizeNovaLinkedVoiceProvider(parsed.linkedVoiceProvider));
+        setNovaLinkedVoiceApiKey(trimVoiceProviderApiKey(parsed.linkedVoiceApiKey));
+        setNovaLinkedVoiceId(normalizeExternalVoiceId(parsed.linkedVoiceId));
       } catch {
         if (mounted) {
           setNovaAlwaysListeningEnabled(false);
@@ -1122,6 +1153,9 @@ export default function AppShell() {
           setNovaConversationIdleMs(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
           setNovaSpeakRepliesEnabled(true);
           setNovaSpeechVoiceId("");
+          setNovaLinkedVoiceProvider("system");
+          setNovaLinkedVoiceApiKey("");
+          setNovaLinkedVoiceId("");
         }
       } finally {
         if (mounted) {
@@ -1137,6 +1171,68 @@ export default function AppShell() {
     };
   }, []);
 
+  const stopLinkedVoicePlayback = useCallback(() => {
+    try {
+      linkedVoicePlayerRef.current?.pause();
+    } catch {
+      // best effort
+    }
+    try {
+      linkedVoicePlayerRef.current?.release();
+    } catch {
+      // best effort
+    }
+    linkedVoicePlayerRef.current = null;
+    linkedVoicePlaybackCleanupRef.current?.();
+    linkedVoicePlaybackCleanupRef.current = null;
+  }, []);
+
+  const refreshNovaLinkedVoiceChoices = useCallback(async () => {
+    const apiKey = trimVoiceProviderApiKey(novaLinkedVoiceApiKeyRef.current);
+    if (novaLinkedVoiceProviderRef.current !== "elevenlabs" || !apiKey) {
+      setNovaLinkedVoiceChoices([]);
+      setNovaLinkedVoiceStatus(apiKey ? "Choose ElevenLabs to use your linked subscription." : "");
+      return;
+    }
+
+    setNovaLinkedVoiceBusy(true);
+    try {
+      const voices = await fetchElevenLabsVoices(apiKey);
+      setNovaLinkedVoiceChoices(voices);
+      const preferredVoiceId = selectPreferredExternalVoice(voices, novaLinkedVoiceIdRef.current);
+      if (preferredVoiceId !== novaLinkedVoiceIdRef.current) {
+        setNovaLinkedVoiceId(preferredVoiceId);
+      }
+      setNovaLinkedVoiceStatus(voices.length ? "Linked ElevenLabs voices loaded." : "No ElevenLabs voices found.");
+    } catch (error) {
+      setNovaLinkedVoiceChoices([]);
+      setNovaLinkedVoiceStatus(error instanceof Error ? error.message : String(error));
+    } finally {
+      setNovaLinkedVoiceBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (novaLinkedVoiceProvider !== "elevenlabs") {
+      stopLinkedVoicePlayback();
+      setNovaLinkedVoiceChoices([]);
+      setNovaLinkedVoiceStatus("");
+      return;
+    }
+    if (!trimVoiceProviderApiKey(novaLinkedVoiceApiKey)) {
+      setNovaLinkedVoiceChoices([]);
+      setNovaLinkedVoiceStatus("Add your ElevenLabs API key to unlock linked voices.");
+      return;
+    }
+    void refreshNovaLinkedVoiceChoices();
+  }, [novaLinkedVoiceApiKey, novaLinkedVoiceProvider, refreshNovaLinkedVoiceChoices, stopLinkedVoicePlayback]);
+
+  useEffect(() => {
+    return () => {
+      stopLinkedVoicePlayback();
+    };
+  }, [stopLinkedVoicePlayback]);
+
   useEffect(() => {
     if (!novaVoiceSettingsLoadedRef.current) {
       return;
@@ -1150,9 +1246,22 @@ export default function AppShell() {
         conversationIdleMs: normalizeNovaConversationIdleMs(novaConversationIdleMs),
         speakRepliesEnabled: novaSpeakRepliesEnabled,
         speechVoiceId: novaSpeechVoiceId.trim() || "",
+        linkedVoiceProvider: novaLinkedVoiceProvider,
+        linkedVoiceApiKey: trimVoiceProviderApiKey(novaLinkedVoiceApiKey),
+        linkedVoiceId: normalizeExternalVoiceId(novaLinkedVoiceId),
       })
     );
-  }, [novaAlwaysListeningEnabled, novaConversationIdleMs, novaHandsFreeEnabled, novaSpeakRepliesEnabled, novaSpeechVoiceId, novaWakePhrase]);
+  }, [
+    novaAlwaysListeningEnabled,
+    novaConversationIdleMs,
+    novaHandsFreeEnabled,
+    novaLinkedVoiceApiKey,
+    novaLinkedVoiceId,
+    novaLinkedVoiceProvider,
+    novaSpeakRepliesEnabled,
+    novaSpeechVoiceId,
+    novaWakePhrase,
+  ]);
 
   useEffect(() => {
     novaAlwaysListeningEnabledRef.current = novaAlwaysListeningEnabled;
@@ -1181,6 +1290,18 @@ export default function AppShell() {
   useEffect(() => {
     novaSpeechVoiceIdRef.current = novaSpeechVoiceId;
   }, [novaSpeechVoiceId]);
+
+  useEffect(() => {
+    novaLinkedVoiceProviderRef.current = novaLinkedVoiceProvider;
+  }, [novaLinkedVoiceProvider]);
+
+  useEffect(() => {
+    novaLinkedVoiceApiKeyRef.current = trimVoiceProviderApiKey(novaLinkedVoiceApiKey);
+  }, [novaLinkedVoiceApiKey]);
+
+  useEffect(() => {
+    novaLinkedVoiceIdRef.current = normalizeExternalVoiceId(novaLinkedVoiceId);
+  }, [novaLinkedVoiceId]);
 
   useEffect(() => {
     let mounted = true;
@@ -2090,10 +2211,20 @@ export default function AppShell() {
     () => novaSpeechVoices.findIndex((voice) => voice.identifier === novaSpeechVoiceId),
     [novaSpeechVoiceId, novaSpeechVoices]
   );
-  const activeNovaSpeechVoiceLabel =
+  const activeNovaSystemSpeechVoiceLabel =
     activeNovaSpeechVoiceIndex >= 0
       ? `${novaSpeechVoices[activeNovaSpeechVoiceIndex]?.name || "System"}`
       : "System default";
+  const activeNovaLinkedVoiceIndex = useMemo(
+    () => novaLinkedVoiceChoices.findIndex((voice) => voice.identifier === novaLinkedVoiceId),
+    [novaLinkedVoiceChoices, novaLinkedVoiceId]
+  );
+  const activeNovaLinkedVoiceLabel =
+    activeNovaLinkedVoiceIndex >= 0
+      ? `${novaLinkedVoiceChoices[activeNovaLinkedVoiceIndex]?.label || "Linked"}`
+      : "Linked voice";
+  const activeNovaSpeechVoiceLabel =
+    novaLinkedVoiceProvider === "elevenlabs" ? activeNovaLinkedVoiceLabel : activeNovaSystemSpeechVoiceLabel;
 
   const scopedServerId = focusedServerId ?? activeServerId;
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(scopedServerId);
@@ -4353,6 +4484,84 @@ export default function AppShell() {
     [endNovaConversationSession, queueNovaListeningMode, requestNovaOverlayOpen, requestVoicePermission, setStatus]
   );
 
+  const speakNovaReplyWithLinkedVoice = useCallback(
+    async (spoken: string): Promise<boolean> => {
+      if (novaLinkedVoiceProviderRef.current !== "elevenlabs") {
+        return false;
+      }
+      const apiKey = trimVoiceProviderApiKey(novaLinkedVoiceApiKeyRef.current);
+      const voiceId = normalizeExternalVoiceId(novaLinkedVoiceIdRef.current);
+      if (!apiKey || !voiceId) {
+        return false;
+      }
+
+      const audioFile = await synthesizeElevenLabsSpeechToFile({
+        apiKey,
+        voiceId,
+        text: spoken,
+      });
+
+      stopLinkedVoicePlayback();
+
+      let cleanedUp = false;
+      const cleanup = () => {
+        if (cleanedUp) {
+          return;
+        }
+        cleanedUp = true;
+        try {
+          audioFile.delete();
+        } catch {
+          // best effort
+        }
+      };
+
+      const player = createAudioPlayer(
+        {
+          uri: audioFile.uri,
+        },
+        {
+          keepAudioSessionActive: true,
+        }
+      );
+      player.volume = 1;
+      linkedVoicePlayerRef.current = player;
+      linkedVoicePlaybackCleanupRef.current = cleanup;
+
+      await new Promise<void>((resolve) => {
+        let settled = false;
+        let hasStarted = false;
+        const release = () => {
+          if (settled) {
+            return;
+          }
+          settled = true;
+          subscription.remove();
+          stopLinkedVoicePlayback();
+          resolve();
+        };
+
+        const subscription = player.addListener("playbackStatusUpdate", (status: AudioStatus) => {
+          if (status.playing) {
+            hasStarted = true;
+            return;
+          }
+          if (hasStarted && !status.playing) {
+            release();
+          }
+        });
+
+        setTimeout(() => {
+          player.play();
+        }, 120);
+        setTimeout(release, Math.max(7000, Math.min(22000, spoken.length * 120)));
+      });
+
+      return true;
+    },
+    [stopLinkedVoicePlayback]
+  );
+
   const handleNovaAssistantReply = useCallback(
     async (reply: string) => {
       const nextMode = resolveDefaultNovaListeningMode();
@@ -4371,7 +4580,7 @@ export default function AppShell() {
       }
 
       const speechModule = getSpeechOutputModule();
-      if (!speechModule) {
+      if (novaLinkedVoiceProviderRef.current !== "elevenlabs" && !speechModule) {
         devVoiceUiLog("novaSpeech:moduleUnavailable");
         resumeConversation();
         return;
@@ -4380,38 +4589,54 @@ export default function AppShell() {
       try {
         await prepareSpeechOutput();
         await new Promise((resolve) => setTimeout(resolve, 180));
-        speechModule.stop?.();
-        devVoiceUiLog("novaSpeech:start", { spokenPreview: spoken.slice(0, 160) });
-        await new Promise<void>((resolve) => {
-          let settled = false;
-          const finish = () => {
-            if (settled) {
-              return;
-            }
-            settled = true;
-            resolve();
-          };
-
-          speechModule.speak(spoken, {
-            language: "en-US",
-            pitch: Platform.OS === "ios" ? 1.0 : 1.02,
-            rate: Platform.OS === "ios" ? 0.86 : 0.94,
-            volume: 1,
-            voice: novaSpeechVoiceIdRef.current || undefined,
-            onDone: finish,
-            onStopped: finish,
-            onError: finish,
-          });
-
-          setTimeout(finish, Math.max(6000, Math.min(18000, spoken.length * 90)));
+        const handledByLinkedVoice = await speakNovaReplyWithLinkedVoice(spoken).catch((error) => {
+          setNovaLinkedVoiceStatus(error instanceof Error ? error.message : String(error));
+          return false;
         });
+        if (!handledByLinkedVoice) {
+          if (!speechModule) {
+            return;
+          }
+          speechModule.stop?.();
+          devVoiceUiLog("novaSpeech:start", { spokenPreview: spoken.slice(0, 160) });
+          await new Promise<void>((resolve) => {
+            let settled = false;
+            const finish = () => {
+              if (settled) {
+                return;
+              }
+              settled = true;
+              resolve();
+            };
+
+            speechModule.speak(spoken, {
+              language: "en-US",
+              pitch: Platform.OS === "ios" ? 1.0 : 1.02,
+              rate: Platform.OS === "ios" ? 0.86 : 0.94,
+              volume: 1,
+              voice: novaSpeechVoiceIdRef.current || undefined,
+              onDone: finish,
+              onStopped: finish,
+              onError: finish,
+            });
+
+            setTimeout(finish, Math.max(6000, Math.min(18000, spoken.length * 90)));
+          });
+        }
       } catch {
         // best effort
       }
 
       resumeConversation();
     },
-    [clearNovaConversationIdleTimer, prepareSpeechOutput, queueNovaListeningMode, resetNovaConversationIdleTimer, resolveDefaultNovaListeningMode]
+    [
+      clearNovaConversationIdleTimer,
+      prepareSpeechOutput,
+      queueNovaListeningMode,
+      resetNovaConversationIdleTimer,
+      resolveDefaultNovaListeningMode,
+      speakNovaReplyWithLinkedVoice,
+    ]
   );
 
   const novaAssistant = useNovaAssistant({
@@ -4424,7 +4649,7 @@ export default function AppShell() {
 
   const testNovaSpeechOutput = useCallback(() => {
     const speechModule = getSpeechOutputModule();
-    if (!speechModule) {
+    if (novaLinkedVoiceProviderRef.current !== "elevenlabs" && !speechModule) {
       setStatus({ text: "Nova voice unavailable in this build.", error: true });
       return;
     }
@@ -4433,24 +4658,45 @@ export default function AppShell() {
       try {
         await prepareSpeechOutput();
         await new Promise((resolve) => setTimeout(resolve, 180));
-        speechModule.stop?.();
-        devVoiceUiLog("novaSpeech:testStart");
-        speechModule.speak("Nova voice is active.", {
-          language: "en-US",
-          pitch: Platform.OS === "ios" ? 1.0 : 1.02,
-          rate: Platform.OS === "ios" ? 0.86 : 0.94,
-          volume: 1,
-          voice: novaSpeechVoiceIdRef.current || undefined,
+        const handledByLinkedVoice = await speakNovaReplyWithLinkedVoice("Nova voice is active.").catch((error) => {
+          setNovaLinkedVoiceStatus(error instanceof Error ? error.message : String(error));
+          return false;
         });
+        if (!handledByLinkedVoice) {
+          if (!speechModule) {
+            return;
+          }
+          speechModule.stop?.();
+          devVoiceUiLog("novaSpeech:testStart");
+          speechModule.speak("Nova voice is active.", {
+            language: "en-US",
+            pitch: Platform.OS === "ios" ? 1.0 : 1.02,
+            rate: Platform.OS === "ios" ? 0.86 : 0.94,
+            volume: 1,
+            voice: novaSpeechVoiceIdRef.current || undefined,
+          });
+        }
         setStatus({ text: "Testing Nova voice...", error: false });
       } catch (error) {
         setStatus({ text: error instanceof Error ? error.message : String(error), error: true });
       }
     })();
-  }, [prepareSpeechOutput, setStatus]);
+  }, [prepareSpeechOutput, setStatus, speakNovaReplyWithLinkedVoice]);
 
   const cycleNovaSpeechVoice = useCallback(
     (direction: -1 | 1) => {
+      if (novaLinkedVoiceProviderRef.current === "elevenlabs") {
+        if (!novaLinkedVoiceChoices.length) {
+          return;
+        }
+        const currentIndex = novaLinkedVoiceChoices.findIndex((voice) => voice.identifier === novaLinkedVoiceIdRef.current);
+        const nextIndex =
+          currentIndex >= 0
+            ? (currentIndex + direction + novaLinkedVoiceChoices.length) % novaLinkedVoiceChoices.length
+            : 0;
+        setNovaLinkedVoiceId(novaLinkedVoiceChoices[nextIndex]?.identifier || "");
+        return;
+      }
       if (!novaSpeechVoices.length) {
         return;
       }
@@ -4461,7 +4707,7 @@ export default function AppShell() {
           : 0;
       setNovaSpeechVoiceId(novaSpeechVoices[nextIndex]?.identifier || "");
     },
-    [novaSpeechVoices]
+    [novaLinkedVoiceChoices, novaSpeechVoices]
   );
 
   const resetNovaRecordingSilenceTimer = useCallback(
@@ -6226,9 +6472,13 @@ export default function AppShell() {
               speakRepliesEnabled={novaSpeakRepliesEnabled}
               wakePhrase={novaWakePhrase}
               conversationIdleMs={novaConversationIdleMs}
-              speechOutputAvailable={Boolean(getSpeechOutputModule())}
+              speechOutputAvailable={novaLinkedVoiceProvider === "elevenlabs" ? Boolean(novaLinkedVoiceApiKey && novaLinkedVoiceId) : Boolean(getSpeechOutputModule())}
               selectedSpeechVoiceLabel={activeNovaSpeechVoiceLabel}
-              speechVoiceChoicesAvailable={novaSpeechVoices.length > 1}
+              speechVoiceChoicesAvailable={novaLinkedVoiceProvider === "elevenlabs" ? novaLinkedVoiceChoices.length > 1 : novaSpeechVoices.length > 1}
+              linkedVoiceProvider={novaLinkedVoiceProvider}
+              linkedVoiceApiKey={novaLinkedVoiceApiKey}
+              linkedVoiceBusy={novaLinkedVoiceBusy}
+              linkedVoiceStatus={novaLinkedVoiceStatus}
               onTestSpeakReplies={testNovaSpeechOutput}
               onShowPaywall={() => setPaywallVisible(true)}
               onSetAlwaysListeningEnabled={applyNovaAlwaysListeningEnabled}
@@ -6239,6 +6489,15 @@ export default function AppShell() {
               }}
               onSetConversationIdleMs={(value) => {
                 setNovaConversationIdleMs(normalizeNovaConversationIdleMs(value));
+              }}
+              onSetLinkedVoiceProvider={(value) => {
+                setNovaLinkedVoiceProvider(normalizeNovaLinkedVoiceProvider(value));
+              }}
+              onSetLinkedVoiceApiKey={(value) => {
+                setNovaLinkedVoiceApiKey(value);
+              }}
+              onRefreshLinkedVoices={() => {
+                void refreshNovaLinkedVoiceChoices();
               }}
               onCycleSpeechVoice={cycleNovaSpeechVoice}
             />
