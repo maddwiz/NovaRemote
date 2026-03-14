@@ -16,6 +16,8 @@ type RevenueCatState = {
   enterprisePackage: PurchasesPackage | null;
 };
 
+const FALLBACK_FORCED_SUBSCRIPTION_TIER = "enterprise";
+
 function entitlementId(envKey: string, fallback: string): string {
   const raw = typeof process !== "undefined" ? process.env[envKey] || "" : "";
   return raw.trim() || fallback;
@@ -43,13 +45,13 @@ function resolveApiKey(): string | undefined {
   return undefined;
 }
 
-function resolveTier(info: CustomerInfo | null): { isPro: boolean; isTeam: boolean; isEnterprise: boolean; subscriptionTier: SubscriptionTier } {
-  const active = info?.entitlements.active || {};
-  const isEnterprise = Boolean(active[ENTERPRISE_ENTITLEMENT_ID]);
-  const isTeam = Boolean(active[TEAM_ENTITLEMENT_ID]);
-  const hasProOnly = Boolean(active[PRO_ENTITLEMENT_ID]);
-
-  if (isEnterprise) {
+function tierStateFromTier(subscriptionTier: SubscriptionTier): {
+  isPro: boolean;
+  isTeam: boolean;
+  isEnterprise: boolean;
+  subscriptionTier: SubscriptionTier;
+} {
+  if (subscriptionTier === "enterprise") {
     return {
       isPro: true,
       isTeam: true,
@@ -58,7 +60,7 @@ function resolveTier(info: CustomerInfo | null): { isPro: boolean; isTeam: boole
     };
   }
 
-  if (isTeam) {
+  if (subscriptionTier === "team") {
     return {
       isPro: true,
       isTeam: true,
@@ -67,7 +69,7 @@ function resolveTier(info: CustomerInfo | null): { isPro: boolean; isTeam: boole
     };
   }
 
-  if (hasProOnly) {
+  if (subscriptionTier === "pro") {
     return {
       isPro: true,
       isTeam: false,
@@ -82,6 +84,47 @@ function resolveTier(info: CustomerInfo | null): { isPro: boolean; isTeam: boole
     isEnterprise: false,
     subscriptionTier: "free",
   };
+}
+
+function resolveTier(info: CustomerInfo | null): { isPro: boolean; isTeam: boolean; isEnterprise: boolean; subscriptionTier: SubscriptionTier } {
+  const active = info?.entitlements.active || {};
+  const isEnterprise = Boolean(active[ENTERPRISE_ENTITLEMENT_ID]);
+  const isTeam = Boolean(active[TEAM_ENTITLEMENT_ID]);
+  const hasProOnly = Boolean(active[PRO_ENTITLEMENT_ID]);
+
+  if (isEnterprise) {
+    return tierStateFromTier("enterprise");
+  }
+
+  if (isTeam) {
+    return tierStateFromTier("team");
+  }
+
+  if (hasProOnly) {
+    return tierStateFromTier("pro");
+  }
+
+  return tierStateFromTier("free");
+}
+
+function resolveForcedSubscriptionTier(): SubscriptionTier | null {
+  const raw =
+    typeof process !== "undefined"
+      ? process.env.EXPO_PUBLIC_FORCE_SUBSCRIPTION_TIER ||
+        process.env.EXPO_PUBLIC_INTERNAL_UNLOCK_TIER ||
+        FALLBACK_FORCED_SUBSCRIPTION_TIER
+      : FALLBACK_FORCED_SUBSCRIPTION_TIER;
+  const normalized = String(raw || "").trim().toLowerCase();
+
+  if (!normalized || normalized === "off" || normalized === "none" || normalized === "false" || normalized === "disabled") {
+    return null;
+  }
+
+  if (normalized === "pro" || normalized === "team" || normalized === "enterprise") {
+    return normalized;
+  }
+
+  return "enterprise";
 }
 
 function normalize(value: string | undefined | null): string {
@@ -228,12 +271,15 @@ function classifyPackages(offerings: PurchasesOfferings | null): {
 }
 
 export function useRevenueCat() {
+  const forcedSubscriptionTier = useMemo(() => resolveForcedSubscriptionTier(), []);
+  const forcedTierState = useMemo(
+    () => (forcedSubscriptionTier ? tierStateFromTier(forcedSubscriptionTier) : null),
+    [forcedSubscriptionTier]
+  );
+
   const [state, setState] = useState<RevenueCatState>({
-    ready: false,
-    isPro: false,
-    isTeam: false,
-    isEnterprise: false,
-    subscriptionTier: "free",
+    ready: Boolean(forcedTierState),
+    ...(forcedTierState || tierStateFromTier("free")),
     offerings: null,
     proPackage: null,
     teamPackage: null,
@@ -245,6 +291,18 @@ export function useRevenueCat() {
     let mounted = true;
 
     async function setup() {
+      if (forcedTierState) {
+        if (mounted) {
+          setAvailable(false);
+          setState((prev) => ({
+            ...prev,
+            ready: true,
+            ...forcedTierState,
+          }));
+        }
+        return;
+      }
+
       const apiKey = resolveApiKey();
       if (!apiKey) {
         if (mounted) {
@@ -288,9 +346,18 @@ export function useRevenueCat() {
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [forcedTierState]);
 
   const refresh = useCallback(async () => {
+    if (forcedTierState) {
+      setState((prev) => ({
+        ...prev,
+        ready: true,
+        ...forcedTierState,
+      }));
+      return;
+    }
+
     if (!available) {
       return;
     }
@@ -307,9 +374,13 @@ export function useRevenueCat() {
       teamPackage,
       enterprisePackage,
     }));
-  }, [available]);
+  }, [available, forcedTierState]);
 
   const purchaseForTier = useCallback(async (tier: Exclude<SubscriptionTier, "free">) => {
+    if (forcedTierState) {
+      return forcedTierState.isPro;
+    }
+
     const selectedPackage =
       tier === "enterprise"
         ? state.enterprisePackage
@@ -324,7 +395,7 @@ export function useRevenueCat() {
     const tierState = resolveTier(result.customerInfo);
     setState((prev) => ({ ...prev, ...tierState }));
     return tierState.isPro;
-  }, [state.enterprisePackage, state.proPackage, state.teamPackage]);
+  }, [forcedTierState, state.enterprisePackage, state.proPackage, state.teamPackage]);
 
   const purchasePro = useCallback(async () => {
     return purchaseForTier("pro");
@@ -339,11 +410,16 @@ export function useRevenueCat() {
   }, [purchaseForTier]);
 
   const restore = useCallback(async () => {
+    if (forcedTierState) {
+      setState((prev) => ({ ...prev, ready: true, ...forcedTierState }));
+      return forcedTierState.isPro;
+    }
+
     const info = await Purchases.restorePurchases();
     const tier = resolveTier(info);
     setState((prev) => ({ ...prev, ...tier }));
     return tier.isPro;
-  }, []);
+  }, [forcedTierState]);
 
   const proPriceLabel = useMemo(() => {
     return state.proPackage?.product.priceString || null;

@@ -118,6 +118,8 @@ beforeEach(() => {
   delete process.env.EXPO_PUBLIC_RC_ENTITLEMENT_PRO;
   delete process.env.EXPO_PUBLIC_RC_ENTITLEMENT_TEAM;
   delete process.env.EXPO_PUBLIC_RC_ENTITLEMENT_ENTERPRISE;
+  process.env.EXPO_PUBLIC_FORCE_SUBSCRIPTION_TIER = "off";
+  delete process.env.EXPO_PUBLIC_INTERNAL_UNLOCK_TIER;
 
   consoleErrorSpy = vi.spyOn(console, "error").mockImplementation((...args: unknown[]) => {
     const joined = args.map((value) => String(value)).join(" ");
@@ -134,6 +136,8 @@ afterEach(() => {
   delete process.env.EXPO_PUBLIC_RC_ENTITLEMENT_PRO;
   delete process.env.EXPO_PUBLIC_RC_ENTITLEMENT_TEAM;
   delete process.env.EXPO_PUBLIC_RC_ENTITLEMENT_ENTERPRISE;
+  delete process.env.EXPO_PUBLIC_FORCE_SUBSCRIPTION_TIER;
+  delete process.env.EXPO_PUBLIC_INTERNAL_UNLOCK_TIER;
   consoleErrorSpy?.mockRestore();
   consoleErrorSpy = null;
   vi.unstubAllGlobals();
@@ -343,6 +347,34 @@ describe("useRevenueCat", () => {
 
     expect(latestOrThrow(latest).teamSeatCount).toBe(5);
     expect(latestOrThrow(latest).enterpriseSeatCount).toBe(200);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("can force the app into enterprise tier without contacting RevenueCat", async () => {
+    delete process.env.EXPO_PUBLIC_REVENUECAT_API_KEY_IOS;
+    process.env.EXPO_PUBLIC_FORCE_SUBSCRIPTION_TIER = "enterprise";
+
+    let latest: RevenueCatHandle | null = null;
+    function Harness() {
+      latest = useRevenueCat();
+      return null;
+    }
+
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(React.createElement(Harness));
+    });
+    await waitFor(() => Boolean(latest && latest.ready), "forced revenuecat hook ready");
+
+    expect(latestOrThrow(latest).available).toBe(false);
+    expect(latestOrThrow(latest).isPro).toBe(true);
+    expect(latestOrThrow(latest).isTeam).toBe(true);
+    expect(latestOrThrow(latest).isEnterprise).toBe(true);
+    expect(latestOrThrow(latest).subscriptionTier).toBe("enterprise");
+    expect(purchasesMock.configure).not.toHaveBeenCalled();
 
     await act(async () => {
       renderer?.unmount();

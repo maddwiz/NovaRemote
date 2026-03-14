@@ -332,13 +332,86 @@ function selectPreferredNovaVoice(
     return normalizedPreferredId;
   }
 
-  const preferredVoice =
-    voices.find((voice) => /^en[-_]?us/i.test(voice.language) && String(voice.quality || "").toLowerCase() === "enhanced") ||
-    voices.find((voice) => /^en[-_]?us/i.test(voice.language)) ||
-    voices.find((voice) => /^en/i.test(voice.language)) ||
-    voices[0];
+  const preferredVoice = [...voices].sort((a, b) => scoreNovaVoice(b) - scoreNovaVoice(a) || a.name.localeCompare(b.name))[0];
 
   return preferredVoice?.identifier || "";
+}
+
+const FEMALE_NOVA_VOICE_HINTS = [
+  "ava",
+  "samantha",
+  "allison",
+  "susan",
+  "karen",
+  "moira",
+  "tessa",
+  "victoria",
+  "fiona",
+  "veena",
+  "serena",
+  "joelle",
+  "nora",
+  "amelie",
+  "paulina",
+  "monica",
+  "siri voice 4",
+  "siri female",
+];
+
+const MALE_NOVA_VOICE_HINTS = [
+  "alex",
+  "daniel",
+  "oliver",
+  "thomas",
+  "fred",
+  "aaron",
+  "arthur",
+  "siri voice 2",
+  "siri male",
+];
+
+function includesVoiceHint(name: string, hints: string[]): boolean {
+  const normalized = name.trim().toLowerCase();
+  return hints.some((hint) => normalized.includes(hint));
+}
+
+function isLikelyFemaleNovaVoice(voice: { name: string }): boolean {
+  const normalizedName = voice.name.trim().toLowerCase();
+  return /\bfemale\b/.test(normalizedName) || includesVoiceHint(normalizedName, FEMALE_NOVA_VOICE_HINTS);
+}
+
+function scoreNovaVoice(voice: { name: string; language: string; quality?: string }): number {
+  let score = 0;
+  const normalizedLanguage = String(voice.language || "").trim().toLowerCase();
+  const normalizedQuality = String(voice.quality || "").trim().toLowerCase();
+  const normalizedName = voice.name.trim().toLowerCase();
+
+  if (isLikelyFemaleNovaVoice(voice)) {
+    score += 240;
+  }
+  if (/\bfemale\b/.test(normalizedName)) {
+    score += 120;
+  }
+  if (includesVoiceHint(normalizedName, MALE_NOVA_VOICE_HINTS) || /\bmale\b/.test(normalizedName)) {
+    score -= 180;
+  }
+  if (/^en[-_]?us/.test(normalizedLanguage)) {
+    score += 90;
+  } else if (/^en/.test(normalizedLanguage)) {
+    score += 60;
+  }
+  if (normalizedQuality === "enhanced") {
+    score += 80;
+  }
+
+  return score;
+}
+
+function filterNovaSpeechVoices(
+  voices: Array<{ identifier: string; name: string; language: string; quality?: string }>
+): Array<{ identifier: string; name: string; language: string; quality?: string }> {
+  const femaleVoices = voices.filter((voice) => isLikelyFemaleNovaVoice(voice));
+  return femaleVoices.length ? femaleVoices : voices;
 }
 
 function countMatches(output: string, searchTerm: string): number {
@@ -1067,17 +1140,17 @@ export default function AppShell() {
         if (!mounted) {
           return;
         }
-        const normalizedVoices = voices
+        const normalizedVoices = filterNovaSpeechVoices(
+          voices
           .filter((voice) => typeof voice.identifier === "string" && typeof voice.name === "string")
           .sort((a, b) => {
-            const qualityDelta =
-              Number(String(b.quality || "").toLowerCase() === "enhanced") -
-              Number(String(a.quality || "").toLowerCase() === "enhanced");
-            if (qualityDelta !== 0) {
-              return qualityDelta;
+            const scoreDelta = scoreNovaVoice(b) - scoreNovaVoice(a);
+            if (scoreDelta !== 0) {
+              return scoreDelta;
             }
             return a.name.localeCompare(b.name);
-          });
+          })
+        );
         setNovaSpeechVoices(normalizedVoices);
         const preferredVoiceId = selectPreferredNovaVoice(normalizedVoices, novaSpeechVoiceIdRef.current);
         if (preferredVoiceId !== novaSpeechVoiceIdRef.current) {
@@ -4255,8 +4328,8 @@ export default function AppShell() {
 
           speechModule.speak(spoken, {
             language: "en-US",
-            pitch: 1,
-            rate: 1.0,
+            pitch: 1.03,
+            rate: Platform.OS === "ios" ? 0.92 : 0.96,
             volume: 1,
             voice: novaSpeechVoiceIdRef.current || undefined,
             onDone: finish,
@@ -4298,8 +4371,8 @@ export default function AppShell() {
         devVoiceUiLog("novaSpeech:testStart");
         speechModule.speak("Nova voice is active.", {
           language: "en-US",
-          pitch: 1,
-          rate: 1.0,
+          pitch: 1.03,
+          rate: Platform.OS === "ios" ? 0.92 : 0.96,
           volume: 1,
           voice: novaSpeechVoiceIdRef.current || undefined,
         });
