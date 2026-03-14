@@ -342,8 +342,20 @@ function summarizeNovaReplyForSpeech(value: string): string {
   return `${spoken.slice(0, 417).trimEnd()}...`;
 }
 
+type NovaSpeechVoiceChoice = {
+  identifier: string;
+  name: string;
+  language: string;
+  quality?: string;
+  resolvedIdentifier?: string;
+};
+
+function formatNovaVoiceLabel(name: string): string {
+  return name.charAt(0).toUpperCase() + name.slice(1).toLowerCase();
+}
+
 function selectPreferredNovaVoice(
-  voices: Array<{ identifier: string; name: string; language: string; quality?: string }>,
+  voices: NovaSpeechVoiceChoice[],
   preferredId: string
 ): string {
   const normalizedPreferredId = preferredId.trim();
@@ -464,22 +476,53 @@ function scoreNovaVoice(voice: { name: string; language: string; quality?: strin
   return score;
 }
 
-function filterNovaSpeechVoices(
+function buildNovaSpeechVoiceChoices(
   voices: Array<{ identifier: string; name: string; language: string; quality?: string }>
-): Array<{ identifier: string; name: string; language: string; quality?: string }> {
+): NovaSpeechVoiceChoice[] {
   const withoutLowQuality = voices.filter((voice) => !isLowQualityNovaVoice(voice));
   const candidatePool = withoutLowQuality.length ? withoutLowQuality : voices;
-  const allowedVoices = candidatePool.filter((voice) => isAllowedNovaVoice(voice));
-  if (allowedVoices.length) {
-    return allowedVoices;
-  }
 
   const nonMaleVoices = candidatePool.filter((voice) => {
     const searchText = getNovaVoiceSearchText(voice);
     return !includesVoiceHint(searchText, MALE_NOVA_VOICE_HINTS) && !/\bmale\b/.test(searchText);
   });
 
-  return nonMaleVoices.length ? nonMaleVoices : candidatePool;
+  const fallbackPool = nonMaleVoices.length ? nonMaleVoices : candidatePool;
+
+  const explicitChoices = ALLOWED_NOVA_VOICE_NAMES.map((allowedName) => {
+    const matches = fallbackPool.filter((voice) => {
+      const matcher = new RegExp(`(^|\\b)${allowedName}(\\b|$)`, "i");
+      return matcher.test(getNovaVoiceSearchText(voice));
+    });
+    const bestMatch = [...matches].sort((a, b) => scoreNovaVoice(b) - scoreNovaVoice(a) || a.name.localeCompare(b.name))[0];
+    return {
+      identifier: `preset:${allowedName}`,
+      name: formatNovaVoiceLabel(allowedName),
+      language: bestMatch?.language || "en-US",
+      quality: bestMatch?.quality,
+      resolvedIdentifier: bestMatch?.identifier,
+    };
+  });
+
+  if (explicitChoices.some((choice) => Boolean(choice.resolvedIdentifier))) {
+    return explicitChoices;
+  }
+
+  return fallbackPool.map((voice) => ({
+    identifier: voice.identifier,
+    name: voice.name,
+    language: voice.language,
+    quality: voice.quality,
+    resolvedIdentifier: voice.identifier,
+  }));
+}
+
+function resolveNovaSpeechVoiceIdentifier(
+  voices: NovaSpeechVoiceChoice[],
+  selectedId: string
+): string {
+  const match = voices.find((voice) => voice.identifier === selectedId);
+  return match?.resolvedIdentifier || match?.identifier || "";
 }
 
 function countMatches(output: string, searchTerm: string): number {
@@ -1052,7 +1095,7 @@ export default function AppShell() {
   const [novaConversationIdleMs, setNovaConversationIdleMs] = useState<number>(DEFAULT_NOVA_CONVERSATION_IDLE_MS);
   const [novaSpeakRepliesEnabled, setNovaSpeakRepliesEnabled] = useState<boolean>(true);
   const [novaSpeechVoiceId, setNovaSpeechVoiceId] = useState<string>("");
-  const [novaSpeechVoices, setNovaSpeechVoices] = useState<Array<{ identifier: string; name: string; language: string; quality?: string }>>([]);
+  const [novaSpeechVoices, setNovaSpeechVoices] = useState<NovaSpeechVoiceChoice[]>([]);
   const [novaLinkedVoiceProvider, setNovaLinkedVoiceProvider] = useState<NovaLinkedVoiceProvider>("system");
   const [novaLinkedVoiceApiKey, setNovaLinkedVoiceApiKey] = useState<string>("");
   const [novaLinkedVoiceId, setNovaLinkedVoiceId] = useState<string>("");
@@ -1123,6 +1166,7 @@ export default function AppShell() {
   const novaConversationIdleMsRef = useRef<number>(novaConversationIdleMs);
   const novaSpeakRepliesEnabledRef = useRef<boolean>(novaSpeakRepliesEnabled);
   const novaSpeechVoiceIdRef = useRef<string>(novaSpeechVoiceId);
+  const novaSpeechVoicesRef = useRef<NovaSpeechVoiceChoice[]>(novaSpeechVoices);
   const novaLinkedVoiceProviderRef = useRef<NovaLinkedVoiceProvider>(novaLinkedVoiceProvider);
   const novaLinkedVoiceApiKeyRef = useRef<string>(novaLinkedVoiceApiKey);
   const novaLinkedVoiceIdRef = useRef<string>(novaLinkedVoiceId);
@@ -1333,6 +1377,10 @@ export default function AppShell() {
   }, [novaSpeechVoiceId]);
 
   useEffect(() => {
+    novaSpeechVoicesRef.current = novaSpeechVoices;
+  }, [novaSpeechVoices]);
+
+  useEffect(() => {
     novaLinkedVoiceProviderRef.current = novaLinkedVoiceProvider;
   }, [novaLinkedVoiceProvider]);
 
@@ -1361,7 +1409,7 @@ export default function AppShell() {
         if (!mounted) {
           return;
         }
-        const normalizedVoices = filterNovaSpeechVoices(
+        const normalizedVoices = buildNovaSpeechVoiceChoices(
           voices
           .filter((voice) => typeof voice.identifier === "string" && typeof voice.name === "string")
           .sort((a, b) => {
@@ -4638,6 +4686,10 @@ export default function AppShell() {
           if (!speechModule) {
             return;
           }
+          const resolvedVoiceIdentifier = resolveNovaSpeechVoiceIdentifier(
+            novaSpeechVoicesRef.current,
+            novaSpeechVoiceIdRef.current
+          );
           speechModule.stop?.();
           devVoiceUiLog("novaSpeech:start", { spokenPreview: spoken.slice(0, 160) });
           await new Promise<void>((resolve) => {
@@ -4655,7 +4707,7 @@ export default function AppShell() {
               pitch: Platform.OS === "ios" ? 1.0 : 1.02,
               rate: Platform.OS === "ios" ? 0.86 : 0.94,
               volume: 1,
-              voice: novaSpeechVoiceIdRef.current || undefined,
+              voice: resolvedVoiceIdentifier || undefined,
               onDone: finish,
               onStopped: finish,
               onError: finish,
@@ -4707,6 +4759,10 @@ export default function AppShell() {
           if (!speechModule) {
             return;
           }
+          const resolvedVoiceIdentifier = resolveNovaSpeechVoiceIdentifier(
+            novaSpeechVoicesRef.current,
+            novaSpeechVoiceIdRef.current
+          );
           speechModule.stop?.();
           devVoiceUiLog("novaSpeech:testStart");
           speechModule.speak("Nova voice is active.", {
@@ -4714,7 +4770,7 @@ export default function AppShell() {
             pitch: Platform.OS === "ios" ? 1.0 : 1.02,
             rate: Platform.OS === "ios" ? 0.86 : 0.94,
             volume: 1,
-            voice: novaSpeechVoiceIdRef.current || undefined,
+            voice: resolvedVoiceIdentifier || undefined,
           });
         }
         setStatus({ text: "Testing Nova voice...", error: false });
