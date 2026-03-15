@@ -29,6 +29,9 @@ TARGET_REPO="$(cd "${TARGET_REPO}" && pwd)"
 
 mkdir -p \
   "${TARGET_REPO}/docs/vr" \
+  "${TARGET_REPO}/docs/qa" \
+  "${TARGET_REPO}/docs/release" \
+  "${TARGET_REPO}/docs/ops" \
   "${TARGET_REPO}/contracts" \
   "${TARGET_REPO}/.github/workflows" \
   "${TARGET_REPO}/api" \
@@ -39,6 +42,9 @@ mkdir -p \
   "${TARGET_REPO}/input" \
   "${TARGET_REPO}/hud" \
   "${TARGET_REPO}/clients/quest-unity" \
+  "${TARGET_REPO}/clients/quest-unity/Assets/NovaRemoteVR" \
+  "${TARGET_REPO}/clients/quest-unity/Packages" \
+  "${TARGET_REPO}/clients/quest-unity/ProjectSettings" \
   "${TARGET_REPO}/clients/visionos" \
   "${TARGET_REPO}/shared" \
   "${TARGET_REPO}/scripts"
@@ -67,6 +73,9 @@ Standalone immersive client for NovaRemote protocol contracts.
 - `clients/quest-unity/` Quest OpenXR client
 - `clients/visionos/` Vision Pro client
 - `shared/` generated and shared message models
+- `docs/qa/` manual Quest validation and beta checks
+- `docs/release/` release and launch-readiness checklists
+- `docs/ops/` operator/tester setup and rollback notes
 
 ## Contract Sync
 
@@ -81,7 +90,7 @@ npm run vr:sync-contracts -- /absolute/path/to/NovaRemoteVR
 Inside `NovaRemoteVR`, run:
 
 ```bash
-bash ./scripts/verify-contract-sync.sh
+npm run ci
 ```
 
 This is also wired into `.github/workflows/contracts-sync.yml`.
@@ -115,11 +124,86 @@ xcuserdata/
 DOC
 fi
 
+if [[ ! -f "${TARGET_REPO}/package.json" ]]; then
+  cat > "${TARGET_REPO}/package.json" <<'DOC'
+{
+  "name": "novaremote-vr",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "contracts:verify-sync": "bash ./scripts/verify-contract-sync.sh",
+    "quest:verify": "node ./scripts/verify-quest-scaffold.mjs",
+    "ci": "npm run contracts:verify-sync && npm run quest:verify"
+  }
+}
+DOC
+fi
+
 if [[ ! -f "${TARGET_REPO}/docs/vr/README.md" ]]; then
   cat > "${TARGET_REPO}/docs/vr/README.md" <<'DOC'
 # VR Docs
 
 This directory receives protocol contracts from NovaRemote and stores VR-specific architecture notes.
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/docs/qa/QUEST_QA_CHECKLIST.md" ]]; then
+  cat > "${TARGET_REPO}/docs/qa/QUEST_QA_CHECKLIST.md" <<'DOC'
+# Quest QA Checklist
+
+Use this checklist before inviting external Quest testers:
+
+- sign-in / token bootstrap succeeds on a clean install
+- capability discovery resolves `terminal` and `stream`
+- create, focus, move, resize, and close terminal panels work
+- text send and control-key routing reach the correct `serverId + session`
+- websocket reconnect recovers after a network flap
+- phone + Quest concurrent usage is safe against the same session set
+- voice route commands cover focus, send, layout, and panel control basics
+- comfort/accessibility defaults are reviewed for seated and standing use
+- critical error paths surface actionable recovery copy
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/docs/release/QUEST_RELEASE_CHECKLIST.md" ]]; then
+  cat > "${TARGET_REPO}/docs/release/QUEST_RELEASE_CHECKLIST.md" <<'DOC'
+# Quest Release Checklist
+
+- contract sync provenance updated from NovaRemote
+- `npm run ci` passes
+- Quest client scene/bootstrap is current with OpenXR integration notes
+- tester onboarding guide is current
+- rollback steps are current
+- known issues and launch recommendation are current
+- beta build signing / distribution notes reviewed
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/docs/ops/QUEST_OPERATOR_SETUP.md" ]]; then
+  cat > "${TARGET_REPO}/docs/ops/QUEST_OPERATOR_SETUP.md" <<'DOC'
+# Quest Operator Setup
+
+Document the minimum operator path here:
+
+1. install the Quest build
+2. provide companion server URL + token
+3. confirm capability discovery
+4. open the default workspace layout
+5. run the smoke-test panel and voice flows
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/docs/ops/ROLLBACK.md" ]]; then
+  cat > "${TARGET_REPO}/docs/ops/ROLLBACK.md" <<'DOC'
+# Quest Rollback
+
+If a Quest beta build regresses:
+
+1. stop distributing the current build
+2. roll back to the last verified beta build
+3. re-sync contracts from the last known-good NovaRemote commit if protocol drift is involved
+4. record the failing scenario and affected companion capability profile
 DOC
 fi
 
@@ -181,6 +265,50 @@ DOC
   chmod +x "${TARGET_REPO}/scripts/verify-contract-sync.sh"
 fi
 
+if [[ ! -f "${TARGET_REPO}/scripts/verify-quest-scaffold.mjs" ]]; then
+  cat > "${TARGET_REPO}/scripts/verify-quest-scaffold.mjs" <<'DOC'
+#!/usr/bin/env node
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const rootDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
+
+function assertFile(relativePath) {
+  const fullPath = path.join(rootDir, relativePath);
+  if (!fs.existsSync(fullPath) || !fs.statSync(fullPath).isFile()) {
+    throw new Error(`Missing required file: ${relativePath}`);
+  }
+}
+
+function assertContains(relativePath, pattern) {
+  const fullPath = path.join(rootDir, relativePath);
+  const content = fs.readFileSync(fullPath, "utf8");
+  if (!content.includes(pattern)) {
+    throw new Error(`Expected '${pattern}' in ${relativePath}`);
+  }
+}
+
+[
+  "package.json",
+  "docs/qa/QUEST_QA_CHECKLIST.md",
+  "docs/release/QUEST_RELEASE_CHECKLIST.md",
+  "docs/ops/QUEST_OPERATOR_SETUP.md",
+  "docs/ops/ROLLBACK.md",
+  "clients/quest-unity/README.md",
+  "clients/quest-unity/Assets/NovaRemoteVR/README.md",
+].forEach(assertFile);
+
+assertContains("package.json", "\"quest:verify\"");
+assertContains("clients/quest-unity/README.md", "Packages/manifest.json");
+assertContains("clients/quest-unity/README.md", "Assets/NovaRemoteVR");
+assertContains("clients/quest-unity/Assets/NovaRemoteVR/README.md", "Scenes");
+
+console.log("Quest scaffold verification passed.");
+DOC
+  chmod +x "${TARGET_REPO}/scripts/verify-quest-scaffold.mjs"
+fi
+
 if [[ ! -f "${TARGET_REPO}/.github/workflows/contracts-sync.yml" ]]; then
   cat > "${TARGET_REPO}/.github/workflows/contracts-sync.yml" <<'DOC'
 name: Contract Sync
@@ -197,8 +325,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Verify contract sync
-        run: bash ./scripts/verify-contract-sync.sh
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Verify Quest VR scaffold
+        run: npm run ci
 DOC
 fi
 
@@ -211,7 +343,26 @@ Initial scope:
 - Session stream panel rendering
 - Voice route command dispatch
 
-Add Unity project files in this directory.
+Expected launch-grade skeleton:
+
+- `Packages/manifest.json` for OpenXR and Quest package dependencies
+- `Assets/NovaRemoteVR/` for scripts, scenes, prefabs, and config assets
+- `ProjectSettings/` for checked-in Unity project configuration
+
+Add the Unity project files in this directory and keep Quest-first scope here.
+DOC
+fi
+
+if [[ ! -f "${TARGET_REPO}/clients/quest-unity/Assets/NovaRemoteVR/README.md" ]]; then
+  cat > "${TARGET_REPO}/clients/quest-unity/Assets/NovaRemoteVR/README.md" <<'DOC'
+# NovaRemoteVR Quest Assets
+
+Recommended checked-in structure:
+
+- `Scenes/` entry and test scenes
+- `Scripts/` Quest runtime, auth, layout, input, and HUD code
+- `Prefabs/` reusable panel, keyboard, and HUD prefabs
+- `Resources/` fallback config or generated protocol data
 DOC
 fi
 
@@ -307,5 +458,6 @@ if [[ -n "${REMOTE_URL}" ]]; then
   echo "Configured origin remote: ${REMOTE_URL}"
 fi
 echo "Next steps:"
-echo "1. Build client projects in clients/quest-unity and clients/visionos."
-echo "2. Commit scaffold + synced contracts in the NovaRemoteVR repo."
+echo "1. Build the Quest client first under clients/quest-unity."
+echo "2. Run npm run ci inside the NovaRemoteVR repo."
+echo "3. Commit scaffold + synced contracts in the NovaRemoteVR repo."

@@ -11,10 +11,14 @@ Target repos:
 Recommended top-level folders:
 
 - `docs/` architecture, protocol notes, release checks
+- `docs/qa/` Quest smoke/regression checklists
+- `docs/release/` beta and launch checklists
+- `docs/ops/` operator/tester setup and rollback notes
 - `contracts/` copied protocol schemas from NovaRemote (`docs/contracts`)
 - `clients/quest-unity/` Unity + OpenXR app
 - `clients/visionos/` SwiftUI + RealityKit app
 - `shared/` generated OpenAPI types / message models (language-specific)
+- `scripts/` local verification hooks
 
 Quick scaffold command from `NovaRemote`:
 
@@ -22,10 +26,11 @@ Quick scaffold command from `NovaRemote`:
 npm run vr:bootstrap-repo -- /absolute/path/to/NovaRemoteVR
 ```
 
-This creates the baseline directory structure, starter docs, and then syncs protocol contracts.
+This creates the baseline directory structure, starter docs, a minimal root `package.json`, and then syncs protocol contracts.
 It also scaffolds:
 
 - `scripts/verify-contract-sync.sh` (contract provenance + schema sanity checks)
+- `scripts/verify-quest-scaffold.mjs` (Quest skeleton/doc completeness checks)
 - `.github/workflows/contracts-sync.yml` (CI guard for contract drift)
 
 Optional: configure `origin` in the same command:
@@ -43,7 +48,7 @@ npm run vr:verify-bootstrap
 Inside `NovaRemoteVR`, you can run the standalone check directly:
 
 ```bash
-bash ./scripts/verify-contract-sync.sh
+npm run ci
 ```
 
 ## 2. Shared Contract Source of Truth
@@ -105,6 +110,7 @@ Release gate checks before public beta:
 - concurrent phone + VR session usage validated
 - reconnect stress test (network flap) validated
 - token handling and secure storage review complete
+- Quest onboarding / rollback / release checklist docs present in-repo
 
 ## 6. Definition of Done (VR Track Prep)
 
@@ -112,3 +118,4 @@ Release gate checks before public beta:
 - JSON schema checked in for client generation.
 - Bootstrap structure agreed and documented.
 - A sync workflow from `NovaRemote` contract files to `NovaRemoteVR` defined.
+- Quest scaffold includes repo-local CI tooling plus QA/release/operator doc placeholders.
