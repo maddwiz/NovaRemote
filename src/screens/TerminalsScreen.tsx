@@ -1,6 +1,18 @@
 import React, { useEffect, useMemo, useState } from "react";
 import * as SecureStore from "expo-secure-store";
-import { Alert, Modal, NativeSyntheticEvent, ScrollView, Switch, Text, TextInput, TextInputKeyPressEventData, View, useWindowDimensions } from "react-native";
+import {
+  Alert,
+  Modal,
+  NativeSyntheticEvent,
+  Pressable as ReactNativePressable,
+  ScrollView,
+  Switch,
+  Text,
+  TextInput,
+  TextInputKeyPressEventData,
+  View,
+  useWindowDimensions,
+} from "react-native";
 import { FeedbackPressable as Pressable } from "../components/FeedbackPressable";
 
 import { useAppContext } from "../context/AppContext";
@@ -2104,13 +2116,12 @@ export function TerminalsScreen() {
       animationType="fade"
       onRequestClose={() => setShowControlCenter(false)}
     >
-      <Pressable style={styles.overlayBackdrop} onPress={() => setShowControlCenter(false)}>
-        <Pressable
-          style={[styles.overlayCard, styles.controlCenterCard]}
-          onPress={(event) => {
-            event.stopPropagation();
-          }}
-        >
+      <View style={styles.overlayBackdrop}>
+        <ReactNativePressable
+          style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+          onPress={() => setShowControlCenter(false)}
+        />
+        <View style={[styles.overlayCard, styles.controlCenterCard]}>
           <View style={[styles.rowInlineSpace, styles.rowInlineSpaceWrap]}>
             <Text style={styles.panelLabel}>Control Center</Text>
             <Pressable
@@ -2129,6 +2140,10 @@ export function TerminalsScreen() {
             style={styles.controlCenterScroll}
             contentContainerStyle={styles.controlCenterScrollContent}
             showsVerticalScrollIndicator
+            keyboardShouldPersistTaps="handled"
+            canCancelContentTouches
+            directionalLockEnabled
+            nestedScrollEnabled
           >
             {connectionPanels}
 
@@ -2204,8 +2219,8 @@ export function TerminalsScreen() {
             </View>
             {showAdvancedCollaboration ? collabAiPanels : null}
           </ScrollView>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 
