@@ -1,4 +1,5 @@
 import React from "react";
+import * as ReactNative from "react-native";
 import TestRenderer, { act } from "react-test-renderer";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -116,6 +117,31 @@ describe("TerminalCardHeader", () => {
     });
     const enabledStop = root.findByProps({ accessibilityLabel: "Close main" });
     expect(enabledStop.props.disabled).toBe(false);
+
+    await act(async () => {
+      renderer?.unmount();
+    });
+  });
+
+  it("opens more actions inside a scrollable sheet", async () => {
+    let renderer: TestRenderer.ReactTestRenderer | null = null;
+    await act(async () => {
+      renderer = TestRenderer.create(<TerminalCardHeader {...buildProps()} />);
+    });
+
+    if (!renderer) {
+      throw new Error("Renderer did not initialize.");
+    }
+
+    const root = (renderer as unknown as TestRenderer.ReactTestRenderer).root;
+    const moreButton = root.findByProps({ accessibilityLabel: "Open more actions for main" });
+
+    await act(async () => {
+      moreButton.props.onPress();
+    });
+
+    expect(() => root.findByType(ReactNative.ScrollView)).not.toThrow();
+    expect(() => root.findByProps({ accessibilityLabel: "Close session actions" })).not.toThrow();
 
     await act(async () => {
       renderer?.unmount();

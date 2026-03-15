@@ -2166,6 +2166,7 @@ export const styles = StyleSheet.create({
   overlayCard: {
     width: "100%",
     maxWidth: 520,
+    maxHeight: "82%",
     borderRadius: 24,
     borderWidth: 1,
     borderColor: "rgba(136, 148, 208, 0.16)",
@@ -2177,6 +2178,13 @@ export const styles = StyleSheet.create({
     shadowRadius: 22,
     shadowOffset: { width: 0, height: 14 },
     elevation: 10,
+  },
+  overlayScroll: {
+    maxHeight: 360,
+  },
+  overlayScrollContent: {
+    gap: 12,
+    paddingBottom: 4,
   },
   controlCenterCard: {
     maxHeight: "86%",

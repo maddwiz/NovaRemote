@@ -1,6 +1,6 @@
 import * as Haptics from "expo-haptics";
 import React from "react";
-import { Modal, Text, View } from "react-native";
+import { Modal, Pressable as ReactNativePressable, ScrollView, Text, View } from "react-native";
 import { FeedbackPressable as Pressable } from "../FeedbackPressable";
 
 import { styles } from "../../theme/styles";
@@ -260,16 +260,21 @@ export function TerminalCardHeader({
         animationType="fade"
         onRequestClose={() => setShowMoreActions(false)}
       >
-        <Pressable style={({ pressed }) => [styles.overlayBackdrop, pressed ? { opacity: 0.98 } : null]} onPress={() => setShowMoreActions(false)}>
-          <Pressable
-            style={styles.overlayCard}
-            onPress={(event) => {
-              event.stopPropagation();
-            }}
-          >
+        <View style={styles.overlayBackdrop}>
+          <ReactNativePressable
+            style={{ position: "absolute", top: 0, right: 0, bottom: 0, left: 0 }}
+            onPress={() => setShowMoreActions(false)}
+          />
+          <View style={styles.overlayCard}>
             <Text style={styles.panelLabel}>Session Actions</Text>
             <Text style={styles.serverSubtitle}>{sessionAlias.trim() || session}</Text>
-            <View style={styles.actionsWrap}>
+            <ScrollView
+              style={styles.overlayScroll}
+              contentContainerStyle={styles.overlayScrollContent}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.actionsWrap}>
               {moreActions.map((entry) => (
                 <Pressable
                   key={entry.key}
@@ -293,6 +298,7 @@ export function TerminalCardHeader({
                   <Text style={styles.actionButtonText}>{entry.label}</Text>
                 </Pressable>
               ))}
+              </View>
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Close session actions"
@@ -304,9 +310,9 @@ export function TerminalCardHeader({
               >
                 <Text style={styles.buttonGhostText}>Close</Text>
               </Pressable>
-            </View>
-          </Pressable>
-        </Pressable>
+            </ScrollView>
+          </View>
+        </View>
       </Modal>
     </View>
   );
