@@ -1,6 +1,6 @@
 # NovaRemote Handoff Status
 
-Updated: 2026-03-11
+Updated: 2026-03-15
 
 > Note: companion-side `codex_remote` references below point to the external companion repository / sibling checkout used for sidecar validation, not a folder expected to exist inside this app repository.
 
@@ -63,7 +63,7 @@ Updated: 2026-03-11
 ## v1.4 VR Command Center
 
 - [x] In this repo: VR preview route/screen + pooled multi-server controls + tests
-- [~] Separate production VR native app (`NovaRemoteVR`) track has executable bootstrap + contract sync scripts, temp-dir bootstrap verification (`vr:verify-bootstrap`) wired into CI, and scaffolded repo-side contract verification (`scripts/verify-contract-sync.sh` + `.github/workflows/contracts-sync.yml`); full native client implementation remains pending
+- [~] Separate production VR native app (`NovaRemoteVR`) track now has a committed Quest Unity/OpenXR client foundation, synced contract verification, local Unity edit-mode coverage, repeatable smoke APK builds, runtime-config/install/logcat/manifest tooling, startup workspace persistence/preview priming, and operator/release runbooks; physical-headset validation, signing automation, CI-native Unity coverage, and wider release hardening remain pending
 
 ## v1.5 VM Grouping
 

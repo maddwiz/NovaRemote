@@ -1,6 +1,6 @@
 # Quest VR Launch-Grade Handoff
 
-Updated: 2026-03-14
+Updated: 2026-03-15
 Repo: `/Users/desmondpottle/Documents/New project/NovaRemote`
 Isolated worktree: `/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR`
 Branch: `codex/quest-vr-launch-grade`
@@ -44,6 +44,14 @@ That means the next Codex should use this branch to:
 - [Roadmap](/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/docs/ROADMAP.md)
 - [Handoff status](/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/docs/HANDOFF_STATUS.md)
 
+### Current `NovaRemoteVR` state
+- committed Quest Unity/OpenXR client foundation
+- synced contract verification against NovaRemote source-of-truth artifacts
+- local Unity edit-mode tests runnable from `npm run quest:test:editmode`
+- repeatable Quest smoke APK builds via `npm run build:quest:smoke`
+- operator tooling for candidate manifests, runtime config generation/push, install, and logcat capture
+- updated Quest setup, QA, release, rollback, and known-issues docs in the external repo
+
 ### Bootstrap support already present
 - [bootstrap-vr-repo.sh](/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/scripts/bootstrap-vr-repo.sh)
 - [sync-vr-contracts.sh](/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/scripts/sync-vr-contracts.sh)
@@ -51,14 +59,14 @@ That means the next Codex should use this branch to:
 - [verify-contract-sync.sh](/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/scripts/verify-contract-sync.sh)
 
 ## What Is Not Done
-- Production Quest Unity/OpenXR client
-- real Quest auth/session bootstrap flow
-- terminal stream rendering in-headset
-- input layer for controller/hand interactions
-- spatial panel layout/persistence in the headset
-- Quest voice routing in production client
-- reconnect/stress/perf/hardening pass
-- launch-grade QA and release checklist for Quest
+- physical Quest install/run validation of the current candidate
+- real Quest auth/session bootstrap validation on device
+- full in-headset terminal rendering, send/control routing, and reconnect validation
+- controller/hand interaction validation and polish on real hardware
+- Quest voice routing validation on real hardware
+- signing/release packaging automation for tester distribution
+- CI-native Unity coverage in addition to the current local edit-mode and smoke-build path
+- launch-grade QA and release checklist pass on real Quest hardware
 
 ## Success Definition
 Quest is considered launch-grade only when all of these are true:
@@ -73,6 +81,8 @@ Quest is considered launch-grade only when all of these are true:
 9. A release checklist exists and is actually passable.
 
 ## Recommended Execution Plan
+Phases 0 through much of 3 now exist in repo form. The remaining emphasis is physical-headset validation, release hardening, and packaging.
+
 ### Phase 0: Establish the external Quest repo cleanly
 - Bootstrap `/Users/desmondpottle/Documents/New project/NovaRemoteVR` from this repo if it does not already exist.
 - Keep this NovaRemote branch as the contract/source-of-truth branch.

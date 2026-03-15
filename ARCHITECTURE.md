@@ -1,6 +1,6 @@
 # NovaRemote Architecture
 
-Updated: 2026-03-13
+Updated: 2026-03-15
 
 ## Topology
 1. NovaRemote mobile app
@@ -20,7 +20,7 @@ Updated: 2026-03-13
 ## Runtime Boundaries
 - Terminal traffic stays app <-> companion directly
 - Cloud traffic covers team identity, server assignment, token brokering, audit/export metadata
-- VR production client is external; this repo ships the protocol/bootstrap/preview side only
+- VR production client is external; this repo ships the protocol/bootstrap/preview side while the separate `NovaRemoteVR` repo carries the committed Quest Unity client
 - NovaAdapt sidecar migration is companion-facing; this repo ships bridge surfaces and contract validation hooks
 
 ## Key Contracts
@@ -30,4 +30,4 @@ Updated: 2026-03-13
 
 ## Health And Verification
 - `npm run ci` verifies typecheck, tests, contract sync, cloud bootstrap, VR bootstrap, and Expo doctor
-- Cloud and VR external tracks are validated here through scaffold/contract/bootstrap scripts, not by shipping those repos from this codebase
+- Cloud external tracks are validated here through scaffold/contract/bootstrap scripts; the VR external track is validated here through contract/bootstrap sync while the installable Quest client is built and smoke-tested from the separate `NovaRemoteVR` repo
