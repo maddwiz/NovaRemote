@@ -12,10 +12,10 @@
   "remaining_primary_work": [
     "validate the current NovaRemoteVR candidate on a physical Quest headset",
     "stabilize signing and release packaging for tester distribution",
-    "add repeatable CI or equivalent automation for Unity edit-mode and smoke-build coverage"
+    "broaden Unity CI validation from the current secret-gated workflow coverage into always-on release confidence"
   ],
   "external_tracks": {
     "cloud_backend_dashboard": "scaffolded and verified from this repo; production rollout pending",
-    "vr_native_repo": "committed Quest Unity client foundation with local edit-mode verification, smoke builds, runtime-config/install/logcat/manifest tooling, and remaining headset validation/signing work"
+    "vr_native_repo": "committed Quest Unity client foundation with local edit-mode verification, secret-gated Unity CI, smoke builds, candidate bundling, runtime-config/install/logcat/manifest tooling, and remaining headset validation/signing work"
   }
 }

@@ -63,7 +63,7 @@ Updated: 2026-03-15
 ## v1.4 VR Command Center
 
 - [x] In this repo: VR preview route/screen + pooled multi-server controls + tests
-- [~] Separate production VR native app (`NovaRemoteVR`) track now has a committed Quest Unity/OpenXR client foundation, synced contract verification, local Unity edit-mode coverage, repeatable smoke APK builds, runtime-config/install/logcat/manifest tooling, startup workspace persistence/preview priming, and operator/release runbooks; physical-headset validation, signing automation, CI-native Unity coverage, and wider release hardening remain pending
+- [~] Separate production VR native app (`NovaRemoteVR`) track now has a committed Quest Unity/OpenXR client foundation, synced contract verification, local Unity edit-mode coverage, repeatable smoke APK builds, runtime-config/install/logcat/manifest tooling, candidate-bundle packaging, startup workspace persistence/preview priming, operator/release runbooks, and conditional GitHub Actions coverage for Unity edit-mode plus smoke builds when Unity licensing secrets are configured; physical-headset validation, signing automation, and wider release hardening remain pending
 
 ## v1.5 VM Grouping
 

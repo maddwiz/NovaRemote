@@ -49,7 +49,8 @@ That means the next Codex should use this branch to:
 - synced contract verification against NovaRemote source-of-truth artifacts
 - local Unity edit-mode tests runnable from `npm run quest:test:editmode`
 - repeatable Quest smoke APK builds via `npm run build:quest:smoke`
-- operator tooling for candidate manifests, runtime config generation/push, install, and logcat capture
+- operator tooling for candidate manifests, candidate bundling, runtime config generation/push, install, and logcat capture
+- conditional GitHub Actions coverage for Unity edit-mode and Quest smoke builds once Unity secrets are configured
 - updated Quest setup, QA, release, rollback, and known-issues docs in the external repo
 
 ### Bootstrap support already present
@@ -65,7 +66,7 @@ That means the next Codex should use this branch to:
 - controller/hand interaction validation and polish on real hardware
 - Quest voice routing validation on real hardware
 - signing/release packaging automation for tester distribution
-- CI-native Unity coverage in addition to the current local edit-mode and smoke-build path
+- broader CI validation and release hardening beyond the current conditional Unity workflow coverage
 - launch-grade QA and release checklist pass on real Quest hardware
 
 ## Success Definition

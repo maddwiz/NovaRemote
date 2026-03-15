@@ -11,7 +11,7 @@ Updated: 2026-03-15
 | v1.2 | Connection Pool + Server Switcher | Multi-server pooled state, concurrent websockets, instant server switching, switcher rail, unread badges, pooled fleet base-path reuse | Complete |
 | v1.3 | Spatial AR (Glasses) | Multi-panel glasses workspace, pooled panel sourcing, expanded brand presets, shared spatial voice routing | Complete |
 | v1.3.1 | Voice Session + Panel Management (Glasses/VR) | Hands-free create/close/resize/move/swap panel flows, prompt-aware session creation, pooled server-target fallback, parser priority guarantees | Complete |
-| v1.4 | VR Command Center | In-repo VR workspace/runtime preview and pooled controls; separate native VR repo now has a committed Quest client foundation with local edit-mode verification, smoke builds, and operator tooling | In progress (headset validation and release hardening pending) |
+| v1.4 | VR Command Center | In-repo VR workspace/runtime preview and pooled controls; separate native VR repo now has a committed Quest client foundation with local edit-mode verification, smoke builds, candidate bundling, and conditional Unity CI/operator tooling | In progress (headset validation and release hardening pending) |
 | v1.5 | VM Grouping + Fleet Scoping | VM metadata model, server grouping by VM host/type, VM-aware fleet target helpers | Complete |
 | v1.6 | Team MVP (Enterprise Foundation) | Team auth, token broker, team server governance, audit log + exports, team screen, tier-aware paywall, enforced safety/fleet/session policies | Complete (app-side) |
 | v2.0 | Enterprise Readiness | SSO/OIDC/SAML lifecycle, fleet approval governance, compliance export workflows, cloud/dashboard scaffolding and bootstrap verification | In progress (production rollout/hardening pending) |
