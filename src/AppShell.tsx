@@ -1274,9 +1274,10 @@ export default function AppShell() {
 
   const refreshNovaLinkedVoiceChoices = useCallback(async () => {
     const apiKey = trimVoiceProviderApiKey(novaLinkedVoiceApiKeyRef.current);
-    if (novaLinkedVoiceProviderRef.current !== "elevenlabs" || !apiKey) {
+    if (!apiKey) {
       setNovaLinkedVoiceChoices([]);
-      setNovaLinkedVoiceStatus(apiKey ? "Choose ElevenLabs to use your linked subscription." : "");
+      setNovaLinkedVoiceId("");
+      setNovaLinkedVoiceStatus("");
       return;
     }
 
@@ -1296,6 +1297,14 @@ export default function AppShell() {
       setNovaLinkedVoiceBusy(false);
     }
   }, []);
+
+  useEffect(() => {
+    const normalizedApiKey = trimVoiceProviderApiKey(novaLinkedVoiceApiKey);
+    const nextProvider: NovaLinkedVoiceProvider = normalizedApiKey ? "elevenlabs" : "system";
+    if (novaLinkedVoiceProvider !== nextProvider) {
+      setNovaLinkedVoiceProvider(nextProvider);
+    }
+  }, [novaLinkedVoiceApiKey, novaLinkedVoiceProvider]);
 
   useEffect(() => {
     if (novaLinkedVoiceProvider !== "elevenlabs") {
@@ -2312,8 +2321,14 @@ export default function AppShell() {
     activeNovaLinkedVoiceIndex >= 0
       ? `${novaLinkedVoiceChoices[activeNovaLinkedVoiceIndex]?.label || "Linked"}`
       : "Linked voice";
+  const novaUsingLinkedVoice = Boolean(
+    novaLinkedVoiceProvider === "elevenlabs" &&
+      trimVoiceProviderApiKey(novaLinkedVoiceApiKey) &&
+      normalizeExternalVoiceId(novaLinkedVoiceId) &&
+      novaLinkedVoiceChoices.length
+  );
   const activeNovaSpeechVoiceLabel =
-    novaLinkedVoiceProvider === "elevenlabs" ? activeNovaLinkedVoiceLabel : activeNovaSystemSpeechVoiceLabel;
+    novaUsingLinkedVoice ? activeNovaLinkedVoiceLabel : activeNovaSystemSpeechVoiceLabel;
 
   const scopedServerId = focusedServerId ?? activeServerId;
   const { commandHistory, historyCount, addCommand, recallPrev, recallNext } = useCommandHistory(scopedServerId);
@@ -6644,9 +6659,9 @@ export default function AppShell() {
               speakRepliesEnabled={novaSpeakRepliesEnabled}
               wakePhrase={novaWakePhrase}
               conversationIdleMs={novaConversationIdleMs}
-              speechOutputAvailable={novaLinkedVoiceProvider === "elevenlabs" ? Boolean(novaLinkedVoiceApiKey && novaLinkedVoiceId) : Boolean(getSpeechOutputModule())}
+              speechOutputAvailable={novaUsingLinkedVoice ? Boolean(novaLinkedVoiceApiKey && novaLinkedVoiceId) : Boolean(getSpeechOutputModule())}
               selectedSpeechVoiceLabel={activeNovaSpeechVoiceLabel}
-              speechVoiceChoicesAvailable={novaLinkedVoiceProvider === "elevenlabs" ? novaLinkedVoiceChoices.length > 1 : novaSpeechVoices.length > 1}
+              speechVoiceChoicesAvailable={novaUsingLinkedVoice ? novaLinkedVoiceChoices.length > 1 : novaSpeechVoices.length > 1}
               linkedVoiceProvider={novaLinkedVoiceProvider}
               linkedVoiceApiKey={novaLinkedVoiceApiKey}
               linkedVoiceBusy={novaLinkedVoiceBusy}
@@ -6661,9 +6676,6 @@ export default function AppShell() {
               }}
               onSetConversationIdleMs={(value) => {
                 setNovaConversationIdleMs(normalizeNovaConversationIdleMs(value));
-              }}
-              onSetLinkedVoiceProvider={(value) => {
-                setNovaLinkedVoiceProvider(normalizeNovaLinkedVoiceProvider(value));
               }}
               onSetLinkedVoiceApiKey={(value) => {
                 setNovaLinkedVoiceApiKey(value);
