@@ -1978,7 +1978,7 @@ export function TerminalsScreen() {
           <View style={styles.rowInlineSpace}>
             <Text style={styles.switchLabel}>Open session on Mac Terminal</Text>
             <Switch
-              accessibilityLabel="Open new AI session on Mac Terminal"
+              accessibilityLabel="Open new Codex session on Mac Terminal"
               trackColor={{ false: "#33596c", true: "#0ea8c8" }}
               thumbColor={startOpenOnMac ? "#d4fdff" : "#d3dee5"}
               value={startOpenOnMac}
@@ -2067,12 +2067,12 @@ export function TerminalsScreen() {
         </Pressable>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Start a new AI terminal now"
+          accessibilityLabel="Start a new Codex terminal now"
           style={[styles.buttonGhost, !connected || !canQuickStartAi ? styles.buttonDisabled : null]}
           onPress={() => handleQuickStartSession("ai")}
           disabled={!connected || !canQuickStartAi}
         >
-          <Text style={styles.buttonGhostText}>New AI</Text>
+          <Text style={styles.buttonGhostText}>New Codex</Text>
         </Pressable>
         <Pressable
           accessibilityRole="button"

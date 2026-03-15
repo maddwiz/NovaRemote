@@ -186,7 +186,7 @@ export function PageSlideMenu({
               </Pressable>
               <Pressable
                 accessibilityRole="button"
-                accessibilityLabel="Create a new AI session"
+                accessibilityLabel="Create a new Codex session"
                 style={({ pressed }) => [styles.pageMenuActionButton, pressed ? styles.pressablePressed : null]}
                 onPress={() => {
                   fireSelectionHaptic();
@@ -194,7 +194,7 @@ export function PageSlideMenu({
                   onCreateAi();
                 }}
               >
-                <Text style={styles.pageMenuActionText}>New AI Session</Text>
+                <Text style={styles.pageMenuActionText}>New Codex Session</Text>
               </Pressable>
             </View>
           ),
