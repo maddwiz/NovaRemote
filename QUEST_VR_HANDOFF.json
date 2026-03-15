@@ -1,0 +1,34 @@
+{
+  "updated": "2026-03-14",
+  "repo": "/Users/desmondpottle/Documents/New project/NovaRemote",
+  "worktree": "/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR",
+  "branch": "codex/quest-vr-launch-grade",
+  "base_branch": "feat/final-polish-and-remaining-work",
+  "target": "Quest VR launch-grade completion",
+  "phone_launch_branch_protected": true,
+  "vr_repo_expected": "/Users/desmondpottle/Documents/New project/NovaRemoteVR",
+  "status": {
+    "novaremote_vr_preview": "implemented in phone repo",
+    "vr_contracts": "implemented",
+    "vr_bootstrap": "implemented and verified",
+    "quest_native_client": "not implemented",
+    "visionos_native_client": "not implemented"
+  },
+  "definition_of_done": [
+    "Quest client signs in and connects to companion servers",
+    "Terminal panel streams render reliably in-headset",
+    "Users can create, focus, move, resize, and close panels",
+    "Text and control input route correctly by server and session",
+    "Voice routing works for core commands",
+    "Concurrent phone and Quest usage is validated",
+    "Reconnect and network-flap behavior is hardened",
+    "Release checklist and QA checklist exist and pass"
+  ],
+  "first_reads": [
+    "/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/QUEST_VR_HANDOFF.md",
+    "/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/docs/vr/VR_REPO_BOOTSTRAP.md",
+    "/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/docs/vr/VR_PROTOCOL_CONTRACT.md",
+    "/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/ARCHITECTURE.md",
+    "/Users/desmondpottle/Documents/New project/NovaRemote-QuestVR/docs/HANDOFF_STATUS.md"
+  ]
+}
